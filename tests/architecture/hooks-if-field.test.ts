@@ -22,10 +22,9 @@
 //     sixth `kind` literal red-fails the local switch (NFR-7).
 //
 // The architecture-test fixture rows are copied verbatim from the
-// upstream truth tables snapshotted at research time. Plan 02 / Plan 03
-// wire `compileIfPredicate` (parse-time entry) and `ifFires`
-// (dispatch-time consult); rows that depend on those entry points are
-// marked `test.todo(...)` with an explicit dependency note.
+// upstream truth tables snapshotted at research time. End-to-end blocks
+// drive every row through `compileIfPredicate` (parse-time entry) and
+// `ifFires` (dispatch-time consult), closing the MATCH-03 contract.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -35,6 +34,7 @@ import {
   compileBashGlob,
   compileIfPredicate,
   compilePathGlob,
+  ifFires,
   MATCH_ALL_IF,
   parseBashSubcommands,
   type IfPredicate,
@@ -43,7 +43,11 @@ import { IF_PREFIX_TARGETS } from "../../extensions/pi-claude-marketplace/domain
 import {
   HOOKS_VALIDATOR,
   parseHooksConfig,
+  parseMatcher,
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+
+import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // MATCH-03: synthetic path-anchor triple for compileIfPredicate /
 // parseHooksConfig invocations. Stable across the file.
@@ -464,8 +468,9 @@ const MCP_TABLE: ReadonlyArray<{
  *   - `mcp__server__*`           -> server-prefix with `mcp__server__`
  *   - `mcp__server__tool`        -> mcp-literal with the exact toolName
  *
- * Plan 02's `compileIfPredicate` will own this construction at parse
- * time; the unit test exercises the predicate shape directly.
+ * `compileIfPredicate` owns this construction at parse time; this
+ * helper exercises the predicate shape directly for the unit-table
+ * iteration.
  */
 function predicateFromMcpIfPattern(ifPattern: string): IfPredicate {
   if (ifPattern.endsWith("__*")) {
@@ -623,7 +628,7 @@ test('MATCH-03: compileIfPredicate falls open to MATCH_ALL_IF on malformed `if: 
   assert.equal(pred.kind, "match-all");
 });
 
-test("MATCH-03: compileIfPredicate falls open to MATCH_ALL_IF on empty string (Pitfall 9)", () => {
+test("MATCH-03: compileIfPredicate falls open to MATCH_ALL_IF on empty string", () => {
   const pred = compileIfPredicate("", "PreToolUse", TEST_IF_CTX);
   assert.equal(pred.kind, "match-all");
 });
@@ -868,17 +873,357 @@ test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Ba
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 14: Plan 03 wiring placeholders (dispatch-time consult)
+// Block 14: end-to-end ifFires harness (MATCH-03 dispatch-time consult)
 // ──────────────────────────────────────────────────────────────────────────
 
-test.todo(
-  "MATCH-03: ifFires consults predicate.kind=`path-tool` against a Pi reader event with substituted ctx.cwd when input.path is absent (dispatch-time consult)",
-);
+// Synthetic ExtensionContext used across the end-to-end blocks. Only
+// `ctx.cwd` is read by ifFires + the per-event extractors; the cast
+// elides the rest of the ExtensionContext surface so the architecture
+// test does not need the full Pi-API peer-dep mock.
+const TEST_CTX = { cwd: "/projects/p" } as unknown as ExtensionContext;
 
-test.todo(
-  "MATCH-03: ifFires fails open on parseBashSubcommands `{ok:false}` and emits hookDebugLog warning (dispatch-time fail-open)",
-);
+/**
+ * Drive the full parse-time -> dispatch-time path: compile the `if`
+ * string into a predicate against `TEST_IF_CTX`, then call `ifFires`
+ * against a synthetic Bash tool-event. The plumbing mirrors what
+ * `reduceBucket` does at runtime.
+ */
+function fireBashIf(
+  ifString: string,
+  bashCommand: string,
+  claudeEvent: BucketAEvent = "PostToolUse",
+): boolean {
+  const predicate = compileIfPredicate(ifString, claudeEvent, TEST_IF_CTX);
+  return ifFires(
+    predicate,
+    { toolName: "bash", input: { command: bashCommand } },
+    TEST_CTX,
+    claudeEvent,
+  );
+}
 
-test.todo(
-  "MATCH-03: ifFires returns `continue` (skip entry) when predicate does not fire; dispatch reducer never sees `block` from the if-layer (dispatch-time semantic)",
-);
+test("MATCH-03: end-to-end ifFires against HOOKS_GUIDE_TRUTH_TABLE", () => {
+  for (const row of HOOKS_GUIDE_TRUTH_TABLE) {
+    const actual = fireBashIf(row.ifPattern, row.bashCommand);
+    assert.equal(actual, row.fires, `${row.ifPattern} vs "${row.bashCommand}" -- ${row.why}`);
+  }
+});
+
+test("MATCH-03: end-to-end ifFires against BASH_WORD_BOUNDARY_TABLE", () => {
+  for (const row of BASH_WORD_BOUNDARY_TABLE) {
+    const actual = fireBashIf(row.ifPattern, row.bashCommand);
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs "${row.bashCommand}" expected fires=${String(row.fires)}`,
+    );
+  }
+});
+
+test("MATCH-03: end-to-end ifFires against COLON_SUGAR_TABLE", () => {
+  for (const row of COLON_SUGAR_TABLE) {
+    const actual = fireBashIf(row.ifPattern, row.bashCommand);
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs "${row.bashCommand}" expected fires=${String(row.fires)}`,
+    );
+  }
+});
+
+test("MATCH-03: end-to-end ifFires against WRAPPER_TABLE", () => {
+  for (const row of WRAPPER_TABLE) {
+    const actual = fireBashIf(row.ifPattern, row.bashCommand);
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs "${row.bashCommand}" expected fires=${String(row.fires)} -- ${row.reason}`,
+    );
+  }
+});
+
+test("MATCH-03: end-to-end ifFires against COMPOUND_TABLE", () => {
+  for (const row of COMPOUND_TABLE) {
+    const actual = fireBashIf(row.ifPattern, row.bashCommand);
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs "${row.bashCommand}" expected fires=${String(row.fires)} -- ${row.reason}`,
+    );
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 15: end-to-end ifFires against PATH_ANCHOR_TABLE (D-61-01)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03: end-to-end ifFires against PATH_ANCHOR_TABLE", () => {
+  for (const row of PATH_ANCHOR_TABLE) {
+    const pattern = stripReadEditWrapper(row.ifPattern);
+    const isEdit = row.ifPattern.startsWith("Edit(");
+    const ifString = isEdit ? `Edit(${pattern})` : `Read(${pattern})`;
+    const predicate = compileIfPredicate(ifString, "PreToolUse", TEST_IF_CTX);
+    // The predicate must compile to path-tool (D-61-02 fall-open would
+    // skip the row; the fixtures are crafted to compile cleanly).
+    assert.equal(predicate.kind, "path-tool", `${row.ifPattern} should compile to path-tool`);
+
+    const absPath = toAbsoluteForFixture(row.inputPath);
+    // Bind the path tool to a Pi reader / editor event. Read covers
+    // grep/find/ls/read; Edit covers edit/write. Choose a representative
+    // toolName for the assertion.
+    const toolName = isEdit ? "edit" : "read";
+    const actual = ifFires(
+      predicate,
+      { toolName, input: { path: absPath } },
+      TEST_CTX,
+      "PreToolUse",
+    );
+    const reason = row.reason ?? "no reason provided";
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs absolute "${absPath}" expected fires=${String(row.fires)} -- ${reason}`,
+    );
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 16: end-to-end ifFires against MCP_TABLE
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03: end-to-end ifFires against MCP_TABLE", () => {
+  for (const row of MCP_TABLE) {
+    const predicate = compileIfPredicate(row.ifPattern, "PreToolUse", TEST_IF_CTX);
+    const actual = ifFires(
+      predicate,
+      { toolName: row.toolName, input: {} },
+      TEST_CTX,
+      "PreToolUse",
+    );
+    assert.equal(
+      actual,
+      row.fires,
+      `${row.ifPattern} vs toolName "${row.toolName}" expected fires=${String(row.fires)} -- ${row.reason}`,
+    );
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 17: AND composition with matcher (MATCH-03 §4)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03 §4: AND composition with matcher -- both gates required", () => {
+  // Simulate the dispatch-loop gate sequence by hand: matcher gate first,
+  // then ifFires gate. `reduceBucket` runs them in this order against
+  // every entry.
+  const matcher = parseMatcher("Bash");
+  const predicate = compileIfPredicate("Bash(git push *)", "PostToolUse", TEST_IF_CTX);
+
+  function matcherFiresOnToolEvent(toolName: string): boolean {
+    return matcher.kind === "tool-set" ? matcher.piTools.has(toolName as never) : false;
+  }
+
+  // Case 1: matcher passes (toolName=bash) + ifFires passes (command
+  // matches the glob) -> both gates pass.
+  {
+    const event = { toolName: "bash", input: { command: "git push origin main" } };
+    assert.equal(matcherFiresOnToolEvent(event.toolName), true);
+    assert.equal(ifFires(predicate, event, TEST_CTX, "PostToolUse"), true);
+  }
+
+  // Case 2: matcher passes (toolName=bash) + ifFires fails (command does
+  // not match) -> entry skipped via the if-layer.
+  {
+    const event = { toolName: "bash", input: { command: "npm test" } };
+    assert.equal(matcherFiresOnToolEvent(event.toolName), true);
+    assert.equal(ifFires(predicate, event, TEST_CTX, "PostToolUse"), false);
+  }
+
+  // Case 3: matcher fails (toolName=edit) -> reduceBucket never reaches
+  // the ifFires gate. We assert the matcher-fail outcome directly; the
+  // ifFires call below would also return false because the path-extractor
+  // would yield undefined for the missing command, but the dispatch loop
+  // short-circuits earlier.
+  {
+    const event = { toolName: "edit", input: { path: "x.ts" } };
+    assert.equal(matcherFiresOnToolEvent(event.toolName), false);
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 18: dispatch-time fail-open (MATCH-03 §3 / D-61-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03 §3: ifFires fails open on unparseable Bash command", () => {
+  // Generate a $(...) nest that exceeds the parser's recursion cap
+  // (MAX_RECURSION_DEPTH = 8 in bash.ts). The parser surfaces
+  // `{ ok: false, reason }`; ifFires fires the hook regardless.
+  let nested = "echo";
+  for (let i = 0; i < 16; i++) {
+    nested = `$(${nested})`;
+  }
+
+  const predicate = compileIfPredicate("Bash(git push *)", "PostToolUse", TEST_IF_CTX);
+  assert.equal(predicate.kind, "bash");
+  const fires = ifFires(
+    predicate,
+    { toolName: "bash", input: { command: nested } },
+    TEST_CTX,
+    "PostToolUse",
+  );
+  assert.equal(fires, true, "ifFires must fail open when parseBashSubcommands returns !ok");
+});
+
+test("MATCH-03 §3: ifFires returns false when bash event carries no command", () => {
+  const predicate = compileIfPredicate("Bash(git *)", "PostToolUse", TEST_IF_CTX);
+  const fires = ifFires(predicate, { toolName: "bash", input: {} }, TEST_CTX, "PostToolUse");
+  assert.equal(
+    fires,
+    false,
+    "no command -> nothing to glob against -> entry skipped (matcher already filtered for bash; no payload means no decision)",
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 19: every compile-failure mode collapses to MATCH_ALL_IF (D-61-02)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-61-02: every compile-failure mode collapses to MATCH_ALL_IF", () => {
+  const failureFixtures: ReadonlyArray<{ rawIf: string; claudeEvent: BucketAEvent; why: string }> =
+    [
+      { rawIf: "", claudeEvent: "PreToolUse", why: "empty string" },
+      { rawIf: "   \t  ", claudeEvent: "PreToolUse", why: "whitespace-only" },
+      { rawIf: "Bash(", claudeEvent: "PreToolUse", why: "malformed prefix syntax" },
+      {
+        rawIf: "Grep(*.ts)",
+        claudeEvent: "PreToolUse",
+        why: "unsupported prefix (covered by Read)",
+      },
+      { rawIf: "PowerShell(Get-Item)", claudeEvent: "PreToolUse", why: "non-Pi tool prefix" },
+      {
+        rawIf: "Bash(git push *)",
+        claudeEvent: "SessionStart",
+        why: "non-tool event ignores if (A5)",
+      },
+    ];
+
+  for (const fx of failureFixtures) {
+    const pred = compileIfPredicate(fx.rawIf, fx.claudeEvent, TEST_IF_CTX);
+    assert.equal(
+      pred.kind,
+      "match-all",
+      `${fx.why}: "${fx.rawIf}" on ${fx.claudeEvent} -> expected MATCH_ALL_IF`,
+    );
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 20: D-61-03 substitute-cwd (Pi grep/find/ls without input.path)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-61-03: ifFires substitutes ctx.cwd when path-tool event omits input.path", () => {
+  // `Read(src/**)` compiles to a cwd-anchored path glob. Pi `grep` event
+  // with no `input.path` should substitute `ctx.cwd` -- the glob's
+  // resolved match target becomes ctx.cwd, which does NOT match `src/**`
+  // (cwd is `/projects/p`, the glob anchor; `src/**` requires at least
+  // one segment under cwd).
+  const predicateAtCwd = compileIfPredicate("Read(src/**)", "PreToolUse", TEST_IF_CTX);
+  const firesAtCwd = ifFires(
+    predicateAtCwd,
+    { toolName: "grep", input: {} },
+    TEST_CTX,
+    "PreToolUse",
+  );
+  assert.equal(
+    firesAtCwd,
+    false,
+    "substituted cwd (/projects/p) does not match src/** anchored to cwd",
+  );
+
+  // Now place ctx.cwd UNDER src so the substitute hits. The synthetic
+  // ctx points at /projects/p/src/sub; the glob anchored against the
+  // compile-time TEST_IF_CTX (cwd=/projects/p) checks the cwd against
+  // /projects/p/src/sub which matches src/**.
+  const ctxUnderSrc = { cwd: "/projects/p/src/sub" } as unknown as ExtensionContext;
+  const firesUnderSrc = ifFires(
+    predicateAtCwd,
+    { toolName: "grep", input: {} },
+    ctxUnderSrc,
+    "PreToolUse",
+  );
+  assert.equal(
+    firesUnderSrc,
+    true,
+    "substituted cwd /projects/p/src/sub matches src/** anchored to /projects/p",
+  );
+});
+
+test("D-61-03: ifFires guards toolName against piEvents set", () => {
+  // Read(src/**) covers Pi readers (read/grep/find/ls); a bash event
+  // should NOT match even when the matcher gate would have admitted it.
+  const predicate = compileIfPredicate("Read(src/**)", "PreToolUse", TEST_IF_CTX);
+  const fires = ifFires(
+    predicate,
+    { toolName: "bash", input: { command: "git status" } },
+    TEST_CTX,
+    "PreToolUse",
+  );
+  assert.equal(fires, false, "Read predicate does not fire on bash event (cross-tool guard)");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 21: non-tool-event fall-open (A5 disposition)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("A5: ifFires fires on SessionStart handler with if field (fall-open per D-61-02)", () => {
+  // Upstream Claude's "attaching to other events prevents the hook from
+  // running" rule: a SessionStart handler with `if: Bash(...)` is
+  // compiled to MATCH_ALL_IF at parse time, and ifFires returns true
+  // unconditionally -- the hook runs every SessionStart, the `if`
+  // field is silently ignored. Pi-Claude matches this verbatim.
+  const predicate = compileIfPredicate("Bash(git push *)", "SessionStart", TEST_IF_CTX);
+  assert.equal(predicate.kind, "match-all");
+
+  // ifFires against any synthetic SessionStart event payload fires true.
+  const fires = ifFires(predicate, { reason: "startup" }, TEST_CTX, "SessionStart");
+  assert.equal(fires, true, "SessionStart handler with if field fires unconditionally per A5");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block 22: dispatch-time fail-open emits hookDebugLog
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03 §3: ifFires fail-open emits hookDebugLog when PI_CLAUDE_MARKETPLACE_DEBUG=1", (t) => {
+  const prior = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const captured: string[] = [];
+  t.mock.method(console, "error", (msg: unknown) => {
+    captured.push(String(msg));
+  });
+
+  try {
+    let nested = "echo";
+    for (let i = 0; i < 16; i++) {
+      nested = `$(${nested})`;
+    }
+
+    const predicate = compileIfPredicate("Bash(git push *)", "PostToolUse", TEST_IF_CTX);
+    const fires = ifFires(
+      predicate,
+      { toolName: "bash", input: { command: nested } },
+      TEST_CTX,
+      "PostToolUse",
+    );
+    assert.equal(fires, true, "fail-open path returns true");
+    assert.ok(
+      captured.some((line) => line.includes("ifFires") && line.includes("unparseable")),
+      `expected hookDebugLog line for parser fail-open, captured: ${JSON.stringify(captured)}`,
+    );
+  } finally {
+    if (prior === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prior;
+    }
+  }
+});
