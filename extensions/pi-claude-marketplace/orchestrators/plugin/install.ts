@@ -934,31 +934,6 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // compose the user-visible notification without re-entering the closure.
       installCtx = result.installCtx;
 
-      // D-59-02: hooks-bridge parsed-config cache add. Synchronous in-memory
-      // mutation; bounded leak on a closure throw between this line and
-      // `tx.save()` -- the next `/reload` resets the cache (D-59-03 epoch
-      // bump + factory-time hydrate from disk). Skipped when the plugin
-      // declares no hooks (`resources.hooks` is empty by construction).
-      // Read+parse failures are non-fatal: the resolver already validated
-      // the config at install-entry time; a re-parse failure here is the
-      // sole defensive arm and surfaces only through the OBS-01 debug seam.
-      // Reconcile rehydrates from disk on the next pass.
-      if (installCtx.resolved.hooksConfigPath !== undefined) {
-        await addInstalledPluginHooksToCache(
-          scope,
-          marketplace,
-          plugin,
-          path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
-        );
-
-        // WR-03: keep the routing table in lockstep with the parsed-config
-        // cache so a standalone install (outside a reconcile cascade) starts
-        // dispatching to the new plugin's hooks immediately, without
-        // requiring `/reload` (NFR-2). Synchronous + zero disk I/O per
-        // DISP-02, so the per-plugin lock holds for sub-millisecond extra.
-        rebuildRoutingTables(state, locations);
-      }
-
       // WB-01 / WR-09: write-back the plugin entry to the user-authored
       // config. SKIPPED in orchestrated mode (reconcile derives desired
       // state FROM the merged config; writing back would clobber a
@@ -1011,6 +986,39 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // config write-back (a write-back throw aborts the save, leaving the
       // state snapshot discarded exactly as before).
       await tx.save();
+
+      // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
+      // table rebuild. Moved AFTER `tx.save()` so a write-back throw
+      // (lines above) or a tx.save throw aborts BEFORE the cache mutates.
+      // Without this ordering, a closure-throw between cache mutation and
+      // tx.save() left a phantom routing entry that the next dispatch
+      // event would fire against -- state.json had no record of the
+      // install but the parsed-config cache + routing table did, and the
+      // next `/reload` was required to clear the strand.
+      //
+      // Post-save semantics are safe: state.json now matches in-memory
+      // state, so the next `/reload`'s factory-time hydrate (D-59-03)
+      // rebuilds the cache from the SAME source of truth.  Synchronous +
+      // zero disk I/O per DISP-02; the per-plugin lock still holds for
+      // the sub-millisecond cache+rebuild.  Skipped when the plugin
+      // declares no hooks.  Read+parse failures are non-fatal: the
+      // resolver already validated the config at install-entry time, and
+      // any defensive re-parse failure routes through OBS-01 debug only.
+      //
+      // WR-03: keep the routing table in lockstep with the parsed-config
+      // cache so a standalone install (outside a reconcile cascade)
+      // starts dispatching to the new plugin's hooks immediately,
+      // without requiring `/reload` (NFR-2).
+      if (installCtx.resolved.hooksConfigPath !== undefined) {
+        await addInstalledPluginHooksToCache(
+          scope,
+          marketplace,
+          plugin,
+          path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
+        );
+
+        rebuildRoutingTables(state, locations);
+      }
     });
   } catch (err) {
     // Pattern S-1 single chokepoint for user-visible errors (one

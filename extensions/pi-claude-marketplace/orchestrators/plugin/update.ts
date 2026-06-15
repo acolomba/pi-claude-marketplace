@@ -1076,31 +1076,6 @@ async function finalizeUpdateRecord(
 
     sRecord.updatedAt = new Date().toISOString();
 
-    // WR-03 + D-60-05: update does NOT delegate to install/uninstall, so
-    // without an explicit cache+rebuild step the parsed-config cache would
-    // still hold the PRE-update hooks config and dispatch would fire the
-    // old command paths until `/reload`. Mirror the install / uninstall
-    // pattern explicitly inside the existing per-plugin lock: drop the old
-    // cache entry, repopulate from the just-staged `hooks.json` (when
-    // present), then rebuild the routing table once. The cache step ONLY
-    // runs on the all-success arm; an aggregated phase-3 failure leaves
-    // the OLD config in place (truthful "we did not complete the swap"
-    // view that mirrors the SC#2 compatibility/resolvedSource decision
-    // immediately above).
-    if (phase3aFailures.length === 0) {
-      removePluginConfigFromCache(args.scope, marketplace, plugin);
-      if (installable.hooksConfigPath !== undefined) {
-        await readAndCacheUpdatedPluginHooks(
-          args.scope,
-          marketplace,
-          plugin,
-          path.join(installable.pluginRoot, installable.hooksConfigPath),
-        );
-      }
-
-      rebuildRoutingTables(s, locations);
-    }
-
     // WB-01 / A7: deep-equal short-circuited config write-back
     // on the all-success arm. SKIPPED in cascade mode (the marketplace
     // autoupdate cascade owns its own writes; mirrors WR-09 orchestrated-
@@ -1119,6 +1094,38 @@ async function finalizeUpdateRecord(
       if (writeResult.invalidConfig) {
         invalidConfigWriteBack = true;
       }
+    }
+
+    // WR-06 + WR-03 + D-60-05: update does NOT delegate to install/
+    // uninstall, so without an explicit cache+rebuild step the parsed-
+    // config cache would still hold the PRE-update hooks config and
+    // dispatch would fire the old command paths until `/reload`. Mirror
+    // the install / uninstall pattern explicitly inside the existing
+    // per-plugin lock: drop the old cache entry, repopulate from the
+    // just-staged `hooks.json` (when present), then rebuild the routing
+    // table once. The cache step ONLY runs on the all-success arm; an
+    // aggregated phase-3 failure leaves the OLD config in place
+    // (truthful "we did not complete the swap" view that mirrors the
+    // SC#2 compatibility/resolvedSource decision above).
+    //
+    // Moved AFTER `maybeWritePluginConfigBack` so a write-back throw
+    // aborts BEFORE the cache mutates -- tightens the WR-06 strand
+    // window to just the `withStateGuard` auto-save tail.  A full close
+    // would require exposing `tx.save()` from `withStateGuard` (a
+    // larger refactor); a future phase can complete the restructure if
+    // tx.save throws become observable in practice.
+    if (phase3aFailures.length === 0) {
+      removePluginConfigFromCache(args.scope, marketplace, plugin);
+      if (installable.hooksConfigPath !== undefined) {
+        await readAndCacheUpdatedPluginHooks(
+          args.scope,
+          marketplace,
+          plugin,
+          path.join(installable.pluginRoot, installable.hooksConfigPath),
+        );
+      }
+
+      rebuildRoutingTables(s, locations);
     }
   });
   return { invalidConfigWriteBack };

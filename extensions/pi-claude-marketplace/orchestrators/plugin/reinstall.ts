@@ -1076,28 +1076,6 @@ async function runLockedReinstall(
   try {
     updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
 
-    // WR-03 + D-60-05: reinstall does NOT delegate to install/uninstall,
-    // so the parsed-config cache + routing table would otherwise stay
-    // pinned to the OLD plugin's hooks config (or be entirely absent if
-    // the previous install pre-dated the bridge). Mirror the install /
-    // uninstall pattern explicitly inside the per-plugin lock: drop the
-    // old cache entry, re-populate from the just-installed `hooks.json`
-    // (when present), then rebuild the routing table once at the end.
-    // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
-    // is the same defensive shape `install.ts` uses (failures route
-    // through hookDebugLog and the next `/reload` rehydrates from disk).
-    removePluginConfigFromCache(scope, marketplace, plugin);
-    if (installable.hooksConfigPath !== undefined) {
-      await readAndCacheReinstalledPluginHooks(
-        scope,
-        marketplace,
-        plugin,
-        path.join(installable.pluginRoot, installable.hooksConfigPath),
-      );
-    }
-
-    rebuildRoutingTables(tx.state, locations);
-
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
     // mtime invariant. Reinstall is invoked by the user (both standalone and
     // bulk-cascade paths are user-initiated); there is no orchestrated /
@@ -1114,6 +1092,36 @@ async function runLockedReinstall(
     invalidConfigWriteBack = writeResult.invalidConfig;
 
     await tx.save();
+
+    // WR-06 + WR-03 + D-60-05: reinstall does NOT delegate to install/
+    // uninstall, so the parsed-config cache + routing table would
+    // otherwise stay pinned to the OLD plugin's hooks config (or be
+    // entirely absent if the previous install pre-dated the bridge).
+    // Mirror the install / uninstall pattern explicitly inside the
+    // per-plugin lock: drop the old cache entry, re-populate from the
+    // just-installed `hooks.json` (when present), then rebuild the
+    // routing table once.
+    //
+    // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
+    // aborts BEFORE the cache mutates -- otherwise a phantom routing
+    // entry survives a closure throw and the next dispatch fires against
+    // a record state.json never wrote.  Post-save semantics are safe:
+    // state.json now matches in-memory state, and the next `/reload`'s
+    // factory-time hydrate (D-59-03) rebuilds the cache from disk.
+    // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
+    // is the same defensive shape `install.ts` uses (failures route
+    // through hookDebugLog and the next `/reload` rehydrates).
+    removePluginConfigFromCache(scope, marketplace, plugin);
+    if (installable.hooksConfigPath !== undefined) {
+      await readAndCacheReinstalledPluginHooks(
+        scope,
+        marketplace,
+        plugin,
+        path.join(installable.pluginRoot, installable.hooksConfigPath),
+      );
+    }
+
+    rebuildRoutingTables(tx.state, locations);
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
   }
