@@ -60,7 +60,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Per-Event Payload Translators
 
-- [ ] **PAYL-01**: Bucket A -- 8 direct 1:1 events round-trip cleanly with field-rename + type-coercion translators: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd. PreToolUse / PostToolUse / PostToolUseFailure translators additionally map Pi's lowercase `event.toolName` to Claude's capitalized `tool_name` via the TOOL-01 mapping before writing the stdin payload. Each translator lives at `bridges/hooks/payloads/<event>.ts` with an architecture-test fixture per event. These 8 events are the entire v1.13 dispatchable scope — every other Claude hook event triggers TOOL-02(c) plugin-unavailability
+- [x] **PAYL-01**: Bucket A -- 8 direct 1:1 events round-trip cleanly with field-rename + type-coercion translators: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd. PreToolUse / PostToolUse / PostToolUseFailure translators additionally map Pi's lowercase `event.toolName` to Claude's capitalized `tool_name` via the TOOL-01 mapping before writing the stdin payload. Each translator lives at `bridges/hooks/payloads/<event>.ts` with an architecture-test fixture per event. These 8 events are the entire v1.13 dispatchable scope — every other Claude hook event triggers TOOL-02(c) plugin-unavailability
 
 ### User-Facing Surface
 
@@ -200,7 +200,7 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | EXEC-03 | Phase 60 | Pending |
 | EXEC-04 | Phase 60 | Pending |
 | EXEC-05 | Phase 62 | Pending |
-| PAYL-01 | Phase 60 | Pending |
+| PAYL-01 | Phase 60 | Complete |
 | SURF-01 | Phase 63 | Pending |
 | SURF-02 | Phase 63 | Pending |
 | SURF-03 | Phase 63 (reserved for v1.14+) | Pending |

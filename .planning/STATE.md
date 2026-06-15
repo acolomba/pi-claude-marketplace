@@ -4,13 +4,13 @@ milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
 stopped_at: Phase 60 context gathered
-last_updated: "2026-06-15T01:41:10.853Z"
-last_activity: 2026-06-15 -- Phase 60 planning complete
+last_updated: "2026-06-15T02:31:20.119Z"
+last_activity: 2026-06-15 -- Phase 60 execution started
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 15
+  completed_plans: 12
   percent: 43
 ---
 
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 59 — bridge-dispatch-core-debug-seam
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 60 — hook-execution-payload-translators-env-vars
 
 ## Current Position
 
-Phase: 60
-Plan: Not started
+Phase: 60 (hook-execution-payload-translators-env-vars) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-15 -- Phase 60 planning complete
+Last activity: 2026-06-15 -- Phase 60 execution started
 
 ## Performance Metrics
 
@@ -114,6 +114,7 @@ Last activity: 2026-06-15 -- Phase 60 planning complete
 | Phase Phase 59 PP01 | 25min | 2 tasks | 4 files |
 | Phase 59 P02 | 43m | 3 tasks | 9 files |
 | Phase 59 P03 | 95min | 3 tasks | 11 files |
+| Phase 60 P01 | ~45m | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [Phase 59 Plan 03]: deferred project-scope hydrate via hydrateProjectScopeForCwd(event.cwd) at first resources_discover. Plan 02's registerHooksBridge needs cwd at factory time; the factory passes homedir() so user scope hydrates correctly, then project re-hydrates with the real cwd before applyReconcile rebuilds.
 - [Phase ?]: [Phase 59 Plan 03]: WR-05 pristine-scope gate on rebuildScopeRoutingTable (pathExists check on state.json) prevents the lock acquisition's mkdir(extensionRoot) from creating .pi/pi-claude-marketplace/ directories in pristine scopes. Correctness-equivalent: pristine scope has zero plugins to register.
 - [Phase ?]: [Phase 59 Plan 03]: reinstall.ts and update.ts do NOT route through installPlugin/uninstallPlugin -- cache add/remove does not flow transitively. Gap is bounded (cache stays stale until next reconcile rebuild). Future plan should wire cache mutators into reinstall + update directly.
+- [Phase 60]: 8 hand-authored payload translators (D-60-04) at bridges/hooks/payloads/ -- the three tool translators share mapPiToClaudeToolName for TOOL-01 reuse with CustomToolCallEvent passthrough. -- Plan 60-01 established the translator + TranslationContext foundation.
+- [Phase 60]: PreCompact / PostCompact trigger synthesized as 'auto' -- Pi's compact events do not expose a trigger source. -- Plan 60-01 documented the synthesis in source comments.
 
 ### Pending Todos
 
@@ -283,7 +286,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-15T00:53:22.997Z
+Last session: 2026-06-15T02:30:52.496Z
 Stopped At: Phase 60 context gathered
 Resume File: .planning/phases/60-hook-execution-payload-translators-env-vars/60-CONTEXT.md
 
