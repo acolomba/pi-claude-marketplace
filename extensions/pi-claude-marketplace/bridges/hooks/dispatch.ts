@@ -116,10 +116,12 @@ function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolea
  * `event` is typed as `unknown` because each Pi event has a distinct
  * payload shape; the per-event filter narrows at access time.
  */
-export function compositeHandlerFor(
-  claudeEvent: Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+export function compositeHandlerFor<
+  E extends Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+>(
+  claudeEvent: E,
   capturedEpoch: number,
-): (event: CompositeEventFor<typeof claudeEvent>, ctx: ExtensionContext) => Promise<void> {
+): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<void> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
       return;
