@@ -27,7 +27,8 @@
 //     shared/debug-log.ts and the three call sites are preserved.
 
 import assert from "node:assert/strict";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -199,38 +200,64 @@ async function collectExtensionTsFiles(dir: string): Promise<string[]> {
 test("DISP-01: registerHooksBridge calls pi.on exactly 7 times with the locked Pi event names", async () => {
   _resetForTest();
 
-  const piMock = makePiMock();
+  // WR-04: hermetic env. Without this, the user-scope hydrate arm resolves
+  // `getAgentDir()` which reads `PI_CODING_AGENT_DIR` or defaults to
+  // `~/.pi/agent`, pulling the developer's real $HOME state into the test.
+  // The 7-handler assertion does not depend on hydrate output today, but a
+  // future invariant added to this test must not be silently bypassed by
+  // ambient $HOME state. Mirrors `withHermeticEnv` in
+  // tests/edge/index-handler.test.ts.
+  const originalHome = process.env.HOME;
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const home = await mkdtemp(path.join(tmpdir(), "hd-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "hd-cwd-"));
+  process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
 
-  // Use the OS tmpdir as the cwd so the bridge's hydrate path (which reads
-  // state.json under <cwd>/.pi/...) finds no state -- loadState's missing-
-  // file arm yields the default empty state, and the rebuild walks zero
-  // plugins. Tests run in <1s.
-  const tmpRoot = path.join(process.cwd(), "tests", "fixtures", "no-such-dir-for-hooks-dispatch");
-  await registerHooksBridge(piMock as unknown as ExtensionAPI, {
-    ctx: stubCtx,
-    cwd: tmpRoot,
-  });
+  try {
+    const piMock = makePiMock();
 
-  assert.equal(
-    piMock.calls.length,
-    7,
-    `expected 7 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
-  );
+    await registerHooksBridge(piMock as unknown as ExtensionAPI, {
+      ctx: stubCtx,
+      cwd,
+    });
 
-  const locked = new Set([
-    "session_start",
-    "session_shutdown",
-    "session_before_compact",
-    "session_compact",
-    "input",
-    "tool_call",
-    "tool_result",
-  ]);
-  assert.deepEqual(
-    new Set(piMock.calls),
-    locked,
-    "pi.on event-name set drifted from the locked 7-tuple",
-  );
+    assert.equal(
+      piMock.calls.length,
+      7,
+      `expected 7 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
+    );
+
+    const locked = new Set([
+      "session_start",
+      "session_shutdown",
+      "session_before_compact",
+      "session_compact",
+      "input",
+      "tool_call",
+      "tool_result",
+    ]);
+    assert.deepEqual(
+      new Set(piMock.calls),
+      locked,
+      "pi.on event-name set drifted from the locked 7-tuple",
+    );
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    }
+
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
 });
 
 // ──────────────────────────────────────────────────────────────────────────
