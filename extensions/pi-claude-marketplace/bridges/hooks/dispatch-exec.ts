@@ -48,7 +48,7 @@
 // sibling "exactly two files" assertion, with justification in the docstring
 // header.
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
@@ -312,7 +312,7 @@ async function spawnAndCollect(
     let overflowed = false;
     let settled = false;
 
-    const ladder = installTimerLadder(child, timeoutMs);
+    let ladder = installTimerLadder(child, timeoutMs);
 
     const settle = (result: HookExecResult): void => {
       if (settled) {
@@ -324,6 +324,41 @@ async function spawnAndCollect(
       resolve(result);
     };
 
+    // WR-01 / WR-07: when overflow fires, detach the stream `data`
+    // listeners so a child that keeps writing cannot keep growing the
+    // accumulator (unbounded heap growth + GC pressure until the SIGKILL
+    // tail of the original ladder fires). Also cancel the original
+    // SIGTERM/SIGKILL ladder and arm a tight escalation -- the child
+    // has demonstrated misbehavior, so SIGTERM fires synchronously and
+    // SIGKILL fires after the 5s grace rather than waiting up to
+    // `timeoutMs + 5s` (default 605 s) for the original ladder to
+    // escalate.
+    const handleOverflow = (which: "stdout" | "stderr"): void => {
+      if (overflowed) {
+        return;
+      }
+
+      overflowed = true;
+      hookDebugLog(
+        `exec: ${which} overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
+      );
+      child.stdout.removeAllListeners("data");
+      child.stdout.removeAllListeners("end");
+      child.stderr.removeAllListeners("data");
+      child.stderr.removeAllListeners("end");
+      ladder.cancel();
+      // SIGTERM synchronously so observers (and the architecture-test
+      // spawn-spy assertion) see the kill request even when the child
+      // exits before the next macrotask tick. The fresh ladder still
+      // arms the SIGKILL escalation 5s out for a child that ignores
+      // SIGTERM.
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+
+      ladder = installTimerLadder(child, 0);
+    };
+
     accumulateStream(
       child.stdout,
       STDOUT_MAX_BYTES,
@@ -331,15 +366,7 @@ async function spawnAndCollect(
         stdout += chunk;
       },
       () => {
-        if (overflowed) {
-          return;
-        }
-
-        overflowed = true;
-        hookDebugLog(
-          `exec: stdout overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
-        );
-        tryKill(child);
+        handleOverflow("stdout");
       },
     );
 
@@ -350,15 +377,7 @@ async function spawnAndCollect(
         stderr += chunk;
       },
       () => {
-        if (overflowed) {
-          return;
-        }
-
-        overflowed = true;
-        hookDebugLog(
-          `exec: stderr overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
-        );
-        tryKill(child);
+        handleOverflow("stderr");
       },
     );
 
@@ -440,10 +459,4 @@ function accumulateStream(
       onChunk(tail);
     }
   });
-}
-
-function tryKill(child: ChildProcess): void {
-  if (!child.killed) {
-    child.kill("SIGTERM");
-  }
 }
