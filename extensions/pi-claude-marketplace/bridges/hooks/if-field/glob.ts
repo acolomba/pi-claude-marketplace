@@ -34,8 +34,14 @@
 // segment-bounded (consumes whole path segments, not arbitrary characters);
 // `*` is segment-local in path mode (cannot consume `/`), but consumes
 // across `/` in Bash mode (CR-01) because Bash subcommands carry path
-// arguments (`rm /tmp/foo`, `cat /etc/passwd`). Linear-time match against
-// `pattern.length * text.length`. Recursion is bounded by `text.length`.
+// arguments (`rm /tmp/foo`, `cat /etc/passwd`). Single-globstar patterns
+// match in linear `O(pattern.length * text.length)` time; multi-globstar
+// patterns are `O(text.length ** N)` in the worst case where N is the
+// number of `**` tokens in the pattern (each globstar independently
+// scans the whole remainder). Realistic plugin-authored patterns use at
+// most 1-2 globstars and bounded path depths; the architecture test
+// pins the truth-table rows and is the regression gate. Recursion depth
+// is bounded by `text.length`.
 //
 // Anchor resolution context: callers pass `{ homedir, cwd, projectRoot }`.
 // On Pi the `ExtensionContext` from `@earendil-works/pi-coding-agent` does
