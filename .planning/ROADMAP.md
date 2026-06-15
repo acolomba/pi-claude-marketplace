@@ -319,7 +319,19 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 4. The `if` field composes with `matcher` under AND semantics (matcher filters at group level, `if` narrows within).
 5. An architecture test at `bridges/hooks/if-field/` exercises every fixture row in the upstream `hooks-guide` § "Filter by tool name and arguments" truth table verbatim; the bridge ignores `if` on non-tool events (matches upstream's "attaching prevents the hook from running" behavior).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 61-01-PLAN.md — Hand-authored glob engine + Bash subcommand parser + IF_PREFIX_TARGETS table + IfPredicate union + architecture-test scaffold (D-61-01 / D-61-04 / D-61-03 / D-61-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 61-02-PLAN.md — Schema admission + `compileIfPredicate` + `parseHooksConfig` side-Map + `RoutingEntry.ifPredicate` + `flattenPluginIntoBuckets` populate (D-61-02 / D-61-03)
+
+**Wave 3** *(blocked on Wave 2 completion — REQUIREMENTS.md MATCH-03 amendment lockstep per D-61-03 atomic-supersession)*
+
+- [ ] 61-03-PLAN.md — `ifFires` dispatch consult + single-line `reduceBucket` insertion + REQUIREMENTS.md MATCH-03 amendment + architecture-test end-to-end closure (D-61-02 / D-61-03 / D-61-04)
 
 #### Phase 62: `asyncRewake` Registry & Background-Spawn
 
@@ -425,6 +437,6 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 4/4 | Complete    | 2026-06-14 |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 3/3 | Complete    | 2026-06-14 |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
-| 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/0 | Not started | -          |
+| 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/3 | Not started | -          |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |
