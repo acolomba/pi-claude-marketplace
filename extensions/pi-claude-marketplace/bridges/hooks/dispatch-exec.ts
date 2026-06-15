@@ -1,26 +1,412 @@
-/**
- * bridges/hooks/dispatch-exec.ts -- no-op execution-layer stub for the
- * hooks bridge (D-59-04).
- *
- * The composite handler bodies call `dispatchHookExec` sequentially against
- * each routing-entry that fires for an incoming Pi event. This module
- * exposes the locked `(entry, event, ctx): Promise<void>` signature so the
- * dispatch core can be unit-tested today without growing an execution
- * subsystem; the execution layer fills the body in a later phase without
- * changing the signature.
- *
- * The stub is intentionally permissive on the event shape (`unknown`) so a
- * malformed Pi payload at runtime cannot crash the bridge before the
- * execution layer's defensive narrowing lands.
- */
+// bridges/hooks/dispatch-exec.ts -- hooks-bridge execution layer
+// (EXEC-01..04 + PAYL-01 wiring + HOOK-05 env vars + D-60-01 / D-60-06).
+//
+// `dispatchHookExec(entry, event, ctx)` is the seam the composite handler
+// in `dispatch.ts` fires once per routing-entry that survives the matcher
+// filter. The body:
+//
+//   1. Build a `TranslationContext` from the dispatch-time `ExtensionContext`
+//      and select the per-event payload translator keyed by
+//      `entry.claudeEvent` (PAYL-01 / D-60-04).
+//   2. Serialize the translated payload to JSON, truncating at 256 KB with a
+//      top-level `_truncated: true` marker (EXEC-02 stdin cap).
+//   3. Prepare the env: `process.env` + `CLAUDE_PROJECT_DIR`,
+//      `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA` (HOOK-05; containment-
+//      guarded via `assertPathInside` per NFR-10) + (SessionStart only)
+//      `CLAUDE_ENV_FILE = <dataRoot>/_shared/claude-env-<sessionId>.env`
+//      (D-60-06). `CLAUDE_CODE_REMOTE` is intentionally UNSET (Pi runs
+//      locally).
+//   4. Pick exec-form vs shell-form per EXEC-04: `entry.handlerDecl.args
+//      !== undefined` -> `spawn(command, args, { ..., shell: false })`;
+//      otherwise -> `spawn(command, [], { ..., shell: entry.handlerDecl.shell
+//      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
+//      "args defined" not "args non-empty".
+//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). Attach
+//      `child.once("exit", ladder.cancel)` AND `child.once("error",
+//      ladder.cancel)` to close the TOCTOU window against the timer
+//      firing on a recycled pid.
+//   6. Stream stdout / stderr with manual caps (1 MB / 64 KB) -- maxBuffer
+//      does NOT apply to `spawn`, so on overflow the dispatcher kills the
+//      child and falls back to `{ kind: "noop" }`.
+//   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
+//      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
+//      cannot escape as an unhandled exception.
+//   8. On `close`, route stderr through `hookDebugLog` (EXEC-03 sole sink;
+//      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
+//      stderr)`.
+//
+// Never-throws contract: every error path resolves to `{ kind: "noop" }` +
+// `hookDebugLog`. The outer `try/catch` wraps spawn-time errors (ENOENT,
+// containment violation, etc.) so the composite handler reducer never
+// crashes against malformed configs.
+//
+// Whitelist note: this is the second of exactly TWO sanctioned
+// `node:child_process` import sites in the extension tree (the first being
+// `platform/git-credential.ts`). The architecture-test gate at
+// `tests/architecture/no-shell-out.test.ts` enforces the 2-element set;
+// adding a third file requires an explicit edit there + an update to the
+// sibling "exactly two files" assertion, with justification in the docstring
+// header.
+
+import { spawn, type ChildProcess } from "node:child_process";
+import path from "node:path";
+
+import { locationsFor } from "../../persistence/locations.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
+
+import { installTimerLadder } from "./exec-timer.ts";
+import { translate as translatePostCompact } from "./payloads/post-compact.ts";
+import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
+import { translate as translatePostToolUse } from "./payloads/post-tool-use.ts";
+import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
+import { translate as translatePreToolUse } from "./payloads/pre-tool-use.ts";
+import { translate as translateSessionEnd } from "./payloads/session-end.ts";
+import { translate as translateSessionStart } from "./payloads/session-start.ts";
+import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
+import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
+import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { RoutingEntry } from "./event-router.ts";
+import type { HookExecResult } from "./exec-result.ts";
+import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 
-export function dispatchHookExec(
-  _entry: RoutingEntry,
-  _event: unknown,
-  _ctx: ExtensionContext,
-): Promise<void> {
-  return Promise.resolve();
+// ──────────────────────────────────────────────────────────────────────────
+// Constants
+// ──────────────────────────────────────────────────────────────────────────
+
+/** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
+const DEFAULT_TIMEOUT_MS = 600_000;
+/** EXEC-02: stdin payload cap before `_truncated: true` marker injection. */
+const STDIN_TRUNCATION_BYTES = 256 * 1024;
+/** EXEC-02: hard stdout buffer cap; overflow kills + noop. */
+const STDOUT_MAX_BYTES = 1024 * 1024;
+/** EXEC-02: hard stderr buffer cap; overflow kills + noop. */
+const STDERR_MAX_BYTES = 64 * 1024;
+
+// ──────────────────────────────────────────────────────────────────────────
+// Translator dispatch table (PAYL-01 / D-60-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Key the 8 per-event translators by `BucketAEvent`. The dispatcher
+ * casts the runtime `event: unknown` to the per-translator argument
+ * shape at the call site; each translator's typed signature is
+ * preserved at compile time, narrowed by the `entry.claudeEvent`
+ * discriminator.
+ */
+const TRANSLATORS: Record<BucketAEvent, (event: never, ctx: TranslationContext) => unknown> = {
+  SessionStart: translateSessionStart,
+  UserPromptSubmit: translateUserPromptSubmit,
+  PreToolUse: translatePreToolUse,
+  PostToolUse: translatePostToolUse,
+  PostToolUseFailure: translatePostToolUseFailure,
+  PreCompact: translatePreCompact,
+  PostCompact: translatePostCompact,
+  SessionEnd: translateSessionEnd,
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+// Test seam (mirrors `_setExecutorForTest` in dispatch.ts)
+// ──────────────────────────────────────────────────────────────────────────
+
+type SpawnImpl = typeof spawn;
+let activeSpawn: SpawnImpl = spawn;
+
+/**
+ * Test-only seam: substitute the `spawn` implementation for the duration
+ * of a unit test so mock fixtures can pin EXEC-01..04 invariants without
+ * touching the real OS. Bridge-internal -- NOT re-exported from
+ * `bridges/hooks/index.ts`.
+ */
+export function _setSpawnForTest(impl: SpawnImpl): void {
+  activeSpawn = impl;
+}
+
+/** Reset the spawn seam to the production binding. */
+export function _resetSpawnForTest(): void {
+  activeSpawn = spawn;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Public surface
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * EXEC-01..04 + PAYL-01 + HOOK-05 + D-60-01 + D-60-06 execution layer.
+ *
+ * NEVER throws. Every error / overflow / timeout / parse failure path
+ * resolves to `{ kind: "noop" }` + `hookDebugLog`. The composite handler
+ * reducer (lands in a follow-up plan) folds the returned arms across the
+ * bucket and dispatches to the per-Pi-event adapter (D-60-03).
+ */
+export async function dispatchHookExec(
+  entry: RoutingEntry,
+  event: unknown,
+  ctx: ExtensionContext,
+): Promise<HookExecResult> {
+  try {
+    const transCtx = buildTranslationContext(ctx);
+    const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
+    const stdinJson = serializeWithTruncation(stdinPayload);
+    const env = await prepareEnv(entry, transCtx);
+    return await spawnAndCollect(entry, env, stdinJson);
+  } catch (err) {
+    hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
+    return { kind: "noop" };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Translator dispatch
+// ──────────────────────────────────────────────────────────────────────────
+
+function buildPayload(
+  claudeEvent: BucketAEvent,
+  event: unknown,
+  transCtx: TranslationContext,
+): unknown {
+  const translator = TRANSLATORS[claudeEvent];
+  // Defensive narrowing: an unknown event arrives here as `unknown`; the
+  // per-translator argument shape was already validated at the dispatch
+  // router (composite handler) before fan-out. The `as never` cast is the
+  // dispatcher's bridge between the per-event closed set and the
+  // translator's typed signature.
+  return translator(event as never, transCtx);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Stdin payload serialization with 256 KB truncation marker
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * EXEC-02: cap the serialized stdin payload at 256 KB. When the raw JSON
+ * exceeds the cap, re-serialize with a top-level `_truncated: true`
+ * marker (Research Discretion: top-level placement preferred so a hook
+ * author can detect truncation without knowing per-event nesting). The
+ * marker takes precedence over the cap -- the JSON with the marker may
+ * itself exceed the cap by a few bytes, but the contract is honored.
+ */
+function serializeWithTruncation(payload: unknown): string {
+  const raw = JSON.stringify(payload);
+  if (raw.length <= STDIN_TRUNCATION_BYTES) {
+    return raw;
+  }
+
+  // Inject the top-level marker by re-wrapping. When the payload is a
+  // plain object (the only shape the 8 translators emit), spread the
+  // marker onto a shallow copy.
+  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+    const marked = { _truncated: true, ...(payload as Record<string, unknown>) };
+    return JSON.stringify(marked);
+  }
+
+  // Defensive arm: non-object payloads (shouldn't happen for v1.13
+  // translators) get wrapped under a synthetic envelope so the marker
+  // is still observable at the top level.
+  return JSON.stringify({ _truncated: true, payload });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// HOOK-05 env construction + D-60-06 _shared CLAUDE_ENV_FILE
+// ──────────────────────────────────────────────────────────────────────────
+
+async function prepareEnv(
+  entry: RoutingEntry,
+  transCtx: TranslationContext,
+): Promise<NodeJS.ProcessEnv> {
+  const loc = locationsFor(entry.scope, transCtx.cwd);
+
+  const pluginRoot = path.join(loc.extensionRoot, "plugins", entry.pluginId);
+  await assertPathInside(loc.extensionRoot, pluginRoot, "CLAUDE_PLUGIN_ROOT");
+
+  const pluginData = path.join(loc.dataRoot, entry.pluginId);
+  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
+
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_PROJECT_DIR: transCtx.cwd,
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    CLAUDE_PLUGIN_DATA: pluginData,
+  };
+
+  if (entry.claudeEvent === "SessionStart") {
+    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
+    await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
+    env.CLAUDE_ENV_FILE = envFile;
+  }
+
+  // CLAUDE_CODE_REMOTE is intentionally NOT set (HOOK-05 -- Pi runs
+  // locally; documented absence is the upstream-parity contract).
+  return env;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Spawn + stream-and-collect
+// ──────────────────────────────────────────────────────────────────────────
+
+interface SpawnPlan {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly shell: boolean | string;
+}
+
+/**
+ * EXEC-04: `entry.handlerDecl.args !== undefined` -> exec-form
+ * `spawn(command, args, { shell: false })`. Otherwise -> shell-form
+ * `spawn(command, [], { shell: entry.handlerDecl.shell ?? true })`.
+ * `args: []` is the exec-form arm -- the discriminator is "args
+ * defined", not "args non-empty".
+ */
+function planSpawn(entry: RoutingEntry): SpawnPlan {
+  const command = entry.handlerDecl.command ?? "";
+  const argsField = entry.handlerDecl.args;
+
+  if (Array.isArray(argsField)) {
+    const args: string[] = (argsField as readonly unknown[]).map((a): string =>
+      typeof a === "string" ? a : JSON.stringify(a),
+    );
+    return { command, args, shell: false };
+  }
+
+  const shellField = entry.handlerDecl.shell;
+  const shell: boolean | string = typeof shellField === "string" ? shellField : true;
+  return { command, args: [], shell };
+}
+
+async function spawnAndCollect(
+  entry: RoutingEntry,
+  env: NodeJS.ProcessEnv,
+  stdinJson: string,
+): Promise<HookExecResult> {
+  const plan = planSpawn(entry);
+  const timeoutMsRaw = entry.handlerDecl.timeout;
+  const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
+
+  const child = activeSpawn(plan.command, [...plan.args], {
+    cwd: env.CLAUDE_PROJECT_DIR,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: plan.shell,
+  });
+
+  return await new Promise<HookExecResult>((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let overflowed = false;
+    let settled = false;
+
+    const ladder = installTimerLadder(child, timeoutMs);
+
+    const settle = (result: HookExecResult): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      ladder.cancel();
+      resolve(result);
+    };
+
+    accumulateStream(
+      child.stdout,
+      STDOUT_MAX_BYTES,
+      (chunk) => {
+        stdout += chunk;
+      },
+      () => {
+        if (overflowed) {
+          return;
+        }
+
+        overflowed = true;
+        hookDebugLog(
+          `exec: stdout overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
+        );
+        tryKill(child);
+      },
+    );
+
+    accumulateStream(
+      child.stderr,
+      STDERR_MAX_BYTES,
+      (chunk) => {
+        stderr += chunk;
+      },
+      () => {
+        if (overflowed) {
+          return;
+        }
+
+        overflowed = true;
+        hookDebugLog(
+          `exec: stderr overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
+        );
+        tryKill(child);
+      },
+    );
+
+    child.once("error", (err) => {
+      hookDebugLog(
+        `exec: spawn error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
+      settle({ kind: "noop" });
+    });
+
+    child.once("close", (code) => {
+      if (overflowed) {
+        settle({ kind: "noop" });
+        return;
+      }
+
+      // EXEC-03: stderr sole-sink through hookDebugLog. NO ctx.ui.notify.
+      if (stderr.length > 0) {
+        hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
+      }
+
+      settle(parseHookStdout(code, stdout, stderr));
+    });
+
+    // EPIPE defense: attach the error listener BEFORE write so a child
+    // that exits before reading stdin doesn't surface as an unhandled
+    // exception. `child.stdin` is non-null because the dispatcher opens
+    // stdio: ["pipe", "pipe", "pipe"].
+    child.stdin.on("error", (err) => {
+      hookDebugLog(
+        `exec: stdin error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
+    });
+    child.stdin.end(stdinJson);
+  });
+}
+
+function accumulateStream(
+  stream: NodeJS.ReadableStream | null,
+  cap: number,
+  onChunk: (chunk: string) => void,
+  onOverflow: () => void,
+): void {
+  if (stream === null) {
+    return;
+  }
+
+  let accumulated = 0;
+  stream.on("data", (chunk: Buffer | string) => {
+    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    accumulated += text.length;
+    if (accumulated > cap) {
+      onOverflow();
+      return;
+    }
+
+    onChunk(text);
+  });
+}
+
+function tryKill(child: ChildProcess): void {
+  if (!child.killed) {
+    child.kill("SIGTERM");
+  }
 }

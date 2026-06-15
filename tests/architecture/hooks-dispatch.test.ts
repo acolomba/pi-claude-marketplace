@@ -49,7 +49,10 @@ import {
   _setRoutingBucketForTest,
   type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import { BUCKET_A_EVENTS } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import {
+  BUCKET_A_EVENTS,
+  type BucketAEvent,
+} from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -149,6 +152,7 @@ function makeConfig(
 function makeEntry(input: {
   scope?: "user" | "project";
   pluginId: string;
+  claudeEvent?: BucketAEvent;
   rawMatcher?: string;
   command?: string;
   declarationIndex?: number;
@@ -158,6 +162,7 @@ function makeEntry(input: {
     scope: input.scope ?? "user",
     marketplace: "mp",
     pluginId: input.pluginId,
+    claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,
     handlerDecl: { type: "command", command: input.command ?? `echo ${input.pluginId}` },
@@ -385,7 +390,7 @@ test("DISP-03: composite handler with stale capturedEpoch no-ops without invokin
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -424,7 +429,7 @@ test("D-59-01: toolResultCompositeHandler routes isError=true to PostToolUseFail
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -458,7 +463,7 @@ test("D-59-01: toolResultCompositeHandler routes isError=false to PostToolUse bu
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();

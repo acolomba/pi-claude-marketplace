@@ -77,6 +77,13 @@ export interface RoutingEntry {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly pluginId: string;
+  /**
+   * D-60-01 / D-60-04: the Claude-side bucket this entry was flattened
+   * into. The translator dispatch in `dispatch-exec.ts` keys on this
+   * field to pick `./payloads/<event>.ts` without re-deriving the bucket
+   * from the routing table's outer Map key.
+   */
+  readonly claudeEvent: BucketAEvent;
   readonly matcher: ParsedMatcher;
   readonly rawMatcher: string;
   readonly handlerDecl: HookHandlerEntry;
@@ -257,7 +264,8 @@ function flattenPluginIntoBuckets(
   let declarationIndex = 0;
 
   for (const [eventName, groups] of Object.entries(cacheEntry.config)) {
-    const bucket = buckets.get(eventName as BucketAEvent);
+    const claudeEvent = eventName as BucketAEvent;
+    const bucket = buckets.get(claudeEvent);
     if (bucket === undefined) {
       // Unknown event names are filtered by the parser; defensive skip.
       continue;
@@ -272,6 +280,7 @@ function flattenPluginIntoBuckets(
           scope: cacheEntry.scope,
           marketplace: cacheEntry.marketplace,
           pluginId: cacheEntry.pluginId,
+          claudeEvent,
           matcher,
           rawMatcher,
           handlerDecl,

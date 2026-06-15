@@ -20,7 +20,10 @@ import {
   removePluginConfigFromCache,
   type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import {
+  BUCKET_A_EVENTS,
+  type BucketAEvent,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -310,6 +313,7 @@ test("currentEpoch: starts at 0 in a fresh module load and exposes a number", ()
 // Build a synthetic RoutingEntry. `rawMatcher` defaults to "" (match-all).
 function makeEntry(input: {
   pluginId: string;
+  claudeEvent?: BucketAEvent;
   rawMatcher?: string;
   command?: string;
   declarationIndex?: number;
@@ -319,6 +323,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: input.pluginId,
+    claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,
     handlerDecl: { type: "command", command: input.command ?? `echo ${input.pluginId}` },
@@ -332,7 +337,7 @@ test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequenti
   const calls: string[] = [];
   _setExecutorForTest((entry) => {
     calls.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -357,7 +362,7 @@ test("compositeHandlerFor: skips entries whose matcher does not fire", async (t)
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -382,7 +387,7 @@ test("compositeHandlerFor: SessionStart filter against event.reason", async (t) 
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -404,7 +409,7 @@ test("compositeHandlerFor: UserPromptSubmit fires unconditionally on every event
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -425,7 +430,7 @@ test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatch
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -452,7 +457,7 @@ test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailur
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -482,7 +487,7 @@ test("toolResultCompositeHandler: event.isError false routes to PostToolUse buck
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -512,7 +517,7 @@ test("toolResultCompositeHandler: epoch mismatch causes no-op", async (t) => {
   const fired: string[] = [];
   _setExecutorForTest((entry) => {
     fired.push(entry.pluginId);
-    return Promise.resolve();
+    return Promise.resolve({ kind: "noop" as const });
   });
   t.after(() => {
     _resetExecutorForTest();
@@ -551,6 +556,7 @@ test("dispatch is sequential awaited (NOT Promise.all)", async (t) => {
     events.push(`start:${entry.pluginId}`);
     await new Promise((r) => setTimeout(r, 10));
     events.push(`end:${entry.pluginId}`);
+    return { kind: "noop" as const };
   });
   t.after(() => {
     _resetExecutorForTest();
