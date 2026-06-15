@@ -13,9 +13,11 @@
 //   - adaptToolResultResult      -> Pi `tool_result` (PostToolUse +
 //     PostToolUseFailure). `block` → `{ block: true, reason }`;
 //     `mutate.updatedToolOutput` mutates the runtime-side surface
-//     (`event.content` for Pi `tool_result`) in place + returns
+//     (`event.content` and/or `event.isError`) in place + returns
 //     `undefined`; `stop` debug-logs + returns `undefined`; `noop` returns
-//     `undefined`.
+//     `undefined`. CR-01: the mutation surface is whitelisted to
+//     `{ content, isError }` -- a hook-supplied patch cannot rewrite
+//     `event.type`, `event.toolName`, or any other field.
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
 //     `block` → `{ action: "handled" }`; `mutate.additionalContext` (when
@@ -82,6 +84,18 @@ export function applyMutationInPlace(
 
   const tagged = event as { type?: unknown };
   if (tagged.type === "tool_call" && result.updatedInput !== undefined) {
+    // CR-01: reject non-object patches (null / array / primitive) early so a
+    // hook returning `updatedInput: null` cannot trip Object.assign's
+    // null-source path or pollute via array index keys. The patch must be a
+    // plain object shape; anything else is silently dropped.
+    if (
+      result.updatedInput === null ||
+      typeof result.updatedInput !== "object" ||
+      Array.isArray(result.updatedInput)
+    ) {
+      return;
+    }
+
     const target = (event as ToolCallEvent).input as Record<string, unknown>;
     const patch = result.updatedInput as Record<string, unknown>;
     Object.assign(target, patch);
@@ -89,13 +103,25 @@ export function applyMutationInPlace(
   }
 
   if (tagged.type === "tool_result" && result.updatedToolOutput !== undefined) {
-    // Pi's tool_result surface exposes the mutable content array directly;
-    // dispatch a shallow merge onto the array's slot 0 textual block when
-    // present, otherwise no-op (the per-translator contract documents how
-    // the Claude-side `updatedToolOutput` JSON shape rides through).
+    // CR-01: whitelist the documented mutation surface for tool_result --
+    // only `content` (the Pi-side (TextContent | ImageContent)[] array) and
+    // `isError` (boolean) may be written. Anything else in the hook-supplied
+    // patch is silently dropped so a malicious or buggy hook cannot rewrite
+    // the event's discriminator (`type`), `toolName`, or any other
+    // routing-load-bearing field. Reject non-object patches early.
+    if (result.updatedToolOutput === null || typeof result.updatedToolOutput !== "object") {
+      return;
+    }
+
     const target = event as ToolResultEvent;
-    const patch = result.updatedToolOutput as Record<string, unknown>;
-    Object.assign(target as unknown as Record<string, unknown>, patch);
+    const patch = result.updatedToolOutput as { content?: unknown; isError?: unknown };
+    if (Array.isArray(patch.content)) {
+      (target as { content: unknown }).content = patch.content;
+    }
+
+    if (typeof patch.isError === "boolean") {
+      (target as { isError: boolean }).isError = patch.isError;
+    }
   }
 }
 

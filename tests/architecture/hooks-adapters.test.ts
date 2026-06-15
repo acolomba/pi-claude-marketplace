@@ -141,9 +141,84 @@ test("D-60-03 adaptToolResult: mutate.updatedToolOutput patches event in place",
     event,
   );
   assert.equal(out, undefined);
-  // applyMutationInPlace shallow-merges onto the event itself; the
-  // upstream `isError` slot flips per the patch.
+  // CR-01: `isError` is a whitelisted field; the slot flips per the patch.
   assert.equal((event as unknown as { isError: boolean }).isError, true);
+});
+
+test("CR-01 adaptToolResult: mutate.updatedToolOutput cannot overwrite event.type / toolName / unrelated fields", () => {
+  const event = makeToolResultEvent();
+  const originalType = (event as unknown as { type: string }).type;
+  const originalToolName = (event as unknown as { toolName: string }).toolName;
+  // Hook returns a patch with malicious fields alongside a legitimate one.
+  adaptToolResultResult(
+    {
+      kind: "mutate",
+      updatedToolOutput: {
+        type: "hacker",
+        toolName: "rm",
+        isError: false,
+        bogusField: "should-not-appear",
+      },
+    },
+    event,
+  );
+  // CR-01: only the whitelisted `isError` field may mutate.
+  assert.equal((event as unknown as { isError: boolean }).isError, false);
+  assert.equal(
+    (event as unknown as { type: string }).type,
+    originalType,
+    "CR-01: hook must not be able to rewrite event.type",
+  );
+  assert.equal(
+    (event as unknown as { toolName: string }).toolName,
+    originalToolName,
+    "CR-01: hook must not be able to rewrite event.toolName",
+  );
+  assert.equal(
+    (event as unknown as { bogusField?: unknown }).bogusField,
+    undefined,
+    "CR-01: hook must not be able to add arbitrary fields to the event",
+  );
+});
+
+test("CR-01 adaptToolResult: mutate.updatedToolOutput.content (array) is whitelisted and patches event.content", () => {
+  const event = makeToolResultEvent();
+  const newContent = [{ type: "text", text: "patched" }];
+  adaptToolResultResult({ kind: "mutate", updatedToolOutput: { content: newContent } }, event);
+  assert.deepEqual((event as unknown as { content: unknown }).content, newContent);
+});
+
+test("CR-01 adaptToolResult: mutate.updatedToolOutput with non-array content is silently dropped", () => {
+  const event = makeToolResultEvent();
+  const originalContent = JSON.stringify((event as unknown as { content: unknown }).content);
+  adaptToolResultResult({ kind: "mutate", updatedToolOutput: { content: "not-an-array" } }, event);
+  assert.equal(
+    JSON.stringify((event as unknown as { content: unknown }).content),
+    originalContent,
+    "CR-01: non-array content patches must not mutate the content slot",
+  );
+});
+
+test("CR-01 adaptToolResult: null / primitive updatedToolOutput is silently dropped", () => {
+  const event = makeToolResultEvent();
+  const originalIsError = (event as unknown as { isError: boolean }).isError;
+  adaptToolResultResult({ kind: "mutate", updatedToolOutput: null }, event);
+  adaptToolResultResult({ kind: "mutate", updatedToolOutput: "string-patch" }, event);
+  adaptToolResultResult({ kind: "mutate", updatedToolOutput: 42 }, event);
+  assert.equal((event as unknown as { isError: boolean }).isError, originalIsError);
+});
+
+test("CR-01 adaptToolCall: null / non-object updatedInput is silently dropped", () => {
+  const event = makeToolCallEvent({ keep: "me" });
+  const before = JSON.stringify(event.input);
+  adaptToolCallResult({ kind: "mutate", updatedInput: null }, event);
+  adaptToolCallResult({ kind: "mutate", updatedInput: "string-patch" }, event);
+  adaptToolCallResult({ kind: "mutate", updatedInput: [1, 2, 3] }, event);
+  assert.equal(
+    JSON.stringify(event.input),
+    before,
+    "CR-01: non-object updatedInput must be dropped",
+  );
 });
 
 test("D-60-03 adaptToolResult: stop debug-logs and returns undefined", () => {
