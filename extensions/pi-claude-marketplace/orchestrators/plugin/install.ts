@@ -1560,9 +1560,9 @@ function classifyEntityShapeError(
 // The carve-out: `startsWith("contains ")` strips the resolver's prefix,
 // then checks the remaining token against the set.
 // HOOK-04 / D-58-02: `lspServers` is now the SOLE manifest-field
-// carve-out. `hooks` was a supported component kind under v1.13
-// (Phase 57 SUPPORTED_COMPONENT_KINDS extension) so the resolver no
-// longer emits a `"contains hooks"` note; the dead carve-out entry was
+// carve-out. `hooks` was a supported component kind under v1.13 (the
+// `SUPPORTED_COMPONENT_KINDS` extension) so the resolver no longer
+// emits a `"contains hooks"` note; the dead carve-out entry was
 // dropped. The `{unsupported hooks}` reason is now a normal 2-word
 // REASON sourced through `shared/probe-classifiers.ts::narrowResolverNotes`
 // against the `parseHooksConfig` prefix tokens, not a manifest-field
