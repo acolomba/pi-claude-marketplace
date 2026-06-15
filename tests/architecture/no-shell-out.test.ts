@@ -48,15 +48,28 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  * envelope. Adding a third file requires the same edit-here +
  * edit-sibling-assertion discipline.
  *
+ * EXEC-05 / HOOK-06 / D-62-01 third sanctioned site:
+ * The async-rewake registry at
+ * extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
+ * is the bridge-owned background-spawn site for `asyncRewake: true` hook
+ * entries. Spawn options diverge from the sync EXEC-01..04 path
+ * (`detached: false` + fire-and-forget exit handler watching for code 2
+ * -> `ctx.sendMessage` injection); the OS-level concern lives here
+ * because no pure-JS equivalent exists for arbitrary plugin-supplied
+ * commands AND the registry owns in-memory + persisted (PID table)
+ * state for `/reload`-safe SIGKILL. Adding a FOURTH file requires the
+ * same edit-here + edit-sibling-assertion discipline.
+ *
  * The ALLOWED_CHILD_PROCESS_FILES whitelist below is the SOLE permitted use
- * of node:child_process in the extension tree. Adding a third file MUST
+ * of node:child_process in the extension tree. Adding a fourth file MUST
  * require an explicit edit here AND an update to the sibling
- * "exactly two files" assertion below, so silent widening is caught in CI.
+ * "exactly three files" assertion below, so silent widening is caught in CI.
  */
 
 const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set([
   "extensions/pi-claude-marketplace/platform/git-credential.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
+  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
 ]);
 
 async function* walkTsFiles(dir: string): AsyncGenerator<string> {
@@ -103,14 +116,15 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
   );
 });
 
-// AUTH-06/08/09 + EXEC-01..04 assertion: the whitelist is exactly the two
-// load-bearing sites named below -- nobody silently widened it. If a future
-// change needs another file with node:child_process, it MUST update both
-// ALLOWED_CHILD_PROCESS_FILES above AND this assertion's expected array
-// in the same commit, with a justification recorded in the
+// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 assertion: the whitelist
+// is exactly the three load-bearing sites named below -- nobody silently
+// widened it. If a future change needs another file with node:child_process,
+// it MUST update both ALLOWED_CHILD_PROCESS_FILES above AND this assertion's
+// expected array in the same commit, with a justification recorded in the
 // docstring header.
-test("whitelist: exactly two files may import node:child_process", () => {
+test("whitelist: exactly three files may import node:child_process", () => {
   assert.deepEqual([...ALLOWED_CHILD_PROCESS_FILES].sort(), [
+    "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
     "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
     "extensions/pi-claude-marketplace/platform/git-credential.ts",
   ]);
