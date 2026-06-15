@@ -29,7 +29,7 @@
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -472,6 +472,26 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
 }
 
 /**
+ * D-60-06: mkdir-p the per-session `_shared` data dir under `loc.dataRoot`
+ * so SessionStart hooks can rely on `CLAUDE_ENV_FILE`'s containing
+ * directory existing without the bridge re-checking on every dispatch.
+ * Containment-guarded via `assertPathInside` per NFR-10; failures route
+ * through `hookDebugLog` and the bridge factory continues. Idempotent
+ * across `/reload`.
+ */
+async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
+  const sharedDir = path.join(loc.dataRoot, "_shared");
+  try {
+    await assertPathInside(loc.dataRoot, sharedDir, "_shared data dir");
+    await mkdir(sharedDir, { recursive: true });
+  } catch (err) {
+    hookDebugLog(
+      `registerHooksBridge: _shared mkdir failed for scope=${loc.scope}: ${errorMessage(err)}`,
+    );
+  }
+}
+
+/**
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
  * Step order is load-bearing:
@@ -497,6 +517,21 @@ export async function registerHooksBridge(
   const hydrated = await hydrateCacheFromDisk(opts);
   for (const { state, loc } of hydrated) {
     rebuildRoutingTables(state, loc);
+    // D-60-06: ensure the per-session `_shared` data dir exists so a
+    // SessionStart hook's `CLAUDE_ENV_FILE = <dataRoot>/_shared/...` path
+    // can be written by the hook without the bridge having to do it from
+    // inside dispatchHookExec. Gate on at least one SessionStart entry
+    // actually existing in the rebuilt routing table for this scope: an
+    // unsolicited mkdir on a pristine scope would create
+    // `<scopeRoot>/pi-claude-marketplace/...` and violate WR-05 (the "no
+    // files on a clean reconcile" invariant pinned by
+    // tests/edge/index-handler.test.ts). When no plugin declares
+    // SessionStart hooks the env-file path will never be set, so the
+    // dir's absence is harmless. Idempotent across `/reload` via mkdir {
+    // recursive }; failures route through hookDebugLog.
+    if ((routingTable.get("SessionStart") ?? []).length > 0) {
+      await ensureSharedDataDir(loc);
+    }
   }
 
   pi.on("session_start", compositeHandlerFor("SessionStart", capturedEpoch));
