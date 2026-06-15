@@ -468,7 +468,13 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
   // `cacheKey()`); we scope the delete to keys whose first segment is the
   // literal `"project"` token.
   const projectKeyPrefix = "project\x00";
-  for (const key of parsedConfigCache.keys()) {
+  // WR-04: snapshot the key set BEFORE iterating + deleting.  ECMAScript
+  // does specify that a Map iterator skips entries deleted during
+  // iteration, so this is not a correctness change today -- it is a
+  // contributor-hygiene change.  A casual reader of the original loop
+  // would reach for `Array.from(...)` thinking they need a snapshot;
+  // hoisting it here removes that cognitive friction.
+  for (const key of Array.from(parsedConfigCache.keys())) {
     if (key.startsWith(projectKeyPrefix)) {
       parsedConfigCache.delete(key);
     }
