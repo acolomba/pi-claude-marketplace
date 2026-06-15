@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -458,4 +459,120 @@ test("parseHooksConfig: hookDebugLog fires for supportability failure when PI_CL
       process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prior;
     }
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// HOOK_HANDLER_SCHEMA asyncRewake / rewakeMessage / rewakeSummary admission
+// HOOK-06 / EXEC-05: schema-level admission only; runtime narrowing lives
+// in the bridges/hooks/async-rewake/ registry per HOOK-03 lenient stance.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("HOOK_HANDLER_SCHEMA admits asyncRewake / rewakeMessage / rewakeSummary as optional", () => {
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [
+            {
+              type: "command",
+              command: "/bin/false",
+              asyncRewake: true,
+              rewakeMessage: "Security review",
+              rewakeSummary: "Background scan ran",
+            },
+          ],
+        },
+      ],
+    }),
+    true,
+  );
+});
+
+test("HOOK_HANDLER_SCHEMA accepts non-boolean asyncRewake (HOOK-03 lenient)", () => {
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [{ type: "command", command: "/bin/false", asyncRewake: "yes" }],
+        },
+      ],
+    }),
+    true,
+  );
+});
+
+test("HOOK_HANDLER_SCHEMA accepts non-string rewakeMessage / rewakeSummary (HOOK-03 lenient)", () => {
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [
+            { type: "command", command: "/bin/false", rewakeMessage: 42, rewakeSummary: null },
+          ],
+        },
+      ],
+    }),
+    true,
+  );
+});
+
+test("HOOK_HANDLER_SCHEMA still requires `command` on type:'command' when asyncRewake is set", () => {
+  assert.equal(
+    HOOKS_VALIDATOR.Check({
+      PreToolUse: [
+        {
+          matcher: "Edit",
+          hooks: [{ type: "command", asyncRewake: true, rewakeMessage: "x" }],
+        },
+      ],
+    }),
+    false,
+  );
+});
+
+test("HOOK_HANDLER_SCHEMA explicitly lists asyncRewake / rewakeMessage / rewakeSummary in its properties block", async () => {
+  // Distinguishes "lenient additionalProperties:true admits the field"
+  // from "the schema explicitly names the field". Plan 01 requires the
+  // three names to land in the properties block alongside the existing
+  // HOOK-03 admissions (statusMessage / once / async / shell / args) so
+  // a downstream `additionalProperties:false` audit, plus the
+  // documentation surface the schema exposes, both pin the field family
+  // as a first-class admission.
+  const source = await readFile(
+    new URL(
+      "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  // The properties block should declare each of the three names by
+  // literal key. The empty-object JSON Schema value (`asyncRewake: {}`)
+  // is the HOOK-03 lenient marker.
+  for (const name of ["asyncRewake", "rewakeMessage", "rewakeSummary"]) {
+    assert.match(source, new RegExp(`${name}\\s*:\\s*\\{\\s*\\}`));
+  }
+});
+
+test("parseHooksConfig admits the full asyncRewake field family", () => {
+  const raw = JSON.stringify({
+    PreToolUse: [
+      {
+        matcher: "Edit",
+        hooks: [
+          {
+            type: "command",
+            command: "/bin/false",
+            asyncRewake: true,
+            rewakeMessage: "Security review",
+            rewakeSummary: "Background scan ran",
+          },
+        ],
+      },
+    ],
+  });
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
+  assert.equal(result.ok, true);
 });
