@@ -4,12 +4,12 @@ milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
 stopped_at: Phase 61 context gathered
-last_updated: "2026-06-15T14:08:38.785Z"
-last_activity: 2026-06-15 -- Phase 61 planning complete
+last_updated: "2026-06-15T14:33:16.238Z"
+last_activity: 2026-06-15 -- Phase 61 execution started
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 15
+  total_plans: 18
   completed_plans: 15
   percent: 57
 ---
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 60 — hook-execution-payload-translators-env-vars
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 61 — if-field-permission-rule-matcher
 
 ## Current Position
 
-Phase: 61
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-15 -- Phase 61 planning complete
+Phase: 61 (if-field-permission-rule-matcher) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 61
+Last activity: 2026-06-15 -- Phase 61 execution started
 
 ## Performance Metrics
 

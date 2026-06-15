@@ -178,7 +178,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 - [x] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02, HOOK-04 (pulled forward per D-58-01) (completed 2026-06-14)
 - [x] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01 (completed 2026-06-14)
 - [x] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05 (completed 2026-06-15)
-- [ ] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03
+- [x] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03 (completed 2026-06-15)
 - [ ] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05
 - [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06
 
@@ -323,15 +323,15 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 1**
 
-- [ ] 61-01-PLAN.md — Hand-authored glob engine + Bash subcommand parser + IF_PREFIX_TARGETS table + IfPredicate union + architecture-test scaffold (D-61-01 / D-61-04 / D-61-03 / D-61-02)
+- [x] 61-01-PLAN.md — Hand-authored glob engine + Bash subcommand parser + IF_PREFIX_TARGETS table + IfPredicate union + architecture-test scaffold (D-61-01 / D-61-04 / D-61-03 / D-61-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 61-02-PLAN.md — Schema admission + `compileIfPredicate` + `parseHooksConfig` side-Map + `RoutingEntry.ifPredicate` + `flattenPluginIntoBuckets` populate (D-61-02 / D-61-03)
+- [x] 61-02-PLAN.md — Schema admission + `compileIfPredicate` + `parseHooksConfig` side-Map + `RoutingEntry.ifPredicate` + `flattenPluginIntoBuckets` populate (D-61-02 / D-61-03)
 
 **Wave 3** *(blocked on Wave 2 completion — REQUIREMENTS.md MATCH-03 amendment lockstep per D-61-03 atomic-supersession)*
 
-- [ ] 61-03-PLAN.md — `ifFires` dispatch consult + single-line `reduceBucket` insertion + REQUIREMENTS.md MATCH-03 amendment + architecture-test end-to-end closure (D-61-02 / D-61-03 / D-61-04)
+- [x] 61-03-PLAN.md — `ifFires` dispatch consult + single-line `reduceBucket` insertion + REQUIREMENTS.md MATCH-03 amendment + architecture-test end-to-end closure (D-61-02 / D-61-03 / D-61-04)
 
 #### Phase 62: `asyncRewake` Registry & Background-Spawn
 
@@ -437,6 +437,6 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 58. Matcher Parser, Tool-Name Mapping & Supportability Gate         | v1.13     | 4/4 | Complete    | 2026-06-14 |
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 3/3 | Complete    | 2026-06-14 |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
-| 61. `if` Field Permission-Rule Matcher                              | v1.13     | 0/3 | Not started | -          |
+| 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete   | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |
