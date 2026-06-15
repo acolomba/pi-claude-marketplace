@@ -24,6 +24,7 @@
 // `installable: false`).
 
 import { readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import Type from "typebox";
@@ -661,7 +662,19 @@ async function readStandaloneHooks(
   // wrapper.
   const raw = await readFileTextOf(ctx)(hooksPath);
 
-  const parsed = parseHooksConfig(raw);
+  // MATCH-03 / A1 projectRoot fallback: the resolver has no
+  // `ExtensionContext` in scope; construct the path-anchor triple from
+  // `os.homedir()` + `process.cwd()`. The resolver's outcome is the
+  // discriminated `installable` shape -- the `if`-field side-Map is
+  // discarded here (only the bridge cache hydrate / install /
+  // reinstall / update paths consume it), so the `compileIf` callback
+  // is a no-op that returns a synthetic fall-open token. Domain MUST
+  // NOT import the bridge `IfPredicate` union (D-11), and the
+  // resolver-emitted map is unreachable from any consumer at this
+  // call site.
+  const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
+  const noopCompileIf = (): null => null;
+  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf);
   if (!parsed.ok) {
     return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
   }

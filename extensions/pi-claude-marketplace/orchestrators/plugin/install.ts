@@ -63,6 +63,7 @@
 // shared/notify.ts; this file holds no rendering imports.
 
 import { mkdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -77,6 +78,7 @@ import {
   prepareStageCommands,
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import { addPluginConfigToCache, rebuildRoutingTables } from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
@@ -331,6 +333,7 @@ async function addInstalledPluginHooksToCache(
   marketplace: string,
   plugin: string,
   hooksJsonPath: string,
+  cwd: string,
 ): Promise<void> {
   let raw: string;
   try {
@@ -342,7 +345,11 @@ async function addInstalledPluginHooksToCache(
     return;
   }
 
-  const parsed = parseHooksConfig(raw);
+  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot;
+  // homedir from `os.homedir()` anchors `~`-prefixed path globs in
+  // `if`-field rules.
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
   if (!parsed.ok) {
     hookDebugLog(
       `install: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
@@ -1015,6 +1022,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           marketplace,
           plugin,
           path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
+          cwd,
         );
 
         rebuildRoutingTables(state, locations);

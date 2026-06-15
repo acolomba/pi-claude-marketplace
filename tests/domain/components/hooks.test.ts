@@ -8,6 +8,17 @@ import {
   parseMatcher,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
+// MATCH-03: synthetic path-anchor triple + no-op compileIf callback
+// consumed by parseHooksConfig. Fixture values are stable across every
+// parseHooksConfig invocation in this file -- no test exercises an
+// `if` field, so the ctx is effectively a no-op here.
+const TEST_IF_CTX = {
+  homedir: "/home/u",
+  cwd: "/projects/p",
+  projectRoot: "/projects/p",
+} as const;
+const TEST_COMPILE_IF = (): null => null;
+
 // ──────────────────────────────────────────────────────────────────────────
 // HOOKS_CONFIG_SCHEMA accept matrix
 // HOOK-03: additionalProperties: true at every nesting level (lenient).
@@ -128,7 +139,7 @@ test("parseHooksConfig returns {ok:true,value} for a syntactically + structurall
   const raw = JSON.stringify({
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.value, JSON.parse(raw));
@@ -136,7 +147,7 @@ test("parseHooksConfig returns {ok:true,value} for a syntactically + structurall
 });
 
 test("parseHooksConfig returns {ok:false,reason} on invalid JSON", () => {
-  const result = parseHooksConfig("not-valid-json");
+  const result = parseHooksConfig("not-valid-json", TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(typeof result.reason, "string");
@@ -145,7 +156,7 @@ test("parseHooksConfig returns {ok:false,reason} on invalid JSON", () => {
 });
 
 test("parseHooksConfig returns {ok:false,reason} on a structurally-malformed payload", () => {
-  const result = parseHooksConfig('{"PreToolUse": "not-an-array"}');
+  const result = parseHooksConfig('{"PreToolUse": "not-an-array"}', TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(typeof result.reason, "string");
@@ -154,7 +165,11 @@ test("parseHooksConfig returns {ok:false,reason} on a structurally-malformed pay
 });
 
 test("parseHooksConfig returns {ok:false,reason} when a type:'command' entry is missing the required `command` field", () => {
-  const result = parseHooksConfig('{"PreToolUse": [{"hooks": [{"type": "command"}]}]}');
+  const result = parseHooksConfig(
+    '{"PreToolUse": [{"hooks": [{"type": "command"}]}]}',
+    TEST_IF_CTX,
+    TEST_COMPILE_IF,
+  );
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(typeof result.reason, "string");
@@ -280,7 +295,7 @@ test("checkMatcherSupportability: regex matcher -> (a) via parseHooksConfig", ()
   const raw = JSON.stringify({
     PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -294,7 +309,7 @@ test("checkMatcherSupportability: unmapped tool (MultiEdit) -> (b)", () => {
   const raw = JSON.stringify({
     PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -308,7 +323,7 @@ test("checkMatcherSupportability: non-bucket-A event (Stop) -> (c)", () => {
   const raw = JSON.stringify({
     Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -327,7 +342,7 @@ test("checkMatcherSupportability: UserPromptSubmit with non-empty matcher -> (c)
       { matcher: "anything", hooks: [{ type: "command", command: "/bin/false" }] },
     ],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -343,7 +358,7 @@ test("checkMatcherSupportability: SessionStart source=clear -> (c) closed-set", 
   const raw = JSON.stringify({
     SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -358,7 +373,7 @@ test("checkMatcherSupportability: SessionStart source=startup -> ok (admissible)
   const raw = JSON.stringify({
     SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
 });
 
@@ -368,7 +383,7 @@ test("checkMatcherSupportability: PreCompact trigger=manual -> (c) closed-set", 
   const raw = JSON.stringify({
     PreCompact: [{ matcher: "manual", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -383,7 +398,7 @@ test("checkMatcherSupportability: PreCompact empty matcher -> ok (match-all)", (
   const raw = JSON.stringify({
     PreCompact: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
 });
 
@@ -393,7 +408,7 @@ test("checkMatcherSupportability: non-command handler type (http) -> (d)", () =>
   const raw = JSON.stringify({
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "http", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.ok(
@@ -408,7 +423,7 @@ test("checkMatcherSupportability: success path -> ok=true", () => {
   const raw = JSON.stringify({
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw);
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
 
   // Direct gate call on a typed HooksConfig: also ok.
@@ -430,7 +445,7 @@ test("parseHooksConfig: hookDebugLog fires for supportability failure when PI_CL
     const raw = JSON.stringify({
       PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
     });
-    const result = parseHooksConfig(raw);
+    const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
     assert.equal(result.ok, false);
     assert.ok(
       captured.some((line) => line.includes("unsupported hooks: (a) regex matcher")),

@@ -42,6 +42,47 @@ import {
 } from "./hook-events.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 
+// MATCH-03: the `if`-field permission-rule primitives live in
+// `bridges/hooks/if-field/` (Plan 01 placement) -- domain MUST NOT
+// import upward (D-11 import direction). `parseHooksConfig` consumes
+// the predicate compile path as a generic `<P>` callback parameter so
+// the parser layer never type-depends on the concrete predicate union.
+// The bridge layer wires `compileIfPredicate` at the `parseHooksConfig`
+// call site; the resolver supplies a no-op that returns a fixed
+// fall-open sentinel because it only consumes the discriminated
+// installable arm, not the side-Map.
+
+/**
+ * Anchor context consumed by the `compileIf` callback. Mirrors the
+ * shape `bridges/hooks/if-field/index.ts::CompileIfPredicateContext`
+ * structurally -- duplicated here so the parser does not depend on
+ * the bridge surface (D-11 import direction).
+ */
+export interface CompileIfPredicateContext {
+  readonly homedir: string;
+  readonly cwd: string;
+  readonly projectRoot: string;
+}
+
+/**
+ * MATCH-03 callback type. The bridge layer (`event-router.ts`,
+ * orchestrators) supplies `compileIfPredicate` from
+ * `bridges/hooks/if-field/`; the resolver supplies a no-op returning
+ * a fixed fall-open sentinel (it only cares about the installable
+ * verdict). The callback MUST be pure and total (never throws past
+ * its return type) -- the parser does not wrap call sites in
+ * try/catch.
+ *
+ * Generic in `P` so the bridge layer's concrete `IfPredicate`
+ * discriminated union flows out via `parseHooksConfig` typed
+ * correctly without the domain parser importing the union.
+ */
+export type CompileIfCallback<P> = (
+  rawIf: string,
+  claudeEvent: BucketAEvent,
+  ctx: CompileIfPredicateContext,
+) => P;
+
 // ──────────────────────────────────────────────────────────────────────────
 // Schema layer-by-layer
 // ──────────────────────────────────────────────────────────────────────────
@@ -61,6 +102,12 @@ import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 export interface HookHandlerEntry {
   type: string;
   command?: string;
+  // MATCH-03: upstream permission-rule string consumed by
+  // `compileIfPredicate`. OPTIONAL on every handler (HOOK-03
+  // forward-compat: handlers without `if` MUST still validate). The
+  // schema's `required` array stays exactly `["type"]`; absence is
+  // normalized to MATCH_ALL_IF at the parse-time compile seam.
+  readonly if?: string;
   // HOOK-03 tolerated additive extensions (silently accepted; semantics
   // live in the future EXEC layer, not here).
   statusMessage?: unknown;
@@ -78,6 +125,11 @@ const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({
   properties: {
     type: { type: "string" },
     command: { type: "string" },
+    // MATCH-03: user-facing `if` permission-rule string. Distinct from
+    // the schema-level `if`/`then` conditional below (which encodes the
+    // "command required when type === 'command'" discriminator). The
+    // user-facing field is OPTIONAL -- absent on most handlers.
+    if: { type: "string" },
   },
   if: {
     type: "object",
@@ -142,11 +194,44 @@ function firstHookValidationDetail(value: unknown): string {
 }
 
 /**
+ * MATCH-03 side-Map of compiled `if` predicates produced by
+ * `parseHooksConfig`. Key shape is
+ * `${claudeEvent}|${groupIndex}|${handlerIndex}` (e.g.
+ * `"PostToolUse|0|2"`); only handlers whose `if` field is non-undefined
+ * are present. The downstream `flattenPluginIntoBuckets` consumer reads
+ * the map via the same key and falls back to MATCH_ALL_IF on miss --
+ * absent + malformed + non-tool-event entries all collapse to the
+ * fall-open sentinel so dispatch never observes `undefined`
+ * (always-present-with-sentinel per D-61-02).
+ *
+ * Generic in `P` so the bridge layer's concrete `IfPredicate`
+ * discriminated union flows out typed correctly.
+ */
+export type CompiledIfPredicateMap<P> = ReadonlyMap<string, P>;
+
+/**
+ * Compose the side-Map key. Centralized so producers (parseHooksConfig)
+ * and consumers (flattenPluginIntoBuckets) cannot drift.
+ */
+export function ifPredicateMapKey(
+  claudeEvent: BucketAEvent,
+  groupIndex: number,
+  handlerIndex: number,
+): string {
+  return `${claudeEvent}|${groupIndex}|${handlerIndex}`;
+}
+
+/**
  * Discriminated parse result. Consumers (resolver) narrow on `ok` to
  * surface the `{unsupported hooks}` reason on failure (D-57-04).
+ *
+ * MATCH-03 extension: the success arm now carries the compiled
+ * `ifPredicates` side-Map; failure arm unchanged. Generic in `P` so
+ * the bridge layer's concrete `IfPredicate` discriminated union flows
+ * out typed correctly.
  */
-export type HookConfigParseResult =
-  | { ok: true; value: HooksConfig }
+export type HookConfigParseResult<P> =
+  | { ok: true; value: HooksConfig; ifPredicates: CompiledIfPredicateMap<P> }
   | { ok: false; reason: string };
 
 /**
@@ -154,8 +239,21 @@ export type HookConfigParseResult =
  * success; on failure returns `{ok:false,reason}` and forwards the
  * detail through `hookDebugLog`. The resolver maps the failure to
  * `installable: false` with the `{unsupported hooks}` reason. No throws.
+ *
+ * MATCH-03 (D-61-02): the success arm also returns `ifPredicates`, a
+ * `Map` keyed on `(event|groupIndex|handlerIndex)` carrying the
+ * `compileIfPredicate` result for every handler whose `if` field is
+ * defined. Missing keys collapse to MATCH_ALL_IF at the flatten seam.
+ *
+ * `ctx` is the `CompileIfPredicateContext` consumed by the path-glob
+ * compiler; production call sites construct it from the in-scope
+ * `ExtensionContext.cwd` per the A1 projectRoot fallback.
  */
-export function parseHooksConfig(raw: string): HookConfigParseResult {
+export function parseHooksConfig<P>(
+  raw: string,
+  ctx: CompileIfPredicateContext,
+  compileIf: CompileIfCallback<P>,
+): HookConfigParseResult<P> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -186,7 +284,75 @@ export function parseHooksConfig(raw: string): HookConfigParseResult {
     return { ok: false, reason };
   }
 
-  return { ok: true, value: parsed };
+  // MATCH-03: compile the side-Map of `if` predicates via the caller-
+  // supplied `compileIf` callback. Per D-61-02 every failure path
+  // inside `compileIfPredicate` collapses to MATCH_ALL_IF -- the
+  // parser never fails on an `if`-field issue (plugin always installs).
+  const ifPredicates = buildIfPredicateMap(parsed, ctx, compileIf);
+
+  return { ok: true, value: parsed, ifPredicates };
+}
+
+/**
+ * MATCH-03 walker. Iterates every (claudeEvent, groupIndex,
+ * handlerIndex) triple in the parsed config and, for each handler with
+ * a non-undefined `if` field, invokes the caller-supplied `compileIf`
+ * callback and stores the result in the side-Map. Handlers without an
+ * `if` field are absent from the map (the flatten consumer falls back
+ * to MATCH_ALL_IF).
+ *
+ * Pre-condition: `checkMatcherSupportability` has already accepted the
+ * config, so every event key is a BucketAEvent.
+ */
+function buildIfPredicateMap<P>(
+  config: HooksConfig,
+  ctx: CompileIfPredicateContext,
+  compileIf: CompileIfCallback<P>,
+): CompiledIfPredicateMap<P> {
+  const out = new Map<string, P>();
+  for (const [eventName, groups] of Object.entries(config)) {
+    const claudeEvent = eventName as BucketAEvent;
+    for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      const group = groups[groupIndex];
+      if (group === undefined) {
+        continue;
+      }
+
+      compileGroupIfPredicates(claudeEvent, groupIndex, group.hooks, ctx, compileIf, out);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Per-group helper. Walks the handler list and stores compiled
+ * predicates in `out` keyed on (event|groupIndex|handlerIndex).
+ * Handlers without an `if` field are skipped (the flatten consumer
+ * falls back to MATCH_ALL_IF).
+ */
+function compileGroupIfPredicates<P>(
+  claudeEvent: BucketAEvent,
+  groupIndex: number,
+  hooks: ReadonlyArray<HookHandlerEntry>,
+  ctx: CompileIfPredicateContext,
+  compileIf: CompileIfCallback<P>,
+  out: Map<string, P>,
+): void {
+  for (let handlerIndex = 0; handlerIndex < hooks.length; handlerIndex++) {
+    const handler = hooks[handlerIndex];
+    if (handler === undefined) {
+      continue;
+    }
+
+    const rawIf = handler.if;
+    if (rawIf === undefined) {
+      continue;
+    }
+
+    const predicate = compileIf(rawIf, claudeEvent, ctx);
+    out.set(ifPredicateMapKey(claudeEvent, groupIndex, handlerIndex), predicate);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -50,6 +50,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
+import { compileIfPredicate } from "./if-field/index.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -344,7 +345,11 @@ async function hydrateCacheFromDisk(opts: {
       state = { schemaVersion: 1, marketplaces: {} };
     }
 
-    await hydrateScopeFromState(state, loc);
+    // MATCH-03 / A1 projectRoot fallback: pass opts.cwd as cwd +
+    // projectRoot for project scope; user-scope hydrate paths use
+    // homedir-rooted paths so opts.cwd is the right "current project"
+    // anchor for path globs.
+    await hydrateScopeFromState(state, loc, opts.cwd);
     hydrated.push({ state, loc });
   }
 
@@ -357,7 +362,11 @@ async function hydrateCacheFromDisk(opts: {
  * populate the cache. Parse failures are logged through hookDebugLog and
  * skipped (the resolver flips installable: false on the next reconcile).
  */
-async function hydrateScopeFromState(state: ExtensionState, loc: ScopedLocations): Promise<void> {
+async function hydrateScopeFromState(
+  state: ExtensionState,
+  loc: ScopedLocations,
+  cwd: string,
+): Promise<void> {
   for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
     if (mpRecord.scope !== loc.scope) {
       continue;
@@ -374,7 +383,7 @@ async function hydrateScopeFromState(state: ExtensionState, loc: ScopedLocations
       // Zero or one entry today; iterate defensively for forward-compat.
       for (const slug of hookSlugs) {
         const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
-        await tryHydrateOnePlugin(loc.scope, mpName, pluginId, hooksJsonPath, loc.hooksDir);
+        await tryHydrateOnePlugin(loc.scope, mpName, pluginId, hooksJsonPath, loc.hooksDir, cwd);
       }
     }
   }
@@ -386,6 +395,7 @@ async function tryHydrateOnePlugin(
   pluginId: string,
   hooksJsonPath: string,
   hooksDir: string,
+  cwd: string,
 ): Promise<void> {
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
@@ -412,7 +422,10 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  const result = parseHooksConfig(raw);
+  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot;
+  // homedir from `os.homedir()` anchors `~`-prefixed path globs.
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const result = parseHooksConfig(raw, ifCtx, compileIfPredicate);
   if (!result.ok) {
     hookDebugLog(`hydrate: parse failed for ${scope}/${marketplace}/${pluginId}: ${result.reason}`);
     return;
@@ -492,7 +505,7 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
     return;
   }
 
-  await hydrateScopeFromState(state, loc);
+  await hydrateScopeFromState(state, loc, cwd);
 }
 
 /**

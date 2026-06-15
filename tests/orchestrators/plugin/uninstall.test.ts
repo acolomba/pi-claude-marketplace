@@ -1893,10 +1893,14 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       // the uninstall has something visible to remove. Two parallel seeds:
       // (a) cache so rebuild walks pick it up, (b) explicit routing-table
       // injection so the test's pre-condition assertion is unambiguous.
+      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
+      const TEST_COMPILE_IF = (): null => null;
       const parsed = parseHooksConfig(
         JSON.stringify({
           PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
         }),
+        TEST_IF_CTX,
+        TEST_COMPILE_IF,
       );
       assert.ok(parsed.ok);
       addPluginConfigToCache("project", "mp", "p1", parsed.value);

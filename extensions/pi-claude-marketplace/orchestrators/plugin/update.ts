@@ -51,6 +51,7 @@
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -63,6 +64,7 @@ import {
   commitPreparedCommands,
   prepareStageCommands,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
   addPluginConfigToCache,
   rebuildRoutingTables,
@@ -1122,6 +1124,7 @@ async function finalizeUpdateRecord(
           marketplace,
           plugin,
           path.join(installable.pluginRoot, installable.hooksConfigPath),
+          args.cwd,
         );
       }
 
@@ -1143,6 +1146,7 @@ async function readAndCacheUpdatedPluginHooks(
   marketplace: string,
   plugin: string,
   hooksJsonPath: string,
+  cwd: string,
 ): Promise<void> {
   let raw: string;
   try {
@@ -1154,7 +1158,9 @@ async function readAndCacheUpdatedPluginHooks(
     return;
   }
 
-  const parsed = parseHooksConfig(raw);
+  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
   if (!parsed.ok) {
     hookDebugLog(
       `update: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,

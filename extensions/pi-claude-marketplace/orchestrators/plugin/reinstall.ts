@@ -22,6 +22,7 @@
 // surface is absent.
 
 import { readFile, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -38,6 +39,7 @@ import {
   replacePreparedCommands,
   rollbackCommandsReplacement,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
   addPluginConfigToCache,
   rebuildRoutingTables,
@@ -1118,6 +1120,7 @@ async function runLockedReinstall(
         marketplace,
         plugin,
         path.join(installable.pluginRoot, installable.hooksConfigPath),
+        cwd,
       );
     }
 
@@ -1152,6 +1155,7 @@ async function readAndCacheReinstalledPluginHooks(
   marketplace: string,
   plugin: string,
   hooksJsonPath: string,
+  cwd: string,
 ): Promise<void> {
   let raw: string;
   try {
@@ -1163,7 +1167,9 @@ async function readAndCacheReinstalledPluginHooks(
     return;
   }
 
-  const parsed = parseHooksConfig(raw);
+  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
   if (!parsed.ok) {
     hookDebugLog(
       `reinstall: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,

@@ -2582,7 +2582,13 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
       helloRecord.resources.hooks = ["hello"];
       await saveState(locations.extensionRoot, seededState);
 
-      const parsedOld = parseHooksConfig(JSON.stringify(oldHooksJson));
+      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
+      const TEST_COMPILE_IF = (): null => null;
+      const parsedOld = parseHooksConfig(
+        JSON.stringify(oldHooksJson),
+        TEST_IF_CTX,
+        TEST_COMPILE_IF,
+      );
       assert.ok(parsedOld.ok);
       addPluginConfigToCache("project", "mp", "hello", parsedOld.value);
 
