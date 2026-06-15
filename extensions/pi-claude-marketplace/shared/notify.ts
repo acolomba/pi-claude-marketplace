@@ -309,6 +309,27 @@ export function notifyDiagnostic(
   ctx.ui.notify(`${header}\n\n${lines.join("\n")}`, "warning");
 }
 
+/**
+ * T-62-09 IL-2 EXEMPTION: surfaces the `rewakeSummary` UI message at
+ * `"info"` severity from the asyncRewake exit handler. This is the
+ * single sanctioned runtime notify call originating from
+ * `bridges/hooks/async-rewake/registry.ts`; the exemption exists
+ * because `rewakeSummary` is the upstream Claude-Code-mandated UI
+ * status surface declared in the plugin author's hook handler -- the
+ * hooks bridge does not have a structured `NotificationMessage` arm
+ * for it (HOOK-06).
+ *
+ * Empty strings are silently ignored so the caller can pass an
+ * `entry.rewakeSummary` field unconditionally without a guard.
+ */
+export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string): void {
+  if (summary.length === 0) {
+    return;
+  }
+
+  ctx.ui.notify(summary, "info");
+}
+
 // ---------------------------------------------------------------------------
 // Structured notification type model.
 //
