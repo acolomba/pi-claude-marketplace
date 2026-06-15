@@ -36,6 +36,9 @@ import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
 export type { CompiledBashGlob, CompiledPathGlob, GlobToken, PathAnchor } from "./glob.ts";
 export { compileBashGlob, compilePathGlob } from "./glob.ts";
 
+export type { ParseResult } from "./bash.ts";
+export { parseBashSubcommands, bashSubcommandFires, WRAPPER_STRIP } from "./bash.ts";
+
 // ──────────────────────────────────────────────────────────────────────────
 // IfPredicate discriminated union
 // ──────────────────────────────────────────────────────────────────────────
