@@ -46,6 +46,7 @@ import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
@@ -364,7 +365,7 @@ async function hydrateScopeFromState(state: ExtensionState, loc: ScopedLocations
       // Zero or one entry today; iterate defensively for forward-compat.
       for (const slug of hookSlugs) {
         const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
-        await tryHydrateOnePlugin(loc.scope, mpName, pluginId, hooksJsonPath);
+        await tryHydrateOnePlugin(loc.scope, mpName, pluginId, hooksJsonPath, loc.hooksDir);
       }
     }
   }
@@ -375,7 +376,23 @@ async function tryHydrateOnePlugin(
   marketplace: string,
   pluginId: string,
   hooksJsonPath: string,
+  hooksDir: string,
 ): Promise<void> {
+  // Defense-in-depth (NFR-10): state.json is normally written only by this
+  // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
+  // state-supplied data. A corrupted state record (third-party tampering or
+  // future schema mismatch) carrying a traversal slug like `"../../etc"` must
+  // not let `readFile` escape `loc.hooksDir`. Mirror the WRITE-site guard at
+  // this READ site.
+  try {
+    await assertPathInside(hooksDir, hooksJsonPath, "hooks.json hydrate path");
+  } catch (err) {
+    hookDebugLog(
+      `hydrate: containment violation for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
   let raw: string;
   try {
     raw = await readFile(hooksJsonPath, "utf8");
