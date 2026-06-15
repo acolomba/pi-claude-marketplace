@@ -50,6 +50,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -395,6 +396,22 @@ async function spawnAndCollect(
   });
 }
 
+/**
+ * WR-05: decode incoming Buffers through a `StringDecoder` so a multi-
+ * byte UTF-8 sequence that straddles a chunk boundary is reassembled
+ * rather than rendered as `U+FFFD` replacement characters. The decoder's
+ * tail (`decoder.end()`) is flushed on stream `end` so any final partial
+ * sequence is not silently dropped. Direct per-buffer `chunk.toString
+ * ("utf8")` would corrupt non-ASCII strings whose code-point bytes
+ * happen to land on a chunk boundary -- the downstream JSON parser
+ * (wire-protocol) would silently propagate the U+FFFD into string
+ * values without failing `JSON.parse`.
+ *
+ * CR-02: cap accounting measures UTF-8 bytes (`Buffer.byteLength(...,
+ * "utf8")`), not UTF-16 code units (`String.prototype.length`), so the
+ * documented "stdout 1 MB / stderr 64 KB" guarantees hold for multi-byte
+ * payloads.
+ */
 function accumulateStream(
   stream: NodeJS.ReadableStream | null,
   cap: number,
@@ -405,16 +422,23 @@ function accumulateStream(
     return;
   }
 
+  const decoder = new StringDecoder("utf8");
   let accumulated = 0;
   stream.on("data", (chunk: Buffer | string) => {
-    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    accumulated += text.length;
+    const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
+    accumulated += Buffer.byteLength(text, "utf8");
     if (accumulated > cap) {
       onOverflow();
       return;
     }
 
     onChunk(text);
+  });
+  stream.on("end", () => {
+    const tail = decoder.end();
+    if (tail !== "") {
+      onChunk(tail);
+    }
   });
 }
 
