@@ -43,8 +43,8 @@ import {
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 
 // MATCH-03: the `if`-field permission-rule primitives live in
-// `bridges/hooks/if-field/` (Plan 01 placement) -- domain MUST NOT
-// import upward (D-11 import direction). `parseHooksConfig` consumes
+// `bridges/hooks/if-field/` -- domain MUST NOT import upward
+// (D-11 import direction). `parseHooksConfig` consumes
 // the predicate compile path as a generic `<P>` callback parameter so
 // the parser layer never type-depends on the concrete predicate union.
 // The bridge layer wires `compileIfPredicate` at the `parseHooksConfig`
