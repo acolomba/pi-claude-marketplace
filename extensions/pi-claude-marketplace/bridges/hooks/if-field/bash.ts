@@ -103,6 +103,15 @@ export const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
  * params `$1`-`$9` which are not user-controlled interpolation),
  * `${...}`, `$(`, or a backtick. The first match on the raw command sets
  * `hasInterpolation = true` for the specificity-override rule.
+ *
+ * Quote-naïve by design (WR-03): a `$VAR` or backtick literal inside
+ * single quotes (`echo 'literal $HOME'`, `awk '/foo/ { print $1 }'`)
+ * still trips the flag. The trade-off is acceptable because the
+ * specificity-override path is fail-OPEN -- a spurious flag yields an
+ * extra fire, never a missed one (matches upstream's "best-effort, not
+ * a security boundary" contract per MATCH-03 §3). Quote-tracking the
+ * regex would add real complexity for marginal gain on a fail-OPEN
+ * surface.
  */
 const INTERPOLATION_RE = /\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^}]+\}|\$\(|`/;
 
