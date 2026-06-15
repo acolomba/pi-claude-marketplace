@@ -32,6 +32,19 @@ export type {
 } from "@earendil-works/pi-coding-agent";
 
 /**
+ * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
+ * shape (peer-dep does not re-export it). The bridge's
+ * `adaptToolResultResult` emits only `{ type: "text", text }` blocks
+ * for `block` outcomes; this type is the minimal structural match
+ * accepted by `pi.on("tool_result", ...)`'s narrow `content?:
+ * (TextContent | ImageContent)[]` slot.
+ */
+export interface PiTextContentBlock {
+  type: "text";
+  text: string;
+}
+
+/**
  * Structural Pi `tool_result` handler return shape.
  *
  * Peer-dep does not re-export `ToolResultEventResult` from its root, but
@@ -44,7 +57,7 @@ export type {
  * compatible with the upstream declaration.
  */
 export interface ToolResultEventResult {
-  content?: unknown[];
+  content?: PiTextContentBlock[];
   details?: unknown;
   isError?: boolean;
 }

@@ -1,7 +1,7 @@
 // bridges/hooks/dispatch.ts
 //
 // Composite-handler bodies for the hooks bridge (D-59-01 / D-59-04 /
-// DISP-01 / DISP-03 / DISP-04).
+// D-60-02 / D-60-03 / DISP-01 / DISP-03 / DISP-04 / OBS-01).
 //
 // Two exported factories:
 //
@@ -9,33 +9,61 @@
 //     registered on six of the seven Pi events (session_start,
 //     session_shutdown, session_before_compact, session_compact, input,
 //     tool_call). Each closure: epoch-checks, looks up the bucket for
-//     `claudeEvent`, applies the per-event matcher-fires predicate, and
-//     fans out sequentially to dispatchHookExec.
+//     `claudeEvent`, applies the per-event matcher-fires predicate, runs
+//     the D-60-02 reducer over `await activeExecutor(...)` calls, then
+//     hands the folded `HookExecResult` to the per-Pi-event adapter
+//     (D-60-03) which converts it to the Pi-side handler return shape.
 //
 //   - toolResultCompositeHandler(capturedEpoch) returns the closure
 //     registered on `tool_result`. ONE handler, TWO buckets: the body
 //     reads `event.isError` once and routes to PostToolUseFailure or
-//     PostToolUse before applying the same tool-name matcher + fan-out
-//     (D-59-01).
+//     PostToolUse (D-59-01 / DISP-01) BEFORE the reducer loop runs.
+//
+// D-60-02 reducer semantics:
+//   - first-block-wins: on `kind: "block"`, finalResult is captured and
+//     the bucket short-circuits -- subsequent entries' executors are NOT
+//     invoked.
+//   - terminal stop: on `kind: "stop"`, finalResult is captured and the
+//     bucket short-circuits.
+//   - mutate composition: on `kind: "mutate"`, applyMutationInPlace
+//     mutates the Pi event in place so the NEXT entry's executor (which
+//     re-translates) sees the post-mutation state. finalResult stays at
+//     the prior noop / mutate.
+//   - noop: continue to the next entry without changing finalResult.
+//   - assertNever default arm pins exhaustiveness (NFR-7).
 //
 // All handlers short-circuit when capturedEpoch != currentEpoch() so a
 // stale closure from a prior load cannot fire against the live routing
-// tables (DISP-03 zombie-defense belt-and-suspenders).
+// tables (DISP-03 zombie-defense belt-and-suspenders). Sequential
+// awaited fan-out preserved (DISP-04) -- early-exit on block is
+// compatible because DISP-04 pins sequential ordering, not
+// every-entry-must-run.
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
+import {
+  adaptInputResult,
+  adaptObservationResult,
+  adaptToolCallResult,
+  adaptToolResultResult,
+  applyMutationInPlace,
+} from "./event-adapters.ts";
 import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-router.ts";
+import { assertNever, type HookExecResult } from "./exec-result.ts";
 
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
 import type {
   ExtensionContext,
   InputEvent,
+  InputEventResult,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolCallEventResult,
   ToolResultEvent,
+  ToolResultEventResult,
 } from "../../platform/pi-api.ts";
 
 /**
@@ -44,8 +72,18 @@ import type {
  * indirection exists because ESM imports are read-only bindings -- a unit
  * test cannot mock the imported symbol directly. The seam is bridge-internal
  * and not re-exported via index.ts.
+ *
+ * D-59-04 signature evolution: the executor now returns
+ * `Promise<HookExecResult>` so the reducer below can fold outcomes across
+ * a bucket. The DISP-04 stub previously returned `Promise<void>`; spy
+ * fixtures in the existing test files have already been updated to
+ * resolve `{ kind: "noop" }` per the evolved seam.
  */
-type HookExecutor = typeof dispatchHookExec;
+type HookExecutor = (
+  entry: RoutingEntry,
+  event: unknown,
+  ctx: ExtensionContext,
+) => Promise<HookExecResult>;
 
 let activeExecutor: HookExecutor = dispatchHookExec;
 
@@ -103,74 +141,169 @@ function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolea
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// D-60-02 reducer
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-60-02: fold a sequence of HookExecResult outcomes across the
+ * routing bucket. Returns the final reduced outcome.
+ *
+ * Loop semantics:
+ *   - `block`     -> capture as finalResult; break (first-block-wins).
+ *   - `stop`      -> capture as finalResult; break (terminal).
+ *   - `mutate`    -> applyMutationInPlace mutates `event` so the NEXT
+ *                    entry's executor sees the post-mutation state;
+ *                    finalResult stays at the prior outcome (a mutate is
+ *                    not, by itself, a terminal Pi-side return).
+ *   - `noop`      -> continue.
+ *
+ * Caller controls bucket selection + per-entry matcher filter; this
+ * reducer just walks the pre-filtered entry list.
+ */
+async function reduceBucket(
+  bucket: ReadonlyArray<RoutingEntry>,
+  event: unknown,
+  ctx: ExtensionContext,
+  matcherFires: (entry: RoutingEntry) => boolean,
+): Promise<HookExecResult> {
+  let finalResult: HookExecResult = { kind: "noop" };
+  for (const entry of bucket) {
+    if (!matcherFires(entry)) {
+      continue;
+    }
+
+    const r = await activeExecutor(entry, event, ctx);
+    switch (r.kind) {
+      case "block":
+        finalResult = r;
+        return finalResult;
+      case "stop":
+        finalResult = r;
+        return finalResult;
+      case "mutate":
+        applyMutationInPlace(event, r);
+        // D-60-03: mutate also becomes the running finalResult so the
+        // per-event adapter at exit can consume it. The Input adapter
+        // converts `mutate.additionalContext` into `{ action:
+        // "transform", text }` (the Pi-side return value for the input
+        // event family) -- this requires the reducer to carry the
+        // mutate forward, not drop it after the in-place patch. For
+        // tool_call / tool_result, the adapter's mutate arm is a
+        // double-counting no-op against the already-mutated event
+        // (applyMutationInPlace is idempotent on identical patches).
+        finalResult = r;
+        continue;
+      case "noop":
+        continue;
+      default:
+        return assertNever(r);
+    }
+  }
+
+  return finalResult;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Composite-handler factories
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Six-uniform composite handler factory. Returns a closure that fans out
- * to the per-event bucket, applying the per-event matcher-fires predicate
- * before each `dispatchHookExec`. DISP-03 epoch check at entry; DISP-04
- * sequential awaited fan-out (no Promise.all).
+ * D-59-01 / D-60-02 / D-60-03: six-uniform composite handler factory.
  *
- * `claudeEvent` constrains which bucket the closure reads. The runtime
- * `event` is typed as `unknown` because each Pi event has a distinct
- * payload shape; the per-event filter narrows at access time.
+ * `claudeEvent` constrains which bucket the closure reads and which
+ * per-Pi-event adapter narrows the reducer's final result. The runtime
+ * `event` is typed via `CompositeEventFor<E>` so each closure exposes
+ * the Pi-shape its registration point expects; the per-event filter
+ * narrows the matcher-fires path at access time.
+ *
+ * Return type: `CompositeReturnFor<E>` -- the Pi-side handler return
+ * shape selected by the adapter table (tool_call returns
+ * `ToolCallEventResult | undefined`; input returns `InputEventResult |
+ * undefined`; observation events return `undefined`).
  */
 export function compositeHandlerFor<
   E extends Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
 >(
   claudeEvent: E,
   capturedEpoch: number,
-): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<void> {
+): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
-      return;
+      return undefined as CompositeReturnFor<E>;
     }
 
     const bucket = getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
-      return;
+      return undefined as CompositeReturnFor<E>;
     }
 
-    for (const entry of bucket) {
-      if (!entryFires(claudeEvent, entry, event)) {
-        continue;
-      }
+    const finalResult = await reduceBucket(bucket, event, ctx, (entry) =>
+      entryFires(claudeEvent, entry, event),
+    );
 
-      await activeExecutor(entry, event, ctx);
-    }
+    return adaptForEvent(claudeEvent, finalResult, event) as CompositeReturnFor<E>;
   };
 }
 
 /**
- * D-59-01: `tool_result` composite handler. Reads `event.isError` once,
- * picks the PostToolUseFailure bucket on truthy or PostToolUse on
- * falsy/undefined, then applies the tool-name matcher and fans out
- * sequentially. DISP-03 epoch check at entry; DISP-04 sequential awaited
- * fan-out.
+ * D-59-01 / D-60-02 / D-60-03: `tool_result` composite handler. Reads
+ * `event.isError` once, picks the PostToolUseFailure bucket on truthy or
+ * PostToolUse on falsy/undefined, then runs the D-60-02 reducer over the
+ * bucket. DISP-01 (event.isError split) happens BEFORE the reducer loop;
+ * DISP-03 epoch check at entry; DISP-04 sequential awaited fan-out.
+ *
+ * Returns `ToolResultEventResult | undefined` via
+ * `adaptToolResultResult` (D-60-03).
  */
 export function toolResultCompositeHandler(
   capturedEpoch: number,
-): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<void> {
+): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
-      return;
+      return undefined;
     }
 
     const claudeEvent: BucketAEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
-      return;
+      return undefined;
     }
 
-    for (const entry of bucket) {
-      if (!matcherFiresOnToolEvent(entry.matcher, event.toolName)) {
-        continue;
-      }
+    const finalResult = await reduceBucket(bucket, event, ctx, (entry) =>
+      matcherFiresOnToolEvent(entry.matcher, event.toolName),
+    );
 
-      await activeExecutor(entry, event, ctx);
-    }
+    return adaptToolResultResult(finalResult, event);
   };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Per-Pi-event adapter dispatch (D-60-03)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-60-03: dispatch the reducer's final HookExecResult to the matching
+ * per-Pi-event adapter. Observation events have no Pi-side return slot
+ * -- their adapter is invoked for the block/stop debug-log side effect
+ * and always returns undefined.
+ */
+function adaptForEvent(
+  claudeEvent: Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+  result: HookExecResult,
+  event: unknown,
+): ToolCallEventResult | InputEventResult | undefined {
+  switch (claudeEvent) {
+    case "PreToolUse":
+      return adaptToolCallResult(result, event as ToolCallEvent);
+    case "UserPromptSubmit":
+      return adaptInputResult(result, event as InputEvent);
+    case "SessionStart":
+    case "SessionEnd":
+    case "PreCompact":
+    case "PostCompact":
+      adaptObservationResult(result);
+      return undefined;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -197,6 +330,19 @@ type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
           : E extends "PreToolUse"
             ? ToolCallEvent
             : never;
+
+/**
+ * D-60-03: per-event return type bridge mapping each composite-handler
+ * `claudeEvent` to the Pi-side handler return shape its registered
+ * closure must produce. PreToolUse -> ToolCallEventResult;
+ * UserPromptSubmit -> InputEventResult; the four observation events ->
+ * undefined (Pi handler return slot is void for those).
+ */
+type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
+  ? ToolCallEventResult | undefined
+  : E extends "UserPromptSubmit"
+    ? InputEventResult | undefined
+    : undefined;
 
 /**
  * Per-event filter dispatch. Routes to the per-event matcher-fires
