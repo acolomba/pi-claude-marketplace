@@ -42,15 +42,20 @@
 // so this fallback preserves byte-for-byte upstream truth-table
 // fidelity until a richer Pi context surfaces.
 
+import path from "node:path";
+
 import { TOOL_EVENTS, type BucketAEvent } from "../../../domain/components/hook-events.ts";
 import { IF_PREFIX_TARGETS } from "../../../domain/components/hook-if-targets.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
+import { assertNever } from "../exec-result.ts";
 
+import { bashSubcommandFires, parseBashSubcommands } from "./bash.ts";
 import { compileBashGlob, compilePathGlob } from "./glob.ts";
 
 import type { CompiledBashGlob, CompiledPathGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
+import type { ExtensionContext } from "../../../platform/pi-api.ts";
 
 export type {
   CompiledBashGlob,
@@ -268,4 +273,134 @@ function compileIfPrefixForm(
 
   hookDebugLog(`compileIfPredicate: unsupported prefix "${prefix}" in "${raw}"; falling open`);
   return MATCH_ALL_IF;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Dispatch-time consult (MATCH-03 / D-61-02 / D-61-03 / D-61-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-event input extractors. Read shape-fragile fields off the runtime
+ * Pi event payload without throwing on malformed input. Each helper
+ * returns string-or-undefined; the `ifFires` switch arms handle the
+ * undefined arm explicitly per the D-61-02 fail-open contract and the
+ * D-61-03 substitute-cwd rule.
+ *
+ * The narrow `(event as { ... }).input?.X` shape is deliberate: typing
+ * against the full Pi `ToolCallEvent`/`ToolResultEvent` union would
+ * require importing every per-event payload variant just to read one
+ * field; the extractor's job is bounded to "pluck the field if present;
+ * say undefined otherwise".
+ */
+
+function extractBashCommand(event: unknown): string | undefined {
+  const cmd = (event as { input?: { command?: unknown } }).input?.command;
+  return typeof cmd === "string" ? cmd : undefined;
+}
+
+function extractToolName(event: unknown): string {
+  const name = (event as { toolName?: unknown }).toolName;
+  return typeof name === "string" ? name : "";
+}
+
+function extractPath(event: unknown): string | undefined {
+  const p = (event as { input?: { path?: unknown } }).input?.path;
+  return typeof p === "string" ? p : undefined;
+}
+
+/**
+ * D-61-03 substitute-cwd helper: if the runtime path is relative, resolve
+ * it against `ctx.cwd`. Absolute paths are normalized in place. No
+ * `fs.realpath` -- pure string comparison only (RESEARCH T-61-05 note:
+ * symlink resolution at dispatch time would add I/O cost and surface
+ * race conditions).
+ */
+function resolveTarget(p: string, ctx: ExtensionContext): string {
+  if (path.isAbsolute(p)) {
+    return path.normalize(p);
+  }
+
+  return path.resolve(ctx.cwd, p);
+}
+
+/**
+ * MATCH-03 dispatch-time consult. Returns true iff the routing entry's
+ * `if` field permits dispatch for the current event. Total switch over
+ * `IfPredicate.kind` with `assertNever` exhaustiveness (NFR-7).
+ *
+ * Per-arm contract:
+ *
+ *   - `match-all` -- always fires (fall-open sentinel).
+ *   - `bash` -- extract `event.input.command`; if absent return false
+ *     (no command to match); parse subcommands; on parse failure
+ *     `hookDebugLog` + return true (D-61-04 fail-open); on parse success
+ *     match every subcommand against `bashGlob` and return true on the
+ *     first hit (with `bashSubcommandFires` applying the
+ *     specificity-override branch on `$()`/backticks/`$VAR`).
+ *   - `path-tool` -- guard `event.toolName` against the predicate's
+ *     `piEvents` set (defensive; the matcher gate already filters by
+ *     event kind, but the closed-set membership check keeps the path
+ *     extractor's substitute-cwd semantic correctly anchored). If the
+ *     event carries no `input.path` (Pi grep/find/ls optional-path
+ *     tools), substitute `ctx.cwd` per D-61-03. Resolve relative inputs
+ *     against `ctx.cwd` and call `pathGlob.testAbsolute`.
+ *   - `mcp-literal` -- exact equality on `event.toolName`.
+ *   - `mcp-server-prefix` -- prefix probe via `startsWith`.
+ *
+ * `claudeEvent` is accepted for symmetry with `compileIfPredicate` (the
+ * parse-time entry rejects `if` on non-tool events by compiling them to
+ * `MATCH_ALL_IF`, so a non-tool entry reaching this consult is already
+ * the fall-open sentinel). Reserved for forward-compat against future
+ * per-event nuance.
+ */
+export function ifFires(
+  predicate: IfPredicate,
+  event: unknown,
+  ctx: ExtensionContext,
+  _claudeEvent: BucketAEvent,
+): boolean {
+  switch (predicate.kind) {
+    case "match-all":
+      return true;
+
+    case "bash": {
+      const command = extractBashCommand(event);
+      if (command === undefined) {
+        return false;
+      }
+
+      const parsed = parseBashSubcommands(command);
+      if (!parsed.ok) {
+        hookDebugLog(`ifFires: Bash unparseable: ${parsed.reason}; firing`);
+        return true;
+      }
+
+      for (const subcmd of parsed.subcommands) {
+        if (bashSubcommandFires(predicate.bashGlob, subcmd, parsed.hasInterpolation)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    case "path-tool": {
+      const toolName = extractToolName(event);
+      if (!predicate.piEvents.has(toolName as PiToolName)) {
+        return false;
+      }
+
+      const rawPath = extractPath(event) ?? ctx.cwd;
+      return predicate.pathGlob.testAbsolute(resolveTarget(rawPath, ctx));
+    }
+
+    case "mcp-literal":
+      return extractToolName(event) === predicate.toolName;
+
+    case "mcp-server-prefix":
+      return extractToolName(event).startsWith(predicate.serverPrefix);
+
+    default:
+      return assertNever(predicate);
+  }
 }
