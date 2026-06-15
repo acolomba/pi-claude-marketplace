@@ -202,6 +202,11 @@ function consumeQuoteChar(qc: QuoteCursor, c: string | undefined): boolean {
  * a compound separator is encountered outside any quoted region.
  * Backticks do NOT inhibit splitting (they are recursed as command
  * substitution by the caller).
+ *
+ * Backslash-escape awareness (WR-04): outside single quotes a
+ * backslash escapes the next character, so `find . -exec rm {} \;`
+ * and `echo foo \&\& bar` do NOT split on the escaped `;` / `&&`.
+ * Inside single quotes the backslash is literal per Bash semantics.
  */
 function splitOnCompoundSeparators(command: string): string[] {
   const pieces: string[] = [];
@@ -209,6 +214,13 @@ function splitOnCompoundSeparators(command: string): string[] {
   let pieceStart = 0;
   let i = 0;
   while (i < command.length) {
+    // Backslash escape outside single quotes consumes the next char so
+    // an escaped separator (`\;`, `\&&`) does not split the command.
+    if (!qc.inSingle && command[i] === "\\" && i + 1 < command.length) {
+      i += 2;
+      continue;
+    }
+
     if (consumeQuoteChar(qc, command[i])) {
       i++;
       continue;
