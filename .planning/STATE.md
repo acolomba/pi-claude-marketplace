@@ -4,13 +4,13 @@ milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
 stopped_at: Plan 60-02 complete
-last_updated: "2026-06-15T03:20:47.093Z"
+last_updated: "2026-06-15T04:06:38.901Z"
 last_activity: 2026-06-15 -- Phase 60 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 12
+  completed_plans: 14
   percent: 43
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 60 (hook-execution-payload-translators-env-vars) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-15 -- Phase 60 execution started
 
@@ -116,6 +116,7 @@ Last activity: 2026-06-15 -- Phase 60 execution started
 | Phase 59 P03 | 95min | 3 tasks | 11 files |
 | Phase 60 P01 | ~45m | 3 tasks | 21 files |
 | Phase 60 P02 | ~45m | 3 tasks | 13 files |
+| Phase 60 P03 | ~40min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -233,6 +234,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 60]: 8 hand-authored payload translators (D-60-04) at bridges/hooks/payloads/ -- the three tool translators share mapPiToClaudeToolName for TOOL-01 reuse with CustomToolCallEvent passthrough. -- Plan 60-01 established the translator + TranslationContext foundation.
 - [Phase 60]: PreCompact / PostCompact trigger synthesized as 'auto' -- Pi's compact events do not expose a trigger source. -- Plan 60-01 documented the synthesis in source comments.
 - [Phase ?]: [Phase 60]: Plan 02 shipped HookExecResult discriminated union (D-60-01 4-arm noop/block/mutate/stop) + parseHookStdout wire-protocol parser + installTimerLadder SIGTERM->5s->SIGKILL escalation. dispatchHookExec body filled: spawn + 8 per-event translator dispatch + HOOK-05 env vars (CLAUDE_ENV_FILE on SessionStart at <dataRoot>/_shared/claude-env-<sid>.env per D-60-06; CLAUDE_CODE_REMOTE unset) + EXEC-04 args!==undefined exec-form vs shell-form + EXEC-02 256KB stdin truncation marker + 1MB/64KB buffer caps + EPIPE defense + EXEC-03 stderr sole-sink. Architecture whitelist widened to 2 entries admitting dispatch-exec.ts. _shared mkdir gated on SessionStart entries to preserve WR-05. RoutingEntry gains claudeEvent. Phase 59 dispatch.ts unchanged. npm run check GREEN 2046+10. -- Plan 60-02.
+- [Phase ?]: Plan 60-03: D-60-02 reducer + D-60-03 per-Pi-event adapters; mutate carries forward as finalResult so input adapter can consume mutate.additionalContext as { action: transform, text }
 
 ### Pending Todos
 
@@ -288,7 +290,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-15T03:20:35.200Z
+Last session: 2026-06-15T04:06:10.734Z
 Stopped At: Plan 60-02 complete
 Resume File: .planning/phases/60-hook-execution-payload-translators-env-vars/60-02-SUMMARY.md
 
