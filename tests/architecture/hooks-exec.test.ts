@@ -283,6 +283,31 @@ test("Block B / EXEC-02: stdin > 256 KB injects top-level _truncated:true marker
   assert.ok(stdinText.includes('"_truncated":true'), "top-level _truncated marker missing");
 });
 
+test("CR-02 / Block B: stdin truncation accounts for UTF-8 bytes (CJK), not code units", async (t) => {
+  await relocateAgent(t);
+  const spy = installSpawnSpy(t, (h) => {
+    h.emitClose(0);
+  });
+
+  // 120 K code units of "中" (U+4E2D, 3 UTF-8 bytes each) = 360 K bytes.
+  // 360 K bytes > 256 KB cap; the marker MUST fire under byte-accurate
+  // measurement. Under the old code-unit comparison this would fall
+  // BELOW the cap (120 K < 262 144) and the marker would be omitted.
+  const cjk = "中".repeat(120 * 1024);
+  await dispatchHookExec(
+    makeEntry({ claudeEvent: "UserPromptSubmit" }),
+    { text: cjk },
+    makeCtx("/tmp/proj"),
+  );
+
+  await new Promise((r) => setImmediate(r));
+  const stdinText = spy.calls[0]?.stdinChunks.join("") ?? "";
+  assert.ok(
+    stdinText.includes('"_truncated":true'),
+    "CR-02: top-level _truncated marker missing on CJK payload that exceeds 256 KB UTF-8",
+  );
+});
+
 test("Block B / EXEC-02: stdout > 1 MB triggers SIGTERM + noop", async (t) => {
   await relocateAgent(t);
   const spy = installSpawnSpy(t, (h) => {
