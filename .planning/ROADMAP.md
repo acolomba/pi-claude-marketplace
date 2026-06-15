@@ -349,7 +349,19 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 4. The registry is cleared on `/reload`; orphan children from a crashed prior load are SIGKILLed at next bridge load via PID-table scan; multi-hook fan-in via independent `dispatchId` per registered process (HOOK-06 lifecycle; NFR-2).
 5. `rewakeMessage` / `rewakeSummary` declared without `asyncRewake: true` install normally (warning surfaced per SURF-05 in Phase 63 — no-op upstream).
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1** (parallel — no shared file conflicts; three independent leaves)
+
+- [ ] 62-01-PLAN.md — RingBuffer (D-62-04 caps + tail-drop + truncated latch) + PID table (D-62-05 atomic write + version=1 envelope) + HOOK_HANDLER_SCHEMA admission for `asyncRewake` / `rewakeMessage` / `rewakeSummary` (HOOK-03 lenient stance) — pure leaves, no `node:child_process`
+
+**Wave 2** *(blocked on Wave 1 completion — atomic-supersession with `no-shell-out.test.ts` per D-58-01)*
+
+- [ ] 62-02-PLAN.md — `bridges/hooks/async-rewake/registry.ts` (spawnAndRegister + onChildExit + shutdownInMemoryChildren + reapOrphans + AsyncRewakeEntry + test seams) + `tests/architecture/no-shell-out.test.ts` TWO -> THREE atomic amendment in the same commit (HOOK-06 / EXEC-05 / D-62-01..05 / D-58-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 62-03-PLAN.md — `dispatch-exec.ts` pre-spawn delegation arm + `event-router.ts` factory `shutdownInMemoryChildren` + per-scope `reapOrphans(loc)` wiring + `tests/architecture/hooks-async-rewake.test.ts` single-file architecture test (HOOK-06 / EXEC-05 / D-62-01 / D-62-05)
 
 **UI hint**: yes
 
@@ -438,5 +450,5 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 3/3 | Complete    | 2026-06-14 |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
-| 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/0 | Not started | -          |
+| 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/3 | Not started | -          |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |
