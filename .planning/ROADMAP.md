@@ -323,7 +323,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 1**
 
-- [ ] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
+- [x] 60-01-PLAN.md — Translators, tool-name helper, TranslationContext (PAYL-01 / D-60-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

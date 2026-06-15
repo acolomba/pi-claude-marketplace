@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 60 context gathered
-last_updated: "2026-06-15T02:31:20.119Z"
+stopped_at: Plan 60-02 complete
+last_updated: "2026-06-15T03:20:47.093Z"
 last_activity: 2026-06-15 -- Phase 60 execution started
 progress:
   total_phases: 7
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 60 (hook-execution-payload-translators-env-vars) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-06-15 -- Phase 60 execution started
 
@@ -115,6 +115,7 @@ Last activity: 2026-06-15 -- Phase 60 execution started
 | Phase 59 P02 | 43m | 3 tasks | 9 files |
 | Phase 59 P03 | 95min | 3 tasks | 11 files |
 | Phase 60 P01 | ~45m | 3 tasks | 21 files |
+| Phase 60 P02 | ~45m | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [Phase 59 Plan 03]: reinstall.ts and update.ts do NOT route through installPlugin/uninstallPlugin -- cache add/remove does not flow transitively. Gap is bounded (cache stays stale until next reconcile rebuild). Future plan should wire cache mutators into reinstall + update directly.
 - [Phase 60]: 8 hand-authored payload translators (D-60-04) at bridges/hooks/payloads/ -- the three tool translators share mapPiToClaudeToolName for TOOL-01 reuse with CustomToolCallEvent passthrough. -- Plan 60-01 established the translator + TranslationContext foundation.
 - [Phase 60]: PreCompact / PostCompact trigger synthesized as 'auto' -- Pi's compact events do not expose a trigger source. -- Plan 60-01 documented the synthesis in source comments.
+- [Phase ?]: [Phase 60]: Plan 02 shipped HookExecResult discriminated union (D-60-01 4-arm noop/block/mutate/stop) + parseHookStdout wire-protocol parser + installTimerLadder SIGTERM->5s->SIGKILL escalation. dispatchHookExec body filled: spawn + 8 per-event translator dispatch + HOOK-05 env vars (CLAUDE_ENV_FILE on SessionStart at <dataRoot>/_shared/claude-env-<sid>.env per D-60-06; CLAUDE_CODE_REMOTE unset) + EXEC-04 args!==undefined exec-form vs shell-form + EXEC-02 256KB stdin truncation marker + 1MB/64KB buffer caps + EPIPE defense + EXEC-03 stderr sole-sink. Architecture whitelist widened to 2 entries admitting dispatch-exec.ts. _shared mkdir gated on SessionStart entries to preserve WR-05. RoutingEntry gains claudeEvent. Phase 59 dispatch.ts unchanged. npm run check GREEN 2046+10. -- Plan 60-02.
 
 ### Pending Todos
 
@@ -286,9 +288,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-15T02:30:52.496Z
-Stopped At: Phase 60 context gathered
-Resume File: .planning/phases/60-hook-execution-payload-translators-env-vars/60-CONTEXT.md
+Last session: 2026-06-15T03:20:35.200Z
+Stopped At: Plan 60-02 complete
+Resume File: .planning/phases/60-hook-execution-payload-translators-env-vars/60-02-SUMMARY.md
 
 ## Operator Next Steps
 
