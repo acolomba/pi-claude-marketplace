@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 61 context gathered
+stopped_at: Phase 61 complete
 last_updated: "2026-06-15T17:11:12.910Z"
-last_activity: 2026-06-15
+last_activity: 2026-06-15 -- Phase 61 complete (MATCH-03 `if` field permission-rule matcher)
 progress:
   total_phases: 7
   completed_phases: 5
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 61 — if-field-permission-rule-matcher
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 62 — `asyncRewake` Registry & Background-Spawn (next)
 
 ## Current Position
 
 Phase: 62
 Plan: Not started
-Status: Executing Phase 61
-Last activity: 2026-06-15
+Status: Ready to discuss
+Last activity: 2026-06-15 -- Phase 61 complete; MATCH-03 `if` field permission-rule matcher landed atomically with REQUIREMENTS.md amendment (D-61-03 / D-58-01)
 
 ## Performance Metrics
 
@@ -295,8 +295,8 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 ## Session Continuity
 
 Last session: 2026-06-15T13:26:27.516Z
-Stopped At: Phase 61 context gathered
-Resume File: .planning/phases/61-if-field-permission-rule-matcher/61-CONTEXT.md
+Stopped At: Phase 61 complete
+Resume File: .planning/phases/61-if-field-permission-rule-matcher/61-VERIFICATION.md
 
 ## Operator Next Steps
 
