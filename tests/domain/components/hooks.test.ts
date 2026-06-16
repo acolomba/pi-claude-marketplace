@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -575,4 +577,37 @@ test("parseHooksConfig admits the full asyncRewake field family", () => {
   });
   const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// HOOK-03 / LIFE-01: upstream plugin-format wrapper acceptance (wire-format
+// pin). Claude Code's `plugin-dev/skills/hook-development/SKILL.md` mandates
+// that plugin `hooks/hooks.json` files use the WRAPPER form
+// `{description?, hooks: {<event>: [...]}}`, distinct from user-settings
+// `.claude/settings.json` which uses the BARE top-level-event-keys form.
+// The fixture under `tests/fixtures/hookify-hooks.json` is a verbatim copy
+// of hookify@claude-plugins-official's hooks.json -- pinning the parser's
+// wrapper-detection arm against the real upstream wire bytes so any future
+// schema change that re-narrows the parser to the settings-format shape
+// red-fails here.
+// ──────────────────────────────────────────────────────────────────────────
+
+const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire bytes)", async () => {
+  const fixturePath = path.resolve(FIXTURE_DIR, "../../fixtures/hookify-hooks.json");
+  const raw = await readFile(fixturePath, "utf8");
+
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    // hookify ships PreToolUse / PostToolUse / Stop / UserPromptSubmit
+    // under the wrapper's `hooks` field; after unwrap the parser's
+    // `value` is the bare-event-keys record.
+    assert.ok("PreToolUse" in result.value);
+    assert.ok("PostToolUse" in result.value);
+    assert.ok("Stop" in result.value);
+    assert.ok("UserPromptSubmit" in result.value);
+  }
 });
