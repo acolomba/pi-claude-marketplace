@@ -12,12 +12,16 @@
 // `assertSafeName` guard on the plugin name. `removeHookConfig` is a single
 // `fs.rm(..., { recursive: true, force: true })` and is idempotent (NFR-3).
 
-import { readdir, realpath, rm } from "node:fs/promises";
+import { readdir, readlink, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+  assertPathInside,
+} from "../../shared/path-safety.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
@@ -38,8 +42,15 @@ export function hookConfigPathFor(locations: ScopedLocations, plugin: string): s
  * `child`, so a leaf-level rogue link would slip past write-side
  * containment.
  *
- * ENOENT on the hooks subtree is a clean return (a plugin with no
- * hooks/ dir has nothing to check). Any other I/O error propagates.
+ * Throws `SymlinkRefusedError` (subclass of `PathContainmentError`, inherits
+ * PI-14 handling) on the first escaping symlink encountered: the entry IS a
+ * symlink AND its `realpath` is outside `pluginRoot` -- both halves of the
+ * LIFE-03 vector. The narrower subclass is chosen over the parent class
+ * because a non-symlink containment violation can't occur from a `readdir`
+ * walk (the walker only emits paths under `pluginRoot/hooks/`).
+ *
+ * ENOENT/ENOTDIR on the hooks subtree is a clean return (a plugin with no
+ * `hooks/` dir has nothing to check). Any other I/O error propagates.
  */
 async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<void> {
   const hooksRoot = path.join(pluginRoot, "hooks");
@@ -62,9 +73,44 @@ async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<
 
     const linkPath = path.join(entry.parentPath, entry.name);
     const resolved = await realpath(linkPath);
-    // Throws SymlinkRefusedError (subclass of PathContainmentError) if the
-    // resolved target escapes pluginRoot. Inherits PI-14 handling.
-    await assertPathInside(pluginRoot, resolved, `hooks subtree symlink ${linkPath}`);
+    try {
+      await assertPathInside(pluginRoot, resolved, `hooks subtree symlink ${linkPath}`);
+    } catch (err) {
+      // The entry IS a symlink AND its realpath escapes pluginRoot -- both
+      // halves of the LIFE-03 vector. Surface the narrower
+      // SymlinkRefusedError subclass so callers can `instanceof`-discriminate
+      // a symlink-escape from a generic containment failure. Inherits
+      // PathContainmentError so PI-14 instance-check handling propagates.
+      // The pass-through assertPathInside above ALREADY throws
+      // SymlinkRefusedError when an intermediate segment from pluginRoot
+      // down to resolved is itself a symlink (e.g. the pluginRoot tmpdir on
+      // macOS resolving through /private/var). Only translate the plain
+      // containment-only failure case.
+      if (err instanceof SymlinkRefusedError) {
+        throw err;
+      }
+
+      if (err instanceof PathContainmentError) {
+        const linkTarget = await readSymlinkTargetSafe(linkPath);
+        throw new SymlinkRefusedError(
+          pluginRoot,
+          resolved,
+          `hooks subtree symlink ${linkPath}`,
+          linkPath,
+          linkTarget,
+        );
+      }
+
+      throw err;
+    }
+  }
+}
+
+async function readSymlinkTargetSafe(linkPath: string): Promise<string> {
+  try {
+    return await readlink(linkPath);
+  } catch {
+    return "<unreadable>";
   }
 }
 
