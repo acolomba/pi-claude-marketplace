@@ -2630,3 +2630,209 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFE-01: 5th cascade slot in update.ts -- Phase 3a commit loop writes /
+// removes <hooksDir>/<plugin>/hooks.json between agents and mcp commits.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<plugin>/hooks.json atomically with version B's content", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-overwrite-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      const oldHooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo OLD" }] }],
+      };
+      const newHooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo NEW" }] }],
+      };
+
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: true, hooksJson: oldHooksJson },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Pre-seed the hooks slug so finalize updates it; the bridge file
+      // is not present (the install slot did not exist when this fixture
+      // was first written) -- the update commit slot writes it.
+      const seededState = await loadState(locations.extensionRoot);
+      const mpRecord = seededState.marketplaces["mp"];
+      assert.ok(mpRecord !== undefined);
+      const helloRecord = mpRecord.plugins["hello"];
+      assert.ok(helloRecord !== undefined);
+      helloRecord.resources.hooks = ["hello"];
+      await saveState(locations.extensionRoot, seededState);
+
+      // Bump to v2.0.0 with NEW hooks payload on disk.
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "2.0.0" }),
+      );
+      await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(!summary.includes("(failed)"), `expected clean update; got: ${summary}`);
+
+      const written = await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
+      assert.deepEqual(
+        JSON.parse(written),
+        newHooksJson,
+        "update Phase 3a commit slot must write version B's hooks.json",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes the stale hooks file", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-remove-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      const oldHooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo OLD" }] }],
+      };
+
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: true, hooksJson: oldHooksJson },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Pre-place the stale hooks file at the destination so we can assert
+      // the update commit removed it.
+      await mkdir(path.join(locations.hooksDir, "hello"), { recursive: true });
+      await writeFile(
+        path.join(locations.hooksDir, "hello", "hooks.json"),
+        JSON.stringify(oldHooksJson),
+      );
+
+      const seededState = await loadState(locations.extensionRoot);
+      const mpRecord = seededState.marketplaces["mp"];
+      assert.ok(mpRecord !== undefined);
+      const helloRecord = mpRecord.plugins["hello"];
+      assert.ok(helloRecord !== undefined);
+      helloRecord.resources.hooks = ["hello"];
+      await saveState(locations.extensionRoot, seededState);
+
+      // Bump to v2.0.0 with NO hooks (delete the on-disk hooks tree).
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "2.0.0" }),
+      );
+      await rm(path.join(pluginRoot, "hooks"), { recursive: true, force: true });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(!summary.includes("(failed)"), `expected clean update; got: ${summary}`);
+
+      // The stale hooks dir must be gone.
+      let stillThere = true;
+      try {
+        await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
+      } catch {
+        stillThere = false;
+      }
+      assert.equal(
+        stillThere,
+        false,
+        "update Phase 3a commit slot must removeHookConfig when version B has no hooks",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes the new hooks.json", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-add-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.0", hasSkill: true },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const newHooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo NEW" }] }],
+      };
+
+      // Bump to v2.0.0 WITH a hooks payload.
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "2.0.0" }),
+      );
+      await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+      await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(!summary.includes("(failed)"), `expected clean update; got: ${summary}`);
+
+      const written = await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
+      assert.deepEqual(JSON.parse(written), newHooksJson);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
