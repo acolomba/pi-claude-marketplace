@@ -54,6 +54,7 @@ import { ifFires } from "./if-field/index.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
 import type {
+  ExtensionAPI,
   ExtensionContext,
   InputEvent,
   InputEventResult,
@@ -84,6 +85,7 @@ type HookExecutor = (
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
+  pi?: ExtensionAPI,
 ) => Promise<HookExecResult>;
 
 let activeExecutor: HookExecutor = dispatchHookExec;
@@ -165,6 +167,7 @@ async function reduceBucket(
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<HookExecResult> {
   let finalResult: HookExecResult = { kind: "noop" };
@@ -179,7 +182,7 @@ async function reduceBucket(
       continue;
     }
 
-    const r = await activeExecutor(entry, event, ctx);
+    const r = await activeExecutor(entry, event, ctx, pi);
     switch (r.kind) {
       case "block":
         finalResult = r;
@@ -233,6 +236,7 @@ export function compositeHandlerFor<
 >(
   claudeEvent: E,
   capturedEpoch: number,
+  pi?: ExtensionAPI,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -244,7 +248,7 @@ export function compositeHandlerFor<
       return undefined as CompositeReturnFor<E>;
     }
 
-    const finalResult = await reduceBucket(bucket, event, ctx, (entry) =>
+    const finalResult = await reduceBucket(bucket, event, ctx, pi, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
@@ -264,6 +268,7 @@ export function compositeHandlerFor<
  */
 export function toolResultCompositeHandler(
   capturedEpoch: number,
+  pi?: ExtensionAPI,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -276,7 +281,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const finalResult = await reduceBucket(bucket, event, ctx, (entry) =>
+    const finalResult = await reduceBucket(bucket, event, ctx, pi, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 

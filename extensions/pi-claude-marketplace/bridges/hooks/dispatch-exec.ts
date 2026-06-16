@@ -40,13 +40,14 @@
 // containment violation, etc.) so the composite handler reducer never
 // crashes against malformed configs.
 //
-// Whitelist note: this is the second of exactly TWO sanctioned
+// Whitelist note: this is the second of exactly THREE sanctioned
 // `node:child_process` import sites in the extension tree (the first being
-// `platform/git-credential.ts`). The architecture-test gate at
-// `tests/architecture/no-shell-out.test.ts` enforces the 2-element set;
-// adding a third file requires an explicit edit there + an update to the
-// sibling "exactly two files" assertion, with justification in the docstring
-// header.
+// `platform/git-credential.ts`; the third is the async-rewake registry at
+// `bridges/hooks/async-rewake/registry.ts`). The architecture-test gate at
+// `tests/architecture/no-shell-out.test.ts` enforces the 3-element set;
+// adding a fourth file requires an explicit edit there + an update to the
+// sibling "exactly three files" assertion, with justification in the
+// docstring header.
 
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -57,6 +58,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { translate as translatePostCompact } from "./payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
@@ -72,7 +74,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 import type { RoutingEntry } from "./event-router.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
-import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -147,7 +149,43 @@ export async function dispatchHookExec(
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
+  pi?: ExtensionAPI,
 ): Promise<HookExecResult> {
+  // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
+  // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
+  // a string `"yes"` -- flows to the sync EXEC-01..04 path). The reducer
+  // cannot distinguish a sync `{kind:"noop"}` from this async-spawned
+  // `{kind:"noop"}`, so D-60-02 first-block-wins / mutate-compose / stop
+  // semantics are preserved across mixed declaration-order interleave
+  // (D-62-02). `spawnAndRegister` is itself fire-and-forget -- the
+  // spawn + register step is awaited; the child's exit is NOT.
+  //
+  // `pi` is optional in the signature for in-tree test ergonomics (the
+  // 4 pre-existing test harnesses that call `dispatchHookExec` directly
+  // never exercise the async arm), but production callers in
+  // `dispatch.ts` always thread the live `ExtensionAPI` through. When
+  // the async arm fires without `pi`, the registry call is skipped and
+  // the noop arm logged -- never throw.
+  if (entry.handlerDecl.asyncRewake === true) {
+    if (pi === undefined) {
+      hookDebugLog(
+        `async-rewake: pi missing on async dispatch (${entry.pluginId}/${entry.claudeEvent}); skipping spawn`,
+      );
+      return { kind: "noop" };
+    }
+
+    try {
+      const loc = locationsFor(entry.scope, ctx.cwd);
+      await spawnAndRegister(entry, event, ctx, pi, loc);
+    } catch (err) {
+      hookDebugLog(
+        `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
+    }
+
+    return { kind: "noop" };
+  }
+
   try {
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);

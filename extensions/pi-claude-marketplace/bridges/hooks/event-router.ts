@@ -49,6 +49,7 @@ import { compareByNameThenScope } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
+import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 
@@ -568,6 +569,11 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *   1. Bump liveEpoch and capture the new value; every closure registered
  *      below sees the captured value and short-circuits on mismatch
  *      against any future bump.
+ *   1.5. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06) AND
+ *      reap persisted orphans per scope (D-62-05). Runs AFTER the liveEpoch
+ *      bump so any stale exit handlers from prior children fall through the
+ *      captured-epoch guard rather than firing against the freshly hydrated
+ *      session.
  *   2. Hydrate the parsed-config cache from disk for both scopes (factory-
  *      time cold-start path).
  *   3. Rebuild routing tables for both scopes so the first Pi event fires
@@ -583,6 +589,12 @@ export async function registerHooksBridge(
 ): Promise<void> {
   liveEpoch += 1;
   const capturedEpoch = liveEpoch;
+
+  // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
+  // the prior factory invocation BEFORE the persisted-orphan reap reads
+  // the PID table. The in-memory walk covers same-process /reload
+  // cycles; reapOrphans below covers cross-process crash recovery.
+  shutdownInMemoryChildren();
 
   const hydrated = await hydrateCacheFromDisk(opts);
   for (const { state, loc } of hydrated) {
@@ -602,15 +614,23 @@ export async function registerHooksBridge(
     if ((routingTable.get("SessionStart") ?? []).length > 0) {
       await ensureSharedDataDir(loc);
     }
+
+    // EXEC-05 / D-62-05: read the persisted PID table for this scope,
+    // probe each PID via kill 0, verify /proc/<pid>/environ marker on
+    // Linux (soft-skip on macOS / read failure / marker mismatch --
+    // NEVER kill strangers), SIGKILL surviving owned PIDs, unlink the
+    // table. Awaited so the pi.on registrations below cannot race
+    // against an in-flight kill probe.
+    await reapOrphans(loc);
   }
 
-  pi.on("session_start", compositeHandlerFor("SessionStart", capturedEpoch));
-  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch));
-  pi.on("session_before_compact", compositeHandlerFor("PreCompact", capturedEpoch));
-  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch));
-  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch));
-  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch));
-  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch));
+  pi.on("session_start", compositeHandlerFor("SessionStart", capturedEpoch, pi));
+  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch, pi));
+  pi.on("session_before_compact", compositeHandlerFor("PreCompact", capturedEpoch, pi));
+  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch, pi));
+  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi));
+  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch, pi));
+  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch, pi));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
