@@ -1120,18 +1120,38 @@ async function runLockedReinstall(
     // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
     // is the same defensive shape `install.ts` uses (failures route
     // through hookDebugLog and the next `/reload` rehydrates).
-    removePluginConfigFromCache(scope, marketplace, plugin);
-    if (installable.hooksConfigPath !== undefined) {
-      await readAndCacheReinstalledPluginHooks(
-        scope,
-        marketplace,
-        plugin,
-        path.join(installable.pluginRoot, installable.hooksConfigPath),
-        cwd,
+    //
+    // WR-03 (Phase 63 review): the defensive try/catch around the
+    // cache+routing arm mirrors install.ts's WR-02 fix. Without it, a
+    // throw from `removePluginConfigFromCache`,
+    // `readAndCacheReinstalledPluginHooks`, or `rebuildRoutingTables`
+    // would escape the closure AFTER `tx.save()` succeeded, hit the
+    // catch at the bottom of this block, and route through
+    // `errorWithManualRecovery`. The user would see a
+    // `(manual recovery)` row while state.json on disk has already
+    // persisted the new record -- a state divergence. The cache is
+    // rebuilt from state.json on the next `/reload`'s factory-time
+    // hydrate (D-59-03), so a cache-mutation failure must NOT
+    // falsely fail the reinstall. Failures route through
+    // `hookDebugLog` only.
+    try {
+      removePluginConfigFromCache(scope, marketplace, plugin);
+      if (installable.hooksConfigPath !== undefined) {
+        await readAndCacheReinstalledPluginHooks(
+          scope,
+          marketplace,
+          plugin,
+          path.join(installable.pluginRoot, installable.hooksConfigPath),
+          cwd,
+        );
+      }
+
+      rebuildRoutingTables(tx.state, locations);
+    } catch (cacheErr) {
+      hookDebugLog(
+        `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
       );
     }
-
-    rebuildRoutingTables(tx.state, locations);
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
   }
