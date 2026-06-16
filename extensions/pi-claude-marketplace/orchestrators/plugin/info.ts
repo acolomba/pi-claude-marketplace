@@ -12,9 +12,12 @@
 // `unknown`) emits `componentsResolved: false` -- fetching a remote
 // source to resolve components would violate NFR-5.
 
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
+import { TOOL_EVENTS, type ToolEvent } from "../../domain/components/hook-events.ts";
+import { parseHooksConfig, type HooksConfig } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
@@ -29,12 +32,18 @@ import { isRecordedButDisabled } from "../reconcile/plan.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
+  HookSummaryEntry,
   MarketplaceNotificationMessage,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+// SURF-01 / Pitfall 7: TOOL_EVENTS is a string[] tuple; rewrap as a Set
+// for O(1) membership tests in the HookSummaryEntry projector. Module-
+// scope so the Set is allocated once across all info.ts call sites.
+const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
 
 export interface GetPluginInfoOptions {
   readonly ctx: ExtensionContext;
@@ -179,12 +188,99 @@ function normalizeDependencies(raw: unknown): readonly string[] | undefined {
 }
 
 /**
+ * SURF-01 / D-63-04 / D-63-06: project a parsed `HooksConfig` to the
+ * `HookSummaryEntry[]` shape the renderer consumes. One entry per
+ * (event, group) tuple in declaration order from the parsed file --
+ * `Object.entries` and `Array` iteration both preserve insertion order
+ * for plain objects (the JSON.parse output `parseHooksConfig` returns),
+ * so the rendered order matches the on-disk authoring order.
+ *
+ * Tool events (`PreToolUse` / `PostToolUse` / `PostToolUseFailure`)
+ * carry the group's `matcher` (defaulting to the empty string when the
+ * group's `matcher` is absent -- match-all per MATCH-01); non-tool
+ * events do not carry one. Granularity is per-GROUP, not per-handler:
+ * the renderer surfaces `event(matcher)` once per group regardless of
+ * how many handlers the group declares.
+ *
+ * Pure and total: never throws. The supportability gate in
+ * `checkMatcherSupportability` has already accepted every event key as
+ * a `BucketAEvent`, so the tool-event discriminator is a closed-set
+ * membership check against `TOOL_EVENTS`.
+ */
+function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEntry[] {
+  const entries: HookSummaryEntry[] = [];
+  for (const [eventName, groups] of Object.entries(parsed)) {
+    for (const group of groups) {
+      if (TOOL_EVENT_SET.has(eventName)) {
+        entries.push({
+          event: eventName as ToolEvent,
+          matcher: group.matcher ?? "",
+        });
+      } else {
+        // Cast: the assertion is upheld by the supportability gate's
+        // bucket-A admission check (every event key surviving
+        // `parseHooksConfig.ok = true` is a `ClaudeHookEvent`, and the
+        // tool-event guard above excludes the `ToolEvent` subset).
+        entries.push({
+          event: eventName as Exclude<HookSummaryEntry["event"], ToolEvent>,
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Read & re-parse `<pluginRoot>/<resolved.hooksConfigPath>` from disk
+ * and project to `HookSummaryEntry[]`. The resolver discards the parsed
+ * value (it only records `hooksConfigPath`), so the info renderer must
+ * re-open the file at info-render time. Returns `undefined` when the
+ * file has no `hooksConfigPath` (the plugin declares no hooks), or
+ * when the re-parse fails (the resolver would also have flipped
+ * `installable: false`, so this branch is defensive only -- the file
+ * was parseable at resolve time).
+ *
+ * I/O failures (EACCES / ENOENT after resolve) PROPAGATE so the row
+ * builder's outer catch can classify via the existing `narrowProbeError`
+ * ladder unchanged. The error never reaches the user as a hooks-specific
+ * REASON -- it surfaces as the same `{permission denied}` / `{unreadable}`
+ * the other component-kind probes emit.
+ */
+async function readHookSummaryEntries(
+  pluginRoot: string,
+  hooksConfigPath: string,
+): Promise<readonly HookSummaryEntry[] | undefined> {
+  const raw = await readFile(path.join(pluginRoot, hooksConfigPath), "utf8");
+  // MATCH-03 / A1 projectRoot fallback: mirrors the resolver's
+  // `readStandaloneHooks` call site. The info surface only consumes the
+  // installable-verdict + parsed value; the `if`-field side-Map is
+  // discarded via `skipIfMap: true`, and the no-op `compileIf` is never
+  // invoked.
+  const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
+  const noopCompileIf = (): null => null;
+  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+  if (!parsed.ok) {
+    return undefined;
+  }
+
+  return projectHookSummaryEntries(parsed.value);
+}
+
+/**
  * Compose the resolved-components field of a `PluginInfoRow`. Walks
  * `resolved.componentPaths` to discover per-kind component names on
  * disk; for mcpServers, the `resolved.mcpServers` keys ARE the names.
- * Empty per-kind arrays return `undefined` so the renderer omits the
- * line (the renderer assumes pre-sorted input and does not sort
- * defensively).
+ * For hooks, re-parses `<pluginRoot>/<resolved.hooksConfigPath>` and
+ * projects the result to `HookSummaryEntry[]` (the resolver discards
+ * the parsed value -- info.ts must re-open the file). Empty per-kind
+ * arrays return `undefined` so the renderer omits the line (the
+ * renderer assumes pre-sorted input and does not sort defensively).
+ *
+ * SURF-01 / Pitfall 7: object-literal field placement is documentation
+ * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
+ * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
+ * placement matches the alphabetical order for readability.
  */
 async function composeResolvedComponents(
   pluginRoot: string,
@@ -195,10 +291,12 @@ async function composeResolvedComponents(
       readonly agents: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
+    readonly hooksConfigPath?: string;
   },
 ): Promise<{
   readonly agents?: readonly string[];
   readonly commands?: readonly string[];
+  readonly hooks?: readonly HookSummaryEntry[];
   readonly mcp?: readonly string[];
   readonly skills?: readonly string[];
 }> {
@@ -213,9 +311,20 @@ async function composeResolvedComponents(
     a.localeCompare(b, undefined, { sensitivity: "base" }),
   );
 
+  // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
+  // message-construction time (no string re-derivation at render time).
+  // I/O failures propagate to the row-builder catch where
+  // `narrowProbeError` classifies via the existing ladder (Open Question
+  // 3 in 63-RESEARCH.md: no new REASON, no new code path).
+  const hooks =
+    resolved.hooksConfigPath !== undefined
+      ? await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath)
+      : undefined;
+
   return {
     ...(agents.length > 0 && { agents }),
     ...(commands.length > 0 && { commands }),
+    ...(hooks !== undefined && hooks.length > 0 && { hooks }),
     ...(mcp.length > 0 && { mcp }),
     ...(skills.length > 0 && { skills }),
   };
