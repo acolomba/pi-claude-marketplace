@@ -1073,16 +1073,37 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // cache so a standalone install (outside a reconcile cascade)
       // starts dispatching to the new plugin's hooks immediately,
       // without requiring `/reload` (NFR-2).
+      //
+      // WR-02 (Phase 63 review): the defensive try/catch around the
+      // cache+routing arm prevents a post-`tx.save()` throw from
+      // escaping the closure and surfacing as a `(failed)` notification
+      // while state.json on disk records the install as successful.
+      // Both `addInstalledPluginHooksToCache` (which calls `readFile` +
+      // `parseHooksConfig` internally) AND `rebuildRoutingTables`
+      // (which walks state and `collectPluginsInScope`) can throw, and
+      // either throw would create a state divergence: state.json claims
+      // success but the user sees failure. The cache will be rebuilt
+      // from state.json on the next `/reload`'s factory-time hydrate
+      // (D-59-03), so a cache-mutation failure must NOT falsely fail
+      // the install. Failures route through `hookDebugLog` only,
+      // matching the non-fatal discipline `addInstalledPluginHooksToCache`
+      // uses for its own internal read+parse arms.
       if (installCtx.resolved.hooksConfigPath !== undefined) {
-        await addInstalledPluginHooksToCache(
-          scope,
-          marketplace,
-          plugin,
-          path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
-          cwd,
-        );
+        try {
+          await addInstalledPluginHooksToCache(
+            scope,
+            marketplace,
+            plugin,
+            path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
+            cwd,
+          );
 
-        rebuildRoutingTables(state, locations);
+          rebuildRoutingTables(state, locations);
+        } catch (cacheErr) {
+          hookDebugLog(
+            `install: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+          );
+        }
       }
     });
   } catch (err) {
