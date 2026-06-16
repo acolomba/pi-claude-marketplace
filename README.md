@@ -25,6 +25,7 @@ Installs plugins from the Claude plugin marketplace that contain these component
 - Commands.
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Hooks. See [Hook support reference](docs/hooks.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
 Plugins that contain unsupported components are marked as "unavailable".
