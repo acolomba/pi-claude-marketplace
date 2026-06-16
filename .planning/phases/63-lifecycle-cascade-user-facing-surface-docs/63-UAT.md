@@ -1,6 +1,6 @@
 ---
-status: resolved
-previous_status: "diagnosed"
+status: gaps_found
+previous_status: "resolved"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -15,12 +15,12 @@ source:
   - 63-10-SUMMARY.md
   - 63-11-SUMMARY.md
 started: 2026-06-16T18:23:24Z
-updated: 2026-06-16T21:40:59Z
+updated: 2026-06-16T23:55:00Z
 ---
 
 ## Current Test
 
-[testing complete]
+[gap discovered post-resolution -- test 8 added during post-code-review UAT re-run; routed to /gsd-debug]
 
 ## Tests
 
@@ -324,11 +324,99 @@ note: |
   Agents / MCP servers but omits Hooks even though v1.13 ships hook
   support. Recorded as a minor gap below (cosmetic / docs touch-up).
 
+### 8. A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on `/claude:plugin list`
+expected: |
+  Test added during post-code-review UAT re-run on 2026-06-16. Pick a
+  plugin from `claude-plugins-official` whose only declared artefacts are
+  hooks AND whose declared events are all v1.13 bucket-A (i.e. NOT `Stop`,
+  `Notification`, `SubagentStop`). `learning-output-style` matches: it
+  declares only `SessionStart` (bucket-A), its hooks/hooks.json uses the
+  wrapped form, and the source tree contains no skills / commands / agents /
+  mcp/ artefacts.
+
+  In the Pi REPL launched against the pi-uat sandbox:
+
+      /claude:plugin install learning-output-style@claude-plugins-official
+      /claude:plugin list
+      /reload
+      /claude:plugin list
+
+  Expected: the install cascade emits `+ learning-output-style@claude-plugins-official [user] (installed)`.
+  Both list invocations (before and after /reload) render the plugin row
+  with the `(installed)` status token, NOT `(disabled)`. The plugin is
+  newly installed -- it was never disabled, and the renderer must not
+  classify it as such.
+why_human: |
+  The unit suite covers `available` hooks-plugins (HOOK-01 in
+  `tests/orchestrators/plugin/list.test.ts:1083`) but no test exercises
+  an INSTALLED hooks-only plugin through the list renderer. The runtime
+  probe is the only place this misclassification surfaces.
+result: fail
+evidence: |
+  After `/claude:plugin install learning-output-style@claude-plugins-official`,
+  the install cascade prints `(installed)` correctly. State.json records the
+  plugin as installable: true with `resources.hooks = ["learning-output-style"]`
+  and every other resource array empty. But `/claude:plugin list`, both
+  before and after `/reload`, renders the row with `(disabled)`.
+
+  Confirmed state.json after the install (excerpt):
+
+      "learning-output-style": {
+        "version": "1.0.0",
+        "resolvedSource": ".../sources/.../learning-output-style",
+        "compatibility": { "installable": true, "supported": ["hooks"] },
+        "resources": {
+          "skills": [], "prompts": [], "agents": [], "mcpServers": [],
+          "hooks": ["learning-output-style"]
+        },
+        "installedAt": "2026-06-16T23:52:35.798Z"
+      }
+
+  Root cause is the `isRecordedButDisabled` predicate at
+  `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:275-285`
+  which checks the four pre-phase-63 resource axes
+  (skills/prompts/agents/mcpServers) all-empty + installable: true and
+  returns true. The phase-63 hook bridge added `resources.hooks` to the
+  state schema but did NOT extend this predicate. A hooks-only installed
+  plugin therefore satisfies the predicate and `list.ts:255` routes it to
+  the `(disabled)` arm.
+
+  Same gap mirrored in two drift-twin copies of the predicate:
+    - `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:958-968`
+      (the IN-04 duplicate flagged by 63-REVIEW.md as a future cleanup)
+    - `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:175-191`
+      (`isCurrentlyDisabled` -- pinned to plan.ts by the T5 drift gate)
+
+  Why the unit suite missed it:
+    - T5 drift gate at `tests/orchestrators/reconcile/plan.test.ts:713`
+      hard-codes a 4-axis `requiredAxes` list and is consistently wrong on
+      all three predicate copies; the gate fires only when the copies
+      DISAGREE textually, not when they agree wrongly.
+    - T5 truth-table test at `tests/orchestrators/reconcile/plan.test.ts:671`
+      exercises the (installable x populated) matrix over the same 4 axes
+      -- never the hooks axis.
+    - The list HOOK-01 test at `tests/orchestrators/plugin/list.test.ts:1083`
+      pins an `available` (uninstalled) hooks-plugin, never an installed
+      hooks-only plugin.
+reason: |
+  Phase 63's hook bridge added `resources.hooks` to the state schema (D-63-04 /
+  COMPONENT_KINDS 5-tuple) but did not update the 4-axis empty-resources
+  conjunction in `isRecordedButDisabled` / `isCurrentlyDisabled` /
+  `update.ts::isRecordedButDisabled`. The predicate now over-classifies
+  hooks-only installed plugins as "recorded but disabled" and the list
+  renderer emits the wrong status token.
+severity: blocker
+note: |
+  Logged on 2026-06-16T23:55Z post code-review fixes
+  (REVIEW.md:02e0a5d, REVIEW-FIX.md:8eb3c16). The WR-02 / WR-03 try/catch
+  wraps in install.ts / reinstall.ts are unrelated -- this is a read-side
+  predicate gap, not a write-path issue. Routed to /gsd-debug.
+
 ## Summary
 
-total: 7
+total: 8
 passed: 4
-issues: 0
+issues: 1
 pending: 0
 skipped: 0
 blocked: 3
@@ -338,8 +426,13 @@ notes: |
   and verified correctly at runtime. The residual `(unavailable)
   {unsupported hooks}` trip is structural -- hookify declares `Stop`, which
   is NOT in v1.13's BUCKET_A_EVENTS (Option A taken at the 63-09 checkpoint;
-  Stop admission deferred to v1.14+). The UAT loop has closed: every test
-  has a terminal verdict, the residual gap is owned by v1.14+.
+  Stop admission deferred to v1.14+).
+
+  Re-opened on 2026-06-16T23:55Z by a post-code-review UAT cycle: test 8
+  (hooks-only installed plugin list rendering) FAILED on
+  `learning-output-style`. Root cause is a phase-63 read-side regression
+  in `isRecordedButDisabled` (and its two drift twins) which were never
+  extended with the new `resources.hooks` axis. Routed to /gsd-debug.
 
 ## Gaps
 
@@ -459,3 +552,49 @@ notes: |
   missing:
     - "Add a Hooks bullet to README.md's `## Features` list. Suggested wording: `- Hooks. See [Hook support reference](docs/hooks.md).` Slot it to match the COMPONENT_KINDS tuple order in shared/notify.ts (agents, commands, hooks, mcp, skills — i.e. between Commands and MCP servers)."
   debug_session: "(none — trivial doc fix; no investigation needed)"
+- truth: "A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on /claude:plugin list"
+  status: open
+  opened: 2026-06-16T23:55:00Z
+  reason: "User reported during post-code-review UAT on learning-output-style (a hooks-only, bucket-A-only plugin from claude-plugins-official): install cascade prints `(installed)` correctly, but `/claude:plugin list` renders the plugin row with `(disabled)` both before and after `/reload`. State.json confirms the plugin is installed (installable: true, resources.hooks = [\"learning-output-style\"], every other resource array empty) -- so the misclassification is on the read side, not the install path."
+  severity: blocker
+  test: 8
+  root_cause: |
+    Phase 63's hook bridge added `resources.hooks` to the state schema
+    (D-63-04 / COMPONENT_KINDS 5-tuple) but did NOT extend the four
+    "empty resources + installable: true => recorded-but-disabled"
+    predicates that the read side relies on. All three predicate copies
+    check `resources.{skills,prompts,agents,mcpServers}` for empty and
+    return true when they are, treating a hooks-only installed plugin as
+    "recorded but disabled" -- so `list.ts:255` routes the row to the
+    `(disabled)` arm instead of `(installed)`.
+
+    The two drift-gate / truth-table tests pin the same 4-axis list
+    textually, so they happily passed against three CONSISTENTLY-wrong
+    predicate copies; the drift gate fires only on textual disagreement.
+    The single hooks list test (HOOK-01) exercises an `available` (not
+    installed) hooks-plugin, never an installed hooks-only plugin -- so
+    the read-side misclassification slipped past 2280 passing unit tests.
+  artifacts:
+    - path: "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:275-285"
+      issue: "isRecordedButDisabled checks resources.{skills,prompts,agents,mcpServers}.length===0 + installable; never checks resources.hooks.length===0."
+    - path: "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:958-968"
+      issue: "Duplicate of isRecordedButDisabled (IN-04 from 63-REVIEW.md) -- same missing hooks axis."
+    - path: "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:175-191"
+      issue: "isCurrentlyDisabled (drift twin pinned to plan.ts by the T5 drift gate) -- same missing hooks axis."
+    - path: "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts:255"
+      issue: "Consumes isRecordedButDisabled and emits `status: \"disabled\"` for the row. No bug here; downstream of the predicate gap."
+    - path: "tests/orchestrators/reconcile/plan.test.ts:713"
+      issue: "T5 drift-gate's `requiredAxes` list pins the 4 pre-phase-63 axes; never references `resources.hooks.length === 0`. Gate passes against three consistently-wrong predicates."
+    - path: "tests/orchestrators/reconcile/plan.test.ts:671"
+      issue: "T5 truth-table exercises (installable x populated) over 4 axes; never the hooks axis."
+    - path: "tests/orchestrators/plugin/list.test.ts:1083"
+      issue: "Single hooks-related list test exercises an `available` plugin; never an installed hooks-only plugin through the list renderer."
+    - path: "tmp/pi-uat/agent/pi-claude-marketplace/state.json"
+      issue: "Post-install record for learning-output-style proves resources.hooks = [...] and all other resource arrays empty + installable: true -- the exact input the predicate misclassifies."
+  missing:
+    - "Add `record.resources.hooks.length === 0` (and the matching declared-shape entry) to all three predicate copies: plan.ts::isRecordedButDisabled, update.ts::isRecordedButDisabled (the IN-04 duplicate -- consider unifying), enable-disable.ts::isCurrentlyDisabled."
+    - "Extend the T5 drift gate `requiredAxes` array (plan.test.ts:744) with `resources.hooks.length === 0`."
+    - "Extend the T5 truth-table fixtures (plan.test.ts:671) with a hooks-axis dimension so the (installable: true, populated: false) cell now requires hooks-empty as well."
+    - "Add a list-renderer regression test: install a hooks-only plugin (resources.hooks non-empty, every other resource axis empty, installable: true), call listPlugins, assert the row carries the `(installed)` status token -- not `(disabled)`."
+    - "After the fix, re-run /claude:plugin install learning-output-style@claude-plugins-official + /claude:plugin list against the pi-uat sandbox and confirm the row renders `(installed)` both before and after /reload."
+  debug_session: "(to be created by /gsd-debug -- session file path will be linked here after the diagnostic completes)"
