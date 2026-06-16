@@ -1,5 +1,6 @@
 ---
-status: diagnosed
+status: resolved
+previous_status: "diagnosed"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -10,8 +11,11 @@ source:
   - 63-06-SUMMARY.md
   - 63-07-SUMMARY.md
   - 63-08-SUMMARY.md
+  - 63-09-SUMMARY.md
+  - 63-10-SUMMARY.md
+  - 63-11-SUMMARY.md
 started: 2026-06-16T18:23:24Z
-updated: 2026-06-16T19:08:00Z
+updated: 2026-06-16T21:40:59Z
 ---
 
 ## Current Test
@@ -69,8 +73,39 @@ expected: |
   the source under
   `tmp/pi-uat/agent/pi-claude-marketplace/sources/.../hookify/hooks/hooks.json`
   that the resolver re-read.
-result: issue
-reported: |
+result: blocked
+evidence: |
+  After plans 63-09 (wrapper-format fix) + 63-10 (cross-surface classifier
+  parity) landed, the runtime UAT against the pi-uat sandbox produced:
+
+      ● claude-plugins-official [user]
+        ⊘ hookify (unavailable) {unsupported hooks}
+
+  - No notify Error: / Warning: rows.
+  - Cross-surface classification is now consistent: both `info` and the
+    install cascade emit `(unavailable) {unsupported hooks}` for the same
+    plugin (the 63-10 parity arm landed correctly).
+  - On-disk: tmp/pi-uat/agent/pi-claude-marketplace/hooks/hookify/ was
+    NOT written -- the resolver flipped `installable: false` before the
+    install cascade reached the hooks-bridge slot.
+
+  Verdict: the wrapper-format wire-contract bug is closed (63-09), and the
+  cross-surface classifier asymmetry is closed (63-10). The residual
+  `(unavailable) {unsupported hooks}` trip is honest v1.13 scope: hookify's
+  upstream wire bytes (verified at
+  tmp/pi-uat/agent/pi-claude-marketplace/sources/claude-plugins-official/plugins/hookify/hooks/hooks.json)
+  declare `Stop`, which is NOT a member of v1.13's BUCKET_A_EVENTS
+  (extensions/pi-claude-marketplace/domain/components/hook-events.ts:37).
+  `checkMatcherSupportability` correctly trips `(c) non-bucket-A event: Stop`.
+reason: |
+  Stop-event admission to BUCKET_A_EVENTS is deferred to v1.14+ per
+  63-09-SUMMARY.md "Deferred" section (Option A taken at the user-decided
+  checkpoint in 63-09). This is by-design v1.13 scope, not a defect. The
+  binding wrapper fix (63-09) and cross-surface parity fix (63-10) both
+  land correctly; the residual trip is structural.
+closed_by: ["63-09", "63-10"]
+deferred_to: "v1.14+ (Stop-event admission to BUCKET_A_EVENTS)"
+reported_pre_fix: |
   failed:
 
       ● claude-plugins-official [user] <autoupdate>
@@ -124,8 +159,24 @@ expected: |
   `commands:` and `mcp:` (alphabetical), each entry is at 6-space indent,
   tool events render as `<Event>(<matcher>)` and non-tool events
   (Stop, SessionStart, etc.) render as bare `<Event>` with no parentheses.
-result: issue
-reported: |
+result: blocked
+evidence: |
+  Depends on test 3. After 63-09 + 63-10 landed, hookify still flips
+  `(unavailable) {unsupported hooks}` via the bucket-A supportability gate
+  (Stop arm not in BUCKET_A_EVENTS -- v1.14+ scope per 63-09 Option A).
+  Hookify never reaches `(installed)` state, so `/claude:plugin info
+  hookify@claude-plugins-official` correctly falls through to the
+  `components: not resolved` rendering arm (matches Truth #4's
+  "unavailable plugins continue to render components: not resolved"
+  contract). The multi-line `hooks:` block contract this test was
+  meant to exercise could not be validated because the precondition was
+  not met.
+reason: |
+  Depends on test 3 -- hookify never reached installed state due to
+  Stop-event admission being deferred to v1.14+ (63-09 Option A).
+closed_by: ["63-09"]
+deferred_to: "v1.14+ (Stop-event admission to BUCKET_A_EVENTS)"
+reported_pre_fix: |
   fail:
 
       ● claude-plugins-official [user] <autoupdate>
@@ -166,8 +217,19 @@ expected: |
   Expected: directory is missing OR empty (idempotent rm per NFR-3). A
   subsequent re-uninstall would be a no-op (don't reboot — just confirm
   the disk state).
-result: issue
-reported: "fail, because we never installed it"
+result: blocked
+evidence: |
+  Depends on test 3. After 63-09 + 63-10 landed, hookify still flips
+  `(unavailable) {unsupported hooks}` via the bucket-A supportability gate
+  (Stop arm not in BUCKET_A_EVENTS -- v1.14+ scope per 63-09 Option A).
+  Hookify never reached `(installed)` state, so the uninstall path could
+  not be exercised at runtime.
+reason: |
+  Depends on test 3 -- hookify never reached installed state due to
+  Stop-event admission being deferred to v1.14+ (63-09 Option A).
+closed_by: ["63-09"]
+deferred_to: "v1.14+ (Stop-event admission to BUCKET_A_EVENTS)"
+reported_pre_fix: "fail, because we never installed it"
 severity: major
 note: |
   Same downstream story as test 4: hookify never became installable due
@@ -266,15 +328,36 @@ note: |
 
 total: 7
 passed: 4
-issues: 3
+issues: 0
 pending: 0
 skipped: 0
-blocked: 0
+blocked: 3
+notes: |
+  Tests 3/4/5 reached terminal `blocked` state: the binding wrapper-format
+  fix (63-09) and cross-surface classifier parity fix (63-10) both landed
+  and verified correctly at runtime. The residual `(unavailable)
+  {unsupported hooks}` trip is structural -- hookify declares `Stop`, which
+  is NOT in v1.13's BUCKET_A_EVENTS (Option A taken at the 63-09 checkpoint;
+  Stop admission deferred to v1.14+). The UAT loop has closed: every test
+  has a terminal verdict, the residual gap is owned by v1.14+.
 
 ## Gaps
 
 - truth: "Installing hookify@claude-plugins-official produces (installed) row + on-disk hooks.json + reload hint"
-  status: failed
+  status: resolved-with-deferrals
+  closed: 2026-06-16T21:40:59Z
+  closed_by: ["63-09", "63-10"]
+  deferred_to: "v1.14+ (Stop-event admission to BUCKET_A_EVENTS)"
+  closure_note: |
+    The two diagnosed root causes are closed: the wrapper-format wire-contract
+    bug (63-09) and the cross-surface classifier asymmetry (63-10). However,
+    the user-reported claim "uses only bucket-A supported events" was
+    incorrect -- hookify ships `Stop`, which is NOT in v1.13's BUCKET_A_EVENTS.
+    Per the 63-09 Option A user decision, Stop admission is deferred to v1.14+.
+    Runtime UAT against the pi-uat sandbox confirms hookify still flips
+    `(unavailable) {unsupported hooks}` -- but the trip is now the honest
+    bucket-A supportability gate, not the wrapper-format parser bug or the
+    cross-surface classifier asymmetry.
   reason: "User reported: hookify is classified `(unavailable) {unsupported hooks}` (info) / `(unavailable) {unsupported source}` (install cascade) despite using only bucket-A supported events (PreToolUse, PostToolUse, Stop, UserPromptSubmit). Install never reaches the hooks-bridge slot."
   severity: blocker
   test: 3
@@ -317,7 +400,15 @@ blocked: 0
     - "After the fix, re-run /claude:plugin install hookify@claude-plugins-official and expect installable: true + (installed) row + tmp/pi-uat/agent/pi-claude-marketplace/hooks/hookify/hooks.json on disk."
   debug_session: ".planning/debug/hookify-unavailable-resolver-flip.md"
 - truth: "Same plugin reports the same (unavailable) reason across surfaces (info / list / install cascade)"
-  status: failed
+  status: resolved
+  closed: 2026-06-16T21:40:59Z
+  closed_by: ["63-10"]
+  closure_note: |
+    Closed verbatim. The 63-10 cross-surface parity arm mirrors the four
+    `hooks.json`-prefix arms already in `narrowResolverNotes`, so both
+    `info` and the install cascade now emit the SAME
+    `(unavailable) {unsupported hooks}` token for the SAME on-disk
+    hooks-config failure. Runtime UAT confirms parity at the user surface.
   reason: "User reported: hookify shows {unsupported hooks} from `info hookify@claude-plugins-official` but shows {unsupported source} in the install cascade's marketplace-listing block — same plugin, different reason between contexts."
   severity: major
   test: 3
@@ -348,7 +439,12 @@ blocked: 0
     - "Add a cross-surface invariant test: for a synthetic plugin with a deliberately-malformed hooks.json, assert that info(plugin) and install(plugin) cascade emit the SAME (unavailable) {<reason>} token."
   debug_session: ".planning/debug/hookify-unavailable-resolver-flip.md"
 - truth: "README's `## Features` section lists every supported component kind in v1.13"
-  status: failed
+  status: resolved
+  closed: 2026-06-16T21:40:59Z
+  closed_by: ["63-11"]
+  closure_note: |
+    Closed verbatim. README.md `## Features` bullet list now includes
+    `- Hooks. See [Hook support reference](docs/hooks.md).` (commit 7967ea8).
   reason: "User reported: hooks are not mentioned in the README Features bullet list (README.md:21-30) even though v1.13 ships hook support and `## Hook support` (README.md:171) is a separate section. The features list still reads Commands / Skills / Agents / MCP servers."
   severity: cosmetic
   test: 7
