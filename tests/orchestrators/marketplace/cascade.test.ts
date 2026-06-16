@@ -162,8 +162,15 @@ test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dro
     await mkdir(hooksPluginDir, { recursive: true });
     await writeFile(
       path.join(hooksPluginDir, "hooks.json"),
+      // HOOK-03 / LIFE-01: source-plugin seed uses the upstream PLUGIN-format
+      // wrapper per Claude Code `plugin-dev/skills/hook-development/SKILL.md`.
+      // This test does not compare on-disk bytes against the fixture -- it
+      // only observes removal of the subtree -- so no consumer assertion
+      // needs adjustment.
       JSON.stringify({
-        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo bye" }] }],
+        hooks: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo bye" }] }],
+        },
       }),
     );
 

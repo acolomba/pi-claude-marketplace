@@ -34,11 +34,20 @@ async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
 }
 
 const PLUGIN = "acme";
-// WR-05: schema-valid top-level-event-keys shape (parity with
-// `cascade.test.ts` and `lifecycle-cascade.test.ts`). HOOKS_CONFIG_SCHEMA
-// is a Record<string, HookEventArray>, NOT a wrapper object.
+// HOOK-03 / LIFE-01: upstream plugin-format wrapper per Claude Code
+// `plugin-dev/skills/hook-development/SKILL.md` -- plugin `hooks/hooks.json`
+// MUST use `{description?, hooks: {<event>: [...]}}`. The source-plugin
+// seed file written under `<pluginRoot>/hooks/hooks.json` carries the
+// wrapper verbatim; `parseHooksConfig` unwraps `parsed.hooks` before
+// validation, and the bridge stage-write path receives the UNWRAPPED
+// inner record from the parser. Direct `writeHookConfig` test calls (which
+// bypass the parser) pass `HOOKS_VALUE.hooks` to match the production
+// caller's contract; on-disk `deepEqual` assertions compare against
+// `HOOKS_VALUE.hooks` for the same reason.
 const HOOKS_VALUE = {
-  PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+  hooks: {
+    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+  },
 };
 
 test("writeHookConfig writes <hooksDir>/<plugin>/hooks.json and returns absolute path", async () => {
@@ -51,15 +60,15 @@ test("writeHookConfig writes <hooksDir>/<plugin>/hooks.json and returns absolute
       locations,
       pluginName: PLUGIN,
       pluginRoot,
-      hooksValue: HOOKS_VALUE,
+      hooksValue: HOOKS_VALUE.hooks,
     });
 
     assert.equal(result.written, true);
     assert.equal(result.path, path.join(locations.hooksDir, PLUGIN, "hooks.json"));
 
     const onDiskText = await readFile(result.path, "utf8");
-    const onDisk = JSON.parse(onDiskText) as typeof HOOKS_VALUE;
-    assert.deepEqual(onDisk, HOOKS_VALUE);
+    const onDisk = JSON.parse(onDiskText) as typeof HOOKS_VALUE.hooks;
+    assert.deepEqual(onDisk, HOOKS_VALUE.hooks);
   });
 });
 
@@ -72,7 +81,7 @@ test("writeHookConfig is idempotent: second call yields identical content and do
       locations,
       pluginName: PLUGIN,
       pluginRoot,
-      hooksValue: HOOKS_VALUE,
+      hooksValue: HOOKS_VALUE.hooks,
     });
     const firstText = await readFile(first.path, "utf8");
 
@@ -80,7 +89,7 @@ test("writeHookConfig is idempotent: second call yields identical content and do
       locations,
       pluginName: PLUGIN,
       pluginRoot,
-      hooksValue: HOOKS_VALUE,
+      hooksValue: HOOKS_VALUE.hooks,
     });
     const secondText = await readFile(second.path, "utf8");
 
@@ -98,7 +107,7 @@ test("removeHookConfig removes <hooksDir>/<plugin>/ recursively and returns the 
       locations,
       pluginName: PLUGIN,
       pluginRoot,
-      hooksValue: HOOKS_VALUE,
+      hooksValue: HOOKS_VALUE.hooks,
     });
 
     const result = await removeHookConfig({ locations, pluginName: PLUGIN });
@@ -135,7 +144,7 @@ test("writeHookConfig rejects pluginName containing '..' via assertSafeName BEFO
         locations,
         pluginName: "../escape",
         pluginRoot,
-        hooksValue: HOOKS_VALUE,
+        hooksValue: HOOKS_VALUE.hooks,
       }),
       (err: Error) => err.message.includes("hooks bridge plugin name"),
     );

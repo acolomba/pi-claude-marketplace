@@ -143,8 +143,17 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       const locations = locationsFor("project", cwd);
       const hooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
 
+      // HOOK-03 / LIFE-01: upstream PLUGIN-format wrapper per Claude Code
+      // `plugin-dev/skills/hook-development/SKILL.md`. The source-plugin
+      // seed file under `<pluginRoot>/hooks/hooks.json` ships the wrapper;
+      // `parseHooksConfig` unwraps `parsed.hooks` before the bridge stage-
+      // write path receives the inner record. On-disk `deepEqual`
+      // assertions against `hooksPath` compare to `v1Hooks.hooks` /
+      // `v2Hooks.hooks` (the unwrapped inner record the bridge writes).
       const v1Hooks = {
-        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo v1" }] }],
+        hooks: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo v1" }] }],
+        },
       };
 
       // (a) Install -- the hooks bridge file lands on disk.
@@ -166,7 +175,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         });
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `install: expected clean; got: ${summary}`);
-        assert.deepEqual(JSON.parse(await readFile(hooksPath, "utf8")), v1Hooks);
+        assert.deepEqual(JSON.parse(await readFile(hooksPath, "utf8")), v1Hooks.hooks);
         // LIFE-02: install row + reload-hint trailer cascade.
         assert.ok(
           summary.includes("(installed)"),
@@ -180,7 +189,9 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
 
       // (b) Update to v2 with NEW hooks payload.
       const v2Hooks = {
-        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo v2" }] }],
+        hooks: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo v2" }] }],
+        },
       };
       await writeFile(
         seed.manifestPath,
@@ -208,7 +219,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         assert.ok(!summary.includes("(failed)"), `update: expected clean; got: ${summary}`);
         assert.deepEqual(
           JSON.parse(await readFile(hooksPath, "utf8")),
-          v2Hooks,
+          v2Hooks.hooks,
           "update commit slot must rewrite hooks.json with v2 payload",
         );
       }
@@ -233,7 +244,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         assert.ok(!summary.includes("(failed)"), `reinstall: expected clean; got: ${summary}`);
         assert.deepEqual(
           JSON.parse(await readFile(hooksPath, "utf8")),
-          v2Hooks,
+          v2Hooks.hooks,
           "reinstall replace slot must rewrite hooks.json from the resolved manifest",
         );
       }
