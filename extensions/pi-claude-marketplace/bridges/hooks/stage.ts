@@ -12,7 +12,7 @@
 // `assertSafeName` guard on the plugin name. `removeHookConfig` is a single
 // `fs.rm(..., { recursive: true, force: true })` and is idempotent (NFR-3).
 
-import { readdir, readlink, realpath, rm } from "node:fs/promises";
+import { lstat, readdir, readlink, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -24,6 +24,7 @@ import {
 } from "../../shared/path-safety.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { Dirent } from "node:fs";
 
 /**
  * Single source of truth for the hooks bridge write path. Consumed by
@@ -35,74 +36,128 @@ export function hookConfigPathFor(locations: ScopedLocations, plugin: string): s
 }
 
 /**
- * LIFE-03 read-side defense: walk `<pluginRoot>/hooks/` recursively and
- * refuse the first symlink whose `realpath` escapes `pluginRoot`. The
- * subtree walk catches a symlink BURIED inside the hooks tree -- the
- * existing `assertPathInside` chokepoint only walks from `parent` to
- * `child`, so a leaf-level rogue link would slip past write-side
- * containment.
+ * LIFE-03 read-side defense: walk `<pluginRoot>/hooks/` and refuse the
+ * first symlink whose `realpath` escapes `pluginRoot`. The subtree walk
+ * catches a symlink BURIED inside the hooks tree -- the existing
+ * `assertPathInside` chokepoint only walks from `parent` to `child`, so a
+ * leaf-level rogue link would slip past write-side containment.
+ *
+ * The walker is a hand-rolled stack walk that calls `readdir` ONE LEVEL at
+ * a time (NO `recursive: true`) and uses `lstat` to classify each entry
+ * WITHOUT following symlinks. Directory entries are descended into only
+ * when they are real directories AND not symbolic links; this guarantees
+ * the walk never issues any `fs` call against a path outside
+ * `<pluginRoot>/hooks/`. The first symlink encountered is fed through
+ * `realpath` + `assertPathInside(pluginRoot, ...)` and rejected with
+ * `SymlinkRefusedError` if its target escapes `pluginRoot`. Even an
+ * in-tree-resolving symlink is NOT descended through -- the walker treats
+ * every symbolic link as a boundary.
  *
  * Throws `SymlinkRefusedError` (subclass of `PathContainmentError`, inherits
- * PI-14 handling) on the first escaping symlink encountered: the entry IS a
- * symlink AND its `realpath` is outside `pluginRoot` -- both halves of the
- * LIFE-03 vector. The narrower subclass is chosen over the parent class
- * because a non-symlink containment violation can't occur from a `readdir`
- * walk (the walker only emits paths under `pluginRoot/hooks/`).
+ * PI-14 handling, D-17) on the first escaping symlink encountered: the
+ * entry IS a symlink AND its `realpath` is outside `pluginRoot` -- both
+ * halves of the LIFE-03 vector. The narrower subclass is chosen over the
+ * parent class because a non-symlink containment violation can't occur
+ * from this walk (every emitted path is under `pluginRoot/hooks/`).
  *
- * ENOENT/ENOTDIR on the hooks subtree is a clean return (a plugin with no
- * `hooks/` dir has nothing to check). Any other I/O error propagates.
+ * ENOENT/ENOTDIR on the hooks subtree (or any descendant directory) is a
+ * clean continue -- a plugin with no `hooks/` dir has nothing to check.
+ * Any other I/O error propagates.
  */
 async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<void> {
   const hooksRoot = path.join(pluginRoot, "hooks");
-  let entries;
+  const stack: string[] = [hooksRoot];
+
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (dir === undefined) {
+      // Unreachable -- the while-condition guards stack.length > 0 -- but
+      // the explicit narrowing satisfies @typescript-eslint without a
+      // non-null assertion.
+      break;
+    }
+
+    const entries = await readEntriesOrSkip(dir);
+    if (entries === null) {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const linkPath = path.join(dir, entry.name);
+      // `lstat` (NOT `stat`) so we never follow a symlink target. This is
+      // the core of the containment guarantee: we MUST be able to detect
+      // "this entry is a symlink" without issuing any FS call against the
+      // target it points to.
+      const stat = await lstat(linkPath);
+
+      if (stat.isSymbolicLink()) {
+        await assertSymlinkEntryContained(pluginRoot, linkPath);
+        // Even if the symlink resolves INSIDE pluginRoot, we do NOT push
+        // it onto the walk stack. Every symbolic link is a boundary -- the
+        // walker never descends through one.
+        continue;
+      }
+
+      if (stat.isDirectory()) {
+        stack.push(linkPath);
+      }
+      // Regular files: nothing to check; the walker is only looking for
+      // symbolic links.
+    }
+  }
+}
+
+/**
+ * One level of `readdir(dir, { withFileTypes: true })` with ENOENT/ENOTDIR
+ * translated to a `null` skip signal. Any other I/O error propagates.
+ */
+async function readEntriesOrSkip(dir: string): Promise<Dirent[] | null> {
   try {
-    entries = await readdir(hooksRoot, { recursive: true, withFileTypes: true });
+    return await readdir(dir, { withFileTypes: true });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
-      return;
+      return null;
     }
 
     throw err;
   }
+}
 
-  for (const entry of entries) {
-    if (!entry.isSymbolicLink()) {
-      continue;
-    }
-
-    const linkPath = path.join(entry.parentPath, entry.name);
-    const resolved = await realpath(linkPath);
-    try {
-      await assertPathInside(pluginRoot, resolved, `hooks subtree symlink ${linkPath}`);
-    } catch (err) {
-      // The entry IS a symlink AND its realpath escapes pluginRoot -- both
-      // halves of the LIFE-03 vector. Surface the narrower
-      // SymlinkRefusedError subclass so callers can `instanceof`-discriminate
-      // a symlink-escape from a generic containment failure. Inherits
-      // PathContainmentError so PI-14 instance-check handling propagates.
-      // The pass-through assertPathInside above ALREADY throws
-      // SymlinkRefusedError when an intermediate segment from pluginRoot
-      // down to resolved is itself a symlink (e.g. the pluginRoot tmpdir on
-      // macOS resolving through /private/var). Only translate the plain
-      // containment-only failure case.
-      if (err instanceof SymlinkRefusedError) {
-        throw err;
-      }
-
-      if (err instanceof PathContainmentError) {
-        const linkTarget = await readSymlinkTargetSafe(linkPath);
-        throw new SymlinkRefusedError(
-          pluginRoot,
-          resolved,
-          `hooks subtree symlink ${linkPath}`,
-          linkPath,
-          linkTarget,
-        );
-      }
-
+/**
+ * Run the `realpath` + `assertPathInside` containment check for one
+ * symlink entry. The pass-through `assertPathInside` ALREADY throws
+ * `SymlinkRefusedError` when an intermediate segment from `pluginRoot`
+ * down to `resolved` is itself a symlink (e.g. the pluginRoot tmpdir on
+ * macOS resolving through `/private/var`). The translation block below
+ * only converts the plain containment-only failure case to a
+ * `SymlinkRefusedError`, preserving the LIFE-03 rejection contract so
+ * callers can `instanceof`-discriminate a symlink-escape from a generic
+ * containment failure. `SymlinkRefusedError` inherits
+ * `PathContainmentError` so PI-14 instance-check handling propagates
+ * (D-17).
+ */
+async function assertSymlinkEntryContained(pluginRoot: string, linkPath: string): Promise<void> {
+  const resolved = await realpath(linkPath);
+  try {
+    await assertPathInside(pluginRoot, resolved, `hooks subtree symlink ${linkPath}`);
+  } catch (err) {
+    if (err instanceof SymlinkRefusedError) {
       throw err;
     }
+
+    if (err instanceof PathContainmentError) {
+      const linkTarget = await readSymlinkTargetSafe(linkPath);
+      throw new SymlinkRefusedError(
+        pluginRoot,
+        resolved,
+        `hooks subtree symlink ${linkPath}`,
+        linkPath,
+        linkTarget,
+      );
+    }
+
+    throw err;
   }
 }
 
