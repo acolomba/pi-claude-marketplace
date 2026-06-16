@@ -148,6 +148,52 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
   return reasons !== undefined && reasons.length > 0 && reasons.every((r) => BENIGN_REASONS.has(r));
 }
 
+// ---------------------------------------------------------------------------
+// SURF-02 / D-63-06 / D-63-07: hook summary type seam.
+//
+// `ClaudeHookEvent` is the public literal-union of the 8 supported Claude
+// hook events. Type definitions live here (in `shared/`) so the rendering
+// surface can consume them without violating the `shared/` -> `domain/`
+// import-direction fence (`import-x/no-restricted-paths`). The matching
+// runtime tuples `BUCKET_A_EVENTS` / `TOOL_EVENTS` in
+// `domain/components/hook-events.ts` are pinned to these literal unions
+// via a `satisfies readonly ClaudeHookEvent[]` (and respectively
+// `satisfies readonly _ToolEvent[]`) assertion in that file -- one
+// drifts, the typecheck breaks at the source-of-truth assertion site.
+//
+// `HookSummaryEntry` is the discriminated union the info-surface renderer
+// consumes: tool events statically carry `matcher: string`, non-tool events
+// statically cannot carry one. The discriminator is structural
+// (`"matcher" in entry`), so no runtime guard is needed -- both arms render
+// successfully and the renderer reads `entry.event` / `entry.matcher`
+// directly without re-deriving event strings.
+//
+// `HookSummary` is the public wrapper interface. The payload boundary uses
+// the raw `readonly HookSummaryEntry[]` shape (see
+// `PluginInfoComponentsResolved.components.hooks?` below); `HookSummary`
+// exists as a labelled handle for consumers that want the named wrapper.
+// ---------------------------------------------------------------------------
+
+export type ClaudeHookEvent =
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "PreToolUse"
+  | "PostToolUse"
+  | "PostToolUseFailure"
+  | "PreCompact"
+  | "PostCompact"
+  | "SessionEnd";
+
+type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
+
+export type HookSummaryEntry =
+  | { readonly event: _ToolEvent; readonly matcher: string }
+  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> };
+
+export interface HookSummary {
+  readonly entries: readonly HookSummaryEntry[];
+}
+
 /**
  * I5 / PR #51 / T-53-02-02 / T-55-02-01: collapse any absolute-path token
  * (POSIX `/...` or Windows `<drive>:\...` / `\\?\...`) in a free-text
@@ -1043,6 +1089,7 @@ interface PluginInfoComponentsResolved {
   readonly components: {
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
+    readonly hooks?: readonly HookSummaryEntry[];
     readonly mcp?: readonly string[];
     readonly skills?: readonly string[];
   };
@@ -2573,26 +2620,59 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
 }
 
 // Derive the tuple's element type from the interface so the two
-// declarations cannot drift. The tuple is sized exactly (4 entries):
-// adding a 5th key to `PluginInfoComponentsResolved.components` without
+// declarations cannot drift. The tuple is sized exactly (5 entries):
+// adding a 6th key to `PluginInfoComponentsResolved.components` without
 // extending this tuple breaks the typecheck here -- TS rejects the
 // literal because `ComponentKind` would no longer cover every keyof
 // the interface. Without the explicit tuple length, the renderer
 // would silently omit the new kind from output.
 type ComponentKind = keyof PluginInfoComponentsResolved["components"];
-const COMPONENT_KINDS: readonly [ComponentKind, ComponentKind, ComponentKind, ComponentKind] = [
-  "agents",
-  "commands",
-  "mcp",
-  "skills",
-];
+const COMPONENT_KINDS: readonly [
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+] = ["agents", "commands", "hooks", "mcp", "skills"];
+
+/**
+ * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
+ * carries one or more entries. Emits a 4-space-indent header followed by
+ * one 6-space-indent line per entry; `<event>(<matcher>)` for tool events
+ * (discriminated by the structural `"matcher" in entry` predicate), bare
+ * `<event>` for non-tool events. Reads `entry.event` and `entry.matcher`
+ * directly -- no re-derivation from a closed-set tuple, no runtime guard
+ * (the union has exactly two arms, both render).
+ */
+function appendHooksBlock(
+  lines: string[],
+  entries: readonly HookSummaryEntry[] | undefined,
+): void {
+  if (entries === undefined || entries.length === 0) {
+    return;
+  }
+
+  lines.push("    hooks:");
+  for (const entry of entries) {
+    if ("matcher" in entry) {
+      lines.push(`      ${entry.event}(${entry.matcher})`);
+    } else {
+      lines.push(`      ${entry.event}`);
+    }
+  }
+}
 
 /**
  * Append the per-kind component lines + optional dependencies line
  * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
- * (`agents`, `commands`, `mcp`, `skills`); within each kind, names
- * render in the caller-supplied order. The orchestrator pre-sorts;
+ * (`agents`, `commands`, `hooks`, `mcp`, `skills`); within each kind,
+ * names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
+ *
+ * SURF-02 / D-63-04: the `hooks` kind is the only multi-line member;
+ * the per-arm rendering is owned by `appendHooksBlock`. Every other
+ * kind keeps the single-line `<kind>: <name>, <name>, ...` comma-join
+ * shape.
  */
 function appendResolvedComponentLines(
   lines: string[],
@@ -2600,6 +2680,11 @@ function appendResolvedComponentLines(
   dependencies: readonly string[] | undefined,
 ): void {
   for (const kind of COMPONENT_KINDS) {
+    if (kind === "hooks") {
+      appendHooksBlock(lines, components.hooks);
+      continue;
+    }
+
     const names = components[kind];
     if (names !== undefined && names.length > 0) {
       lines.push(`    ${kind}: ${names.join(", ")}`);

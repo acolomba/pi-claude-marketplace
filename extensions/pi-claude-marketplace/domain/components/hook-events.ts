@@ -1,6 +1,8 @@
 // domain/components/hook-events.ts
 //
 // TOOL-02 bucket-A event closed-set + non-tool-event matcher target tables.
+
+import type { ClaudeHookEvent } from "../../shared/notify.ts";
 // This module is the source of truth `checkMatcherSupportability` reads at
 // parse time to trip TOOL-02 when a plugin's `hooks.json` declares hooks
 // under any non-bucket-A event key, or carries a non-tool matcher value
@@ -41,11 +43,20 @@ export const BUCKET_A_EVENTS = [
   "PreCompact",
   "PostCompact",
   "SessionEnd",
-] as const;
+] as const satisfies readonly ClaudeHookEvent[];
 
 /**
  * Literal union of bucket-A event names. Derived from the tuple above so
  * the source of truth lives in exactly one place.
+ *
+ * SURF-02 / D-63-06: `BucketAEvent` is a structural duplicate of the
+ * `ClaudeHookEvent` literal-union declared in `shared/notify.ts`. The
+ * `as const satisfies readonly ClaudeHookEvent[]` assertion above is the
+ * single-source-of-truth pin -- adding/removing a value from
+ * `BUCKET_A_EVENTS` here without the matching `ClaudeHookEvent` edit (or
+ * vice versa) breaks the typecheck at that assertion site. The two
+ * declarations exist on opposite sides of the `shared/` <- `domain/`
+ * import-direction fence (`import-x/no-restricted-paths`).
  */
 export type BucketAEvent = (typeof BUCKET_A_EVENTS)[number];
 
@@ -56,7 +67,11 @@ export type BucketAEvent = (typeof BUCKET_A_EVENTS)[number];
  * whose matcher targets a `source` / `reason` / `trigger` field on the
  * Pi-side payload (or has no matcher support at all).
  */
-export const TOOL_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+export const TOOL_EVENTS = [
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+] as const satisfies readonly BucketAEvent[];
 
 /**
  * Literal union of tool-event names. Subset of `BucketAEvent`.
