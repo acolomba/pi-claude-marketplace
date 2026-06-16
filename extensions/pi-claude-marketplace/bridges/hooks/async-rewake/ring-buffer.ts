@@ -3,7 +3,7 @@
 // EXEC-05 / D-62-04 pure-leaf circular Buffer for the asyncRewake
 // per-child stderr / stdout capture. Fixed capacity, monotonic
 // `writeIndex` + `filled` counters, no project-internal imports, no
-// node:child_process. Plan 02's registry constructs one instance per
+// node:child_process. The registry constructs one instance per
 // stream per child via `new RingBuffer(STDERR_CAP_BYTES)` and
 // `new RingBuffer(STDOUT_CAP_BYTES)` from the constants exported below.
 //
@@ -20,7 +20,7 @@
 // The `truncated` latch is set the moment any byte is dropped (single-
 // write overflow that overwrites an old byte, OR a single chunk larger
 // than capacity that already cannot fit in full) and is NEVER reset.
-// The exit handler in Plan 02 reads it via `read()` and prepends the
+// The exit handler reads it via `read()` and prepends the
 // `[…truncated]\n\n` marker on the inject payload so the model sees
 // that history was lost.
 //
