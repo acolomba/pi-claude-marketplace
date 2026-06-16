@@ -89,7 +89,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [ ] **LIFE-01**: Hooks bridge slots into the existing 4-bridge cascade as a 5th component in `transaction/runPhases.ts` (plan / stage / unstage / discover mirrors the existing cascade shape); install / uninstall / update / reinstall orchestrators add the hooks phase row
 - [ ] **LIFE-02**: Hook install / uninstall operations emit a plugin row through the v1.4 `NotificationMessage` model, triggering the existing reload-hint cascade (no new top-level notify pattern; no new closed-set tokens for state-change tokens)
-- [ ] **LIFE-03**: Per-plugin hooks subtree is contained at `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json` (NFR-10 extension); each hook `command` path resolves via `fs.realpath` + `assertPathInside(<pluginRoot>, realpath)` -- symlinked escape rejected at install with notify error; plugin name with path-separator sanitized via existing `assertSafeName`
+- [x] **LIFE-03**: Per-plugin hooks subtree is contained at `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json` (NFR-10 extension); each hook `command` path resolves via `fs.realpath` + `assertPathInside(<pluginRoot>, realpath)` -- symlinked escape rejected at install with notify error; plugin name with path-separator sanitized via existing `assertSafeName`
 
 ### Operator Observability
 
@@ -213,5 +213,5 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | SURF-06 | Phase 63 | Complete |
 | LIFE-01 | Phase 63 | Pending |
 | LIFE-02 | Phase 63 | Pending |
-| LIFE-03 | Phase 63 | Pending |
+| LIFE-03 | Phase 63 | Complete |
 | OBS-01 | Phase 59 | Complete |
