@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: verifying
-stopped_at: Completed 63-05-PLAN.md (SURF-01)
-last_updated: "2026-06-16T14:57:16.520Z"
-last_activity: 2026-06-16 -- Phase 63 execution started
+stopped_at: Gap-closure plan 63-08 added (CR-01 / LIFE-03 walker fix) -- ready to execute
+last_updated: "2026-06-16T16:00:49.034Z"
+last_activity: 2026-06-16 -- Plan 63-08 added to close CR-01 (LIFE-03 symlink walker)
 progress:
   total_phases: 7
   completed_phases: 7
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — EXECUTING
-Plan: 7 of 7
-Status: Phase complete — ready for verification
-Last activity: 2026-06-16 -- Phase 63 execution started
+Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — GAP CLOSURE
+Plan: 7 of 8 executed; 63-08 (CR-01 / LIFE-03 walker fix) ready to execute
+Status: Ready to execute 63-08 (gap closure for Truth #2 / LIFE-03 — symlink walker hardening)
+Last activity: 2026-06-16 -- Plan 63-08 added (closes CR-01 from 63-REVIEW.md / Truth #2 in 63-VERIFICATION.md)
 
 ## Performance Metrics
 
