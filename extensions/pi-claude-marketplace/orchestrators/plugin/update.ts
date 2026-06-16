@@ -1310,6 +1310,22 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // Phase ledger order. D-03 fail-continue: a throw here lands in
   // phase3aFailures and the loop continues; recovery is via the
   // RECOVERY_PLUGIN_REINSTALL_PREFIX hint -- there is no in-process restore.
+  //
+  // WR-01 (Phase 63 review): the removeHookConfig() arm (version B drops
+  // hooks) is not atomic at the bridge level -- rm({recursive:true,
+  // force:true}) can throw partway through (EACCES on a child, EIO mid-
+  // walk). On such a throw, the on-disk hooks subtree may be partially
+  // deleted relative to state.json's still-old `resources.hooks: [plugin]`
+  // slug. The `failedPhases.has("hooks")` guard at finalize correctly
+  // keeps the OLD inventory slug, so the truthful "we did not complete
+  // the swap" view is preserved -- BUT the dispatcher's routing table
+  // (rebuilt from state.json on /reload) will point at a now-deleted
+  // file until the user runs `reinstall`. The RECOVERY_PLUGIN_REINSTALL_PREFIX
+  // hint emitted by the phase-3b path covers this case: a (failed)
+  // {rollback partial} row directs the user to reinstall, which writes
+  // a fresh hooks subtree from the resolved plugin source. The same
+  // recovery contract applies to reinstall.ts::commitHooks (see
+  // WR-05 documentation there).
   try {
     if (preflight.installable.hooksConfigPath !== undefined) {
       const raw = await readFile(
