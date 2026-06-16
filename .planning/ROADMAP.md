@@ -383,7 +383,26 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 6. A plugin declaring `rewakeMessage` or `rewakeSummary` without `asyncRewake: true` emits one install-time warning (no-op upstream); plugins with `asyncRewake: true` install normally with no warning (SURF-05).
 7. `docs/hooks.md` exists, is linked from `README.md`'s new "Hook support" section, and is written in plain English for first-time readers (plugin authors and end users) — no internal jargon, no bucket-A/D taxonomy, no REQ-IDs / phase numbers, using Claude Code's own field names verbatim. It covers: the 8 supported events with plain descriptions; 4–6 worked examples (auto-formatter, bash-safety net, session-start rule injection, prompt audit log, background security review, compaction snapshot); the unsupported event groups with one-line reasons each; the Pi ↔ Claude tool-name mapping table and currently-unmapped Claude tools; a "what happens to my plugin?" section; the marketplace coverage note (10/13 installable); and cross-references to the two authority docs (SURF-06).
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1** (foundational types — every later plan consumes the new exports)
+
+- [ ] 63-01-PLAN.md — `shared/notify.ts` types & renderer seams: `ClaudeHookEvent` + `HookSummaryEntry` + `HookSummary` + `PluginInfoComponentsResolved.components.hooks?` + `COMPONENT_KINDS` 4 → 5 tuple + `appendResolvedComponentLines` hooks arm (SURF-02 / D-63-04 / D-63-06 / D-63-07)
+
+**Wave 2** (parallel — disjoint file sets)
+
+- [ ] 63-02-PLAN.md — `bridges/hooks/stage.ts` `writeHookConfig` / `removeHookConfig` + `<pluginRoot>/hooks/` subtree symlink-escape walk + atomic write to `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json` (LIFE-03 / D-63-02 / D-63-03 / RESEARCH Open Question 2)
+- [ ] 63-03-PLAN.md — `REASONS` += `"orphan rewake"` + `domain/resolver.ts::applyHooksConfig` orphan-rewake detection + `docs/output-catalog.md` row(s) + `tests/architecture/catalog-uat.test.ts` fixture(s) — ATOMIC commit per D-58-01 (SURF-05 / D-63-08 / RESEARCH Open Question 1)
+
+**Wave 3** *(blocked on Waves 1+2 completion)*
+
+- [ ] 63-04-PLAN.md — 5th cascade slot at ALL FOUR sites: `install.ts` 6-element phases array + `update.ts` hand-rolled prepare + Phase 3a + `reinstall.ts` parallel-prepare + `cascadeUnstagePlugin` in marketplace/shared.ts; orphan-rewake reason wiring on the install row (LIFE-01 / LIFE-02 / D-63-01)
+- [ ] 63-05-PLAN.md — `info <plugin>` hooks block: `composeResolvedComponents` re-parses `<pluginRoot>/hooks/hooks.json` and projects to `HookSummaryEntry[]`; renderer arm from 63-01 emits the multi-line block; `narrowProbeError` ladder reused unchanged (SURF-01 / D-63-04 / D-63-05 / RESEARCH Open Question 3)
+
+**Wave 4** (parallel — independent of Wave 3)
+
+- [ ] 63-06-PLAN.md — `docs/hooks.md` first-time-reader doc + README.md `## Hook support` section + `tests/docs/hooks-doc.test.ts` architecture-lint (SURF-06 / D-63-09 / D-63-10 / D-63-11)
+- [ ] 63-07-PLAN.md — Scope-fence confirmation architecture test pinning SURF-03 absence + SURF-04 non-additions + HOOK-04 prior-completion (RESEARCH Pitfall 3 + Pitfall 4)
 
 **UI hint**: yes
 
@@ -451,4 +470,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/7 | In planning | -          |

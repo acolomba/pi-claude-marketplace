@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: Ready to discuss
-stopped_at: Phase 63 context gathered
-last_updated: "2026-06-16T04:08:20.457Z"
-last_activity: 2026-06-16 -- Phase 62 complete; HOOK-06 + EXEC-05 asyncRewake registry & background-spawn shipped (3 plans, 12 commits) with verifier PASS 10/10; npm run check GREEN 2222 unit + 10 integration
+status: Ready to execute
+stopped_at: Phase 63 planned (7 plans in 4 waves)
+last_updated: "2026-06-16T11:05:00.000Z"
+last_activity: 2026-06-16 -- Phase 63 planning complete; 7 plans across 4 waves covering LIFE-01/02/03 + SURF-01/02/05/06 + SURF-03/04 (scope-fence confirmation). Plan-checker PASS after 1 revision iteration. Requirements coverage 9/9; decision coverage skipped (no trackable CONTEXT.md decisions).
 progress:
   total_phases: 7
   completed_phases: 6
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 63
-Plan: Not started
-Status: Ready to discuss
-Last activity: 2026-06-16 -- Phase 62 complete; HOOK-06 + EXEC-05 asyncRewake registry & background-spawn shipped (3 plans, 12 commits) with verifier PASS 10/10; npm run check GREEN 2222 unit + 10 integration
+Plan: 7 plans (63-01..07) across 4 waves
+Status: Ready to execute
+Last activity: 2026-06-16 -- Phase 63 planning complete; 7 plans across 4 waves covering LIFE-01/02/03 + SURF-01/02/05/06 + SURF-03/04 (scope-fence confirmation). Plan-checker PASS after 1 revision iteration. Requirements coverage 9/9; decision coverage skipped (no trackable CONTEXT.md decisions).
 
 ## Performance Metrics
 
@@ -301,10 +301,10 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 ## Session Continuity
 
 Last session: 2026-06-16T04:08:20.433Z
-Stopped At: Phase 63 context gathered
-Resume File: .planning/phases/63-lifecycle-cascade-user-facing-surface-docs/63-CONTEXT.md
+Stopped At: Phase 63 planned (7 plans in 4 waves)
+Resume File: .planning/phases/63-lifecycle-cascade-user-facing-surface-docs/63-01-PLAN.md
 
 ## Operator Next Steps
 
-- Run `/gsd-discuss-phase 63` to scope Phase 63 (Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06; final v1.13 phase).
-- Carry forward Phase 62's three manual-only verifications when Phase 63 designs the user-facing surface (live `/reload` orphan reap across process death, end-to-end model-injection observability on exit-code-2, `rewakeSummary` Pi UI visibility).
+- Run `/gsd-execute-phase 63` to execute the 7-plan / 4-wave Phase 63 (Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06; final v1.13 phase).
+- Carry forward Phase 62's three manual-only verifications during Phase 63 verification (live `/reload` orphan reap across process death, end-to-end model-injection observability on exit-code-2, `rewakeSummary` Pi UI visibility) -- captured in 63-VALIDATION.md Manual-Only Verifications.
