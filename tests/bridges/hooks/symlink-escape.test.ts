@@ -12,6 +12,9 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 // <pluginRoot>/hooks/ whose realpath escapes pluginRoot. The cases below
 // pin both the buried-symlink and leaf-symlink rejection paths, AND the
 // positive paths (in-tree symlink, valid real files, missing subtree).
+// CR-01: Case A additionally pins that the walker NEVER enumerates paths
+// outside `<pluginRoot>/hooks/` and that the rejection message names the
+// IN-TREE symlink path (never an external target path).
 
 interface Ctx {
   readonly cwd: string;
@@ -35,7 +38,9 @@ async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
 }
 
 const PLUGIN = "acme";
-const HOOKS_VALUE = { hooks: {} };
+// WR-05: schema-valid top-level-event-keys shape. Rejection happens before
+// the value is read, so an empty record is sufficient AND parse-valid.
+const HOOKS_VALUE = {};
 
 // Symlink creation requires elevated permissions on Windows; the entire
 // Phase 63 supported-platform matrix is Linux + macOS, so we skip these
@@ -51,6 +56,21 @@ test(
       await mkdir(subdir, { recursive: true });
       await symlink(externalDir, path.join(subdir, "escape"));
 
+      // Sentinel files inside the external target. The walker MUST NOT
+      // enumerate them (CR-01 / T-63-08-PROBE) -- if it did, their names
+      // would surface in the rejection error message because a buggy
+      // walker that descended through the symlink would either re-emit
+      // them as candidate symlinks (with their parentPath inside
+      // `externalDir`) or raise a containment error citing them.
+      await writeFile(path.join(externalDir, "sentinel-do-not-read-PROBE"), "secret\n");
+      const externalNested = path.join(externalDir, "nested");
+      await mkdir(externalNested, { recursive: true });
+      await writeFile(path.join(externalNested, "deep-sentinel-PROBE"), "deep\n");
+
+      const expectedInTreePath = path.join(subdir, "escape");
+      const externalDirResolved = path.resolve(externalDir);
+
+      let captured: Error | undefined;
       await assert.rejects(
         writeHookConfig({
           locations,
@@ -58,9 +78,46 @@ test(
           pluginRoot,
           hooksValue: HOOKS_VALUE,
         }),
-        (err: Error) =>
-          err instanceof SymlinkRefusedError && err.message.includes("hooks subtree symlink"),
+        (err: Error) => {
+          captured = err;
+          return err instanceof SymlinkRefusedError;
+        },
       );
+
+      assert.ok(captured, "writeHookConfig did not reject");
+      const msg = captured.message;
+      assert.match(msg, /hooks subtree symlink/);
+
+      // CR-01 / T-63-08-MSG: the "hooks subtree symlink <PATH>" SUBJECT
+      // must be the IN-TREE symlink path. Parse the segment defensively.
+      // Format from `SymlinkRefusedError`:
+      //   "hooks subtree symlink <SUBJECT> contains symlink <linkPath> -> <target> (parent: ..., target: ...)."
+      const subjectMatch = /hooks subtree symlink (\S+)\s/.exec(msg);
+      assert.ok(subjectMatch, `could not parse "hooks subtree symlink <PATH>" out of: ${msg}`);
+      assert.equal(
+        subjectMatch[1],
+        expectedInTreePath,
+        "rejection SUBJECT must be the IN-TREE symlink path, not an external-tree path",
+      );
+
+      // CR-01 / T-63-08-PROBE: the rejection message must not name any
+      // path INSIDE `externalDir` -- only the externalDir root itself may
+      // appear (as the symlink's `target:` field). Walking into the
+      // sentinel files would surface their names here.
+      assert.ok(
+        !msg.includes("sentinel-do-not-read-PROBE"),
+        `walker enumerated externalDir contents (sentinel surfaced): ${msg}`,
+      );
+      assert.ok(
+        !msg.includes("deep-sentinel-PROBE"),
+        `walker descended into externalDir (deep sentinel surfaced): ${msg}`,
+      );
+      assert.ok(!msg.includes(externalNested), `walker descended into externalDir/nested: ${msg}`);
+
+      // Reference the resolved externalDir root for diagnostic clarity:
+      // the SymlinkRefusedError correctly reports the target, but only the
+      // root, never a sub-path under it.
+      assert.ok(externalDirResolved.length > 0);
     });
   },
 );

@@ -34,10 +34,11 @@ async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
 }
 
 const PLUGIN = "acme";
+// WR-05: schema-valid top-level-event-keys shape (parity with
+// `cascade.test.ts` and `lifecycle-cascade.test.ts`). HOOKS_CONFIG_SCHEMA
+// is a Record<string, HookEventArray>, NOT a wrapper object.
 const HOOKS_VALUE = {
-  hooks: {
-    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
-  },
+  PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
 };
 
 test("writeHookConfig writes <hooksDir>/<plugin>/hooks.json and returns absolute path", async () => {
