@@ -347,6 +347,32 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 
 `helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15).
 
+### Success with orphan-rewake warning (SURF-05 / D-63-08)
+
+<!-- catalog-state: success-with-orphan-rewake -->
+
+```text
+● official [user]
+  ● helper v1.0.0 (installed) {orphan rewake}
+
+/reload to pick up changes
+```
+
+`helper`'s `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on at least one handler WITHOUT `asyncRewake: true`. The companion field is admitted at the schema layer (HOOK-06 / EXEC-05) but produces no runtime effect; the install warns via the closed-set `{orphan rewake}` reason on the otherwise-successful install row. One row per plugin regardless of N orphan handlers. Severity `info` -- the install still succeeds.
+
+### Success with orphan-rewake AND a soft-dep marker in the same brace
+
+<!-- catalog-state: success-with-orphan-rewake-and-soft-dep -->
+
+```text
+● official [user]
+  ● helper v1.0.0 (installed) {orphan rewake, requires pi-subagents}
+
+/reload to pick up changes
+```
+
+The closed-set REASONS token and the soft-dep marker share ONE brace block per MSG-GR-4. The `composeReasons` helper appends the soft-dep markers AFTER the typed `reasons[]` so the orphan-rewake token leads.
+
 ### Failure -- unsupported features in manifest
 
 <!-- catalog-state: failure-unsupported-features -->

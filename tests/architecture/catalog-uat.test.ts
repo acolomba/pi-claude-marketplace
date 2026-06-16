@@ -568,6 +568,58 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SURF-05 / D-63-08: install succeeds but the parsed hooks.json carries
+    // an orphan-rewake handler (`rewakeMessage` / `rewakeSummary` without
+    // `asyncRewake: true`). The closed-set REASONS token rides the existing
+    // installed-row reasons brace. No soft-dep markers (both companion
+    // extensions are loaded), so the brace contains exactly one reason.
+    "success-with-orphan-rewake": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SURF-05 / D-63-08 + D-16-15: the orphan-rewake token and the soft-dep
+    // marker share ONE brace block. `composeReasons` appends the soft-dep
+    // markers AFTER the typed `reasons[]`, so the brace renders as
+    // `{orphan rewake, requires pi-subagents}`. Probe with only `mcp`
+    // loaded so the `agents` soft-dep marker fires.
+    "success-with-orphan-rewake-and-soft-dep": {
+      pi: piWithMcpLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents"],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
       message: {

@@ -69,6 +69,13 @@ const ResolvedPluginInstallableSchema = Type.Object({
   // file exists on disk or when parse failed (the not-installable variant
   // also carries this marker -- see schema below).
   hooksConfigPath: Type.Optional(Type.String()),
+  // SURF-05 / D-63-08: true iff the parsed hooks.json contains at least one
+  // handler declaring `rewakeMessage` or `rewakeSummary` WITHOUT
+  // `asyncRewake: true`. One-per-plugin invariant (the existing REASONS
+  // render dedupes naturally). Install row composition reads this flag and
+  // pushes `"orphan rewake"` into `reasons[]`; the resolver only provides
+  // the source data and does NOT emit any user-facing surface itself.
+  orphanRewake: Type.Optional(Type.Boolean()),
 });
 
 const ResolvedPluginNotInstallableSchema = Type.Object({
@@ -82,6 +89,13 @@ const ResolvedPluginNotInstallableSchema = Type.Object({
   // HOOK-01: symmetric with the installable variant so downstream
   // consumers can read the marker without narrowing on `installable`.
   hooksConfigPath: Type.Optional(Type.String()),
+  // SURF-05 / D-63-08: symmetric with the installable variant. The
+  // resolver writes this flag only on the parseHooksConfig success branch;
+  // a not-installable plugin (e.g. unsupported-hooks parse failure) never
+  // reaches install row composition, so the flag is effectively unused on
+  // the not-installable arm. Kept symmetric so downstream consumers can
+  // read `r.orphanRewake` without narrowing on `installable`.
+  orphanRewake: Type.Optional(Type.Boolean()),
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
 });
 
@@ -207,6 +221,11 @@ interface PartialResolution {
   // convention probe found a parseable file. Undefined when no file
   // exists on disk or when parse failed.
   hooksConfigPath?: string;
+  // SURF-05 / D-63-08: set ONLY on the parseHooksConfig success branch by
+  // `detectOrphanRewake`. Absent when no hooks.json exists, parse failed,
+  // or no handler is orphaned. Plan 63-04 reads this on the installable
+  // variant.
+  orphanRewake?: boolean;
 }
 
 function emptyResolution(): PartialResolution {
@@ -236,6 +255,7 @@ function notInstallable(
     componentPaths: partial.componentPaths,
     mcpServers: partial.mcpServers,
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
+    ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
   };
 }
 
@@ -254,6 +274,7 @@ function installable(
     componentPaths: partial.componentPaths,
     mcpServers: partial.mcpServers,
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
+    ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
   };
 }
 
@@ -684,11 +705,47 @@ async function readStandaloneHooks(
 }
 
 /**
+ * SURF-05 / D-63-08: scan an already-parsed hooks config for orphan-rewake
+ * companion fields. Returns `true` on the first handler whose
+ * `rewakeMessage` OR `rewakeSummary` is non-undefined AND whose
+ * `asyncRewake` is not `=== true` (the upstream Command-hook-fields
+ * orphan-subordinate case). One-per-plugin invariant -- the resolver
+ * records a single flag, install row composition emits a single
+ * `(installed) {orphan rewake}` reason regardless of N orphan handlers.
+ *
+ * Plugins where every orphan-bearing handler ALSO declares
+ * `asyncRewake: true` return `false`: the companion fields have their
+ * required parent, so the install is silent. Handlers with neither
+ * companion field never participate.
+ */
+function detectOrphanRewake(parsed: HooksConfig): boolean {
+  for (const groups of Object.values(parsed)) {
+    for (const group of groups) {
+      for (const handler of group.hooks) {
+        const hasRewakeField =
+          handler.rewakeMessage !== undefined || handler.rewakeSummary !== undefined;
+        const asyncRewakeTrue = handler.asyncRewake === true;
+        if (hasRewakeField && !asyncRewakeTrue) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * HOOK-01 + D-57-04 wiring helper. Probe `hooks/hooks.json`, update the
  * partial resolution, and report whether the result flips installability.
  * Mode-agnostic: both `resolveStrict` and `resolveLoose` call this
  * unchanged (D-57-04 parse-failure semantics do not depend on
  * entry-vs-manifest declaration mode).
+ *
+ * SURF-05 / D-63-08: on the parse-SUCCESS branch only, also writes
+ * `partial.orphanRewake` from `detectOrphanRewake(parsed)`. The
+ * parse-FAILURE branch never sets the flag -- those plugins are flipped
+ * `installable: false` upstream and never reach install row composition.
  */
 async function applyHooksConfig(
   ctx: ResolveContext,
@@ -705,6 +762,16 @@ async function applyHooksConfig(
     partial.supported.push("hooks");
     if (hooksResult.relativePath !== undefined) {
       partial.hooksConfigPath = hooksResult.relativePath;
+    }
+
+    // SURF-05 / D-63-08: only SET the flag when true (mirror hooksConfigPath
+    // discipline). Absent-vs-false is intentional: a hooks.json with no
+    // orphan handler leaves `partial.orphanRewake` undefined, the
+    // constructor spread (`partial.orphanRewake !== undefined && { ... }`)
+    // omits the field on the ResolvedPlugin, and consumers read
+    // `r.orphanRewake === true`.
+    if (detectOrphanRewake(hooksResult.value)) {
+      partial.orphanRewake = true;
     }
   }
 

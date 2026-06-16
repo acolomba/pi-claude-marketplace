@@ -554,8 +554,13 @@ type _Assert_ReasonsNotOptionalManualRecovery = undefined extends _VManualRecove
   : true;
 export const _rnMR: _Assert_ReasonsNotOptionalManualRecovery = true;
 
-// @ts-expect-error -- D-15-01: installed has NO reasons field
-export type _NoReasonsOnInstalled = _VInstalled["reasons"];
+// SURF-05 / D-63-08: installed now CARRIES an OPTIONAL `reasons?` field
+// (the `"orphan rewake"` token rides the install-cascade row). The legacy
+// D-15-01 "no reasons" constraint is superseded for installed only; the
+// optional-vs-required discipline is preserved (installed.reasons is
+// `readonly ContentReason[] | undefined`, not `readonly ContentReason[]`).
+type _Assert_InstalledReasonsOptional = undefined extends _VInstalled["reasons"] ? true : never;
+export const _riInstalledOpt: _Assert_InstalledReasonsOptional = true;
 // @ts-expect-error -- D-15-01: updated has NO reasons field
 export type _NoReasonsOnUpdated = _VUpdated["reasons"];
 // @ts-expect-error -- D-15-01: reinstalled has NO reasons field
@@ -904,12 +909,15 @@ export const _vD: _Assert_VersionOnDisabled = true;
 // 2); `_l4` / `_l4b` here and `_l5..._l9` cover the info variants below.
 // ============================================================================
 
-// D-54-01 / ENBL-04: REASONS tuple length is now 31
-// (29 existing + `"already enabled"` + `"already disabled"`). Both new
-// members are in BENIGN_REASONS so idempotent enable/disable cascades route
-// to info severity via the UXG-02 / D-28-06 first-match ladder (mirrors the
-// `already autoupdate` / `already no autoupdate` precedent).
-type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 31 ? true : never;
+// D-54-01 / ENBL-04 / SURF-05 / D-63-08: REASONS tuple length is now 32
+// (29 + `"already enabled"` + `"already disabled"` + `"orphan rewake"`).
+// `"already enabled"` / `"already disabled"` are in BENIGN_REASONS so
+// idempotent enable/disable cascades route to info severity via the UXG-02
+// / D-28-06 first-match ladder. `"orphan rewake"` is NOT benign -- it rides
+// the install-cascade `(installed)` row as a config-bug warning when a hook
+// handler declares `rewakeMessage` / `rewakeSummary` without
+// `asyncRewake: true`.
+type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 32 ? true : never;
 export const _l4: _Assert_ReasonsLen = true;
 
 type _Assert_NotAddedMember = "not added" extends (typeof REASONS)[number] ? true : never;

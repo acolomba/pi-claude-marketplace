@@ -135,6 +135,7 @@ import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shar
 import {
   notify,
   notifyUsageError,
+  REASONS,
   type HookSummaryEntry,
   type NotificationMessage,
   type UsageErrorMessage,
@@ -4104,4 +4105,50 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
     args[0],
     `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
   );
+});
+
+// ===========================================================================
+// SURF-05 / D-63-08 -- orphan-rewake closed-set REASONS token
+// ===========================================================================
+
+test("SURF-05 / D-63-08: REASONS tuple includes the literal 'orphan rewake' member", () => {
+  // Closed-set membership proof. The tuple addition is the only seam the
+  // resolver-side `partial.orphanRewake` and the install row composition
+  // (Plan 63-04) depend on; if the tuple ever drops the member the
+  // composition site stops typechecking.
+  assert.ok(
+    (REASONS as readonly string[]).includes("orphan rewake"),
+    `REASONS tuple must include "orphan rewake"; got: ${REASONS.join(" / ")}`,
+  );
+});
+
+test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via the existing reasons brace", () => {
+  // End-to-end byte form: the new REASONS token rides the existing v1.4
+  // installed-row reasons brace; the renderer needs ZERO changes. This
+  // test pins the catalog-mirrored row form so a future renderer
+  // refactor cannot silently drop the token.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "helper",
+            version: "1.0.0",
+            dependencies: [],
+            reasons: ["orphan rewake"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● official [user]\n  ● helper v1.0.0 (installed) {orphan rewake}\n\n/reload to pick up changes`,
+  ]);
 });

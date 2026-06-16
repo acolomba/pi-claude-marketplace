@@ -101,6 +101,15 @@ export const REASONS = [
   "source missing",
   "network unreachable",
   "not added",
+  // SURF-05 / D-63-08: a hook handler declared `rewakeMessage` or
+  // `rewakeSummary` without `asyncRewake: true`. The orphan companion-field
+  // family is admitted at the schema layer (HOOK-06 / EXEC-05) but produces
+  // no runtime effect; this REASONS member surfaces the config bug as
+  // `(installed) {orphan rewake}` on the install-cascade row. Detection
+  // lives in `domain/resolver.ts::applyHooksConfig`; install row composition
+  // reads `resolved.orphanRewake` and pushes this token into `reasons[]`.
+  // One row per plugin regardless of N orphan handlers.
+  "orphan rewake",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -549,6 +558,17 @@ export interface UsageErrorMessage {
  * `dependencies` (SNM-06) so the renderer can emit the
  * `requires pi-subagents` / `requires pi-mcp` probe reasons; no `reasons`
  * because installed rows never emit a `{<reason>}` brace.
+ *
+ * SURF-05 / D-63-08: as of v1.13 the installed row CAN carry a
+ * `readonly reasons?: ContentReason[]` brace -- the `"orphan rewake"`
+ * token surfaces a hook-config bug (`rewakeMessage` / `rewakeSummary`
+ * declared on a handler without `asyncRewake: true`) on the otherwise-
+ * successful install row (`(installed) {orphan rewake}`). The reasons
+ * brace renders through the existing `composeReasons` helper so the
+ * soft-dep markers and reasons share one brace block per MSG-GR-4
+ * (`(installed) {orphan rewake, requires pi-subagents}`). Plan 63-04
+ * pushes the resolver-side `resolved.orphanRewake === true` plugins
+ * into `reasons[]`; this plan only extends the type seam + renderer.
  */
 export interface PluginInstalledMessage {
   readonly status: "installed";
@@ -556,6 +576,7 @@ export interface PluginInstalledMessage {
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -1752,10 +1773,31 @@ function renderPluginRow(
   mpScope: Scope,
 ): string {
   switch (p.status) {
+    // `installed` (cascade transition) -- SURF-05 / D-63-08 threads
+    // the optional `reasons` brace through composeReasons; soft-dep
+    // markers append into the SAME brace block per MSG-GR-4 (a plugin
+    // with orphan-rewake AND a missing companion extension renders as
+    // `(installed) {orphan rewake, requires pi-subagents}`).
+    case "installed":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        renderVersion(p.version),
+        "(installed)",
+        composeReasons(
+          p.reasons,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
+      ]);
     // `present` (UAT G-21-01) is a list-only inventory row that renders
     // byte-identically to `installed`; it stays a distinct status so
-    // shouldEmitReloadHint suppresses the /reload trailer for inventory rows.
-    case "installed":
+    // shouldEmitReloadHint suppresses the /reload trailer for inventory
+    // rows. SURF-05 / D-63-08: `present` is list-only and carries NO
+    // `reasons` field by design -- the orphan-rewake warning is an
+    // install-cascade surface, not a steady-state inventory surface.
     case "present":
       return joinTokens([
         ICON_INSTALLED,

@@ -251,6 +251,152 @@ test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrappe
   );
 });
 
+// SURF-05 / D-63-08: a handler with `rewakeMessage` and NO `asyncRewake: true`
+// flips `partial.orphanRewake = true`. One-per-plugin invariant -- a single
+// orphan handler is enough.
+test("SURF-05 / D-63-08: rewakeMessage without asyncRewake -> orphanRewake === true", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "follow up please" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: the SAME handler with `asyncRewake: true` is no longer
+// orphan -- the companion field has its required parent. Resolver leaves
+// `orphanRewake` absent (absence-or-false invariant).
+test("SURF-05 / D-63-08: rewakeMessage WITH asyncRewake: true -> orphanRewake absent (no warning)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: "echo paired",
+                asyncRewake: true,
+                rewakeMessage: "follow up please",
+              },
+            ],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, undefined);
+  }
+});
+
+// SURF-05 / D-63-08: `rewakeSummary` is the second orphan-bearing companion
+// field; absence of `asyncRewake: true` ALSO flips the flag (covers both
+// fields in the family).
+test("SURF-05 / D-63-08: rewakeSummary without asyncRewake -> orphanRewake === true", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PostToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [{ type: "command", command: "echo summary", rewakeSummary: "what happened" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: one-per-plugin invariant -- multiple groups across
+// multiple events with ONLY ONE orphan handler still emit a single
+// plugin-level flag (no per-handler aggregation).
+test("SURF-05 / D-63-08: multi-event / multi-group config with ONE orphan -> orphanRewake === true (one-per-plugin)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo ok" }],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [
+              { type: "command", command: "echo first" },
+              {
+                type: "command",
+                command: "echo second",
+                rewakeMessage: "orphan #1",
+              },
+            ],
+          },
+          {
+            matcher: "Write",
+            hooks: [{ type: "command", command: "echo write" }],
+          },
+        ],
+        SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    // boolean flag -- no count of N orphan handlers, just the single bit.
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: a hooks.json that exists and parses but contains NO
+// rewake companion fields at all leaves `orphanRewake` absent. Regression
+// guard for the no-op happy path.
+test("SURF-05 / D-63-08: hooks.json without any rewake fields -> orphanRewake absent", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, undefined);
+  }
+});
+
 // HOOK-01 regression guard: absent hooks/hooks.json + no entry/manifest
 // declaration -> installable: true and hooks NOT in supported. This is the
 // no-hooks happy path; the supported-side convention probe must not invent
