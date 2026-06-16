@@ -2773,6 +2773,7 @@ test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes t
       } catch {
         stillThere = false;
       }
+
       assert.equal(
         stillThere,
         false,

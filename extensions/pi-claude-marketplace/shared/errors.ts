@@ -321,7 +321,7 @@ export class StateLockHeldError extends Error {
  * originating error for the depth-5 `causeChainTrailer` walk.
  */
 export interface Phase3Failure {
-  readonly phase: "skills" | "commands" | "agents" | "mcp";
+  readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
   readonly msg: string;
   readonly cause: unknown;
 }
