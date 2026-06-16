@@ -717,7 +717,7 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -891,7 +891,7 @@ test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMe
         });
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -950,7 +950,7 @@ test("narrowCascadeFailure: EPERM maps to 'permission denied' in PluginFailedMes
         );
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1009,7 +1009,7 @@ test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessa
         );
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1065,7 +1065,7 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'un
         });
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1123,7 +1123,7 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'unreadable' (ATTR-09
         // the truthful "unreadable" (ATTR-09) via the final fallthrough.
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: new Error("plain failure"),
         });
       };
@@ -1189,7 +1189,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1289,6 +1289,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
+            hooks: [],
             mcpServers: [],
           },
           cause: err,
@@ -1401,6 +1402,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
+            hooks: [],
             mcpServers: [],
           },
           cause: err,

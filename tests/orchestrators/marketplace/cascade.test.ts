@@ -59,11 +59,16 @@ test("cascadeUnstagePlugin (a): empty resources -- all bridges return cleanly wi
       }),
     );
     assert.equal(outcome.ok, true);
+    // LIFE-01: removeHookConfig is idempotent (NFR-3) and always returns the
+    // plugin name regardless of whether the on-disk subtree existed; the
+    // dropped.hooks array records that name. Skills / commands / agents /
+    // mcpServers stay empty because the unstage*-by-name primitives have
+    // nothing to remove.
     assert.deepEqual(outcome.dropped, {
       skills: [],
       commands: [],
       agents: [],
-      hooks: [],
+      hooks: ["hello"],
       mcpServers: [],
     });
     assert.equal(outcome.cause, undefined);
