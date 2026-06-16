@@ -168,6 +168,12 @@ In the project scope, commit `claude-plugins.json` so collaborators install the 
 
 User-scope files live in your home directory; they are personal and never shared.
 
+## Hook support
+
+Claude Code plugins can ship hook handlers that fire on session events and tool calls. This marketplace translates those hooks into Pi event subscriptions so they run under Pi the same way they would under Claude Code.
+
+See [Hook support reference](docs/hooks.md) for the supported events, worked examples, and a per-plugin compatibility guide.
+
 ## `/claude:plugin` reference
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, updating, or reinstalling plugins so Pi discovers the changed resources.
