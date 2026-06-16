@@ -585,16 +585,27 @@ test("parseHooksConfig admits the full asyncRewake field family", () => {
 // that plugin `hooks/hooks.json` files use the WRAPPER form
 // `{description?, hooks: {<event>: [...]}}`, distinct from user-settings
 // `.claude/settings.json` which uses the BARE top-level-event-keys form.
-// The fixture under `tests/fixtures/hookify-hooks.json` is a verbatim copy
-// of hookify@claude-plugins-official's hooks.json -- pinning the parser's
-// wrapper-detection arm against the real upstream wire bytes so any future
-// schema change that re-narrows the parser to the settings-format shape
-// red-fails here.
+//
+// The fixture under `tests/fixtures/hookify-hooks.json` is derived from
+// hookify@claude-plugins-official's hooks.json (`tmp/pi-uat/agent/
+// pi-claude-marketplace/sources/claude-plugins-official/plugins/hookify/
+// hooks/hooks.json`) with one deliberate slim: the upstream `Stop` event arm
+// is REMOVED because `Stop` is NOT a member of `BUCKET_A_EVENTS` (see
+// `extensions/pi-claude-marketplace/domain/components/hook-events.ts`).
+// v1.13's supportability gate `checkMatcherSupportability` trips
+// `(c) non-bucket-A event: Stop` before the wrapper-acceptance verdict can
+// land. The slim isolates this test to the wire-format wrapper question --
+// the only question this plan owns. Stop-event admission is deferred
+// (`BUCKET_A_EVENTS` extension is a sibling concern, v1.14+).
+//
+// The fixture pins the parser's wrapper-detection arm against real upstream
+// wire bytes; any future schema change that re-narrows the parser to the
+// settings-format shape red-fails here.
 // ──────────────────────────────────────────────────────────────────────────
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire bytes)", async () => {
+test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire bytes, bucket-A slim)", async () => {
   const fixturePath = path.resolve(FIXTURE_DIR, "../../fixtures/hookify-hooks.json");
   const raw = await readFile(fixturePath, "utf8");
 
@@ -602,12 +613,12 @@ test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire 
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    // hookify ships PreToolUse / PostToolUse / Stop / UserPromptSubmit
-    // under the wrapper's `hooks` field; after unwrap the parser's
-    // `value` is the bare-event-keys record.
+    // After the wrapper-unwrap arm, the parser's `value` is the bare
+    // event-keys record sourced from the upstream wrapper's `hooks` field.
+    // Bucket-A event keys hookify ships (Stop arm slimmed to keep the
+    // fixture inside v1.13's BUCKET_A_EVENTS scope).
     assert.ok("PreToolUse" in result.value);
     assert.ok("PostToolUse" in result.value);
-    assert.ok("Stop" in result.value);
     assert.ok("UserPromptSubmit" in result.value);
   }
 });
