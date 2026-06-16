@@ -135,6 +135,7 @@ import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shar
 import {
   notify,
   notifyUsageError,
+  type HookSummaryEntry,
   type NotificationMessage,
   type UsageErrorMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
@@ -2940,6 +2941,160 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
       "● official [user] <autoupdate>",
       "  ○ external v2.0.0 (available)",
       "    components: not resolved",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+// ===========================================================================
+// SURF-02 / D-63-04 / D-63-06 / D-63-07 -- HookSummaryEntry discriminator
+// + the multi-line `hooks:` block emitted by appendResolvedComponentLines.
+//
+// The renderer is the only public-facing consumer of `HookSummaryEntry`
+// in v1.13; these tests pin the discriminator's compile-time exhaustiveness
+// AND the byte form of the rendered block (4-space `hooks:` header +
+// 6-space-indent per-entry lines, `<event>(<matcher>)` for tool events,
+// bare `<event>` for non-tool events).
+// ===========================================================================
+
+test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for tool events, FORBIDS it for non-tool events", () => {
+  // Compile-time exhaustiveness pin: tool events (PreToolUse, PostToolUse,
+  // PostToolUseFailure) carry a `matcher: string` field; non-tool events
+  // (SessionStart, etc.) cannot. The `@ts-expect-error` directives below
+  // assert that the misuse cases fail to typecheck.
+
+  // Valid: tool event with matcher.
+  const validToolEntry: HookSummaryEntry = { event: "PreToolUse", matcher: "Bash" };
+  // Valid: non-tool event without matcher.
+  const validNonToolEntry: HookSummaryEntry = { event: "SessionStart" };
+
+  // @ts-expect-error PreToolUse requires matcher per D-63-06
+  const missingMatcher: HookSummaryEntry = { event: "PreToolUse" };
+  // @ts-expect-error SessionStart forbids matcher per D-63-06
+  const extraneousMatcher: HookSummaryEntry = { event: "SessionStart", matcher: "anything" };
+
+  // Reference the locals so TS does not flag them unused (the assertions
+  // ABOVE -- not the runtime body -- are the actual contract).
+  assert.equal(validToolEntry.event, "PreToolUse");
+  assert.equal(validToolEntry.matcher, "Bash");
+  assert.equal(validNonToolEntry.event, "SessionStart");
+  assert.equal((missingMatcher as { event: string }).event, "PreToolUse");
+  assert.equal((extraneousMatcher as { event: string }).event, "SessionStart");
+});
+
+test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", () => {
+  // Task 1 Test 4 fixture: 3 tool events with matchers + 1 non-tool event
+  // without one. Lock the exact 5-line block (header + 4 entries) in the
+  // exact order supplied by the caller (the renderer does NOT sort).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        hooks: [
+          { event: "PreToolUse", matcher: "Bash" },
+          { event: "PreToolUse", matcher: "Edit|Write" },
+          { event: "PostToolUse", matcher: "Edit" },
+          { event: "SessionStart" },
+        ],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ● alpha v1.0.0 (installed)",
+      "    hooks:",
+      "      PreToolUse(Bash)",
+      "      PreToolUse(Edit|Write)",
+      "      PostToolUse(Edit)",
+      "      SessionStart",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks kinds still render their single-line comma-join", () => {
+  // Empty hooks array MUST NOT push a bare `hooks:` header. Other kinds
+  // continue to render through the legacy single-line path -- this test
+  // pins the regression guard that the hooks arm does not leak into the
+  // other kinds.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        agents: ["agent-a"],
+        hooks: [],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    ["● official [user] <autoupdate>", "  ● alpha v1.0.0 (installed)", "    agents: agent-a"].join(
+      "\n",
+    ),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` header; legacy 4-kind comma-join output is byte-stable", () => {
+  // Regression guard: a payload with every non-hooks kind populated and
+  // NO `hooks` field must render the legacy 4-line output unchanged --
+  // proves the kind === "hooks" arm does not affect the existing
+  // per-kind single-line path.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        agents: ["a"],
+        commands: ["b"],
+        mcp: ["c"],
+        skills: ["d"],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ● alpha v1.0.0 (installed)",
+      "    agents: a",
+      "    commands: b",
+      "    mcp: c",
+      "    skills: d",
     ].join("\n"),
   );
   assert.equal(args.length, 1);

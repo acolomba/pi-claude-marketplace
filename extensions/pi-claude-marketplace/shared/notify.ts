@@ -2644,10 +2644,7 @@ const COMPONENT_KINDS: readonly [
  * directly -- no re-derivation from a closed-set tuple, no runtime guard
  * (the union has exactly two arms, both render).
  */
-function appendHooksBlock(
-  lines: string[],
-  entries: readonly HookSummaryEntry[] | undefined,
-): void {
+function appendHooksBlock(lines: string[], entries: readonly HookSummaryEntry[] | undefined): void {
   if (entries === undefined || entries.length === 0) {
     return;
   }
