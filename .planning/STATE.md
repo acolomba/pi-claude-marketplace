@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: Phase 63 fully closed; CR-01 / LIFE-03 INTENT gap resolved by walker hardening
-stopped_at: Completed 63-08-PLAN.md (CR-01 / LIFE-03 walker hardening) -- phase 63 fully verified 7/7
-last_updated: "2026-06-16T17:35:00.000Z"
-last_activity: 2026-06-16 -- Plan 63-08 (CR-01 gap closure) executed and re-verified (7/7 truths PASSED)
+status: Phase 63 fully closed; UAT gap closure landed (63-09 / 63-10 / 63-11); v1.13 ready for milestone close-out
+stopped_at: Completed 63-11-PLAN.md (UAT loop closed with Stop admission deferred to v1.14+ per Option A)
+last_updated: "2026-06-16T22:30:00.000Z"
+last_activity: 2026-06-16 -- Phase 63 re-verified 11/11 truths PASSED + 1 deferral (Stop event admission to BUCKET_A_EVENTS, v1.14+)
 progress:
   total_phases: 7
   completed_phases: 7
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 32
+  completed_plans: 32
   percent: 100
 ---
 
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED 7/7 (CR-01 gap closed)
-Plan: 8 of 8 complete (63-08 closes the CR-01 gap from 63-REVIEW.md / Truth #2 in 63-VERIFICATION.md)
-Status: Phase 63 fully closed; CR-01 / LIFE-03 INTENT gap resolved by walker hardening (assertNoSymlinkEscapeInHooksSubtree rewritten as hand-rolled lstat-based stack walk — never enumerates paths outside <pluginRoot>/hooks/)
-Last activity: 2026-06-16 -- Plan 63-08 executed (ba6632d test RED → 9c347d1 fix GREEN → 9825192 SUMMARY → 9c3e0c6 code review → 2087842 re-verification 7/7)
+Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED 11/11 (7 carried-forward + 4 new from gap closure); v1.13 milestone ready for close-out
+Plan: 11 of 11 complete (63-09 wrapper-format parser fix + Option A defer Stop; 63-10 install-cascade classifier parity arm; 63-11 README Hooks bullet + runtime UAT terminal)
+Status: Phase 63 fully closed; UAT gap closure landed; v1.13 ready for milestone close-out. Hookify@claude-plugins-official structurally `(unavailable) {unsupported hooks}` at runtime because Stop is not in v1.13's BUCKET_A_EVENTS — admission deferred to v1.14+ per 63-09 Option A user-decided checkpoint
+Last activity: 2026-06-16 -- 63-09 (5fa5543 fix GREEN + 02bb8ba WR-05 revert + f9dbb3f SUMMARY) → 63-10 (4e5adf9 fix GREEN + b28b0f7 parity test + a5c92da SUMMARY) → 63-11 (7967ea8 README + 939574d UAT verdicts + 919944e SUMMARY) → 53ab78a code review (0 Critical / 3 Warning / 3 Info) → 895dece + 3a00595 re-verification
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 206 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 217 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 

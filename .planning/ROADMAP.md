@@ -180,7 +180,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 - [x] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05 (completed 2026-06-15)
 - [x] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03 (completed 2026-06-15)
 - [x] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05 (completed 2026-06-16)
-- [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06 (UAT gap closure in progress; 8/11 plans)
+- [x] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06 (UAT gap closure in progress; 8/11 plans) (completed 2026-06-16)
 
 #### Phase 57: Schema, Component Type & Payload-Extension Tolerance
 
@@ -407,9 +407,9 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 5** (gap closure — runtime UAT against pi-uat sandbox surfaced 3 gaps; plans 63-09 + 63-10 parallel, 63-11 sequenced after)
 
-- [ ] 63-09-PLAN.md — Gap 1 (blocker): wrapper-vs-settings parser fix in `domain/components/hooks.ts::parseHooksConfig` — add wrapper-detection arm that unwraps `parsed.hooks` when the value matches the upstream plugin-format wrapper `{description?, hooks: {...}}` per Claude Code `plugin-dev/skills/hook-development/SKILL.md`; invert the WR-05 fixture flip in three test files; new parser test against hookify's verbatim wire bytes (LIFE-01 / LIFE-02 / SURF-01 / HOOK-03)
-- [ ] 63-10-PLAN.md — Gap 2 (major, defense-in-depth): cross-surface classifier parity — add the four `hooks.json`-prefix family arm to `orchestrators/plugin/install.ts::narrowResolverReasons` mirroring `shared/probe-classifiers.ts::narrowResolverNotes` verbatim; new cross-surface parity invariant test (LIFE-01 / SURF-01)
-- [ ] 63-11-PLAN.md — Gap 3 (cosmetic) + runtime UAT closure: add Hooks bullet to README.md `## Features` list; human-verify runtime UAT recipes 3/4/5 against pi-uat sandbox after 63-09 + 63-10 land; update 63-UAT.md status from `diagnosed` to `passed` with `closed_by` lineage (SURF-06)
+- [x] 63-09-PLAN.md — Gap 1 (blocker): wrapper-vs-settings parser fix in `domain/components/hooks.ts::parseHooksConfig` — add wrapper-detection arm that unwraps `parsed.hooks` when the value matches the upstream plugin-format wrapper `{description?, hooks: {...}}` per Claude Code `plugin-dev/skills/hook-development/SKILL.md`; invert the WR-05 fixture flip in three test files; new parser test against hookify's verbatim wire bytes (LIFE-01 / LIFE-02 / SURF-01 / HOOK-03)
+- [x] 63-10-PLAN.md — Gap 2 (major, defense-in-depth): cross-surface classifier parity — add the four `hooks.json`-prefix family arm to `orchestrators/plugin/install.ts::narrowResolverReasons` mirroring `shared/probe-classifiers.ts::narrowResolverNotes` verbatim; new cross-surface parity invariant test (LIFE-01 / SURF-01)
+- [x] 63-11-PLAN.md — Gap 3 (cosmetic) + runtime UAT closure: add Hooks bullet to README.md `## Features` list; human-verify runtime UAT recipes 3/4/5 against pi-uat sandbox after 63-09 + 63-10 land; update 63-UAT.md status from `diagnosed` to `passed` with `closed_by` lineage (SURF-06)
 
 **UI hint**: yes
 
@@ -477,4 +477,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 8/11 | Gap closure (UAT) | 2026-06-16 |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
