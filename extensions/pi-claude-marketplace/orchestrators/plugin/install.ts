@@ -79,7 +79,12 @@ import {
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
-import { addPluginConfigToCache, rebuildRoutingTables } from "../../bridges/hooks/index.ts";
+import {
+  addPluginConfigToCache,
+  rebuildRoutingTables,
+  removeHookConfig,
+  writeHookConfig,
+} from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -291,6 +296,10 @@ interface InstallCtx {
   commandsPrep?: PreparedCommandsStaging;
   agentsPrep?: PreparedAgentsStaging;
   mcpPrep?: PreparedMcpStaging;
+  // LIFE-01 / D-63-02: hooks bridge has no staging dir (writeHookConfig is
+  // the atomic write). Track whether the file was written so the phase undo
+  // path knows whether to call removeHookConfig.
+  hooksFileWritten: boolean;
   // Names captured for PluginInstallRecord.resources and reload-hint composition.
   stagedSkillNames: readonly string[];
   stagedCommandNames: readonly string[];
@@ -565,6 +574,7 @@ export async function runInstallLedger(
     resolved: installable,
     version,
     pluginDataDir,
+    hooksFileWritten: false,
     stagedSkillNames: [],
     stagedCommandNames: [],
     stagedAgentNames: [],
@@ -690,6 +700,51 @@ export async function runInstallLedger(
     },
   };
 
+  // LIFE-01 / D-63-01: 5th cascade slot. The hooks bridge owns one file per
+  // plugin (`<hooksDir>/<plugin>/hooks.json`) and has no staging dir per
+  // D-63-02 -- `writeHookConfig` is the atomic write. The phase body
+  // re-reads + re-parses the on-disk `hooks.json` because the resolver
+  // stores only `hooksConfigPath` (the relative path) on `c.resolved` and
+  // discards the parsed value after its own `parseHooksConfig` call
+  // returns. The parse is unconditional (no executor judgement); a fresh
+  // parse failure here is a defensive guard (the resolver already validated
+  // the file at install-entry under D-57-04) and unwinds the ledger.
+  // Mirrors the post-state-commit hydrate at lines 340-360 of this file.
+  const hooksPhase: Phase<InstallCtx> = {
+    name: "hooks",
+    do: async (c) => {
+      if (c.resolved.hooksConfigPath === undefined) {
+        return;
+      }
+
+      const raw = await readFile(
+        path.join(c.resolved.pluginRoot, c.resolved.hooksConfigPath),
+        "utf8",
+      );
+      // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
+      const ifCtx = { homedir: homedir(), cwd: c.cwd, projectRoot: c.cwd };
+      const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+      if (!parsed.ok) {
+        throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+      }
+
+      await writeHookConfig({
+        locations: c.locations,
+        pluginName: c.plugin,
+        pluginRoot: c.resolved.pluginRoot,
+        hooksValue: parsed.value,
+      });
+      c.hooksFileWritten = true;
+    },
+    undo: async (c) => {
+      if (!c.hooksFileWritten) {
+        return;
+      }
+
+      await removeHookConfig({ locations: c.locations, pluginName: c.plugin });
+    },
+  };
+
   const mcpPhase: Phase<InstallCtx> = {
     name: "mcp",
     do: async (c) => {
@@ -789,12 +844,14 @@ export async function runInstallLedger(
   };
 
   // D-01 literal-array; order is part of the contract -- never refactor
-  // to a dynamic builder. The PRD-fixed sequence is
-  // [skills, commands, agents, mcp, state].
+  // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.
+  // The PRD-fixed sequence is
+  // [skills, commands, agents, hooks, mcp, state].
   const phases: readonly Phase<InstallCtx>[] = [
     skillsPhase,
     commandsPhase,
     agentsPhase,
+    hooksPhase,
     mcpPhase,
     statePhase,
   ];
@@ -1312,11 +1369,23 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // suppresses the per-row bracket in that case -- matching the same
     // omit convention used by `uninstall.ts::uninstallPlugin` and
     // `reinstall.ts::reinstallPlugin`.
+    // SURF-05 / D-63-08: surface `(installed) {orphan rewake}` when the
+    // resolver flagged a handler with `rewakeMessage` / `rewakeSummary` but
+    // no `asyncRewake: true`. One-per-plugin -- the resolver records a
+    // single flag, the install row emits a single reason regardless of N
+    // orphan handlers. Reasons share the brace block with any companion
+    // soft-dep markers per MSG-GR-4.
+    const reasons: ContentReason[] = [];
+    if (installCtx.resolved.orphanRewake === true) {
+      reasons.push("orphan rewake");
+    }
+
     const installedRow: PluginInstalledMessage = {
       status: "installed",
       name: plugin,
       dependencies,
       version: installCtx.version,
+      ...(reasons.length > 0 && { reasons }),
     };
     // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
