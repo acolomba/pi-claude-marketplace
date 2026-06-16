@@ -179,7 +179,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 - [x] Phase 59: Bridge Dispatch Core & Debug Seam -- DISP-01..04, OBS-01 (completed 2026-06-14)
 - [x] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05 (completed 2026-06-15)
 - [x] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03 (completed 2026-06-15)
-- [ ] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05
+- [x] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05 (completed 2026-06-16)
 - [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06
 
 #### Phase 57: Schema, Component Type & Payload-Extension Tolerance
@@ -450,5 +450,5 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 59. Bridge Dispatch Core & Debug Seam                               | v1.13     | 3/3 | Complete    | 2026-06-14 |
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
-| 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 0/3 | Not started | -          |
+| 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/0 | Not started | -          |

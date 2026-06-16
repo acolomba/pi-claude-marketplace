@@ -91,7 +91,7 @@ completed: 2026-06-16
 
 ### Auto-fixed Issues
 
-**1. [Rule 2 — Missing critical functionality] Composite handler signatures widened beyond the plan's surface**
+**1. [Rule 2 -- Missing critical functionality] Composite handler signatures widened beyond the plan's surface**
 
 - **Found during:** Task 1 (typecheck failures after the initial pre-spawn arm landed).
 - **Issue:** The plan's "small signature widening at the `pi.on(...)` registration call" was incomplete: the production-side handler chain runs `compositeHandlerFor -> reduceBucket -> activeExecutor`, all three of which had to accept and forward `pi`. Without that, `spawnAndRegister` could never see the live `ExtensionAPI` from inside `dispatch-exec.ts`. The plan body mentions the widening only at the registration call site; the implementation required widening the `HookExecutor` type, `reduceBucket` signature, both composite-handler factories, and `dispatch-exec.ts`'s public surface.
@@ -100,12 +100,12 @@ completed: 2026-06-16
 - **Verification:** `npx tsc --noEmit` GREEN; 81 pre-existing tests (`hooks-dispatch`, `hooks-exec`, `hooks-reducer`, `no-shell-out`, `dispatch-exec.test.ts`, `event-router.test.ts`) still pass with zero call-site churn.
 - **Committed in:** `d7ff547` (Task 1).
 
-**2. [Rule 3 — Auto-fixed blocking issue] Architecture test required dual-spawn-seam wiring**
+**2. [Rule 3 -- Auto-fixed blocking issue] Architecture test required dual-spawn-seam wiring**
 
 - **Found during:** Task 2 (3 `dispatch-exec delegation` tests initially red-failed).
 - **Issue:** `dispatch-exec.ts` and `bridges/hooks/async-rewake/registry.ts` each carry their own `_setSpawnForTest` seam (separate `activeSpawn` module-level cells). The test's `installSpawnSpy` initially wired only the registry seam; the sync-path tests therefore observed `spy.calls.length === 0` because the sync EXEC body called the real `spawn`.
 - **Fix:** Added an `{ wireBoth: true }` opt-in to `installSpawnSpy` that calls both `_setSpawnForTest(registry)` and `_setSpawnForTest(dispatch-exec)`; the three sync-path delegation tests use `wireBoth: true` and a `close` event (not `exit`) to satisfy the sync EXEC body's settle contract.
-- **Files modified:** `tests/architecture/hooks-async-rewake.test.ts` (additive — fix landed in the same commit as the file's creation).
+- **Files modified:** `tests/architecture/hooks-async-rewake.test.ts` (additive -- fix landed in the same commit as the file's creation).
 - **Verification:** `node --test tests/architecture/hooks-async-rewake.test.ts` -> 37 pass / 1 skipped (the non-Linux soft-skip arm is skipped on the Linux test host by design); `npm run check` GREEN end-to-end.
 - **Committed in:** `2107227` (Task 2).
 
@@ -133,9 +133,14 @@ None. Plan 03 is the closing plan of Phase 62; every public symbol exported by P
 
 ## Self-Check: PASSED
 
-- `dispatch-exec.ts` modifications present: `grep -c "spawnAndRegister" extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` >= 1 ✓
-- `event-router.ts` modifications present: `grep -c "reapOrphans\|shutdownInMemoryChildren" extensions/pi-claude-marketplace/bridges/hooks/event-router.ts` >= 2 ✓
-- `dispatch.ts` `pi` thread-through present: `grep -c "ExtensionAPI" extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts` >= 1 ✓
-- `tests/architecture/hooks-async-rewake.test.ts` exists with 7 describe blocks ✓
-- All commits exist in `git log`: `d7ff547` (Task 1 feat), `2107227` (Task 2 test) ✓
-- `npm run check` GREEN end-to-end ✓
+- `dispatch-exec.ts` modifications present: `grep -c "spawnAndRegister" extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` >= 1
+- `event-router.ts` modifications present: `grep -c "reapOrphans\|shutdownInMemoryChildren" extensions/pi-claude-marketplace/bridges/hooks/event-router.ts` >= 2
+- `dispatch.ts` `pi` thread-through present: `grep -c "ExtensionAPI" extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts` >= 1
+- `tests/architecture/hooks-async-rewake.test.ts` exists with 7 describe blocks
+- All commits exist in `git log`: `d7ff547` (Task 1 feat), `2107227` (Task 2 test)
+- `npm run check` GREEN end-to-end
+
+## Phase 62 Verification
+
+**PASS** — 10/10 must-haves verified, 2222 tests (2221 pass + 1 skip), `npm run check` GREEN.
+See [62-VERIFICATION.md](62-VERIFICATION.md) for full goal-backward analysis.
