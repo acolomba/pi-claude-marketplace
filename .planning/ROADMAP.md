@@ -387,7 +387,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 1** (foundational types — every later plan consumes the new exports)
 
-- [ ] 63-01-PLAN.md — `shared/notify.ts` types & renderer seams: `ClaudeHookEvent` + `HookSummaryEntry` + `HookSummary` + `PluginInfoComponentsResolved.components.hooks?` + `COMPONENT_KINDS` 4 → 5 tuple + `appendResolvedComponentLines` hooks arm (SURF-02 / D-63-04 / D-63-06 / D-63-07)
+- [x] 63-01-PLAN.md — `shared/notify.ts` types & renderer seams: `ClaudeHookEvent` + `HookSummaryEntry` + `HookSummary` + `PluginInfoComponentsResolved.components.hooks?` + `COMPONENT_KINDS` 4 → 5 tuple + `appendResolvedComponentLines` hooks arm (SURF-02 / D-63-04 / D-63-06 / D-63-07)
 
 **Wave 2** (parallel — disjoint file sets)
 
@@ -470,4 +470,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 0/7 | In planning | -          |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 1/7 | In Progress|  |

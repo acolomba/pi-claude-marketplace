@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: Ready to execute
+status: executing
 stopped_at: Phase 63 planned (7 plans in 4 waves)
-last_updated: "2026-06-16T11:05:00.000Z"
-last_activity: 2026-06-16 -- Phase 63 planning complete; 7 plans across 4 waves covering LIFE-01/02/03 + SURF-01/02/05/06 + SURF-03/04 (scope-fence confirmation). Plan-checker PASS after 1 revision iteration. Requirements coverage 9/9; decision coverage skipped (no trackable CONTEXT.md decisions).
+last_updated: "2026-06-16T11:04:37.782Z"
+last_activity: 2026-06-16 -- Phase 63 execution started
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 21
-  completed_plans: 21
-  percent: 86
+  total_plans: 28
+  completed_plans: 22
+  percent: 79
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 63 — Lifecycle Cascade, User-Facing Surface & Docs (next)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 63 — lifecycle-cascade-user-facing-surface-docs
 
 ## Current Position
 
-Phase: 63
-Plan: 7 plans (63-01..07) across 4 waves
+Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-06-16 -- Phase 63 planning complete; 7 plans across 4 waves covering LIFE-01/02/03 + SURF-01/02/05/06 + SURF-03/04 (scope-fence confirmation). Plan-checker PASS after 1 revision iteration. Requirements coverage 9/9; decision coverage skipped (no trackable CONTEXT.md decisions).
+Last activity: 2026-06-16 -- Phase 63 execution started
 
 ## Performance Metrics
 
@@ -121,6 +121,7 @@ Last activity: 2026-06-16 -- Phase 63 planning complete; 7 plans across 4 waves 
 | Phase 62 P01 | ~36m | 3 tasks | 6 files |
 | Phase 62 P02 | ~33m | 2 tasks | 4 files |
 | Phase 62 P03 | ~33m | 2 tasks | 4 files |
+| Phase 63 P01 | 32m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -245,6 +246,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 62]: Wave 1 leaves landed (RingBuffer + PID table + schema admission). `bridges/hooks/async-rewake/ring-buffer.ts` (D-62-04 caps: STDERR_CAP_BYTES=65536, STDOUT_CAP_BYTES=1048576) drops oldest bytes on overflow, sets a never-reset `truncated` latch, returns chronological-order utf8 decode via `read()`; UTF-8 wrap-boundary lost-glyph caveat documented and accepted. `bridges/hooks/async-rewake/pid-table.ts` (D-62-05) reads `[]` on ENOENT or shape mismatch, writes via `atomicWriteJson` tmp+rename (NFR-1) with `assertPathInside(loc.dataRoot, ...)` (NFR-10); on-disk envelope `{ version: 1, entries: PidTableEntry[] }` hardcodes v=1 for future migration unambiguity. `domain/components/hooks.ts` HOOK_HANDLER_SCHEMA + HookHandlerEntry admit `asyncRewake` / `rewakeMessage` / `rewakeSummary` as optional `Type.Unknown()` (HOOK-03 lenient stance preserved -- runtime narrows via typeof). Zero `node:child_process` imports here (Plan 62-02 owns the whitelist amendment). +28 tests (14 ring-buffer + 13 pid-table + 6 schema admission); npm run check GREEN 2184 unit + 10 integration. -- Plan 62-01.
 - [Phase 62]: Wave 2 registry + atomic-supersession landed (D-58-01 lesson applied). `bridges/hooks/async-rewake/registry.ts` introduced as the THIRD `node:child_process` import site; `tests/architecture/no-shell-out.test.ts` `EXACTLY_TWO_SANCTIONED_SHELL_OUT_SITES` -> `EXACTLY_THREE_...` whitelist amendment landed in the SAME commit (8ef02c5) -- no intermediate RED window. registry exposes `spawnAndRegister(entry, event, ctx, pi, loc)` + `shutdownInMemoryChildren()` + `reapOrphans(loc)` + `AsyncRewakeEntry` + `MARKER_ENV` (constant `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH`) + 4 test seams (`_setSpawnForTest` / `_setDispatchIdGeneratorForTest` / `_setOrphanProbesForTest` / `_getRegistryForTest`). Behaviors locked: `spawn(command, args, { detached: false, stdio: ["pipe","pipe","pipe"], env: { ...preparedEnv, MARKER_ENV: dispatchId } })`; ring-buffered stderr(64KiB)/stdout(1MiB) tail-drop; EXEC-02 SIGTERM->5s->SIGKILL ladder via shared installTimerLadder helper (uniform with sync path); captured-epoch (D-62-03) zombie defense (compare against currentEpoch() before injecting/notifying/mutating PID table; mismatch -> silent no-op); exit-code-2 `pi.sendMessage({ customType: "claude-hook-rewake", display: false, content: rewakeMessage + "\n\n" + body }, { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" })` injection; non-2 exit codes silent; SIGKILL silent. **Plan-spec deviation (D-62-XX):** `spawnAndRegister` signature widened from RESEARCH.md's `(entry, event, ctx)` to `(entry, event, ctx, pi, loc)` because installed peer-dep `@earendil-works/pi-coding-agent@0.79.0` carries `sendMessage` ONLY on `ExtensionAPI`/`ReplacedSessionContext`, NOT on `ExtensionContext`; RESEARCH.md lines 787-794 were wrong. **IL-2 EXEMPTION pinned via shared seam:** `shared/notify.ts` gains `notifyAsyncRewakeSummary(ctx, summary)` -- the project-wide ESLint `no-restricted-syntax` gate forbids direct `ctx.ui.notify` outside `shared/notify.ts`, so the documented exemption is routed through the central notify seam (byte-on-wire unchanged); `rewakeSummary` fires on exit-time independent of exit code. multi-hook fan-in via `crypto.randomUUID()` distinct dispatchIds (D-62-01). npm run check GREEN end-to-end. -- Plan 62-02.
 - [Phase 62]: Wave 3 dispatch-exec delegation + factory wiring + architecture-pin landed. `dispatch-exec.ts` pre-spawn arm: `if (entry.handlerDecl.asyncRewake === true)` strict check delegates to `registry.spawnAndRegister(entry, event, ctx, pi, loc)` and returns `{ kind: "noop" }` so the reducer cannot distinguish sync `noop` from async-spawned `noop` (D-62-02 declaration-order interleave preserved). `event-router.ts` `registerHooksBridge` factory now `await`s `shutdownInMemoryChildren()` (in-memory walk first per D-62-05) followed by per-scope `await reapOrphans(loc)` between the existing `liveEpoch += 1` line and the hydrate step -- async-factory contract from Plan 59-03 preserved (Pi loader awaits the factory Promise -> all bridge registration + orphan-reap complete BEFORE first session event fires). `tests/architecture/hooks-async-rewake.test.ts` NEW single-file architecture pin: 38 tests across 7 describe blocks covering T-62-01..10 (spawn options pinned, exit-code-2 inject shape + body, `display: false` byte-equality, `MARKER_ENV` byte value, `customType: "claude-hook-rewake"`, `deliverAs: ctx.isIdle() ? "nextTurn" : "followUp"` discriminator, declaration-order interleave, ring-buffer overflow `[…truncated]\n` marker, captured-epoch zombie defense, multi-hook fan-in distinct UUIDs, orphan reap + Linux marker-match SIGKILL + marker-mismatch soft-skip + non-Linux soft-skip + macOS skip). **Plan-spec deviation (composite-handler widening):** the plan named only the `pi.on(...)` registration as "small signature widening" but the production handler chain `compositeHandlerFor -> reduceBucket -> activeExecutor -> dispatchHookExec -> spawnAndRegister` had to thread `pi: ExtensionAPI` end-to-end; chose `pi?: ExtensionAPI` (optional) to preserve 40+ pre-existing test call sites (production caller always passes `pi`; the only `pi === undefined` path is legacy tests that never exercise the async arm, guarded by `hookDebugLog` skip + `{kind:"noop"}` defensive return). **Dual-spawn-seam wiring:** `dispatch-exec.ts` and `bridges/hooks/async-rewake/registry.ts` carry independent `_setSpawnForTest` seams; architecture test's `installSpawnSpy` grew a `{ wireBoth: true }` opt-in for the 3 dispatch-exec delegation tests so both sync + async paths exercise off one mock. Verifier PASS 10/10 must-haves (`62-VERIFICATION.md`). +38 tests; final 2222 unit (2221 pass + 1 intentional non-Linux skip) + 10 integration; npm run check GREEN. **Open manual-only verifications carried into Phase 63:** live `/reload` orphan-reap across process death, end-to-end model-injection observability on exit-code-2, `rewakeSummary` Pi UI visibility (VALIDATION.md Manual-Only Verifications). PHASE 62 COMPLETE -- HOOK-06 + EXEC-05 closed. -- Plan 62-03.
+- [Phase ?]: [Phase 63] ClaudeHookEvent literal-union declared in shared/notify.ts; runtime tuples in domain/components/hook-events.ts pinned via 'as const satisfies readonly ClaudeHookEvent[]' to maintain single source of truth across the shared/<-domain/ import fence.
 
 ### Pending Todos
 
@@ -300,7 +302,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-16T04:08:20.433Z
+Last session: 2026-06-16T11:04:27.840Z
 Stopped At: Phase 63 planned (7 plans in 4 waves)
 Resume File: .planning/phases/63-lifecycle-cascade-user-facing-surface-docs/63-01-PLAN.md
 
