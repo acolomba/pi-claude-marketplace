@@ -392,7 +392,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 **Wave 2** (parallel — disjoint file sets)
 
 - [ ] 63-02-PLAN.md — `bridges/hooks/stage.ts` `writeHookConfig` / `removeHookConfig` + `<pluginRoot>/hooks/` subtree symlink-escape walk + atomic write to `<scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json` (LIFE-03 / D-63-02 / D-63-03 / RESEARCH Open Question 2)
-- [ ] 63-03-PLAN.md — `REASONS` += `"orphan rewake"` + `domain/resolver.ts::applyHooksConfig` orphan-rewake detection + `docs/output-catalog.md` row(s) + `tests/architecture/catalog-uat.test.ts` fixture(s) — ATOMIC commit per D-58-01 (SURF-05 / D-63-08 / RESEARCH Open Question 1)
+- [x] 63-03-PLAN.md — `REASONS` += `"orphan rewake"` + `domain/resolver.ts::applyHooksConfig` orphan-rewake detection + `docs/output-catalog.md` row(s) + `tests/architecture/catalog-uat.test.ts` fixture(s) — ATOMIC commit per D-58-01 (SURF-05 / D-63-08 / RESEARCH Open Question 1)
 
 **Wave 3** *(blocked on Waves 1+2 completion)*
 
@@ -470,4 +470,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 1/7 | In Progress|  |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 2/7 | In Progress|  |
