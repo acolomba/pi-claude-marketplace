@@ -2796,3 +2796,170 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFE-01 / LIFE-02 / SURF-05: 5th cascade slot in install.ts -- a plugin
+// declaring `hooks/hooks.json` writes `<hooksDir>/<plugin>/hooks.json` via
+// the bridge `writeHookConfig`; the cascade row surfaces orphan-rewake when
+// the resolver flagged it; rollback removes the just-written file.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      const hooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo life01" }] }],
+      };
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        hooksJson,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)") && !summary.includes("(unavailable)"),
+        `expected clean install; got: ${summary}`,
+      );
+
+      // LIFE-01: the bridge wrote the file at the documented path.
+      const written = await readFile(path.join(locations.hooksDir, "p1", "hooks.json"), "utf8");
+      assert.deepEqual(JSON.parse(written), hooksJson);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // SURF-05 fixture: rewakeMessage WITHOUT asyncRewake: true triggers
+      // detectOrphanRewake -> partial.orphanRewake = true (per resolver
+      // applyHooksConfig success branch, Plan 63-03).
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "orphan",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: "echo orphan",
+                  rewakeMessage: "wake me",
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "orphan",
+      });
+
+      const message = notifications.map((n) => n.message).join("\n");
+      // Renderer composes `(installed) {orphan rewake}` via the existing
+      // composeReasons helper on PluginInstalledMessage.reasons.
+      assert.ok(
+        message.includes("(installed) {orphan rewake}"),
+        `expected '(installed) {orphan rewake}' in cascade; got:\n${message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "async-rewake",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: "echo paired",
+                  rewakeMessage: "wake me",
+                  asyncRewake: true,
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "async-rewake",
+      });
+
+      const message = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !message.includes("{orphan rewake}"),
+        `expected no '{orphan rewake}' brace; got:\n${message}`,
+      );
+      assert.ok(
+        message.includes("(installed)"),
+        `expected clean (installed) row; got:\n${message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
