@@ -1314,6 +1314,23 @@ async function replaceAll(
     // write. NOT pushed onto `replacements[]` -- the hooks file STAYS IN
     // PLACE on a later-step failure (recovery is via the reinstall hint,
     // not in-process rollback, mirroring update.ts D-03 semantics).
+    //
+    // WR-05 (Phase 63 review): the hooks-removed-then-later-step-failed
+    // window is a known manual-recovery case. When installable.hooksConfigPath
+    // is undefined, commitHooks() calls removeHookConfig() to clean up any
+    // stale subtree from the prior install. If that succeeds and a later
+    // step (mcp replace, state save) THROWS, the rollback loop at line
+    // 1301 cannot restore the hooks file -- and since `replacements[]`
+    // has no hooks entry, no in-process restore is possible. The
+    // in-memory state still holds the OLD resources.hooks: [plugin]
+    // slug, the throw routes through errorWithManualRecovery without
+    // saving, and the user-visible row is (manual recovery). On the
+    // next /reload, the dispatcher's routing table is rebuilt from
+    // the still-old state.json and points at a now-deleted hooks file.
+    // The manual-recovery hint directs the user to re-run reinstall,
+    // which re-resolves version B (no hooks) and persists the truthful
+    // state. The same recovery contract applies to update.ts (see
+    // WR-01 documentation there).
     await commitHooks(hooks);
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
