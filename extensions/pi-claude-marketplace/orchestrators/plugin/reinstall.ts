@@ -43,7 +43,9 @@ import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
   addPluginConfigToCache,
   rebuildRoutingTables,
+  removeHookConfig,
   removePluginConfigFromCache,
+  writeHookConfig,
 } from "../../bridges/hooks/index.ts";
 import {
   abortPreparedMcp,
@@ -1072,7 +1074,12 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsSourceDir: generated.agentsSourceDir,
   });
-  const replacements = await replaceAll(handles, force);
+  const replacements = await replaceAll(handles, force, {
+    locations,
+    cwd,
+    plugin,
+    installable,
+  });
 
   let invalidConfigWriteBack: boolean;
   try {
@@ -1269,6 +1276,7 @@ async function prepareAllHandles(input: {
 async function replaceAll(
   handles: PreparedHandles,
   force: boolean | undefined,
+  hooks: HooksReplaceArgs,
 ): Promise<readonly ReplacementEntry[]> {
   const replacements: ReplacementEntry[] = [];
   try {
@@ -1281,6 +1289,12 @@ async function replaceAll(
       force === undefined ? {} : { force },
     );
     replacements.push({ phase: "agents", handle: agents });
+    // LIFE-01 / D-63-01: 5th cascade slot between agents and mcp. The hooks
+    // bridge has no staging dir per D-63-02; writeHookConfig IS the atomic
+    // write. NOT pushed onto `replacements[]` -- the hooks file STAYS IN
+    // PLACE on a later-step failure (recovery is via the reinstall hint,
+    // not in-process rollback, mirroring update.ts D-03 semantics).
+    await commitHooks(hooks);
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (err) {
@@ -1289,6 +1303,45 @@ async function replaceAll(
   }
 
   return Object.freeze(replacements);
+}
+
+interface HooksReplaceArgs {
+  readonly locations: ScopedLocations;
+  readonly cwd: string;
+  readonly plugin: string;
+  readonly installable: ResolvedPluginInstallable;
+}
+
+/**
+ * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
+ * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
+ * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
+ * When the resolved plugin has no hooks, remove any stale subtree (defensive
+ * cleanup of an artefact a prior install left behind).
+ */
+async function commitHooks(args: HooksReplaceArgs): Promise<void> {
+  const { locations, cwd, plugin, installable } = args;
+  if (installable.hooksConfigPath === undefined) {
+    await removeHookConfig({ locations, pluginName: plugin });
+    return;
+  }
+
+  const raw = await readFile(
+    path.join(installable.pluginRoot, installable.hooksConfigPath),
+    "utf8",
+  );
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+  if (!parsed.ok) {
+    throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+  }
+
+  await writeHookConfig({
+    locations,
+    pluginName: plugin,
+    pluginRoot: installable.pluginRoot,
+    hooksValue: parsed.value,
+  });
 }
 
 function updateStateRecord(
