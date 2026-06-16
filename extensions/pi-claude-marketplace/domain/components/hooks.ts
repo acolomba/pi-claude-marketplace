@@ -25,6 +25,16 @@
 // shared/debug-log.ts); env-gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`,
 // the sanctioned IL-2 / IL-3 escape lives at the seam's canonical home and
 // no console.* call survives in this file.
+//
+// HOOK-03 / LIFE-01: `parseHooksConfig` accepts TWO wire shapes -- the
+// upstream PLUGIN-format wrapper `{description?, hooks: {<event>: [...]}}`
+// per Claude Code `plugin-dev/skills/hook-development/SKILL.md`, AND the
+// bare SETTINGS-format top-level-event-keys shape `{<event>: [...]}`. The
+// wrapper-detection step at the head of the function unwraps `parsed.hooks`
+// when the wrapper is present; otherwise it validates `parsed` directly
+// (backward-compat). Real upstream plugins (hookify and siblings) ship the
+// wrapper form; in-tree configs that happen to be bare-shaped continue to
+// validate via the unchanged arm.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -82,6 +92,37 @@ export type CompileIfCallback<P> = (
   claudeEvent: BucketAEvent,
   ctx: CompileIfPredicateContext,
 ) => P;
+
+// ──────────────────────────────────────────────────────────────────────────
+// Wire-format discrimination (plugin wrapper vs. settings bare shape)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Heuristic for the upstream PLUGIN-format wrapper shape per Claude Code
+ * `plugin-dev/skills/hook-development/SKILL.md`:
+ * `{description?: string, hooks: {<event>: [...], ...}}`.
+ *
+ * Returns `true` IFF `v` is a plain non-null non-array object carrying an
+ * own `hooks` property whose value is itself a plain non-null non-array
+ * object. `parseHooksConfig` then validates the unwrapped `v.hooks`
+ * against `HOOKS_VALIDATOR` instead of `v`.
+ *
+ * The heuristic is purely structural -- a crafted value that satisfies it
+ * still flows through the same `HOOKS_VALIDATOR.Check` the bare arm uses,
+ * so no new validation surface is introduced.
+ */
+function isPluginWrapper(v: unknown): v is { hooks: object } {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    return false;
+  }
+
+  if (!Object.hasOwn(v, "hooks")) {
+    return false;
+  }
+
+  const inner = (v as Record<string, unknown>).hooks;
+  return typeof inner === "object" && inner !== null && !Array.isArray(inner);
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Schema layer-by-layer
@@ -181,6 +222,16 @@ const HOOK_EVENT_ARRAY_SCHEMA = Type.Array(HOOK_ENTRY_SCHEMA);
  * Top-level `hooks.json` shape. D-57-02: event keys accepted as any string.
  * The supportability gate (bucket-A admission) lives in TOOL-02(c), not
  * here.
+ *
+ * HOOK-03 / LIFE-01: the schema encodes the BARE settings-format shape
+ * (top-level event keys mapping to event arrays). Real upstream Claude
+ * plugins ship the PLUGIN-format WRAPPER `{description?, hooks: {...}}`
+ * per `plugin-dev/skills/hook-development/SKILL.md`. The wrapper
+ * discrimination lives in `parseHooksConfig` (above the validator); the
+ * schema itself remains the bare record so the validator's instance-path
+ * error messages stay readable and downstream consumers (resolver,
+ * info.ts projection, bridge stage-write) see the unwrapped record per
+ * the contract they already expect.
  */
 export const HOOKS_CONFIG_SCHEMA = Type.Record(Type.String(), HOOK_EVENT_ARRAY_SCHEMA);
 
@@ -255,6 +306,16 @@ export type HookConfigParseResult<P> =
  * detail through `hookDebugLog`. The resolver maps the failure to
  * `installable: false` with the `{unsupported hooks}` reason. No throws.
  *
+ * HOOK-03 / LIFE-01 wrapper-detection arm: if the parsed JSON looks like
+ * the upstream PLUGIN-format wrapper `{description?, hooks: {<event>:
+ * [...]}}` per Claude Code `plugin-dev/skills/hook-development/SKILL.md`,
+ * the parser unwraps `parsed.hooks` before validating against
+ * `HOOKS_VALIDATOR`. Otherwise it validates `parsed` directly
+ * (backward-compat for in-tree bare-shape configs). The success arm's
+ * `value` is the unwrapped record either way, so every downstream
+ * consumer (resolver, info.ts projection, bridge stage-write) sees the
+ * same bare-event-keys shape it already expected.
+ *
  * MATCH-03 (D-61-02): the success arm also returns `ifPredicates`, a
  * `Map` keyed on `(event|groupIndex|handlerIndex)` carrying the
  * `compileIfPredicate` result for every handler whose `if` field is
@@ -285,8 +346,15 @@ export function parseHooksConfig<P>(
     return { ok: false, reason };
   }
 
-  if (!HOOKS_VALIDATOR.Check(parsed)) {
-    const detail = firstHookValidationDetail(parsed);
+  // HOOK-03 / LIFE-01: unwrap the upstream PLUGIN-format wrapper per
+  // Claude Code `plugin-dev/skills/hook-development/SKILL.md`. Bare-shape
+  // inputs fall through to direct validation (backward-compat).
+  const candidate: unknown = isPluginWrapper(parsed)
+    ? (parsed as { hooks: unknown }).hooks
+    : parsed;
+
+  if (!HOOKS_VALIDATOR.Check(candidate)) {
+    const detail = firstHookValidationDetail(candidate);
     const reason = `hooks.json failed schema validation: ${detail}`;
     hookDebugLog(reason);
     return { ok: false, reason };
@@ -299,7 +367,7 @@ export function parseHooksConfig<P>(
   // `"unsupported hooks: " + debugDetail` form; the catalog-layer
   // narrowing in `shared/probe-classifiers.ts::narrowResolverNotes`
   // collapses this to the closed-set `{unsupported hooks}` Reason.
-  const supportability = checkMatcherSupportability(parsed);
+  const supportability = checkMatcherSupportability(candidate);
   if (!supportability.ok) {
     const reason = `unsupported hooks: ${supportability.debugDetail}`;
     hookDebugLog(reason);
@@ -314,9 +382,9 @@ export function parseHooksConfig<P>(
   // callers that consume only the installable verdict (resolver probe).
   const ifPredicates: CompiledIfPredicateMap<P> = options.skipIfMap
     ? new Map<string, P>()
-    : buildIfPredicateMap(parsed, ctx, compileIf);
+    : buildIfPredicateMap(candidate, ctx, compileIf);
 
-  return { ok: true, value: parsed, ifPredicates };
+  return { ok: true, value: candidate, ifPredicates };
 }
 
 /**
