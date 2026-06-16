@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: executing
+status: verifying
 stopped_at: Completed 63-05-PLAN.md (SURF-01)
-last_updated: "2026-06-16T13:41:12.005Z"
+last_updated: "2026-06-16T14:57:16.520Z"
 last_activity: 2026-06-16 -- Phase 63 execution started
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 28
-  completed_plans: 27
-  percent: 86
+  completed_plans: 28
+  percent: 100
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-16 -- Phase 63 execution started
 
 ## Performance Metrics
@@ -127,6 +127,7 @@ Last activity: 2026-06-16 -- Phase 63 execution started
 | Phase 63 P07 | 15min | 1 tasks | 1 files |
 | Phase 63 P02 | 30m | 3 tasks | 4 files |
 | Phase 63 PP05 | 25min | 2 tasks | 2 files |
+| Phase 63 P04 | 55min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [Phase 63] assertNoSymlinkEscapeInHooksSubtree throws narrower SymlinkRefusedError on hooks-subtree symlink escapes (Rule 1 fix on LIFE-03 spec; preserves PathContainmentError inheritance for PI-14 handling).
 - [Phase ?]: [Phase 63] Hooks bridge adopts flatter writeHookConfig/removeHookConfig verb pair instead of mcp bridge's 3-verb prepare/commit/abort (RESEARCH Open Question 2; single-file artefact has no foreign-entry merge surface).
 - [Phase ?]: [Phase 63] info <plugin> surfaces multi-line hooks: block end-to-end by re-parsing pluginRoot/hooks/hooks.json via composeResolvedComponents. Resolver discards parsed value; info.ts re-opens at message-construction time (Plan 63-05, SURF-01).
+- [Phase ?]: [Phase 63] Plan 04: 5th cascade slot landed at all FOUR sites (install / update / reinstall / cascadeUnstagePlugin) in lockstep + integration test pins the end-to-end install->update->reinstall->uninstall lifecycle. LIFE-01 / LIFE-02 closed. Install row composition now reads resolved.orphanRewake and pushes 'orphan rewake' into PluginInstalledMessage.reasons (SURF-05 wiring complete on the consumer side). Update/reinstall orphan-rewake wiring deferred (PluginUpdatedMessage/PluginReinstalledMessage carry no reasons by design; SURF-05 catalog only documents (installed) byte forms).
+- [Phase ?]: [Phase 63] Plan 04: Reinstall hooks slot is NOT pushed onto replacements[]: hooks bridge has no replace primitive (D-63-02), so writeHookConfig STAYS IN PLACE on a later-step failure. Recovery is via the existing reinstall hint, mirroring update.ts D-03 fail-continue semantics. Mirrors the truthful 'we did not complete the swap' view.
 
 ### Pending Todos
 
@@ -312,7 +315,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-16T13:41:11.983Z
+Last session: 2026-06-16T14:57:03.081Z
 Stopped At: Completed 63-05-PLAN.md (SURF-01)
 Resume File: None
 

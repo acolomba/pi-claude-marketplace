@@ -180,7 +180,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 - [x] Phase 60: Hook Execution, Payload Translators & Env Vars -- EXEC-01..04, PAYL-01, HOOK-05 (completed 2026-06-15)
 - [x] Phase 61: `if` Field Permission-Rule Matcher -- MATCH-03 (completed 2026-06-15)
 - [x] Phase 62: `asyncRewake` Registry & Background-Spawn -- HOOK-06, EXEC-05 (completed 2026-06-16)
-- [ ] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06
+- [x] Phase 63: Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06 (completed 2026-06-16)
 
 #### Phase 57: Schema, Component Type & Payload-Extension Tolerance
 
@@ -396,7 +396,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 3** *(blocked on Waves 1+2 completion)*
 
-- [ ] 63-04-PLAN.md — 5th cascade slot at ALL FOUR sites: `install.ts` 6-element phases array + `update.ts` hand-rolled prepare + Phase 3a + `reinstall.ts` parallel-prepare + `cascadeUnstagePlugin` in marketplace/shared.ts; orphan-rewake reason wiring on the install row (LIFE-01 / LIFE-02 / D-63-01)
+- [x] 63-04-PLAN.md — 5th cascade slot at ALL FOUR sites: `install.ts` 6-element phases array + `update.ts` hand-rolled prepare + Phase 3a + `reinstall.ts` parallel-prepare + `cascadeUnstagePlugin` in marketplace/shared.ts; orphan-rewake reason wiring on the install row (LIFE-01 / LIFE-02 / D-63-01)
 - [x] 63-05-PLAN.md — `info <plugin>` hooks block: `composeResolvedComponents` re-parses `<pluginRoot>/hooks/hooks.json` and projects to `HookSummaryEntry[]`; renderer arm from 63-01 emits the multi-line block; `narrowProbeError` ladder reused unchanged (SURF-01 / D-63-04 / D-63-05 / RESEARCH Open Question 3)
 
 **Wave 4** (parallel — independent of Wave 3)
@@ -470,4 +470,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 6/7 | In Progress|  |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 7/7 | Complete   | 2026-06-16 |
