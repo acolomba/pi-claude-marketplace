@@ -1677,6 +1677,11 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
 /**
  * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
  * for renderer consumption. Classification order:
+ *   0. four `hooks.json` prefix families
+ *      (`hooks.json is not valid JSON:` / `hooks.json failed schema validation:` /
+ *      `unsupported hooks:` / `malformed hooks.json:`) -> `unsupported hooks`
+ *      -- mirrors `shared/probe-classifiers.ts::narrowResolverNotes` for
+ *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
  *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
  *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
  *   2. "source" substring -> `unsupported source`
@@ -1686,10 +1691,29 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * the preferred path is typed errno-bearing Errors dispatched at the
  * orchestrator catch site via `.code`.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function narrowResolverReasons(reasons: readonly string[]): readonly ContentReason[] {
   const out: ContentReason[] = [];
   for (const reason of reasons) {
     if (reason === "") {
+      continue;
+    }
+
+    // Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
+    // The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
+    // rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
+    // classifier and the read-only probe classifier MUST emit the same
+    // `unsupported hooks` REASONS token for the same on-disk condition (SURF-01).
+    // Mirrors the probe-side prefix set verbatim -- if a prefix is added or
+    // renamed on one side, the other side MUST follow in lockstep (pinned by
+    // tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
+    const isHooksNote =
+      reason.startsWith("hooks.json is not valid JSON:") ||
+      reason.startsWith("hooks.json failed schema validation:") ||
+      reason.startsWith("unsupported hooks:") ||
+      reason.startsWith("malformed hooks.json:");
+    if (isHooksNote) {
+      out.push("unsupported hooks");
       continue;
     }
 
