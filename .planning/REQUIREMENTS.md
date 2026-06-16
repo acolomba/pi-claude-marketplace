@@ -73,7 +73,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **SURF-03**: No install-time synthesis-caveat warnings in v1.13 — bucket-A events have no documented loss modes. This REQ-slot is reserved for v1.14+ when bucket-D events are added (PAYL-V2-02..PAYL-V2-06); install-time `<lossy synthesis>` warnings will land alongside those events
 - [ ] **SURF-04**: `list` does NOT add a hook-count column (symmetry with the four existing component types -- each plugin line stays terse); no standalone `/claude:plugin hooks <plugin>` command (info already covers it)
 - [x] **SURF-05**: Install-time warning emits once per plugin when `rewakeMessage` or `rewakeSummary` are declared without `asyncRewake: true` (no-op upstream; warn so the plugin author can spot a config bug). Unknown extension field names surface only in debug-log. Plugins WITH `asyncRewake: true` install normally per HOOK-06 — no install-time warning for the normal case
-- [ ] **SURF-06**: A user-facing hook-support document (`docs/hooks.md`, linked from `README.md`) explains in plain language which Claude Code hook events are supported in v1.13, which are deferred to v1.14+, which are permanently unsupportable, and why. Written for FIRST-TIME READERS — plugin authors evaluating "will my plugin work?" and end users wondering "why is this plugin showing `(unavailable) {unsupported hooks}`?" — NOT for project maintainers familiar with bucket A/B/C/D taxonomy, REQ-IDs, or the PRD constraints. The doc MUST cover:
+- [x] **SURF-06**: A user-facing hook-support document (`docs/hooks.md`, linked from `README.md`) explains in plain language which Claude Code hook events are supported in v1.13, which are deferred to v1.14+, which are permanently unsupportable, and why. Written for FIRST-TIME READERS — plugin authors evaluating "will my plugin work?" and end users wondering "why is this plugin showing `(unavailable) {unsupported hooks}`?" — NOT for project maintainers familiar with bucket A/B/C/D taxonomy, REQ-IDs, or the PRD constraints. The doc MUST cover:
   - The 8 supported events with a one-line plain-English description of each (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd)
   - What plugins can DO with those events: shell-command handlers, tool-name matchers (literal + pipe-OR), the `if` field for argument-level filtering with examples (`Bash(git push *)`, `Edit(*.ts)`), blocking tool calls via `{"decision": "block", "reason": "..."}`, modifying tool input (PreToolUse) and output (PostToolUse), running in the background via `asyncRewake: true`, per-hook `timeout` (default 600s), environment variables (`CLAUDE_PROJECT_DIR` / `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA`)
   - 4–6 concrete worked examples covering common plugin patterns: auto-formatters (PostToolUse on Edit/Write), bash-safety nets (PreToolUse with `if`), session-start project-rule injection, prompt audit logging at UserPromptSubmit, background security review with asyncRewake, compaction snapshotting at PreCompact
@@ -210,7 +210,7 @@ Per the audit in `docs/research/claude-hook-config-syntax.md` § 10 (cross-check
 | SURF-03 | Phase 63 (reserved for v1.14+) | Pending |
 | SURF-04 | Phase 63 | Pending |
 | SURF-05 | Phase 63 | Complete |
-| SURF-06 | Phase 63 | Pending |
+| SURF-06 | Phase 63 | Complete |
 | LIFE-01 | Phase 63 | Pending |
 | LIFE-02 | Phase 63 | Pending |
 | LIFE-03 | Phase 63 | Pending |

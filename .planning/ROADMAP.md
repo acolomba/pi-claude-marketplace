@@ -401,7 +401,7 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 
 **Wave 4** (parallel — independent of Wave 3)
 
-- [ ] 63-06-PLAN.md — `docs/hooks.md` first-time-reader doc + README.md `## Hook support` section + `tests/docs/hooks-doc.test.ts` architecture-lint (SURF-06 / D-63-09 / D-63-10 / D-63-11)
+- [x] 63-06-PLAN.md — `docs/hooks.md` first-time-reader doc + README.md `## Hook support` section + `tests/docs/hooks-doc.test.ts` architecture-lint (SURF-06 / D-63-09 / D-63-10 / D-63-11)
 - [ ] 63-07-PLAN.md — Scope-fence confirmation architecture test pinning SURF-03 absence + SURF-04 non-additions + HOOK-04 prior-completion (RESEARCH Pitfall 3 + Pitfall 4)
 
 **UI hint**: yes
@@ -470,4 +470,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 2/7 | In Progress|  |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 3/7 | In Progress|  |
