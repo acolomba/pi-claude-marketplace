@@ -471,4 +471,4 @@ Add a hooks component bridge alongside skills/commands/agents/MCP, translating C
 | 60. Hook Execution, Payload Translators & Env Vars                  | v1.13     | 4/4 | Complete    | 2026-06-15 |
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
-| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 8/8 | Complete   | 2026-06-16 |
+| 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 8/8 | Complete    | 2026-06-16 |

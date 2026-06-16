@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: verified
-stopped_at: Completed 63-08-PLAN.md (CR-01 / LIFE-03 walker hardening) -- gap closure done
-last_updated: "2026-06-16T17:00:00.000Z"
-last_activity: 2026-06-16 -- Plan 63-08 (CR-01 gap closure) executed and committed
+status: Phase 63 fully closed; CR-01 / LIFE-03 INTENT gap resolved by walker hardening
+stopped_at: Completed 63-08-PLAN.md (CR-01 / LIFE-03 walker hardening) -- phase 63 fully verified 7/7
+last_updated: "2026-06-16T17:35:00.000Z"
+last_activity: 2026-06-16 -- Plan 63-08 (CR-01 gap closure) executed and re-verified (7/7 truths PASSED)
 progress:
   total_phases: 7
   completed_phases: 7
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED (gap closed)
-Plan: 8 of 8 complete (63-08 closes CR-01 gap from 63-REVIEW.md / Truth #2 in 63-VERIFICATION.md)
-Status: Phase 63 fully closed; CR-01 / LIFE-03 INTENT gap resolved by walker hardening
-Last activity: 2026-06-16 -- Plan 63-08 (CR-01 walker hardening) executed and committed (ba6632d test RED → 9c347d1 fix GREEN)
+Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED 7/7 (CR-01 gap closed)
+Plan: 8 of 8 complete (63-08 closes the CR-01 gap from 63-REVIEW.md / Truth #2 in 63-VERIFICATION.md)
+Status: Phase 63 fully closed; CR-01 / LIFE-03 INTENT gap resolved by walker hardening (assertNoSymlinkEscapeInHooksSubtree rewritten as hand-rolled lstat-based stack walk — never enumerates paths outside <pluginRoot>/hooks/)
+Last activity: 2026-06-16 -- Plan 63-08 executed (ba6632d test RED → 9c347d1 fix GREEN → 9825192 SUMMARY → 9c3e0c6 code review → 2087842 re-verification 7/7)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 198 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 206 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 
