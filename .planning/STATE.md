@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Completed 63-03-PLAN.md (SURF-05)
-last_updated: "2026-06-16T13:05:29.941Z"
+stopped_at: Completed 63-05-PLAN.md (SURF-01)
+last_updated: "2026-06-16T13:41:12.005Z"
 last_activity: 2026-06-16 -- Phase 63 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 28
-  completed_plans: 26
+  completed_plans: 27
   percent: 86
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-06-16 -- Phase 63 execution started
 
@@ -126,6 +126,7 @@ Last activity: 2026-06-16 -- Phase 63 execution started
 | Phase 63 P06 | 20m | - tasks | - files |
 | Phase 63 P07 | 15min | 1 tasks | 1 files |
 | Phase 63 P02 | 30m | 3 tasks | 4 files |
+| Phase 63 PP05 | 25min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [Phase 63] Plan 06: SURF-06 closed -- docs/hooks.md (257 lines, 9 sections, 8 supported events, 6 worked examples incl. asyncRewake) + README ## Hook support section + tests/docs/hooks-doc.test.ts architecture lint (8 invariants: jargon prohibition, 8-event coverage, two cross-refs, worked-example presence). Rule 2 deviation: extended npm test glob to include tests/docs/ so the lint runs under npm run check. npm run check GREEN 2240+10.
 - [Phase ?]: [Phase 63] assertNoSymlinkEscapeInHooksSubtree throws narrower SymlinkRefusedError on hooks-subtree symlink escapes (Rule 1 fix on LIFE-03 spec; preserves PathContainmentError inheritance for PI-14 handling).
 - [Phase ?]: [Phase 63] Hooks bridge adopts flatter writeHookConfig/removeHookConfig verb pair instead of mcp bridge's 3-verb prepare/commit/abort (RESEARCH Open Question 2; single-file artefact has no foreign-entry merge surface).
+- [Phase ?]: [Phase 63] info <plugin> surfaces multi-line hooks: block end-to-end by re-parsing pluginRoot/hooks/hooks.json via composeResolvedComponents. Resolver discards parsed value; info.ts re-opens at message-construction time (Plan 63-05, SURF-01).
 
 ### Pending Todos
 
@@ -310,8 +312,8 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-16T13:05:29.920Z
-Stopped At: Completed 63-03-PLAN.md (SURF-05)
+Last session: 2026-06-16T13:41:11.983Z
+Stopped At: Completed 63-05-PLAN.md (SURF-01)
 Resume File: None
 
 ## Operator Next Steps
