@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -275,36 +275,91 @@ blocked: 0
 
 - truth: "Installing hookify@claude-plugins-official produces (installed) row + on-disk hooks.json + reload hint"
   status: failed
-  reason: "User reported: hookify is classified `(unavailable) {unsupported hooks}` (info) / `(unavailable) {unsupported source}` (install cascade) despite using only bucket-A supported events (PreToolUse, PostToolUse, Stop, UserPromptSubmit). Install never reaches the hooks-bridge slot — the resolver flips installable: false earlier. Likely a contract mismatch: domain/components/hooks.ts:185 HOOKS_CONFIG_SCHEMA = Type.Record(Type.String(), HOOK_EVENT_ARRAY_SCHEMA) expects top-level event keys, but the upstream Claude wire format hookify ships uses the wrapped envelope `{\"description\":..., \"hooks\":{...}}`. parseHooksConfig validates the raw JSON.parse output without unwrapping, so the validator rejects the description string + nested object, emits `hooks.json failed schema validation: ...`, and the resolver flips installable: false."
+  reason: "User reported: hookify is classified `(unavailable) {unsupported hooks}` (info) / `(unavailable) {unsupported source}` (install cascade) despite using only bucket-A supported events (PreToolUse, PostToolUse, Stop, UserPromptSubmit). Install never reaches the hooks-bridge slot."
   severity: blocker
   test: 3
+  root_cause: |
+    HOOKS_CONFIG_SCHEMA in extensions/pi-claude-marketplace/domain/components/hooks.ts:185
+    encodes the upstream Claude Code SETTINGS-format shape
+    (`Type.Record(Type.String(), Type.Array(HOOK_ENTRY_SCHEMA))` — bare top-level event keys)
+    but is applied to plugin `hooks/hooks.json` files, which the upstream Claude Code spec
+    REQUIRES to use the PLUGIN-format wrapper
+    (`{description?: string, hooks: {<event>: [...], ...}}`). The two are documented as
+    distinct formats. `parseHooksConfig` (hooks.ts:288) calls `HOOKS_VALIDATOR.Check(parsed)`
+    with no unwrap step, so every real upstream plugin (hookify ships the wrapper)
+    fails validation at `/description: expected array`, the resolver flips
+    `installable: false` BEFORE the install cascade reaches the Phase 63 hooks-bridge
+    slot, and downstream narrowers map the resulting note to misleading REASONS tokens.
+
+    This is an original-implementation gap from Phase 57 (commit 43aad1e) attributed to
+    D-57-02. Phase 63 Plan 08 (commit ba6632d, WR-05) ALSO flipped the test fixture
+    `HOOKS_VALUE` in tests/bridges/hooks/stage.test.ts FROM the wrapped form TO the
+    bare-event-key form to make the tests pass, which made the wire-format bug
+    invisible to the unit suite.
   artifacts:
-    - "extensions/pi-claude-marketplace/domain/components/hooks.ts:185 (HOOKS_CONFIG_SCHEMA)"
-    - "extensions/pi-claude-marketplace/domain/components/hooks.ts:273-320 (parseHooksConfig)"
-    - "tmp/pi-uat/agent/pi-claude-marketplace/sources/claude-plugins-official/plugins/hookify/hooks/hooks.json (real wire format example)"
+    - path: "extensions/pi-claude-marketplace/domain/components/hooks.ts:185"
+      issue: "HOOKS_CONFIG_SCHEMA encodes the settings-file shape, not the plugin hooks.json wrapper shape (per upstream Claude Code SKILL.md)."
+    - path: "extensions/pi-claude-marketplace/domain/components/hooks.ts:273-320"
+      issue: "parseHooksConfig calls HOOKS_VALIDATOR.Check(parsed) with no wrapper unwrap step."
+    - path: "tests/bridges/hooks/stage.test.ts:40-42"
+      issue: "HOOKS_VALUE uses the bare-event-key shape (post-WR-05 flip); fixture pins the wrong wire format."
+    - path: "tests/orchestrators/marketplace/cascade.test.ts:166"
+      issue: "Sibling HOOKS_VALUE fixture using the bare-event-key shape (per WR-05 parity)."
+    - path: "tests/transaction/lifecycle-cascade.test.ts:147"
+      issue: "Sibling HOOKS_VALUE fixture using the bare-event-key shape (per WR-05 parity)."
+    - path: "tmp/pi-uat/agent/pi-claude-marketplace/sources/claude-plugins-official/plugins/hookify/hooks/hooks.json"
+      issue: "Canonical upstream wire format example (the wrapped shape); use as test fixture verbatim."
   missing:
-    - "Decide whether the parser unwraps `{hooks: {...}}` before validation or whether HOOKS_CONFIG_SCHEMA is extended to accept the wrapped form (matches upstream Claude Code wire shape)."
-    - "Re-run /claude:plugin install hookify@claude-plugins-official; expect installable: true and (installed) row."
+    - "Add wrapper-detection step at the head of parseHooksConfig: after JSON.parse, if the parsed value is a plain object whose top-level shape looks like `{description?: string, hooks: object, ...}`, validate `parsed.hooks` instead of `parsed`. Otherwise validate `parsed` as today (backward-compatible)."
+    - "Update JSDoc on HOOKS_CONFIG_SCHEMA and parseHooksConfig to document the two-arm parser contract and cite the upstream SKILL.md as the format authority."
+    - "Flip the three test fixtures (stage.test.ts, cascade.test.ts, lifecycle-cascade.test.ts) BACK to the wrapped form — invert the WR-05 change."
+    - "Add a parser unit test using hookify's actual hooks.json bytes (copied verbatim from tmp/pi-uat/.../hookify/hooks/hooks.json) asserting parseHooksConfig returns {ok: true}."
+    - "After the fix, re-run /claude:plugin install hookify@claude-plugins-official and expect installable: true + (installed) row + tmp/pi-uat/agent/pi-claude-marketplace/hooks/hookify/hooks.json on disk."
+  debug_session: ".planning/debug/hookify-unavailable-resolver-flip.md"
 - truth: "Same plugin reports the same (unavailable) reason across surfaces (info / list / install cascade)"
   status: failed
-  reason: "User reported: hookify shows {unsupported hooks} from `info hookify@claude-plugins-official` but shows {unsupported source} in the install cascade's marketplace-listing block — same plugin, different reason between contexts. Hypothesis: the info path and the list/install path build different `notes[]` arrays for the same plugin; shared/probe-classifiers.ts::narrowResolverNotes is a catch-all (hooks-keyword → `unsupported hooks`, `lspServers` → `lsp`, anything else → `unsupported source`), so two different upstream notes naturally produce two different REASONS tokens. The fact that the source `./plugins/hookify` parses as `{kind: \"path\"}` (sourceUnsupportedReason returns undefined) means the `{unsupported source}` reason from the install cascade is the CATCH-ALL bucket — some unclassified note is falling through. The two probe sites should produce the same notes for the same plugin."
+  reason: "User reported: hookify shows {unsupported hooks} from `info hookify@claude-plugins-official` but shows {unsupported source} in the install cascade's marketplace-listing block — same plugin, different reason between contexts."
   severity: major
   test: 3
+  root_cause: |
+    Classifier asymmetry between the two surfaces. The info / list probe surface uses
+    `shared/probe-classifiers.ts::narrowResolverNotes` (lines 87-123), which matches
+    four `hooks.json` prefixes (`hooks.json is not valid JSON:`,
+    `hooks.json failed schema validation:`, `unsupported hooks:`,
+    `malformed hooks.json:`) and emits the `unsupported hooks` REASON. The install
+    cascade surface uses `orchestrators/plugin/install.ts::narrowResolverReasons`
+    (lines 1689-1736), which has NO arm for the same `hooks.json` prefix family;
+    the note lacks the `"source"` substring, so it falls through to the conservative
+    fallback and emits `{unsupported source}`. Both narrowers see the SAME note for
+    the SAME plugin, but classify it to different tokens.
+
+    Once gap 1 is fixed, hookify will be installable and this asymmetry will become
+    invisible for real-world plugins — but the install-surface classifier still has
+    a structural gap that will resurface on any future malformed-hooks.json case
+    (JSON syntax error, schema mismatch on a hand-authored plugin), so the parity
+    fix is needed independently for defense in depth.
   artifacts:
-    - "extensions/pi-claude-marketplace/shared/probe-classifiers.ts:87-123 (narrowResolverNotes)"
-    - "extensions/pi-claude-marketplace/domain/resolver.ts (note-emitting sites)"
-    - "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts (info call site)"
-    - "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts (list/install cascade call site)"
+    - path: "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1689-1736"
+      issue: "narrowResolverReasons lacks an arm for the `hooks.json` / `malformed hooks.json:` / `unsupported hooks:` prefix family; notes fall through to the catch-all `{unsupported source}` bucket."
+    - path: "extensions/pi-claude-marketplace/shared/probe-classifiers.ts:87-123"
+      issue: "Reference implementation — the four prefixes are already enumerated correctly here; install.ts narrowResolverReasons should mirror this set."
   missing:
-    - "Locate where the install/list cascade emits a note that classifies to `unsupported source` for hookify."
-    - "Decide whether the install path should match info's deeper probe, or whether the catch-all in narrowResolverNotes is too broad and should be tightened."
-    - "Add a test pinning that info(plugin) and list(plugin)/install(plugin) yield the same `(unavailable) {<reason>}` tokens for any given plugin (cross-surface invariant)."
+    - "In install.ts::narrowResolverReasons, add an arm matching the same four `hooks.json` prefixes that narrowResolverNotes already handles, mapping them to `{unsupported hooks}` (same closed REASONS token)."
+    - "Add a cross-surface invariant test: for a synthetic plugin with a deliberately-malformed hooks.json, assert that info(plugin) and install(plugin) cascade emit the SAME (unavailable) {<reason>} token."
+  debug_session: ".planning/debug/hookify-unavailable-resolver-flip.md"
 - truth: "README's `## Features` section lists every supported component kind in v1.13"
   status: failed
   reason: "User reported: hooks are not mentioned in the README Features bullet list (README.md:21-30) even though v1.13 ships hook support and `## Hook support` (README.md:171) is a separate section. The features list still reads Commands / Skills / Agents / MCP servers."
   severity: cosmetic
   test: 7
+  root_cause: |
+    Phase 63 Plan 06 added the `## Hook support` section to README (line 171) and
+    authored docs/hooks.md, but did not amend the `## Features` bullet list at
+    README.md:21-30. No subagent investigation needed — the missing bullet is the
+    issue itself.
   artifacts:
-    - "README.md:21-30 (Features section)"
+    - path: "README.md:21-30"
+      issue: "Features bullet list omits the Hooks component kind even though v1.13 supports it."
   missing:
-    - "Add a Hooks bullet to the README Features list. Suggested: `- Hooks. See [Hook support reference](docs/hooks.md).` slotted alphabetically (between Commands and MCP servers, or after Agents — match the COMPONENT_KINDS tuple ordering for consistency)."
+    - "Add a Hooks bullet to README.md's `## Features` list. Suggested wording: `- Hooks. See [Hook support reference](docs/hooks.md).` Slot it to match the COMPONENT_KINDS tuple order in shared/notify.ts (agents, commands, hooks, mcp, skills — i.e. between Commands and MCP servers)."
+  debug_session: "(none — trivial doc fix; no investigation needed)"
