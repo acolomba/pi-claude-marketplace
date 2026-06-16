@@ -2533,3 +2533,125 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFE-01: 5th cascade slot in reinstall.ts -- the parallel-prepare/commit
+// path writes <hooksDir>/<plugin>/hooks.json between the agents and mcp
+// replace steps and removes the stale subtree when the plugin no longer
+// ships hooks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-rewrite-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      const hooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo reinstalled" }] }],
+      };
+
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        install: true,
+        resources: {
+          skill: "old skill",
+          hooksJson,
+        },
+      });
+
+      // Corrupt the on-disk hooks file so we can detect whether reinstall
+      // actually rewrites it (rather than passively leaving the prior install
+      // arm's write in place).
+      await writeFile(
+        path.join(locations.hooksDir, "hello", "hooks.json"),
+        JSON.stringify({ corrupted: true }),
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(!summary.includes("(failed)"), `expected clean reinstall; got: ${summary}`);
+
+      const written = await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
+      assert.deepEqual(
+        JSON.parse(written),
+        hooksJson,
+        "reinstall cascade slot must rewrite hooks.json from the resolved manifest",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<plugin>/ subtree", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-drop-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      // Seed a plugin WITHOUT hooks.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        install: true,
+        resources: { skill: "old skill" },
+      });
+
+      // Pre-place a stale hooks file at the destination as if a prior
+      // install had left one behind.
+      await mkdir(path.join(locations.hooksDir, "hello"), { recursive: true });
+      await writeFile(
+        path.join(locations.hooksDir, "hello", "hooks.json"),
+        JSON.stringify({ stale: true }),
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(!summary.includes("(failed)"), `expected clean reinstall; got: ${summary}`);
+
+      // The stale hooks dir must be gone.
+      let stillThere = true;
+      try {
+        await readFile(path.join(locations.hooksDir, "hello", "hooks.json"), "utf8");
+      } catch {
+        stillThere = false;
+      }
+
+      assert.equal(
+        stillThere,
+        false,
+        "reinstall cascade slot must removeHookConfig when the resolved plugin has no hooks",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
