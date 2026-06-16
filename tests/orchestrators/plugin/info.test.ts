@@ -1302,3 +1302,269 @@ test("ENBL-04: bare info (no --scope) with disabled record in one scope and info
     assert.match(all, /⊘ foo v1\.2\.3 \(disabled\)/, all);
   });
 });
+
+// ---------------------------------------------------------------------------
+// SURF-01 / D-63-04 / D-63-07: `info <plugin>` for an installable plugin
+// with `hooks/hooks.json` renders the multi-line `hooks:` block. The
+// block slots alphabetically between `commands` and `mcp` (driven by
+// the 5-tuple `COMPONENT_KINDS`). Tool events render as
+// `<event>(<matcher>)`; non-tool events render as bare `<event>`.
+// Declaration order from the parsed file is preserved.
+//
+// The byte-form of the `hooks:` block itself is locked end-to-end in
+// `tests/shared/notify-v2.test.ts` (renderer unit tests). These
+// orchestrator-level fixtures verify the integration: the info.ts
+// re-parse from disk produces the `HookSummaryEntry[]` that flows into
+// the renderer at the correct alphabetical slot.
+// ---------------------------------------------------------------------------
+
+test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-line `hooks:` block between `commands:` and `mcp:`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "h",
+            source: "./h",
+            version: "1.0.0",
+            commands: "commands",
+          },
+        ],
+      },
+      installed: { h: { version: "1.0.0" } },
+      installablePluginDirs: ["h"],
+      componentFiles: { h: ["commands/c1.md"] },
+    });
+
+    // Seed a parseable hooks/hooks.json with two PreToolUse groups, one
+    // PostToolUse group, and one SessionStart group. Declaration order
+    // is preserved end-to-end: PreToolUse(Bash) -> PreToolUse(Edit|Write)
+    // -> PostToolUse(Edit) -> SessionStart.
+    const pluginDir = path.join(mpRoot, "h");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [
+          { matcher: "Bash", hooks: [{ type: "command", command: "echo pre-bash" }] },
+          { matcher: "Edit|Write", hooks: [{ type: "command", command: "echo pre-edit-write" }] },
+        ],
+        PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "echo post-edit" }] }],
+        SessionStart: [{ hooks: [{ type: "command", command: "echo session-start" }] }],
+      }),
+      "utf8",
+    );
+
+    // Also seed a `mcpServers` field so we can verify the alphabetical
+    // slot of `hooks:` BETWEEN `commands:` and `mcp:`.
+    await mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "h",
+        version: "1.0.0",
+        mcpServers: { "my-mcp": { command: "echo" } },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "h", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● h v1.0.0 (installed)",
+        "    commands: c1",
+        "    hooks:",
+        "      PreToolUse(Bash)",
+        "      PreToolUse(Edit|Write)",
+        "      PostToolUse(Edit)",
+        "      SessionStart",
+        "    mcp: my-mcp",
+      ].join("\n"),
+    );
+  });
+});
+
+test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) renders `components: not resolved` and NO `hooks:` line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "legacy", source: "./legacy", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["legacy"],
+    });
+
+    // Malformed hooks.json: resolver flips installable: false.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // Unavailable plugin: `components: not resolved` marker per the
+    // existing v1.0+ unavailable-row contract; NO `hooks:` line.
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    assert.match(msg, /components: not resolved/);
+    assert.doesNotMatch(msg, /hooks:/);
+  });
+});
+
+test("SURF-01 / D-63-04: installable plugin with NO hooks/hooks.json renders NO `hooks:` line (legacy 4-kind output unchanged)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "no-hooks",
+            source: "./no-hooks",
+            version: "1.0.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installed: { "no-hooks": { version: "1.0.0" } },
+      installablePluginDirs: ["no-hooks"],
+      componentDirs: { "no-hooks": ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "no-hooks",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ● no-hooks v1.0.0 (installed)", "    skills: s1"].join(
+        "\n",
+      ),
+    );
+    assert.doesNotMatch(notifications[0]!.message, /hooks:/);
+  });
+});
+
+test("SURF-01 / D-63-04: available plugin (not-installed) with hooks/hooks.json also renders the `hooks:` block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "ah", source: "./ah", version: "0.2.0" }],
+      },
+      // NOT installed -> goes through buildAvailableRow.
+      installablePluginDirs: ["ah"],
+    });
+
+    const pluginDir = path.join(mpRoot, "ah");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        UserPromptSubmit: [{ hooks: [{ type: "command", command: "echo ups" }] }],
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ah", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ ah v0.2.0 (available)",
+        "    hooks:",
+        "      UserPromptSubmit",
+      ].join("\n"),
+    );
+  });
+});
+
+test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and info-render surfaces probe-classifier reason via narrowProbeError (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "hr", source: "./hr", version: "1.0.0" }],
+      },
+      installed: { hr: { version: "1.0.0" } },
+      installablePluginDirs: ["hr"],
+    });
+
+    // Seed a parseable hooks.json so the resolver records `hooksConfigPath`
+    // (`installable: true`), then chmod 000 the file so the info-time
+    // re-read raises EACCES. The narrowProbeError ladder must classify
+    // the failure as `permission denied` -- the SAME closed-set REASON
+    // the other component-probe failures (e.g. skills dir EACCES) emit.
+    const pluginDir = path.join(mpRoot, "hr");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    const hooksFile = path.join(pluginDir, "hooks", "hooks.json");
+    await writeFile(
+      hooksFile,
+      JSON.stringify({
+        SessionStart: [{ hooks: [{ type: "command", command: "echo s" }] }],
+      }),
+      "utf8",
+    );
+
+    const { chmod } = await import("node:fs/promises");
+    await chmod(hooksFile, 0o000);
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hr", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      // The closed-set REASON form for unreadable probes flows through
+      // the EXISTING narrowProbeError ladder (Open Question 3: no new
+      // REASON, no new code path). Permission-denied is the expected
+      // classification for an EACCES on the hooks.json read.
+      assert.match(msg, /\(installed\) \{permission denied\}/);
+      // No partial `hooks:` block under a permission-denied row.
+      assert.doesNotMatch(msg, /hooks:/);
+    } finally {
+      await chmod(hooksFile, 0o644).catch(() => undefined);
+    }
+  });
+});
