@@ -173,14 +173,15 @@ test("rebuildRoutingTables: cross-plugin order matches compareByNameThenScope (a
   // compareByNameThenScope sorts primarily by name alphabetical; the
   // project-before-user tie-breaker only fires on same-name pairs. The
   // three plugin ids here have distinct names so the expected order is
-  // strictly alphabetical: alpha, beta, gamma.
+  // strictly alphabetical: alpha, beta, gamma -- regardless of insertion
+  // scope, because rebuild walks the full cross-scope cache.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
   addPluginConfigToCache("user", "mp", "alpha", config, new Map());
   addPluginConfigToCache("project", "mp", "beta", config, new Map());
   addPluginConfigToCache("project", "mp", "gamma", config, new Map());
 
-  const projectState = makeState({
+  const state = makeState({
     marketplaces: {
       mp: {
         scope: "project",
@@ -188,21 +189,13 @@ test("rebuildRoutingTables: cross-plugin order matches compareByNameThenScope (a
       },
     },
   });
-  rebuildRoutingTables(projectState, locationsFor("project", "/tmp/cwd"));
-  const projectBucket = _routingTableForTest().get("PreToolUse") ?? [];
-  assert.deepEqual(
-    projectBucket.map((e) => e.pluginId),
-    ["beta", "gamma"],
-  );
+  rebuildRoutingTables(state, locationsFor("project", "/tmp/cwd"));
 
-  const userState = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { alpha: { hooks: ["s-alpha"] } } } },
-  });
-  rebuildRoutingTables(userState, locationsFor("user", "/tmp/cwd"));
-  const userBucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.deepEqual(
-    userBucket.map((e) => e.pluginId),
-    ["alpha"],
+    bucket.map((e) => e.pluginId),
+    ["alpha", "beta", "gamma"],
+    "rebuild walks the full cross-scope cache and sorts alphabetically",
   );
 });
 
@@ -235,21 +228,26 @@ test("rebuildRoutingTables: within-plugin declaration order preserved via declar
   );
 });
 
-test("rebuildRoutingTables: empty rebuild clears stale entries", () => {
+test("rebuildRoutingTables: empty-cache rebuild clears stale entries", () => {
+  // After uninstall / disable, the orchestrator calls
+  // removePluginConfigFromCache + rebuildRoutingTables in lockstep so the
+  // routing table sheds the now-unstaged entries. This test pins that
+  // contract: a rebuild against an empty cache MUST produce empty
+  // buckets across all eight Claude events.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
   addPluginConfigToCache("user", "mp", "p1", config, new Map());
 
-  let state = makeState({
+  const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["s-p1"] } } } },
   });
   const loc = locationsFor("user", "/tmp/cwd");
   rebuildRoutingTables(state, loc);
   assert.equal((_routingTableForTest().get("PreToolUse") ?? []).length, 1);
 
-  // Drop every plugin from state; rebuild must clear the PreToolUse bucket
-  // (the cache entry is still present but the state no longer references
-  // it, so it MUST NOT leak into the bucket).
-  state = makeState({ marketplaces: {} });
+  // Drop the cache entry (mirroring removePluginConfigFromCache in the
+  // uninstall / disable per-plugin lock body); rebuild must clear the
+  // PreToolUse bucket because the cache is now the source of truth.
+  removePluginConfigFromCache("user", "mp", "p1");
   rebuildRoutingTables(state, loc);
 
   const table = _routingTableForTest();

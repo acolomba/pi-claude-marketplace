@@ -189,9 +189,21 @@ export function currentEpoch(): number {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * DISP-02 / DISP-04: rebuild the per-Claude-event buckets for `loc.scope`
- * from the cached parsed configs. Synchronous, zero disk I/O, sub-ms on
- * realistic catalogs.
+ * DISP-02 / DISP-04: rebuild the per-Claude-event buckets from the cached
+ * parsed configs. Synchronous, zero disk I/O, sub-ms on realistic catalogs.
+ *
+ * Cross-scope cache walk: `routingTable` is a single module-global Map,
+ * and `parsedConfigCache` is the cross-scope authoritative source
+ * (install / uninstall / update / reinstall / disable mutators wire
+ * `addPluginConfigToCache` and `removePluginConfigFromCache` into their
+ * per-plugin locks, and `hydrateCacheFromDisk` rebuilds the cache from
+ * each scope's state at factory time). Rebuild walks the entire cache
+ * so sequential per-scope rebuild calls (the registerHooksBridge boot
+ * loop and applyReconcile's per-scope loop) do not wipe each other's
+ * buckets. The `state` and `loc` parameters are retained for caller
+ * compatibility (every orchestrator already threads them through the
+ * locked transaction); they are intentionally unused at the rebuild
+ * site itself.
  *
  * Bucket assignment is verbatim against the declared event name (D-58-06):
  * `hooks.json` declares either `PostToolUse` or `PostToolUseFailure`, and
@@ -207,18 +219,18 @@ export function currentEpoch(): number {
  * Empty buckets get an empty array so downstream `routingTable.get(event)`
  * never observes `undefined`.
  */
-export function rebuildRoutingTables(state: ExtensionState, loc: ScopedLocations): void {
-  // Pre-seed every bucket so a scope with zero installed plugins still
-  // clears any stale entries from a prior rebuild (e.g. uninstall of the
-  // last hooks-declaring plugin).
+export function rebuildRoutingTables(_state: ExtensionState, _loc: ScopedLocations): void {
+  // Pre-seed every bucket so an empty cache still clears any stale entries
+  // from a prior rebuild (e.g. uninstall / disable of the last
+  // hooks-declaring plugin across both scopes).
   const buckets = new Map<BucketAEvent, RoutingEntry[]>();
   for (const event of BUCKET_A_EVENTS) {
     buckets.set(event, []);
   }
 
-  // Collect (cacheEntry, sort-key) tuples in cross-plugin sort order;
-  // declarationIndex is assigned during flatten.
-  const sortedEntries = collectPluginsInScope(state, loc.scope);
+  // Collect every cache entry across both scopes in cross-plugin sort
+  // order; declarationIndex is assigned during flatten.
+  const sortedEntries = collectAllCachedPlugins();
 
   for (const cacheEntry of sortedEntries) {
     flattenPluginIntoBuckets(cacheEntry, buckets);
@@ -230,35 +242,22 @@ export function rebuildRoutingTables(state: ExtensionState, loc: ScopedLocations
 }
 
 /**
- * Collect cache entries whose state-recorded scope matches `scope` AND
- * whose state record declares `resources.hooks.length > 0` (otherwise the
- * plugin has no hooks artefact to dispatch against). Cross-plugin sort by
- * `compareByNameThenScope` -- project before user, alphabetical by pluginId.
+ * Collect every cache entry across both scopes for the rebuild walk.
+ * Cross-plugin sort by `compareByNameThenScope` -- project before user,
+ * alphabetical by pluginId.
  *
- * A state-declared plugin whose cache entry is missing is silently skipped:
- * the first-install window where install has populated state but the cache
- * is not yet hydrated is normal; reconcile-apply calls rebuild again after
+ * The cache is the authoritative source for "currently dispatchable
+ * hooks plugins": install / uninstall / update / reinstall / disable
+ * keep it in lockstep with state.json + on-disk hooks.json, and
+ * `hydrateCacheFromDisk` rebuilds it from each scope's state at factory
+ * time. A plugin that exists in state.json but not in the cache (the
+ * first-install window before install has run `addPluginConfigToCache`,
+ * or a parse failure routed through hookDebugLog) is correctly absent
+ * from the routing table -- reconcile-apply calls rebuild again after
  * the install path's addPluginConfigToCache lands.
  */
-function collectPluginsInScope(state: ExtensionState, scope: Scope): CacheEntry[] {
-  const collected: CacheEntry[] = [];
-
-  for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
-    if (mpRecord.scope !== scope) {
-      continue;
-    }
-
-    for (const [pluginId, pluginRecord] of Object.entries(mpRecord.plugins)) {
-      if (pluginRecord.resources.hooks.length === 0) {
-        continue;
-      }
-
-      const entry = parsedConfigCache.get(cacheKey(scope, mpName, pluginId));
-      if (entry !== undefined) {
-        collected.push(entry);
-      }
-    }
-  }
+function collectAllCachedPlugins(): CacheEntry[] {
+  const collected = Array.from(parsedConfigCache.values());
 
   collected.sort((a, b) =>
     compareByNameThenScope(

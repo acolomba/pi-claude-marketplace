@@ -309,14 +309,17 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
   // Three plugins under DISTINCT pluginIds (alpha, beta, gamma) span both
   // scopes. compareByNameThenScope sorts primarily by name; the
   // project-before-user tie-breaker only fires on same-name pairs. With
-  // distinct names the expected cross-plugin order is strictly alphabetical.
+  // distinct names the expected cross-plugin order is strictly alphabetical
+  // -- regardless of insertion scope, because rebuild walks the full
+  // cross-scope cache.
   addPluginConfigToCache("user", "mp", "alpha", config, new Map());
   addPluginConfigToCache("project", "mp", "beta", config, new Map());
   addPluginConfigToCache("project", "mp", "gamma", config, new Map());
 
   // Per-scope rebuild (the production wiring fires rebuildRoutingTables once
-  // per scope inside applyReconcile's per-scope loop). Project goes first so
-  // user's rebuild for this test reads the second snapshot.
+  // per scope inside applyReconcile's per-scope loop). Each call walks the
+  // full cross-scope cache so the resulting bucket carries all three
+  // entries regardless of which scope's state is threaded through.
   rebuildRoutingTables(
     makeState({
       marketplaces: {
@@ -328,24 +331,11 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
     }),
     locationsFor("project", "/tmp/cwd"),
   );
-  const projectBucket = _routingTableForTest().get("PreToolUse") ?? [];
+  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.deepEqual(
-    projectBucket.map((e) => e.pluginId),
-    ["beta", "gamma"],
-    "project-scope bucket order drifted from alphabetical",
-  );
-
-  rebuildRoutingTables(
-    makeState({
-      marketplaces: { mp: { scope: "user", plugins: { alpha: { hooks: ["s-alpha"] } } } },
-    }),
-    locationsFor("user", "/tmp/cwd"),
-  );
-  const userBucket = _routingTableForTest().get("PreToolUse") ?? [];
-  assert.deepEqual(
-    userBucket.map((e) => e.pluginId),
-    ["alpha"],
-    "user-scope bucket order drifted from alphabetical",
+    bucket.map((e) => e.pluginId),
+    ["alpha", "beta", "gamma"],
+    "cross-scope cache walk should sort all three plugins alphabetically",
   );
 });
 

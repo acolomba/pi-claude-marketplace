@@ -52,8 +52,10 @@
 
 import path from "node:path";
 
+import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -266,7 +268,9 @@ async function runEnableBranch(
  */
 async function runDisableBranch(
   opts: EnableDisablePluginOptions,
+  scope: Scope,
   locations: ScopedLocations,
+  state: ExtensionState,
   installed: InstalledPluginRecord,
 ): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean }> {
   const recordedVersion = installed.version;
@@ -279,6 +283,24 @@ async function runDisableBranch(
     // surfacing the failure.
     applyPartialCascadeFold(installed, cascade.dropped);
     installed.updatedAt = new Date().toISOString();
+    // WR-03: when the partial cascade DID succeed in unstaging the
+    // on-disk hooks.json (cascade.dropped.hooks is non-empty), drop the
+    // parsed-config cache entry and rebuild the routing table in lockstep
+    // so dispatch does not try to spawn a now-deleted handler. Mirrors
+    // the uninstall.ts cache-mutation invariant. Wrapped in try/catch so
+    // a cache mutation throw cannot escalate a partial-cascade-failure
+    // disable into an unhandled exception.
+    if (cascade.dropped.hooks.length > 0) {
+      try {
+        removePluginConfigFromCache(scope, opts.marketplace, opts.plugin);
+        rebuildRoutingTables(state, locations);
+      } catch (cacheErr) {
+        hookDebugLog(
+          `disable: partial-cascade cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
+        );
+      }
+    }
+
     return {
       outcome: {
         kind: "disable-failed",
@@ -301,6 +323,22 @@ async function runDisableBranch(
   installed.resources.mcpServers = [];
   installed.resources.hooks = [];
   installed.updatedAt = new Date().toISOString();
+
+  // WR-03: the cascade unstaged the on-disk hooks.json via removeHookConfig;
+  // drop the parsed-config cache entry and rebuild the routing table in
+  // lockstep so subsequent dispatch events bypass the now-disabled plugin
+  // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
+  // Wrapped in try/catch so a cache mutation throw cannot escalate a
+  // successful disable into a failure -- the cache will be rebuilt from
+  // state.json on the next /reload's factory-time hydrate (D-59-02).
+  try {
+    removePluginConfigFromCache(scope, opts.marketplace, opts.plugin);
+    rebuildRoutingTables(state, locations);
+  } catch (cacheErr) {
+    hookDebugLog(
+      `disable: cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
+    );
+  }
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
 }
@@ -475,7 +513,7 @@ export async function setPluginEnabled(
       if (enable) {
         outcome = await runEnableBranch(opts, scope, locations, state, installed.version);
       } else {
-        const disableResult = await runDisableBranch(opts, locations, installed);
+        const disableResult = await runDisableBranch(opts, scope, locations, state, installed);
         outcome = disableResult.outcome;
         // I3: a partial disable cascade mutated `installed.resources.*` in
         // place to drop the artefacts already removed before the throw.
