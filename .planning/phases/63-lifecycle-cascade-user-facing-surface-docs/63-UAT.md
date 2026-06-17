@@ -1,6 +1,6 @@
 ---
-status: gaps_found
-previous_status: "passed"
+status: passed
+previous_status: "gaps_found"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -15,12 +15,12 @@ source:
   - 63-10-SUMMARY.md
   - 63-11-SUMMARY.md
 started: 2026-06-16T18:23:24Z
-updated: 2026-06-17T09:30:00Z
+updated: 2026-06-17T10:00:00Z
 ---
 
 ## Current Test
 
-[testing complete -- test 8 gap closed by debug session hooks-only-list-disabled; operator runtime-verified 2026-06-17T01:45Z]
+[testing complete -- v1.13 hook bridge fully wired end-to-end; tests 8, 9, 10 all runtime-verified by operator on 2026-06-17 (★ Insight box appeared on the rate-limiter probe at 10:00Z)]
 
 ## Tests
 
@@ -480,7 +480,8 @@ why_human: |
   end-to-end "did Pi actually spawn the handler" check requires a live
   Pi process emitting `session_start`. Only the runtime probe surfaces
   it.
-result: pass-pending-runtime
+result: pass
+runtime_verified: 2026-06-17T08:17:47-04:00
 evidence: |
   Fix landed 2026-06-17 as two atomic commits on
   features/v1.13-hook-bridge:
@@ -574,7 +575,8 @@ why_human: |
   Pi's real systemPrompt as the base and a real LLM observing the
   joined prompt. Only the runtime probe can confirm the user-visible
   effect.
-result: pass-pending-runtime
+result: pass
+runtime_verified: 2026-06-17T10:00:00Z
 evidence: |
   Fix landed 2026-06-17 as four atomic commits on
   features/v1.13-hook-bridge:
@@ -630,9 +632,9 @@ note: |
 ## Summary
 
 total: 10
-passed: 5
+passed: 7
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 3
 notes: |
@@ -895,9 +897,10 @@ notes: |
     - "After the fix, re-run /claude:plugin install learning-output-style@claude-plugins-official + /claude:plugin list against the pi-uat sandbox and confirm the row renders `(installed)` both before and after /reload."
   debug_session: ".planning/debug/hooks-only-list-disabled.md"
 - truth: "A hooks-only user-scope plugin's SessionStart handler is spawned by Pi at session_start"
-  status: resolved-pending-runtime
+  status: resolved
   opened: 2026-06-17T02:25:00Z
-  closed: 2026-06-17T02:50:00Z
+  closed: 2026-06-17T08:17:47-04:00
+  runtime_verified: 2026-06-17T08:17:47-04:00
   closed_by:
     - "6a28bc4 test(63): regression test for cross-scope routing-table wipe"
     - "2dbbcbd fix(63): rebuild routing table from full cross-scope cache"
@@ -972,9 +975,10 @@ notes: |
     - "After the fix, operator re-runs the touch-file probe: install learning-output-style, sed-insert `echo \"fired at $(date -Iseconds)\" >> /tmp/learning-fired.log` at the top of hooks-handlers/session-start.sh in the source tree, `rm -f /tmp/learning-fired.log`, relaunch Pi, quit immediately, confirm /tmp/learning-fired.log exists with a single timestamped line."
   debug_session: ".planning/debug/routing-table-cross-scope-wipe.md"
 - truth: "A SessionStart hook's additionalContext payload is injected into Pi's next agent turn (model sees it on the first turn)"
-  status: resolved-pending-runtime
+  status: resolved
   opened: 2026-06-17T08:30:00Z
-  closed: 2026-06-17T09:30:00Z
+  closed: 2026-06-17T10:00:00Z
+  runtime_verified: 2026-06-17T10:00:00Z
   closed_by:
     - "f99f48d test(63): RED regression test for SessionStart additionalContext drain"
     - "ce59eda fix(63): bridge SessionStart additionalContext to before_agent_start"
