@@ -15,6 +15,8 @@
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export type {
+  BeforeAgentStartEvent,
+  BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,

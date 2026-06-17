@@ -42,7 +42,7 @@
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
   adaptInputResult,
-  adaptObservationResult,
+  adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
   applyMutationInPlace,
@@ -313,7 +313,11 @@ function adaptForEvent(
     case "SessionEnd":
     case "PreCompact":
     case "PostCompact":
-      adaptObservationResult(result);
+      // adaptObservationResultForEvent narrows the silent-drop arms by
+      // claudeEvent so a SessionStart mutate.additionalContext can be
+      // captured into event-router.ts's pending buffer (drained by the
+      // before_agent_start handler on the next agent turn).
+      adaptObservationResultForEvent(result, claudeEvent);
       return undefined;
   }
 }

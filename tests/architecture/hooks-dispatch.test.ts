@@ -201,17 +201,19 @@ async function collectExtensionTsFiles(dir: string): Promise<string[]> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 7 times with
-// the locked event-name set
+// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 8 times with
+// the locked event-name set (7 Bucket-A dispatch surfaces + the
+// before_agent_start drain point for the SessionStart additionalContext
+// bridge)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("DISP-01: registerHooksBridge calls pi.on exactly 7 times with the locked Pi event names", async () => {
+test("DISP-01: registerHooksBridge calls pi.on exactly 8 times with the locked Pi event names", async () => {
   _resetForTest();
 
   // WR-04: hermetic env. Without this, the user-scope hydrate arm resolves
   // `getAgentDir()` which reads `PI_CODING_AGENT_DIR` or defaults to
   // `~/.pi/agent`, pulling the developer's real $HOME state into the test.
-  // The 7-handler assertion does not depend on hydrate output today, but a
+  // The 8-handler assertion does not depend on hydrate output today, but a
   // future invariant added to this test must not be silently bypassed by
   // ambient $HOME state. Mirrors `withHermeticEnv` in
   // tests/edge/index-handler.test.ts.
@@ -232,8 +234,8 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 7 times with the locked P
 
     assert.equal(
       piMock.calls.length,
-      7,
-      `expected 7 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
+      8,
+      `expected 8 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
     );
 
     const locked = new Set([
@@ -244,11 +246,12 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 7 times with the locked P
       "input",
       "tool_call",
       "tool_result",
+      "before_agent_start",
     ]);
     assert.deepEqual(
       new Set(piMock.calls),
       locked,
-      "pi.on event-name set drifted from the locked 7-tuple",
+      "pi.on event-name set drifted from the locked 8-tuple",
     );
   } finally {
     if (originalHome === undefined) {

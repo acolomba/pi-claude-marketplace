@@ -25,12 +25,22 @@
 //     `additionalContext` field → `undefined`; `stop` debug-logs + returns
 //     `undefined`; `noop` returns `undefined`.
 //
-//   - adaptObservationResult     -> Pi `session_start` /
+//   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_before_compact` / `session_compact`
-//     (SessionStart / SessionEnd / PreCompact / PostCompact). Observation-
-//     only: `block` and `stop` debug-log the dropped reason and return
-//     `undefined`; the Pi event surface has no return slot. NEVER notify.
-//     NEVER throw.
+//     (SessionStart / SessionEnd / PreCompact / PostCompact) with per-event
+//     narrowing for the SessionStart `additionalContext` bridge. The
+//     SessionStart mutate arm captures `additionalContext` into the
+//     event-router.ts pending buffer (drained by the bridge's
+//     `before_agent_start` handler on the next agent turn). All other
+//     observation events keep the silent-drop semantics: there is no
+//     downstream Pi surface to thread their payloads through. `block` and
+//     `stop` debug-log the dropped reason and return `undefined`. NEVER
+//     notify. NEVER throw.
+//
+//   - adaptObservationResult     -> legacy 4-arm silent-drop shim retained
+//     for the architecture-level exhaustiveness gate and for any caller
+//     that lacks a claudeEvent context. Production dispatch uses
+//     adaptObservationResultForEvent instead.
 //
 // Exhaustiveness gate: each adapter exhaustively switches on `result.kind`
 // and calls `assertNever` on the impossible default arm (NFR-7). Adding a
@@ -44,8 +54,10 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
+import { appendPendingSessionStartContext } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
 
+import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
   InputEvent,
   InputEventResult,
@@ -256,17 +268,96 @@ export function adaptInputResult(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// adaptObservationResult -- SessionStart / SessionEnd / PreCompact / PostCompact
+// adaptObservationResultForEvent -- SessionStart / SessionEnd / PreCompact /
+//                                   PostCompact (per-event narrowing)
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-60-03: observation-only adapter for the four Pi session/compact
- * events. Pi's handler return slot for these events is `void` -- there is
- * nowhere to thread a `block` or a `mutate` outcome. The adapter
- * debug-logs the dropped reason for `block` and `stop` so the trail is
- * still visible under `PI_CLAUDE_MARKETPLACE_DEBUG=1`, then returns. The
- * adapter NEVER notifies and NEVER throws -- `assertNever` only fires when
- * the union grows a new arm, which is a compile-time failure.
+ * Observation-event adapter with per-event narrowing for the SessionStart
+ * additionalContext bridge.
+ *
+ * Pi's lifecycle splits the upstream Claude Code SessionStart-hook contract
+ * across two surfaces: `session_start` returns void, and
+ * `before_agent_start` carries the `systemPrompt` chain Pi extensions use
+ * to inject context into the next agent turn. The mutate-arm path here
+ * captures `additionalContext` from a SessionStart event into the
+ * `event-router.ts` pending buffer; the `beforeAgentStartHandlerFor`
+ * closure drains the buffer on the next `before_agent_start` event.
+ *
+ * Per-event semantics:
+ *
+ *   - SessionStart:
+ *       mutate.additionalContext -> appendPendingSessionStartContext()
+ *       mutate without additionalContext -> drop (no upstream payload to carry)
+ *       block / stop / noop -> debug-log (block/stop) and return undefined
+ *
+ *   - SessionEnd / PreCompact / PostCompact:
+ *       all arms silently drop the additionalContext (and other mutate
+ *       fields). No downstream drain point exists for these events under
+ *       Pi's lifecycle: SessionEnd has no future turn; PreCompact /
+ *       PostCompact interact with compaction summaries, not the session
+ *       prompt. Deferred per D-60-03. `block` / `stop` are still
+ *       debug-logged for observability.
+ *
+ * The adapter NEVER notifies and NEVER throws. `assertNever` only fires
+ * when `HookExecResult` grows a new arm, which is a compile-time failure
+ * at this call site (NFR-7).
+ */
+export function adaptObservationResultForEvent(
+  result: HookExecResult,
+  claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
+): undefined {
+  switch (result.kind) {
+    case "block":
+      hookDebugLog(
+        `adaptObservation: block ignored (no Pi return slot); event=${claudeEvent} reason=${result.reason ?? "<none>"}`,
+      );
+      return undefined;
+
+    case "mutate":
+      if (claudeEvent === "SessionStart" && typeof result.additionalContext === "string") {
+        // Capture for drain at the next before_agent_start. The buffer is
+        // drained one-shot by beforeAgentStartHandlerFor and cleared on
+        // registerHooksBridge entry (so /reload does not leak stale
+        // context across sessions).
+        appendPendingSessionStartContext(result.additionalContext);
+      }
+
+      // SessionEnd / PreCompact / PostCompact: no logical drain point for
+      // additionalContext. Other mutate fields (updatedInput,
+      // updatedToolOutput, permissionDecision) are not meaningful for
+      // observation events either; the adapter silently drops them.
+      return undefined;
+
+    case "stop":
+      hookDebugLog(
+        `adaptObservation: stop ignored (no Pi return slot); event=${claudeEvent} reason=${result.stopReason ?? "<none>"}`,
+      );
+      return undefined;
+
+    case "noop":
+      return undefined;
+
+    default:
+      return assertNever(result);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// adaptObservationResult -- legacy 4-arm silent-drop adapter
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-60-03: legacy observation-only adapter that silently drops every
+ * mutate-arm payload. Retained because (a) the architecture-level test
+ * suite pins the 4-arm exhaustiveness gate here, and (b) callers that
+ * have no claudeEvent context can still discharge the result through this
+ * surface. Production dispatch routes through
+ * `adaptObservationResultForEvent` instead so the SessionStart
+ * additionalContext path can capture into the pending buffer.
+ *
+ * The adapter NEVER notifies and NEVER throws -- `assertNever` only fires
+ * when the union grows a new arm, which is a compile-time failure.
  */
 export function adaptObservationResult(result: HookExecResult): undefined {
   switch (result.kind) {
@@ -277,7 +368,9 @@ export function adaptObservationResult(result: HookExecResult): undefined {
       return undefined;
 
     case "mutate":
-      // Observation events have no mutation surface -- silently drop.
+      // Observation events have no mutation surface in the legacy shim --
+      // silently drop. Use adaptObservationResultForEvent for the
+      // SessionStart additionalContext capture path.
       return undefined;
 
     case "stop":

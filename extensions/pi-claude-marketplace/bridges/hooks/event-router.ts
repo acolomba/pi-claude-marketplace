@@ -53,7 +53,12 @@ import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.t
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type {
+  BeforeAgentStartEvent,
+  BeforeAgentStartEventResult,
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -140,6 +145,26 @@ const parsedConfigCache = new Map<string, CacheEntry>();
 
 const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
 
+/**
+ * SessionStart additionalContext capture buffer.
+ *
+ * Pi splits the upstream Claude Code SessionStart-hook protocol across two
+ * surfaces: `session_start` returns void (no slot to thread context
+ * through), and `before_agent_start` carries the `systemPrompt` chain Pi
+ * uses for extension-supplied context injection. The hooks bridge captures
+ * a SessionStart hook's `additionalContext` payload into this buffer at
+ * the `event-adapters.ts` mutate arm, then drains it on the next
+ * `before_agent_start` event so the model's first agent turn sees the
+ * injected text.
+ *
+ * Concat semantics: multiple SessionStart-bearing plugins fold into the
+ * buffer in declaration order. Drain joins with `"\n\n"` separators and
+ * clears the buffer (one-shot drain). The buffer also resets on every
+ * `registerHooksBridge` entry so `/reload` cannot leak stale context from
+ * the prior session.
+ */
+let pendingSessionStartContext: string[] = [];
+
 // ──────────────────────────────────────────────────────────────────────────
 // Cache key helper (D-59-02 + marketplace inclusion)
 // ──────────────────────────────────────────────────────────────────────────
@@ -200,6 +225,74 @@ export function removePluginConfigFromCache(
  */
 export function currentEpoch(): number {
   return liveEpoch;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SessionStart additionalContext bridge
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Append a SessionStart hook's `additionalContext` payload to the pending
+ * buffer. Called by `event-adapters.ts::adaptObservationResultForEvent`
+ * when a SessionStart hook returns
+ * `{hookSpecificOutput: {additionalContext: "..."}}`. The
+ * `beforeAgentStartHandlerFor` closure drains the buffer on the next
+ * `before_agent_start` event.
+ *
+ * Idempotent for noop append (empty string): empty strings are silently
+ * skipped so a buggy hook returning `additionalContext: ""` does not
+ * pollute the join output with a leading blank line.
+ */
+export function appendPendingSessionStartContext(text: string): void {
+  if (text.length === 0) {
+    return;
+  }
+
+  pendingSessionStartContext.push(text);
+}
+
+/**
+ * Factory: build the `before_agent_start` handler closure registered on
+ * Pi at `registerHooksBridge` time. Each closure captures `capturedEpoch`
+ * the same way the composite hook handlers do; on epoch mismatch the
+ * closure short-circuits to `undefined` and does NOT drain the live
+ * buffer (zombie defense -- a stale closure from a prior bridge load
+ * must not consume the new session's pending context).
+ *
+ * Drain semantics:
+ *   - empty buffer -> returns undefined (no systemPrompt mutation, no
+ *     `messages` push). Pi's runner emits `before_agent_start` on every
+ *     agent turn, not just the first one, so a noop return after the
+ *     first drain is the correct path for all subsequent turns.
+ *   - non-empty buffer -> joins entries with `"\n\n"` separators between
+ *     each entry AND between `event.systemPrompt` and the buffered
+ *     block. Returns `{ systemPrompt: <joined> }` and clears the buffer
+ *     in the same call (one-shot drain).
+ *
+ * Each plugin's additionalContext is a one-shot turn primer, not a
+ * permanent system-prompt addition; the drain pattern matches upstream
+ * Claude Code's SessionStart semantics where the injected text is added
+ * to the session prompt once at session boot.
+ */
+export function beforeAgentStartHandlerFor(
+  capturedEpoch: number,
+): (
+  event: BeforeAgentStartEvent,
+  ctx: ExtensionContext,
+) => Promise<BeforeAgentStartEventResult | undefined> {
+  return (event) => {
+    if (capturedEpoch !== currentEpoch()) {
+      return Promise.resolve(undefined);
+    }
+
+    if (pendingSessionStartContext.length === 0) {
+      return Promise.resolve(undefined);
+    }
+
+    const buffered = pendingSessionStartContext.join("\n\n");
+    pendingSessionStartContext = [];
+    return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -612,10 +705,13 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *      time cold-start path).
  *   3. Rebuild routing tables for both scopes so the first Pi event fires
  *      against a populated table.
- *   4. Register exactly 7 pi.on call sites -- one per Pi event the hooks
- *      bridge dispatches against (DISP-01). The eight Claude buckets fan
- *      out from 7 Pi events because `tool_result` splits on `event.isError`
- *      between the PostToolUse and PostToolUseFailure buckets (D-59-01).
+ *   4. Register exactly 8 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *      (DISP-01) plus `before_agent_start`, the drain point for the
+ *      SessionStart `additionalContext` capture buffer. The eight Claude
+ *      buckets fan out from 7 Pi event surfaces because `tool_result`
+ *      splits on `event.isError` between the PostToolUse and
+ *      PostToolUseFailure buckets (D-59-01); the 8th pi.on call is the
+ *      SessionStart additionalContext bridge into `before_agent_start`.
  */
 export async function registerHooksBridge(
   pi: ExtensionAPI,
@@ -623,6 +719,13 @@ export async function registerHooksBridge(
 ): Promise<void> {
   liveEpoch += 1;
   const capturedEpoch = liveEpoch;
+
+  // /reload re-enters this factory and must not leak a stale SessionStart
+  // additionalContext entry from the prior session into the new buffer.
+  // Clearing here makes the invariant explicit: each bridge load starts
+  // with an empty pending buffer, which only `adaptObservationResultForEvent`
+  // (via `appendPendingSessionStartContext`) can subsequently populate.
+  pendingSessionStartContext = [];
 
   // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
   // the prior factory invocation BEFORE the persisted-orphan reap reads
@@ -665,6 +768,11 @@ export async function registerHooksBridge(
   pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi));
   pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch, pi));
   pi.on("tool_result", toolResultCompositeHandler(capturedEpoch, pi));
+  // SessionStart additionalContext drain: every agent turn fires
+  // before_agent_start; the handler returns early when the pending
+  // buffer is empty so the no-context path is a single Map lookup per
+  // turn.
+  pi.on("before_agent_start", beforeAgentStartHandlerFor(capturedEpoch));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -696,6 +804,28 @@ export function _resetForTest(): void {
   liveEpoch = 0;
   parsedConfigCache.clear();
   routingTable.clear();
+  pendingSessionStartContext = [];
+}
+
+/**
+ * Test-only inspector for the pending SessionStart additionalContext
+ * buffer. Returns a snapshot of the buffer; mutating the returned array
+ * does not affect the module state. Not part of the public surface.
+ */
+export function _peekPendingSessionStartContextForTest(): ReadonlyArray<string> {
+  return Array.from(pendingSessionStartContext);
+}
+
+/**
+ * Test-only buffer drain. Returns the joined buffer contents and clears
+ * the cell. Used by tests that want to exercise the drain primitive
+ * without spinning up a `before_agent_start` handler closure. Not part of
+ * the public surface.
+ */
+export function _drainPendingSessionStartContextForTest(): string {
+  const joined = pendingSessionStartContext.join("\n\n");
+  pendingSessionStartContext = [];
+  return joined;
 }
 
 /**

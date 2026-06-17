@@ -68,13 +68,16 @@ test("registers command, read-only tools, session_start, and resources_discover 
 
   assert.equal(commands.length, 1, `expected exactly 1 command, got ${JSON.stringify(commands)}`);
   assert.equal(commands[0]!.name, "claude:plugin");
-  // DISP-01: the hooks bridge adds 7 additional pi.on registrations
-  // (session_start, session_shutdown, session_before_compact,
-  // session_compact, input, tool_call, tool_result) alongside the
-  // long-standing resources_discover registration. session_start is also
-  // registered by registerClaudePluginCommand (read-only-tools surface), so
-  // its multiplicity rises to 2.
+  // DISP-01: the hooks bridge adds 8 pi.on registrations alongside the
+  // long-standing resources_discover registration: 7 Bucket-A dispatch
+  // surfaces (session_start, session_shutdown, session_before_compact,
+  // session_compact, input, tool_call, tool_result) plus
+  // before_agent_start (the drain point for the SessionStart
+  // additionalContext capture buffer). session_start is also registered
+  // by registerClaudePluginCommand (read-only-tools surface), so its
+  // multiplicity rises to 2.
   assert.deepEqual(events.map((e) => e.name).sort(), [
+    "before_agent_start",
     "input",
     "resources_discover",
     "session_before_compact",
