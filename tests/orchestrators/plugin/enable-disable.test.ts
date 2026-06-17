@@ -69,7 +69,17 @@ async function withHermeticHome<T>(
 // a plugin `foo` in the requested shape (populated vs. disabled).
 async function writeUserState(
   home: string,
-  opts: { marketplaceName: string; pluginName: string; disabled: boolean; version?: string },
+  opts: {
+    marketplaceName: string;
+    pluginName: string;
+    disabled: boolean;
+    version?: string;
+    // D-63-04: when true, seed an ENABLED hooks-only record
+    // (resources.hooks populated, every other axis empty) -- the
+    // production shape of a hooks-only installed plugin. Ignored when
+    // `disabled: true` (a disabled record always has every axis empty).
+    hooksOnly?: boolean;
+  },
 ): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
   const scopeRoot = path.join(home, ".pi", "agent");
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
@@ -77,9 +87,21 @@ async function writeUserState(
   const statePath = path.join(extRoot, "state.json");
   const configPath = path.join(scopeRoot, "claude-plugins.json");
   const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
-  const resources = opts.disabled
-    ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
-    : { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  let resources: {
+    skills: string[];
+    prompts: string[];
+    agents: string[];
+    mcpServers: string[];
+    hooks: string[];
+  };
+  if (opts.disabled) {
+    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  } else if (opts.hooksOnly === true) {
+    resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [opts.pluginName] };
+  } else {
+    resources = { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
+  }
+
   const state = {
     schemaVersion: 1,
     marketplaces: {
@@ -330,6 +352,72 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
     assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
     assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
+  });
+});
+
+// D-63-04: runDisableBranch must zero resources.hooks alongside the
+// other four axes. cascadeUnstagePlugin physically unstages hooks via
+// removeHookConfig, so leaving the in-memory hooks array populated
+// would create a state.json that lies about what is on disk -- and the
+// (now five-axis) isCurrentlyDisabled predicate would misclassify the
+// disabled record as installed on the next list call.
+test("D-63-04: disable of a hooks-only plugin empties resources.hooks", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+      version: "9.9.9",
+      hooksOnly: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // Same catalog disable-fresh byte form as ENBL-02 above; the disable
+    // path does not branch on which resources axis was populated.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ⊘ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
+    );
+
+    const raw = await readFile(statePath, "utf8");
+    const state = JSON.parse(raw) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            {
+              version: string;
+              resources: {
+                skills: string[];
+                prompts: string[];
+                agents: string[];
+                mcpServers: string[];
+                hooks: string[];
+              };
+              compatibility: { installable: boolean };
+            }
+          >;
+        }
+      >;
+    };
+    const rec = state.marketplaces.mp!.plugins.foo!;
+    assert.deepEqual(rec.resources.skills, [], "resources.skills emptied");
+    assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
+    assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
+    assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
+    assert.deepEqual(rec.resources.hooks, [], "resources.hooks emptied (D-63-04)");
   });
 });
 
