@@ -1,6 +1,6 @@
 ---
-status: gaps_found
-previous_status: "resolved"
+status: passed
+previous_status: "gaps_found"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -15,12 +15,12 @@ source:
   - 63-10-SUMMARY.md
   - 63-11-SUMMARY.md
 started: 2026-06-16T18:23:24Z
-updated: 2026-06-16T23:55:00Z
+updated: 2026-06-17T01:45:00Z
 ---
 
 ## Current Test
 
-[gap discovered post-resolution -- test 8 added during post-code-review UAT re-run; routed to /gsd-debug]
+[testing complete -- test 8 gap closed by debug session hooks-only-list-disabled; operator runtime-verified 2026-06-17T01:45Z]
 
 ## Tests
 
@@ -351,8 +351,16 @@ why_human: |
   `tests/orchestrators/plugin/list.test.ts:1083`) but no test exercises
   an INSTALLED hooks-only plugin through the list renderer. The runtime
   probe is the only place this misclassification surfaces.
-result: pass-pending-runtime
+result: pass
+runtime_verified: 2026-06-17T01:45:00Z
 evidence: |
+  After fix (commits dbad53f / 3639048 / d43b480 / b563ca7 / aae0e79),
+  the operator re-ran the runtime probe against the pi-uat sandbox and
+  confirmed both `/claude:plugin list` invocations (before and after
+  `/reload`) now render the row as `(installed)`. UAT closed.
+
+  Pre-fix evidence retained below for the record:
+
   After `/claude:plugin install learning-output-style@claude-plugins-official`,
   the install cascade prints `(installed)` correctly. State.json records the
   plugin as installable: true with `resources.hooks = ["learning-output-style"]`
@@ -434,9 +442,9 @@ note: |
 ## Summary
 
 total: 8
-passed: 4
+passed: 5
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 3
 notes: |
@@ -449,17 +457,15 @@ notes: |
 
   Re-opened on 2026-06-16T23:55Z by a post-code-review UAT cycle: test 8
   (hooks-only installed plugin list rendering) FAILED on
-  `learning-output-style`. Root cause is a phase-63 read-side regression
+  `learning-output-style`. Root cause was a phase-63 read-side regression
   in `isRecordedButDisabled` (and its two drift twins) which were never
   extended with the new `resources.hooks` axis. Routed to /gsd-debug.
 
   Test 8 fix landed 2026-06-17 (debug session
-  `.planning/debug/hooks-only-list-disabled.md`, four commits dbad53f /
-  3639048 / d43b480 / b563ca7). Result is `pass-pending-runtime` --
-  npm run check is green and the new list-renderer regression test
-  asserts the row carries `(installed)`, but the pi-uat runtime probe
-  remains the operator's to re-run (see test 8 note for the exact
-  command sequence).
+  `.planning/debug/hooks-only-list-disabled.md`, five commits dbad53f /
+  3639048 / d43b480 / b563ca7 / aae0e79). Operator confirmed the
+  pi-uat runtime probe at 2026-06-17T01:45Z: both `/claude:plugin list`
+  invocations now emit `(installed)`. UAT loop closed.
 
 ## Gaps
 
@@ -580,9 +586,10 @@ notes: |
     - "Add a Hooks bullet to README.md's `## Features` list. Suggested wording: `- Hooks. See [Hook support reference](docs/hooks.md).` Slot it to match the COMPONENT_KINDS tuple order in shared/notify.ts (agents, commands, hooks, mcp, skills — i.e. between Commands and MCP servers)."
   debug_session: "(none — trivial doc fix; no investigation needed)"
 - truth: "A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on /claude:plugin list"
-  status: resolved-pending-runtime
+  status: resolved
   opened: 2026-06-16T23:55:00Z
-  closed: 2026-06-17T01:30:00Z
+  closed: 2026-06-17T01:45:00Z
+  runtime_verified: 2026-06-17T01:45:00Z
   closed_by:
     - "dbad53f fix(63): add resources.hooks axis to recorded-but-disabled predicates"
     - "3639048 fix(63): zero resources.hooks in disable + partial-cascade fold"
