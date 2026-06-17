@@ -439,12 +439,101 @@ note: |
   pi-uat sandbox to confirm both list invocations now render
   `(installed)`.
 
+### 9. A hooks-only user-scope plugin's SessionStart handler fires at Pi launch
+expected: |
+  Test added on 2026-06-17 after the test-8 runtime UAT closed and a
+  follow-on runtime probe surfaced a second, root-cause-independent
+  dispatch-side bug: even with the read-side `(installed)` classification
+  correct, the hook handler was never spawned at session_start. Confirms
+  the cross-scope dispatch path end-to-end.
+
+  Use the same `learning-output-style` plugin from test 8 (hooks-only,
+  declares only `SessionStart`, source ships the wrapped form). In the
+  Pi REPL launched against the pi-uat sandbox:
+
+      /claude:plugin install learning-output-style@claude-plugins-official
+      /reload
+
+  Add a side-channel touch file at the top of the source handler so a
+  successful dispatch leaves disk evidence:
+
+      sed -i '1a echo "fired at $(date -Iseconds)" >> /tmp/learning-fired.log' \
+        tmp/pi-uat/agent/pi-claude-marketplace/sources/claude-plugins-official/plugins/learning-output-style/hooks-handlers/session-start.sh
+
+  Then relaunch Pi (handler script is referenced via
+  `${CLAUDE_PLUGIN_ROOT}`, no re-install needed):
+
+      rm -f /tmp/learning-fired.log
+      scripts/pi.sh --home /home/acolomba/pi-claude-marketplace/tmp/pi-uat
+      # quit immediately
+
+  Expected: `/tmp/learning-fired.log` exists after the launch, carrying
+  a single timestamped `fired at ...` line. This proves the SessionStart
+  bucket in the routing table contained the user-scope plugin's entry
+  when `session_start` emitted, i.e. the cross-scope routing-table wipe
+  is gone.
+why_human: |
+  The unit + integration suite covers per-scope rebuild semantics and
+  the cross-scope cache walk added in this fix (event-router.test.ts
+  "sequential per-scope rebuild preserves entries across scopes" +
+  "cross-scope cache walk includes BOTH scopes' entries"), but the
+  end-to-end "did Pi actually spawn the handler" check requires a live
+  Pi process emitting `session_start`. Only the runtime probe surfaces
+  it.
+result: pass-pending-runtime
+evidence: |
+  Fix landed 2026-06-17 as two atomic commits on
+  features/v1.13-hook-bridge:
+
+      6a28bc4 test(63): regression test for cross-scope routing-table wipe
+      2dbbcbd fix(63): rebuild routing table from full cross-scope cache
+
+  Diagnosed by an instrumented runtime trace (PI_CLAUDE_MARKETPLACE_DEBUG=1
+  plus temporary hookDebugLog instrumentation in dispatch.ts /
+  event-router.ts) captured by the operator on 2026-06-17T02:25Z:
+
+      [hooks] rebuild: scope=user    cache-size=1 collected=1
+      [hooks] rebuild: scope=user    bucket SessionStart -> 1 entries
+      [hooks] rebuild: scope=project cache-size=1 collected=0
+      [hooks] dispatch: composite handler fired for SessionStart
+      [hooks] dispatch: SessionStart routing bucket has 0 entries
+
+  Instrumentation reverted before the session opened. Root cause:
+  `routingTable` in bridges/hooks/event-router.ts:125 is a single
+  module-global Map, but `rebuildRoutingTables(state, loc)` was
+  populating it from `collectPluginsInScope(state, loc.scope)` -- a
+  per-scope filtered view. The registerHooksBridge boot loop walks
+  [user, project] sequentially, so the empty project rebuild
+  immediately overwrote the user-scope's SessionStart bucket with [].
+  session_start fired before any later rebuild restored the entry, so
+  dispatch saw an empty bucket.
+
+  Fix switches `rebuildRoutingTables` to walk the entire
+  `parsedConfigCache` (the cross-scope authoritative source already
+  maintained by install / uninstall / update / reinstall + hydrate),
+  and adds the matching `removePluginConfigFromCache` +
+  `rebuildRoutingTables` calls to runDisableBranch so the cache-walk
+  semantics do not regress when disabling a hooks plugin in-session.
+
+  `npm run check` green: 2285 passing + 1 skipped (up from 2282 + 1) +
+  10 integration. Two new regression tests pin the cross-scope walk;
+  two existing tests updated to align with the new cache-as-source-of-
+  truth contract (event-router.test.ts cross-plugin sort + empty-cache
+  rebuild, plus the same architecture-level twin in
+  hooks-dispatch.test.ts DISP-04).
+
+  Pending runtime probe by the user to flip status from
+  `pass-pending-runtime` to `pass`: install learning-output-style,
+  add the touch-file probe to the source handler, relaunch Pi, and
+  confirm `/tmp/learning-fired.log` exists with a single timestamped
+  line.
+
 ## Summary
 
-total: 8
+total: 9
 passed: 5
 issues: 0
-pending: 0
+pending: 1
 skipped: 0
 blocked: 3
 notes: |
@@ -466,6 +555,21 @@ notes: |
   3639048 / d43b480 / b563ca7 / aae0e79). Operator confirmed the
   pi-uat runtime probe at 2026-06-17T01:45Z: both `/claude:plugin list`
   invocations now emit `(installed)`. UAT loop closed.
+
+  Re-opened a second time on 2026-06-17T02:25Z: a follow-on runtime probe
+  on the same `learning-output-style` plugin (now correctly classified
+  `(installed)`) showed the SessionStart hook handler still never fires.
+  Root cause was a SEPARATE, root-cause-independent dispatch-side bug:
+  `rebuildRoutingTables` populated a single module-global routingTable
+  from a per-scope filtered cache view, so the sequential per-scope
+  rebuild calls in the registerHooksBridge boot loop wiped each other's
+  buckets. Routed to /gsd-debug (session
+  `.planning/debug/routing-table-cross-scope-wipe.md`).
+
+  Test 9 fix landed 2026-06-17 as two atomic commits (6a28bc4 /
+  2dbbcbd). `npm run check` green: 2285 passing + 1 skipped + 10
+  integration. Pending operator runtime probe (touch-file at the
+  source handler) to flip Test 9 from `pass-pending-runtime` to `pass`.
 
 ## Gaps
 
@@ -668,3 +772,80 @@ notes: |
     - "Add a list-renderer regression test: install a hooks-only plugin (resources.hooks non-empty, every other resource axis empty, installable: true), call listPlugins, assert the row carries the `(installed)` status token -- not `(disabled)`."
     - "After the fix, re-run /claude:plugin install learning-output-style@claude-plugins-official + /claude:plugin list against the pi-uat sandbox and confirm the row renders `(installed)` both before and after /reload."
   debug_session: ".planning/debug/hooks-only-list-disabled.md"
+- truth: "A hooks-only user-scope plugin's SessionStart handler is spawned by Pi at session_start"
+  status: resolved-pending-runtime
+  opened: 2026-06-17T02:25:00Z
+  closed: 2026-06-17T02:50:00Z
+  closed_by:
+    - "6a28bc4 test(63): regression test for cross-scope routing-table wipe"
+    - "2dbbcbd fix(63): rebuild routing table from full cross-scope cache"
+  closure_note: |
+    Fix landed as two atomic commits. `rebuildRoutingTables` now walks
+    the entire cross-scope `parsedConfigCache` instead of filtering
+    by `loc.scope`, so sequential per-scope rebuilds (the
+    registerHooksBridge boot loop and applyReconcile's per-scope
+    loop) no longer wipe each other's buckets in the single
+    module-global `routingTable`.
+
+    Cache-walk semantics required the disable path to drop its
+    parsed-config cache entry alongside the on-disk hooks.json
+    unstage (the OLD state-side filter masked this -- a disabled
+    plugin's resources.hooks went to [] and the state-walk skipped
+    it). `runDisableBranch` now calls removePluginConfigFromCache +
+    rebuildRoutingTables in both the success arm and the
+    partial-cascade-failure arm (gated on
+    cascade.dropped.hooks being non-empty), mirroring the WR-03
+    invariant already in install / uninstall.
+
+    Two new regression tests pin the cross-scope walk (event-router.
+    test.ts "sequential per-scope rebuild preserves entries across
+    scopes" + "cross-scope cache walk includes BOTH scopes' entries
+    simultaneously"). Two existing tests updated to align with the
+    new cache-as-source-of-truth contract (event-router.test.ts
+    cross-plugin sort + empty-cache rebuild, plus the same
+    architecture-level twin in hooks-dispatch.test.ts DISP-04).
+
+    `npm run check` green: 2285 passing + 1 skipped (up from 2282 +
+    1) + 10 integration. Pending operator runtime probe (touch-file
+    at the source handler) to flip the gap from
+    `resolved-pending-runtime` to `resolved`.
+  reason: "Operator follow-on runtime probe on 2026-06-17T02:25Z: with test 8's read-side fix landed and learning-output-style now classified `(installed)`, the plugin's SessionStart handler is still never spawned. A touch-file probe in the source handler (sed-inserted on hooks-handlers/session-start.sh) produces no /tmp/learning-fired.log after Pi launch + immediate quit. Side effects in the handler (the learning-mode prompt with `★ Insight ─────`, contribution requests) are absent from Pi's behavioral output. State.json + on-disk hooks.json are correct; the gap is between cache and dispatch."
+  severity: blocker
+  test: 9
+  root_cause: |
+    `routingTable` in `bridges/hooks/event-router.ts:125` is a single
+    module-global `Map<BucketAEvent, ReadonlyArray<RoutingEntry>>`, but
+    `rebuildRoutingTables(state, loc)` clears every bucket and then
+    populates only the entries from the passed-in scope via
+    `collectPluginsInScope(state, loc.scope)`. The
+    registerHooksBridge boot loop walks [user, project] sequentially;
+    the empty project rebuild immediately overwrote the user-scope's
+    SessionStart bucket with []. session_start fired between the wipe
+    and any later rebuild (a subsequent rebuild from
+    resources_discover restored the entry, but too late).
+
+    The cache (`parsedConfigCache`) is the cross-scope authoritative
+    source already maintained correctly by install / uninstall /
+    update / reinstall + hydrate. The bug is that rebuild filters
+    the cache by scope when it should walk the entire cache.
+  artifacts:
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:125"
+      issue: "Module-global routingTable Map shared across scopes."
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:210"
+      issue: "rebuildRoutingTables clears all buckets, then populates only the passed-in scope's entries via collectPluginsInScope -- per-scope wipes one another in sequential calls."
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:243"
+      issue: "collectPluginsInScope filters state-side by `mpRecord.scope !== scope` AND cache-side by cacheKey(scope, ...) -- both layers drop cross-scope entries."
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:599-625"
+      issue: "registerHooksBridge boot loop calls rebuildRoutingTables for both scopes sequentially -- the last scope's empty view wins."
+    - path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:888-899"
+      issue: "rebuildScopeRoutingTable inside applyReconcile's per-scope loop has the same sequential-per-scope shape; same wipe."
+    - path: "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:runDisableBranch"
+      issue: "Latent companion bug: cascadeUnstagePlugin removes on-disk hooks.json but the cache entry is never dropped. Harmless under the OLD state-side filter; with the NEW cache-walk it would re-surface in the routing table."
+  missing:
+    - "Switch rebuildRoutingTables to walk the entire parsedConfigCache cross-scope instead of state-filtering by loc.scope. Retain the (state, loc) signature for caller compatibility (every orchestrator threads the locked transaction state through); the params become intentionally unused at the rebuild site. Replace collectPluginsInScope with collectAllCachedPlugins."
+    - "Add removePluginConfigFromCache + rebuildRoutingTables to runDisableBranch (both the success arm and the partial-cascade-failure arm gated on cascade.dropped.hooks being non-empty). Mirrors the WR-03 invariant already in install / uninstall."
+    - "Update the JSDoc on rebuildRoutingTables to document the cross-scope cache walk."
+    - "Add a regression test pair to tests/bridges/hooks/event-router.test.ts: (a) install a user-scope SessionStart-declaring plugin, rebuild for user (assert 1 entry), rebuild for empty project state (assert 1 entry still); (b) populate both scopes' cache and assert a single rebuild surfaces all entries alphabetically."
+    - "Update existing tests whose assertions encoded the per-scope filter: event-router.test.ts cross-plugin sort + empty-cache rebuild, plus hooks-dispatch.test.ts DISP-04. They now match the cache-walk semantics (single rebuild surfaces all cross-scope entries; empty buckets require explicit removePluginConfigFromCache, not just state mutation)."
+    - "After the fix, operator re-runs the touch-file probe: install learning-output-style, sed-insert `echo \"fired at $(date -Iseconds)\" >> /tmp/learning-fired.log` at the top of hooks-handlers/session-start.sh in the source tree, `rm -f /tmp/learning-fired.log`, relaunch Pi, quit immediately, confirm /tmp/learning-fired.log exists with a single timestamped line."
+  debug_session: ".planning/debug/routing-table-cross-scope-wipe.md"
