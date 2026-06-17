@@ -351,7 +351,7 @@ why_human: |
   `tests/orchestrators/plugin/list.test.ts:1083`) but no test exercises
   an INSTALLED hooks-only plugin through the list renderer. The runtime
   probe is the only place this misclassification surfaces.
-result: fail
+result: pass-pending-runtime
 evidence: |
   After `/claude:plugin install learning-output-style@claude-plugins-official`,
   the install cascade prints `(installed)` correctly. State.json records the
@@ -412,12 +412,31 @@ note: |
   wraps in install.ts / reinstall.ts are unrelated -- this is a read-side
   predicate gap, not a write-path issue. Routed to /gsd-debug.
 
+  Fix landed 2026-06-17 as four atomic commits on
+  features/v1.13-hook-bridge:
+
+      dbad53f fix(63): add resources.hooks axis to recorded-but-disabled predicates
+      3639048 fix(63): zero resources.hooks in disable + partial-cascade fold
+      d43b480 test(63): cover hooks axis in drift gate, truth table, and list
+      b563ca7 test(63): regression test for disable zeroing resources.hooks
+
+  Scope expanded beyond the originally-reported three predicate edits to
+  include two latent companion regressions with the same v1.13 root cause
+  (runDisableBranch + applyPartialCascadeFold both omitted the hooks axis).
+  `npm run check` green: 2282 passing + 1 skipped (up from 2280 + 1) +
+  10 integration. The `pass-pending-runtime` result is contingent on the
+  user re-running the runtime probe -- re-run
+  `/claude:plugin install learning-output-style@claude-plugins-official` +
+  `/claude:plugin list` + `/reload` + `/claude:plugin list` against the
+  pi-uat sandbox to confirm both list invocations now render
+  `(installed)`.
+
 ## Summary
 
 total: 8
 passed: 4
-issues: 1
-pending: 0
+issues: 0
+pending: 1
 skipped: 0
 blocked: 3
 notes: |
@@ -433,6 +452,14 @@ notes: |
   `learning-output-style`. Root cause is a phase-63 read-side regression
   in `isRecordedButDisabled` (and its two drift twins) which were never
   extended with the new `resources.hooks` axis. Routed to /gsd-debug.
+
+  Test 8 fix landed 2026-06-17 (debug session
+  `.planning/debug/hooks-only-list-disabled.md`, four commits dbad53f /
+  3639048 / d43b480 / b563ca7). Result is `pass-pending-runtime` --
+  npm run check is green and the new list-renderer regression test
+  asserts the row carries `(installed)`, but the pi-uat runtime probe
+  remains the operator's to re-run (see test 8 note for the exact
+  command sequence).
 
 ## Gaps
 
@@ -553,8 +580,44 @@ notes: |
     - "Add a Hooks bullet to README.md's `## Features` list. Suggested wording: `- Hooks. See [Hook support reference](docs/hooks.md).` Slot it to match the COMPONENT_KINDS tuple order in shared/notify.ts (agents, commands, hooks, mcp, skills — i.e. between Commands and MCP servers)."
   debug_session: "(none — trivial doc fix; no investigation needed)"
 - truth: "A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on /claude:plugin list"
-  status: open
+  status: resolved-pending-runtime
   opened: 2026-06-16T23:55:00Z
+  closed: 2026-06-17T01:30:00Z
+  closed_by:
+    - "dbad53f fix(63): add resources.hooks axis to recorded-but-disabled predicates"
+    - "3639048 fix(63): zero resources.hooks in disable + partial-cascade fold"
+    - "d43b480 test(63): cover hooks axis in drift gate, truth table, and list"
+    - "b563ca7 test(63): regression test for disable zeroing resources.hooks"
+  closure_note: |
+    Broad fix scope (A+B+C+D+E+F+G+H+I from the debug session) landed as
+    four atomic commits. The three predicate copies
+    (plan.ts::isRecordedButDisabled, update.ts::isRecordedButDisabled,
+    enable-disable.ts::isCurrentlyDisabled) now carry the
+    `resources.hooks.length === 0` axis. The isCurrentlyDisabled
+    structural type literal gained `hooks: readonly string[]`. plan.ts
+    JSDoc updated ("all four arrays" -> "all five arrays").
+
+    Two latent companion regressions with the same v1.13 root cause
+    closed in the same wave: runDisableBranch now zeroes
+    `installed.resources.hooks` alongside the other four axes;
+    applyPartialCascadeFold now accepts and filters `dropped.hooks`.
+
+    Three test surfaces extended to prevent recurrence: T5 drift-gate
+    requiredAxes now lists the hooks axis; T5 truth-table is now a
+    3-axis matrix (the new (installable: true, populated: false,
+    hooksPopulated: true) cell pins the hooks-only installed case);
+    new list-renderer regression test asserts the row carries
+    `(installed)`. Additional regression test pins runDisableBranch
+    zeroing of resources.hooks.
+
+    `npm run check` green: 2282 passing + 1 skipped (up from 2280 + 1)
+    + 10 integration.
+
+    Pending runtime probe by the user to flip status from
+    `resolved-pending-runtime` to `resolved`: re-run
+    `/claude:plugin install learning-output-style@claude-plugins-official` +
+    `/claude:plugin list` + `/reload` + `/claude:plugin list` against the
+    pi-uat sandbox. Both list invocations must render `(installed)`.
   reason: "User reported during post-code-review UAT on learning-output-style (a hooks-only, bucket-A-only plugin from claude-plugins-official): install cascade prints `(installed)` correctly, but `/claude:plugin list` renders the plugin row with `(disabled)` both before and after `/reload`. State.json confirms the plugin is installed (installable: true, resources.hooks = [\"learning-output-style\"], every other resource array empty) -- so the misclassification is on the read side, not the install path."
   severity: blocker
   test: 8
@@ -597,4 +660,4 @@ notes: |
     - "Extend the T5 truth-table fixtures (plan.test.ts:671) with a hooks-axis dimension so the (installable: true, populated: false) cell now requires hooks-empty as well."
     - "Add a list-renderer regression test: install a hooks-only plugin (resources.hooks non-empty, every other resource axis empty, installable: true), call listPlugins, assert the row carries the `(installed)` status token -- not `(disabled)`."
     - "After the fix, re-run /claude:plugin install learning-output-style@claude-plugins-official + /claude:plugin list against the pi-uat sandbox and confirm the row renders `(installed)` both before and after /reload."
-  debug_session: "(to be created by /gsd-debug -- session file path will be linked here after the diagnostic completes)"
+  debug_session: ".planning/debug/hooks-only-list-disabled.md"
