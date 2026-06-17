@@ -1,6 +1,6 @@
 ---
-status: passed
-previous_status: "gaps_found"
+status: gaps_found
+previous_status: "passed"
 phase: 63-lifecycle-cascade-user-facing-surface-docs
 source:
   - 63-01-SUMMARY.md
@@ -15,7 +15,7 @@ source:
   - 63-10-SUMMARY.md
   - 63-11-SUMMARY.md
 started: 2026-06-16T18:23:24Z
-updated: 2026-06-17T01:45:00Z
+updated: 2026-06-17T09:30:00Z
 ---
 
 ## Current Test
@@ -528,12 +528,111 @@ evidence: |
   confirm `/tmp/learning-fired.log` exists with a single timestamped
   line.
 
+### 10. SessionStart additionalContext injects into the agent turn's system prompt
+expected: |
+  Test added on 2026-06-17 after the test-9 routing-table fix closed
+  the dispatch-side gap. With the SessionStart handler now firing
+  end-to-end (sentinel touch-file proven by the operator on
+  2026-06-17T08:17:47Z), the residual contract is whether the
+  handler's `{hookSpecificOutput: {additionalContext: "..."}}` payload
+  is actually injected into Pi's session prompt. The pre-fix bridge
+  silently dropped the mutate arm at `event-adapters.ts:271`
+  (`adaptObservationResult`'s SessionStart case had no logical
+  drain point upstream).
+
+  Use the same `learning-output-style` plugin from tests 8 and 9. In
+  the Pi REPL launched against the pi-uat sandbox AFTER the fix
+  lands:
+
+      scripts/pi.sh --home /home/acolomba/pi-claude-marketplace/tmp/pi-uat
+      # Plugin is already installed from tests 8 / 9; no re-install needed.
+      # In the Pi REPL:
+      write me a simple in-memory rate limiter for an HTTP API
+
+  Expected: Pi exhibits the `learning-mode` behavior the plugin's
+  prompt is supposed to inject. Specifically:
+    • A `★ Insight ──────` box (or similar learning-mode framing)
+      precedes design-decision discussion (e.g. the choice of
+      token-bucket vs leaky-bucket vs fixed-window).
+    • Pi PAUSES to request a 5-10 line user code contribution at the
+      algorithm-choice / data-structure-choice decision point, rather
+      than implementing straight through.
+    • Or, at minimum, Pi's response mentions "learning mode" or
+      acknowledges the contribution-request pattern -- i.e. the
+      additionalContext is reaching the model's first agent turn.
+
+  Pre-fix evidence (operator probe at 2026-06-17T08:30Z): NONE of
+  the above markers appeared. Pi implemented the rate limiter
+  straight through -- identical to the plugin-uninstalled baseline.
+why_human: |
+  The unit suite (session-start-additional-context.test.ts, 12
+  tests) and the integration suite (hooks-additionalcontext-end-to-end
+  .test.ts, 2 tests covering HOOK-E2E-03 and HOOK-E2E-04) pin the
+  buffer-append + drain + reload-clears contract at the seam level.
+  The end-to-end "did the model actually see the injected context"
+  check requires a live Pi process emitting before_agent_start with
+  Pi's real systemPrompt as the base and a real LLM observing the
+  joined prompt. Only the runtime probe can confirm the user-visible
+  effect.
+result: pass-pending-runtime
+evidence: |
+  Fix landed 2026-06-17 as four atomic commits on
+  features/v1.13-hook-bridge:
+
+      f99f48d test(63): RED regression test for SessionStart additionalContext drain
+      ce59eda fix(63): bridge SessionStart additionalContext to before_agent_start
+      1ccd511 test(63): integration test for SessionStart additionalContext drain
+      cbc4206 test(63): drop redundant type assertion in additionalcontext e2e
+
+  Root cause: Pi's event lifecycle splits "session lifecycle"
+  (session_start, void return) from "context injection"
+  (before_agent_start, returns systemPrompt). The Claude Code
+  SessionStart-hook protocol assumes a unified surface. Phase 63's
+  bridge subscribed session_start correctly but never wired the
+  additionalContext payload over to Pi's actual context-injection
+  slot (before_agent_start). `adaptObservationResult` silently dropped
+  the mutate arm because the session_start handler return type IS
+  void -- the drop was honest at the per-event level but the
+  cross-event plumbing was missing.
+
+  Fix shape:
+    1. Added a `pendingSessionStartContext: string[]` module cell on
+       event-router.ts.
+    2. Added `appendPendingSessionStartContext()` setter +
+       `beforeAgentStartHandlerFor(capturedEpoch)` factory.
+    3. Added `adaptObservationResultForEvent()` to event-adapters.ts
+       with per-event narrowing: SessionStart mutate -> append into
+       buffer; SessionEnd / PreCompact / PostCompact -> silent-drop
+       (no downstream drain point).
+    4. Routed `dispatch.ts::adaptForEvent` through the per-event
+       variant so the SessionStart capture path fires.
+    5. Added `pi.on("before_agent_start", ...)` registration to
+       registerHooksBridge (8 pi.on call sites total, up from 7).
+    6. The buffer is cleared on every registerHooksBridge entry so
+       /reload cannot leak stale context across sessions.
+
+  `npm run check` green: 2296 passing + 1 skipped (up from 2285 + 1)
+  + 14 integration (up from 12). 11 net-new unit assertions from
+  the SessionStart-additional-context unit suite plus 2 net-new
+  integration tests (HOOK-E2E-03 + HOOK-E2E-04).
+
+  Pending runtime probe by the user to flip status from
+  `pass-pending-runtime` to `pass`: re-run the rate-limiter probe
+  from the pi-uat sandbox and confirm the learning-mode markers
+  appear in Pi's response.
+note: |
+  Logged on 2026-06-17 post test-9 closure. The dispatch-side fix
+  (test 9, 6a28bc4 / 2dbbcbd) confirmed end-to-end that the
+  handler IS spawning; this test pins the orthogonal additionalContext
+  delivery contract. Routed to /gsd-debug as session
+  `.planning/debug/sessionstart-additionalcontext-dropped.md`.
+
 ## Summary
 
-total: 9
+total: 10
 passed: 5
 issues: 0
-pending: 1
+pending: 2
 skipped: 0
 blocked: 3
 notes: |
@@ -570,6 +669,29 @@ notes: |
   2dbbcbd). `npm run check` green: 2285 passing + 1 skipped + 10
   integration. Pending operator runtime probe (touch-file at the
   source handler) to flip Test 9 from `pass-pending-runtime` to `pass`.
+
+  Re-opened a third time on 2026-06-17T08:30Z: with test 9's
+  dispatch-side fix landed and the SessionStart handler now firing
+  end-to-end (sentinel touch-file proof at 2026-06-17T08:17:47Z),
+  the operator ran a behavioral probe ("write a rate limiter") on
+  `learning-output-style`. Pi implemented the rate limiter straight
+  through with no `★ Insight` box, no contribution-request pause --
+  the plugin's intended `additionalContext` payload was reaching
+  HookExecResult.mutate but being silently dropped at
+  `event-adapters.ts::adaptObservationResult`'s mutate arm. Root
+  cause was a missing cross-event plumb: Pi's `session_start`
+  handler return type is `void`, but `before_agent_start` carries
+  the `systemPrompt` chain extensions use for context injection.
+  The bridge subscribed `session_start` correctly but never wired
+  the additionalContext payload over to `before_agent_start`. Routed
+  to /gsd-debug (session
+  `.planning/debug/sessionstart-additionalcontext-dropped.md`).
+
+  Test 10 fix landed 2026-06-17 as four atomic commits (f99f48d /
+  ce59eda / 1ccd511 / cbc4206). `npm run check` green: 2296
+  passing + 1 skipped + 14 integration. Pending operator runtime
+  probe (rate-limiter prompt + observe for `★ Insight` markers) to
+  flip Test 10 from `pass-pending-runtime` to `pass`.
 
 ## Gaps
 
@@ -849,3 +971,111 @@ notes: |
     - "Update existing tests whose assertions encoded the per-scope filter: event-router.test.ts cross-plugin sort + empty-cache rebuild, plus hooks-dispatch.test.ts DISP-04. They now match the cache-walk semantics (single rebuild surfaces all cross-scope entries; empty buckets require explicit removePluginConfigFromCache, not just state mutation)."
     - "After the fix, operator re-runs the touch-file probe: install learning-output-style, sed-insert `echo \"fired at $(date -Iseconds)\" >> /tmp/learning-fired.log` at the top of hooks-handlers/session-start.sh in the source tree, `rm -f /tmp/learning-fired.log`, relaunch Pi, quit immediately, confirm /tmp/learning-fired.log exists with a single timestamped line."
   debug_session: ".planning/debug/routing-table-cross-scope-wipe.md"
+- truth: "A SessionStart hook's additionalContext payload is injected into Pi's next agent turn (model sees it on the first turn)"
+  status: resolved-pending-runtime
+  opened: 2026-06-17T08:30:00Z
+  closed: 2026-06-17T09:30:00Z
+  closed_by:
+    - "f99f48d test(63): RED regression test for SessionStart additionalContext drain"
+    - "ce59eda fix(63): bridge SessionStart additionalContext to before_agent_start"
+    - "1ccd511 test(63): integration test for SessionStart additionalContext drain"
+    - "cbc4206 test(63): drop redundant type assertion in additionalcontext e2e"
+  closure_note: |
+    Fix landed as four atomic commits. The bridge now wires Pi's
+    `session_start` (void return slot) and `before_agent_start`
+    (carries the systemPrompt chain) across a single module-state
+    buffer. SessionStart's mutate arm appends `additionalContext`
+    into the buffer via the new
+    `adaptObservationResultForEvent` per-event narrowing variant
+    (legacy `adaptObservationResult` shim retained for the
+    architecture-level exhaustiveness gate). The new
+    `beforeAgentStartHandlerFor` factory produces the closure
+    registered on `before_agent_start`; it joins the buffered
+    entries with `\n\n` and prepends `event.systemPrompt + "\n\n"`,
+    then clears the buffer (one-shot drain).
+
+    The buffer resets on every `registerHooksBridge` entry so
+    `/reload` cannot leak stale context across sessions; an
+    epoch-mismatched stale closure short-circuits without
+    draining the live buffer (zombie defense).
+
+    `registerHooksBridge` now registers 8 pi.on call sites
+    (up from 7): the existing 7 Bucket-A dispatch surfaces plus
+    `before_agent_start`. Architecture invariant pinned in
+    `tests/architecture/hooks-dispatch.test.ts` DISP-01 (8-tuple
+    locked); `tests/shared/index-smoke.test.ts` event registration
+    list extended with `before_agent_start`.
+
+    Two new test files pin the contract:
+      - `tests/bridges/hooks/session-start-additional-context.test.ts`
+        (12 unit tests across capture, drain, multi-plugin concat,
+        empty-buffer, epoch-mismatch, /reload-clears).
+      - `tests/integration/hooks-additionalcontext-end-to-end.test.ts`
+        (HOOK-E2E-03 covers the full bash-spawn -> stdout JSON ->
+        wire-protocol parse -> mutate capture -> drain -> systemPrompt
+        slot cycle; HOOK-E2E-04 pins the /reload-clears-buffer
+        contract via registerHooksBridge re-entry).
+
+    `npm run check` green: 2296 passing + 1 skipped (up from
+    2285 + 1) + 14 integration (up from 12).
+
+    Pending operator runtime probe to flip status from
+    `resolved-pending-runtime` to `resolved`: re-run the
+    rate-limiter probe against the pi-uat sandbox and confirm
+    learning-mode markers appear in Pi's response (`★ Insight`
+    box, contribution-request pause at the algorithm-choice point,
+    or at minimum a mention of "learning mode").
+  reason: "Operator follow-on runtime probe on 2026-06-17T08:30Z: with test 9's routing-table fix landed and the SessionStart handler now firing end-to-end (sentinel touch-file proven at 2026-06-17T08:17:47Z), the behavioral probe (`write a rate limiter` against learning-output-style installed) shows Pi implementing the rate limiter straight through with NONE of the plugin's intended learning-mode markers (`★ Insight` box, contribution-request pause) appearing. The plugin's `additionalContext` payload is being parsed by `wire-protocol.ts` into a HookExecResult.mutate arm but silently dropped at `event-adapters.ts::adaptObservationResult`'s mutate arm because Pi's `session_start` handler return type is `void` and the bridge never wired the payload over to Pi's actual context-injection slot (`before_agent_start`'s `systemPrompt` chain)."
+  severity: blocker
+  test: 10
+  root_cause: |
+    Pi's event lifecycle splits "session lifecycle" (session_start,
+    void return) from "context injection" (before_agent_start,
+    returns systemPrompt chained across extensions per
+    pi-coding-agent/dist/core/extensions/runner.js:745-790). The
+    Claude Code SessionStart-hook protocol assumes a unified
+    "inject context into the next agent turn" pathway. Phase 63's
+    bridge subscribed `session_start` (correctly mirroring the
+    upstream event name) but never wired the additionalContext
+    payload over to Pi's actual context-injection surface
+    (`before_agent_start`). The
+    `adaptObservationResult` mutate-arm drop was honest at the
+    per-event level (session_start.return type IS void) but the
+    cross-event plumbing was missing.
+
+    Two read sites confirmed the diagnosis mechanically:
+      1. `bridges/hooks/wire-protocol.ts:154` parses
+         `additionalContext` correctly into HookExecResult.mutate.
+      2. `bridges/hooks/event-adapters.ts:271` had explicit
+         `case "mutate": ... silently drop ... return undefined`.
+      3. `bridges/hooks/event-router.ts:621` subscribed 7 events;
+         `before_agent_start` was NOT among them.
+      4. `pi-coding-agent` exports `BeforeAgentStartEvent` and
+         `BeforeAgentStartEventResult` with a chained
+         `systemPrompt?: string` slot; the runner.js loop iterates
+         every extension and folds each return's `systemPrompt`
+         into `currentSystemPrompt` for the next extension and
+         the agent.
+  artifacts:
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:271"
+      issue: "adaptObservationResult.mutate arm silently dropped additionalContext for SessionStart even though Pi has a downstream context-injection slot."
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:621"
+      issue: "registerHooksBridge registered 7 pi.on call sites; before_agent_start (the drain point) was not among them."
+    - path: "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:154"
+      issue: "Reference site -- parses additionalContext into HookExecResult.mutate correctly; nothing to change here."
+    - path: "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js:740-793"
+      issue: "Reference -- shows Pi's before_agent_start emit loop chains each extension's returned systemPrompt across iterations."
+    - path: "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:489-499,758-762"
+      issue: "Reference -- BeforeAgentStartEvent.systemPrompt and BeforeAgentStartEventResult.systemPrompt are the canonical slot."
+  missing:
+    - "Add a `pendingSessionStartContext: string[]` module-state cell on event-router.ts. Concat semantics support multiple SessionStart-bearing plugins."
+    - "Add an `appendPendingSessionStartContext(text)` setter + a `beforeAgentStartHandlerFor(capturedEpoch)` factory exported from event-router.ts. The handler joins the buffer with `\\n\\n` and prepends `event.systemPrompt + \"\\n\\n\"`, then clears the buffer (one-shot drain). Empty buffer returns undefined."
+    - "Add `adaptObservationResultForEvent(result, claudeEvent)` to event-adapters.ts. For SessionStart mutate.additionalContext, call appendPendingSessionStartContext; otherwise silent-drop. Legacy adaptObservationResult retained for the architecture-level 4-arm exhaustiveness gate."
+    - "Route dispatch.ts::adaptForEvent through adaptObservationResultForEvent so the SessionStart capture path fires in production."
+    - "Add pi.on(`before_agent_start`, beforeAgentStartHandlerFor(capturedEpoch)) to registerHooksBridge (8 pi.on call sites total). Reset the buffer on every registerHooksBridge entry so /reload cannot leak stale context."
+    - "Re-export BeforeAgentStartEvent and BeforeAgentStartEventResult from platform/pi-api.ts."
+    - "Update tests/architecture/hooks-dispatch.test.ts DISP-01 to assert 8 pi.on calls including before_agent_start; update tests/shared/index-smoke.test.ts event-name list to include before_agent_start."
+    - "Add unit-level regression test pinning per-event capture and drain semantics (multi-plugin concat, empty buffer, second-turn undefined, epoch mismatch, /reload-clears-buffer)."
+    - "Add integration test exercising the full handler-stdout-JSON -> wire-protocol parse -> mutate capture -> drain -> systemPrompt slot cycle through real `spawn(bash, [...])`."
+    - "After the fix, operator re-runs the rate-limiter probe: `scripts/pi.sh --home /home/acolomba/pi-claude-marketplace/tmp/pi-uat`, in the Pi REPL: `write me a simple in-memory rate limiter for an HTTP API`. Expected: Pi exhibits learning-mode framing (`★ Insight ──────` box, contribution-request pause at the algorithm-choice decision point, or at minimum a mention of `learning mode`) -- absent in the pre-fix baseline."
+  debug_session: ".planning/debug/sessionstart-additionalcontext-dropped.md"
