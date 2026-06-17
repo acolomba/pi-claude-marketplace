@@ -1141,6 +1141,7 @@ async function runLockedReinstall(
           scope,
           marketplace,
           plugin,
+          installable.pluginRoot,
           path.join(installable.pluginRoot, installable.hooksConfigPath),
           cwd,
         );
@@ -1181,6 +1182,7 @@ async function readAndCacheReinstalledPluginHooks(
   scope: Scope,
   marketplace: string,
   plugin: string,
+  resolvedSource: string,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -1204,7 +1206,14 @@ async function readAndCacheReinstalledPluginHooks(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
+  addPluginConfigToCache(
+    scope,
+    marketplace,
+    plugin,
+    resolvedSource,
+    parsed.value,
+    parsed.ifPredicates,
+  );
 }
 
 async function loadCachedEntry(

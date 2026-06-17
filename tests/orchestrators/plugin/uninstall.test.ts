@@ -1906,12 +1906,20 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         compileIfPredicate,
       );
       assert.ok(parsed.ok);
-      addPluginConfigToCache("project", "mp", "p1", parsed.value, parsed.ifPredicates);
+      addPluginConfigToCache(
+        "project",
+        "mp",
+        "p1",
+        "test://project/mp/p1",
+        parsed.value,
+        parsed.ifPredicates,
+      );
       _setRoutingBucketForTest("PreToolUse", [
         {
           scope: "project",
           marketplace: "mp",
           pluginId: "p1",
+          resolvedSource: "test://plugin-root",
           claudeEvent: "PreToolUse",
           matcher: parseMatcher(""),
           rawMatcher: "",

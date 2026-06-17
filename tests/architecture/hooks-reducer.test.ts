@@ -61,6 +61,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: input.pluginId,
+    resolvedSource: "test://plugin-root",
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,

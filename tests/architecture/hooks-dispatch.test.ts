@@ -163,6 +163,7 @@ function makeEntry(input: {
     scope: input.scope ?? "user",
     marketplace: "mp",
     pluginId: input.pluginId,
+    resolvedSource: "test://plugin-root",
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,
@@ -285,7 +286,7 @@ test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset 
     { event: "PostCompact", handlers: 1 },
     { event: "SessionEnd", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", config, new Map());
+  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
 
   const state = makeState({
     marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
@@ -312,9 +313,9 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
   // distinct names the expected cross-plugin order is strictly alphabetical
   // -- regardless of insertion scope, because rebuild walks the full
   // cross-scope cache.
-  addPluginConfigToCache("user", "mp", "alpha", config, new Map());
-  addPluginConfigToCache("project", "mp", "beta", config, new Map());
-  addPluginConfigToCache("project", "mp", "gamma", config, new Map());
+  addPluginConfigToCache("user", "mp", "alpha", "test://user/mp/alpha", config, new Map());
+  addPluginConfigToCache("project", "mp", "beta", "test://project/mp/beta", config, new Map());
+  addPluginConfigToCache("project", "mp", "gamma", "test://project/mp/gamma", config, new Map());
 
   // Per-scope rebuild (the production wiring fires rebuildRoutingTables once
   // per scope inside applyReconcile's per-scope loop). Each call walks the
@@ -349,7 +350,7 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
     { event: "PreToolUse", matcher: "", handlers: 2 },
     { event: "PreToolUse", matcher: "", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", config, new Map());
+  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
 
   rebuildRoutingTables(
     makeState({

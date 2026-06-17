@@ -316,8 +316,14 @@ async function prepareEnv(
 ): Promise<NodeJS.ProcessEnv> {
   const loc = locationsFor(entry.scope, transCtx.cwd);
 
-  const pluginRoot = path.join(loc.extensionRoot, "plugins", entry.pluginId);
-  await assertPathInside(loc.extensionRoot, pluginRoot, "CLAUDE_PLUGIN_ROOT");
+  // CLAUDE_PLUGIN_ROOT is exported to the spawned hook handler so the
+  // upstream Claude Code `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolves
+  // to the actual plugin source on disk. The value flows from state.json's
+  // `resolvedSource`, hydrated onto RoutingEntry at install + boot. For
+  // GitHub-source marketplaces this is inside `<extensionRoot>/sources/...`;
+  // for path-source marketplaces the user has explicitly pointed at an
+  // external path, so no containment assertion is meaningful here.
+  const pluginRoot = entry.resolvedSource;
 
   const pluginData = path.join(loc.dataRoot, entry.pluginId);
   await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");

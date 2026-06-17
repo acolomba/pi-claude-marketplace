@@ -866,7 +866,14 @@ test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Ba
   });
   const parsed = parseHooksConfig(raw, TEST_IF_CTX, compileIfPredicate);
   assert.ok(parsed.ok);
-  router.addPluginConfigToCache("project", "mp", "p1", parsed.value, parsed.ifPredicates);
+  router.addPluginConfigToCache(
+    "project",
+    "mp",
+    "p1",
+    "test://project/mp/p1",
+    parsed.value,
+    parsed.ifPredicates,
+  );
 
   // Synthetic state + locations fixture. The shape mirrors
   // `persistence/state-io.ts` but is constructed in-memory; the cast is

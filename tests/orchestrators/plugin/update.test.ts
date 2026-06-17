@@ -2591,7 +2591,14 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
         compileIfPredicate,
       );
       assert.ok(parsedOld.ok);
-      addPluginConfigToCache("project", "mp", "hello", parsedOld.value, parsedOld.ifPredicates);
+      addPluginConfigToCache(
+        "project",
+        "mp",
+        "hello",
+        "test://project/mp/hello",
+        parsedOld.value,
+        parsedOld.ifPredicates,
+      );
 
       // Rewrite the on-disk plugin tree to v2.0.0 with NEW hooks config.
       await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });

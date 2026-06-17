@@ -176,6 +176,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: "test-plugin",
+    resolvedSource: "test://plugin-root",
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: { kind: "match-all" },
     rawMatcher: "",
@@ -259,7 +260,10 @@ test("Block A / EXEC-01: spawn called with options.cwd === ctx.cwd and CLAUDE_* 
   assert.equal(call.options.cwd, "/tmp/proj");
   const env = call.options.env ?? {};
   assert.equal(env.CLAUDE_PROJECT_DIR, "/tmp/proj");
-  assert.ok(env.CLAUDE_PLUGIN_ROOT?.endsWith("/plugins/test-plugin") ?? false);
+  // CLAUDE_PLUGIN_ROOT mirrors `RoutingEntry.resolvedSource` -- the actual
+  // plugin source path on disk (state.json::resolvedSource), NOT a
+  // synthesized `<extensionRoot>/plugins/<id>` path that never existed.
+  assert.equal(env.CLAUDE_PLUGIN_ROOT, "test://plugin-root");
   assert.ok(env.CLAUDE_PLUGIN_DATA?.endsWith("/data/test-plugin") ?? false);
 });
 

@@ -595,8 +595,11 @@ async function prepareAsyncEnv(
   loc: ScopedLocations,
   dispatchId: string,
 ): Promise<NodeJS.ProcessEnv> {
-  const pluginRoot = path.join(loc.extensionRoot, "plugins", entry.pluginId);
-  await assertPathInside(loc.extensionRoot, pluginRoot, "CLAUDE_PLUGIN_ROOT");
+  // CLAUDE_PLUGIN_ROOT mirrors dispatch-exec.ts::prepareEnv: source of truth
+  // is `RoutingEntry.resolvedSource` (hydrated from state.json's
+  // `resolvedSource` field). Async-rewake re-dispatches the same handler
+  // declaration, so the env contract must match.
+  const pluginRoot = entry.resolvedSource;
 
   const pluginData = path.join(loc.dataRoot, entry.pluginId);
   await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");

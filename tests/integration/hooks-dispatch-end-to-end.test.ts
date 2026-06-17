@@ -46,7 +46,7 @@ import type {
 
 interface CapturedRegistration {
   readonly event: string;
-  readonly handler: (event: unknown, ctx: ExtensionContext) => Promise<unknown> | unknown;
+  readonly handler: (event: unknown, ctx: ExtensionContext) => unknown;
 }
 
 function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[] } {
@@ -134,6 +134,7 @@ async function withHermeticPiHome<T>(
     } else {
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
+
     await rm(tmpRoot, { recursive: true, force: true });
   }
 }
@@ -156,9 +157,9 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
 
     // Capture every executor invocation to verify dispatch.
     const executorCalls: Array<{ pluginId: string; claudeEvent: string }> = [];
-    _setExecutorForTest(async (entry: RoutingEntry) => {
+    _setExecutorForTest((entry: RoutingEntry) => {
       executorCalls.push({ pluginId: entry.pluginId, claudeEvent: entry.claudeEvent });
-      return { kind: "noop" };
+      return Promise.resolve({ kind: "noop" });
     });
 
     // Boot the bridge against the mock Pi. Project scope is empty (only

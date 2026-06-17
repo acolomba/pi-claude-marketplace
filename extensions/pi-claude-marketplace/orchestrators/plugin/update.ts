@@ -1137,6 +1137,7 @@ async function finalizeUpdateRecord(
           args.scope,
           marketplace,
           plugin,
+          installable.pluginRoot,
           path.join(installable.pluginRoot, installable.hooksConfigPath),
           args.cwd,
         );
@@ -1159,6 +1160,7 @@ async function readAndCacheUpdatedPluginHooks(
   scope: Scope,
   marketplace: string,
   plugin: string,
+  resolvedSource: string,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -1182,7 +1184,14 @@ async function readAndCacheUpdatedPluginHooks(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
+  addPluginConfigToCache(
+    scope,
+    marketplace,
+    plugin,
+    resolvedSource,
+    parsed.value,
+    parsed.ifPredicates,
+  );
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record

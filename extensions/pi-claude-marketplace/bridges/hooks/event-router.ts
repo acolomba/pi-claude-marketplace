@@ -80,6 +80,15 @@ export interface RoutingEntry {
   readonly marketplace: string;
   readonly pluginId: string;
   /**
+   * Absolute filesystem path of the plugin source dir, mirroring
+   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Dispatch-exec
+   * exports this as `CLAUDE_PLUGIN_ROOT` so hook handlers using the standard
+   * `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolve to a real path on
+   * disk. Carried on RoutingEntry so dispatch does not have to re-read
+   * state.json on every event.
+   */
+  readonly resolvedSource: string;
+  /**
    * D-60-01 / D-60-04: the Claude-side bucket this entry was flattened
    * into. The translator dispatch in `dispatch-exec.ts` keys on this
    * field to pick `./payloads/<event>.ts` without re-deriving the bucket
@@ -104,6 +113,13 @@ interface CacheEntry {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly pluginId: string;
+  /**
+   * Absolute path of the plugin source dir; flows through to
+   * `RoutingEntry.resolvedSource` so dispatch-exec can export
+   * `CLAUDE_PLUGIN_ROOT` to a real path. Mirrors
+   * `state.json::marketplaces[mp].plugins[id].resolvedSource`.
+   */
+  readonly resolvedSource: string;
   readonly config: HooksConfig;
   /**
    * MATCH-03: compiled `if`-field predicates keyed on
@@ -150,6 +166,7 @@ export function addPluginConfigToCache(
   scope: Scope,
   marketplace: string,
   pluginId: string,
+  resolvedSource: string,
   config: HooksConfig,
   ifPredicates: ReadonlyMap<string, IfPredicate>,
 ): void {
@@ -157,6 +174,7 @@ export function addPluginConfigToCache(
     scope,
     marketplace,
     pluginId,
+    resolvedSource,
     config,
     ifPredicates,
   });
@@ -313,6 +331,7 @@ function flattenPluginIntoBuckets(
           scope: cacheEntry.scope,
           marketplace: cacheEntry.marketplace,
           pluginId: cacheEntry.pluginId,
+          resolvedSource: cacheEntry.resolvedSource,
           claudeEvent,
           matcher,
           rawMatcher,
@@ -416,7 +435,15 @@ async function hydrateScopeFromState(
       // Zero or one entry today; iterate defensively for forward-compat.
       for (const slug of hookSlugs) {
         const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
-        await tryHydrateOnePlugin(loc.scope, mpName, pluginId, hooksJsonPath, loc.hooksDir, cwd);
+        await tryHydrateOnePlugin(
+          loc.scope,
+          mpName,
+          pluginId,
+          pluginRecord.resolvedSource,
+          hooksJsonPath,
+          loc.hooksDir,
+          cwd,
+        );
       }
     }
   }
@@ -426,6 +453,7 @@ async function tryHydrateOnePlugin(
   scope: Scope,
   marketplace: string,
   pluginId: string,
+  resolvedSource: string,
   hooksJsonPath: string,
   hooksDir: string,
   cwd: string,
@@ -464,7 +492,14 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, pluginId, result.value, result.ifPredicates);
+  addPluginConfigToCache(
+    scope,
+    marketplace,
+    pluginId,
+    resolvedSource,
+    result.value,
+    result.ifPredicates,
+  );
 }
 
 // ──────────────────────────────────────────────────────────────────────────

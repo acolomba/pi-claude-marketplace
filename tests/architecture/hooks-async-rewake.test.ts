@@ -313,6 +313,7 @@ function makeEntry(overrides: {
     scope: "user",
     marketplace: "mp",
     pluginId: overrides.pluginId ?? "rewake-plug",
+    resolvedSource: "test://plugin-root",
     claudeEvent: overrides.claudeEvent ?? "PreToolUse",
     matcher: { kind: "match-all" },
     rawMatcher: "",

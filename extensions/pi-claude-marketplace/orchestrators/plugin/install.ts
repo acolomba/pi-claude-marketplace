@@ -341,6 +341,7 @@ async function addInstalledPluginHooksToCache(
   scope: Scope,
   marketplace: string,
   plugin: string,
+  resolvedSource: string,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -366,7 +367,14 @@ async function addInstalledPluginHooksToCache(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, plugin, parsed.value, parsed.ifPredicates);
+  addPluginConfigToCache(
+    scope,
+    marketplace,
+    plugin,
+    resolvedSource,
+    parsed.value,
+    parsed.ifPredicates,
+  );
 }
 
 /**
@@ -1094,6 +1102,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             scope,
             marketplace,
             plugin,
+            installCtx.resolved.pluginRoot,
             path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
             cwd,
           );
