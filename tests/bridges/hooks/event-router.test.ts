@@ -258,6 +258,71 @@ test("rebuildRoutingTables: empty rebuild clears stale entries", () => {
   }
 });
 
+test("rebuildRoutingTables: sequential per-scope rebuild preserves entries across scopes (cross-scope wipe regression)", () => {
+  // Pin the cross-scope-wipe regression: `routingTable` is a single
+  // module-global Map, but rebuild has historically populated it from a
+  // per-scope filtered cache view. Sequential per-scope calls (the
+  // registerHooksBridge boot loop in event-router.ts, and the per-scope
+  // loop in orchestrators/reconcile/apply.ts) therefore wiped each
+  // other's buckets -- the last scope's empty view overwrote the first
+  // scope's populated buckets.
+  //
+  // Setup: ONE user-scope hooks plugin declaring SessionStart. Project
+  // scope has nothing installed (empty state). Rebuild for user first,
+  // confirm the bucket has 1 entry, THEN rebuild for project (whose
+  // state has zero hooks-declaring plugins). The user-scope entry MUST
+  // survive the project-scope rebuild because the routing table is a
+  // single global cross-scope object.
+  const config = makeConfig([{ event: "SessionStart", handlers: 1 }]);
+  addPluginConfigToCache("user", "mp", "learning-output-style", config, new Map());
+
+  const userState = makeState({
+    marketplaces: {
+      mp: { scope: "user", plugins: { "learning-output-style": { hooks: ["slug"] } } },
+    },
+  });
+  rebuildRoutingTables(userState, locationsFor("user", "/tmp/cwd"));
+  assert.equal(
+    (_routingTableForTest().get("SessionStart") ?? []).length,
+    1,
+    "user-scope rebuild should populate SessionStart with 1 entry",
+  );
+
+  const emptyProjectState = makeState({ marketplaces: {} });
+  rebuildRoutingTables(emptyProjectState, locationsFor("project", "/tmp/cwd"));
+  assert.equal(
+    (_routingTableForTest().get("SessionStart") ?? []).length,
+    1,
+    "project-scope rebuild with empty state MUST NOT wipe the user-scope's SessionStart entry",
+  );
+});
+
+test("rebuildRoutingTables: cross-scope cache walk includes BOTH scopes' entries simultaneously", () => {
+  // Companion to the cross-scope-wipe regression: a single rebuild call
+  // (regardless of the `loc.scope` it nominally targets) MUST surface
+  // every cached entry across both scopes. Without this, an install in
+  // one scope followed by a reconcile rebuild in the OTHER scope would
+  // silently drop the install's entries.
+  const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
+  addPluginConfigToCache("user", "mp", "alpha", config, new Map());
+  addPluginConfigToCache("project", "mp", "beta", config, new Map());
+
+  // Rebuild nominally for project scope; both entries must surface.
+  const projectState = makeState({
+    marketplaces: {
+      mp: { scope: "project", plugins: { beta: { hooks: ["s-beta"] } } },
+    },
+  });
+  rebuildRoutingTables(projectState, locationsFor("project", "/tmp/cwd"));
+
+  const bucket = _routingTableForTest().get("PreToolUse") ?? [];
+  assert.deepEqual(
+    bucket.map((e) => `${e.scope}/${e.pluginId}`).sort(),
+    ["project/beta", "user/alpha"],
+    "rebuild must walk the full cross-scope cache, not filter by loc.scope",
+  );
+});
+
 test("rebuildRoutingTables: cache miss for a state-declared plugin is silent", () => {
   // State declares a plugin with a hooks resource but the cache has no
   // entry for it. Rebuild MUST NOT throw, and the plugin's entries MUST NOT
