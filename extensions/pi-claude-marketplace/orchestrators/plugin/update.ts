@@ -963,7 +963,8 @@ function isRecordedButDisabled(
     record.resources.skills.length === 0 &&
     record.resources.prompts.length === 0 &&
     record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0
+    record.resources.mcpServers.length === 0 &&
+    record.resources.hooks.length === 0
   );
 }
 

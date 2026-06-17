@@ -267,10 +267,15 @@ interface DeclaredPluginAccumulator {
  * misclassify the `soft-degraded` fixture entry in
  * `state-populated-mixed.json` as `pluginsToEnable`, breaking the
  * deferred-convergence no-op proof. The disable orchestrator empties all
- * four arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
+ * five arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
  * preserving the previously-known `installable: true` flag), so the
  * empty-resources + installable-true intersection is the unambiguous
  * "currently disabled" marker. SPLIT-01 preserved -- no new schema field.
+ *
+ * D-63-04 / COMPONENT_KINDS 5-tuple: the `resources.hooks` axis joined
+ * the conjunction once the hook bridge added hooks to the state schema.
+ * Omitting it would over-classify a hooks-only installed plugin as
+ * "recorded but disabled".
  */
 export function isRecordedButDisabled(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
@@ -280,7 +285,8 @@ export function isRecordedButDisabled(
     record.resources.skills.length === 0 &&
     record.resources.prompts.length === 0 &&
     record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0
+    record.resources.mcpServers.length === 0 &&
+    record.resources.hooks.length === 0
   );
 }
 

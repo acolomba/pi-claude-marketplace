@@ -179,6 +179,7 @@ function isCurrentlyDisabled(installed: {
     prompts: readonly string[];
     agents: readonly string[];
     mcpServers: readonly string[];
+    hooks: readonly string[];
   };
 }): boolean {
   return (
@@ -186,7 +187,8 @@ function isCurrentlyDisabled(installed: {
     installed.resources.skills.length === 0 &&
     installed.resources.prompts.length === 0 &&
     installed.resources.agents.length === 0 &&
-    installed.resources.mcpServers.length === 0
+    installed.resources.mcpServers.length === 0 &&
+    installed.resources.hooks.length === 0
   );
 }
 
