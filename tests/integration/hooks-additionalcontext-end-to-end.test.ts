@@ -327,10 +327,8 @@ JSON
     await registerHooksBridge(firstLoad.pi, { ctx: placeholderCtx, cwd: extensionRoot });
     const firstSessionStartReg = firstLoad.registrations.find((r) => r.event === "session_start");
     assert.ok(firstSessionStartReg);
-    await firstSessionStartReg.handler(
-      { type: "session_start", reason: "startup" } as SessionStartEvent,
-      placeholderCtx,
-    );
+    const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
+    await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
     assert.deepEqual(_peekPendingSessionStartContextForTest(), ["FIRST-LOAD-MARK"]);
 
     // Second load (mirrors /reload re-emitting session_start with
