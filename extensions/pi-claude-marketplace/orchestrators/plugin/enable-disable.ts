@@ -291,10 +291,15 @@ async function runDisableBranch(
 
   // PRESERVE version / resolvedSource / compatibility / installedAt;
   // RESET resources.*; BUMP updatedAt.
+  // D-63-04 / COMPONENT_KINDS 5-tuple: cascadeUnstagePlugin physically
+  // unstages hooks via removeHookConfig, so the in-memory record's hooks
+  // array must be zeroed alongside the other four axes to stay consistent
+  // with what landed on disk.
   installed.resources.skills = [];
   installed.resources.prompts = [];
   installed.resources.agents = [];
   installed.resources.mcpServers = [];
+  installed.resources.hooks = [];
   installed.updatedAt = new Date().toISOString();
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
