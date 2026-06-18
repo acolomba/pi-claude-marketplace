@@ -509,7 +509,28 @@ const SAFE_TOKEN_CHARS = /^[A-Za-z0-9_-]+$/;
  * `__` inside segments would push the disambiguation work into this
  * parser without any consumer that needs the split today.
  */
-const MCP_LITERAL = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
+const MCP_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Match an `mcp__<server>__<tool>` literal. Split-based so the segment
+ * regex runs once per side in linear time, sidestepping the catastrophic
+ * backtracking the equivalent
+ * `/^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/` would exhibit on inputs
+ * like `mcp__aaaa` (super-linear in input length per S5852).
+ */
+function isMcpLiteral(raw: string): boolean {
+  if (!raw.startsWith("mcp__")) {
+    return false;
+  }
+
+  const body = raw.slice("mcp__".length);
+  const sepIdx = body.lastIndexOf("__");
+  if (sepIdx <= 0 || sepIdx >= body.length - 2) {
+    return false;
+  }
+
+  return MCP_SEGMENT.test(body.slice(0, sepIdx)) && MCP_SEGMENT.test(body.slice(sepIdx + 2));
+}
 
 /**
  * Parsed matcher discriminated union. The five arms are:
@@ -578,7 +599,7 @@ export function parseMatcher(raw: string): ParsedMatcher {
   // so any pipe-OR containing an MCP literal token will fall through to
   // the per-token loop below and be rejected as a regex (`mcp__a__b` is
   // not a Claude tool name).
-  if (MCP_LITERAL.test(raw)) {
+  if (isMcpLiteral(raw)) {
     return { kind: "mcp-literal", literal: raw };
   }
 

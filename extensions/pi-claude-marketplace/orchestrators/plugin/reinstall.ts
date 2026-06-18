@@ -41,7 +41,7 @@ import {
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
-  addPluginConfigToCache,
+  readAndCachePluginHooks,
   rebuildRoutingTables,
   removeHookConfig,
   removePluginConfigFromCache,
@@ -64,7 +64,7 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -1131,14 +1131,15 @@ async function runLockedReinstall(
     try {
       removePluginConfigFromCache(scope, marketplace, plugin);
       if (installable.hooksConfigPath !== undefined) {
-        await readAndCacheReinstalledPluginHooks(
+        await readAndCachePluginHooks({
           scope,
           marketplace,
           plugin,
-          asAbsolutePluginRoot(installable.pluginRoot),
-          path.join(installable.pluginRoot, installable.hooksConfigPath),
+          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
           cwd,
-        );
+          logPrefix: "reinstall",
+        });
       }
 
       rebuildRoutingTables();
@@ -1160,54 +1161,6 @@ async function runLockedReinstall(
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
-}
-
-/**
- * D-59-02 cache lifecycle (reinstall arm). Mirror of the install arm's
- * `addInstalledPluginHooksToCache` helper: read the just-installed
- * hooks.json from disk, re-parse via the same domain seam the resolver
- * used, and populate the hooks-bridge cache. Both failure arms (read,
- * parse) are non-fatal -- the resolver already validated the file at
- * reinstall-entry, so a fresh failure here is defensive only. The detail
- * routes through the OBS-01 debug seam; reconcile rehydrates from disk
- * on the next pass.
- */
-async function readAndCacheReinstalledPluginHooks(
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-  resolvedSource: AbsolutePluginRoot,
-  hooksJsonPath: string,
-  cwd: string,
-): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(hooksJsonPath, "utf8");
-  } catch (err) {
-    hookDebugLog(
-      `reinstall: hooks.json read failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-    return;
-  }
-
-  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
-  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
-  if (!parsed.ok) {
-    hookDebugLog(
-      `reinstall: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
-    );
-    return;
-  }
-
-  addPluginConfigToCache(
-    scope,
-    marketplace,
-    plugin,
-    resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
 }
 
 async function loadCachedEntry(

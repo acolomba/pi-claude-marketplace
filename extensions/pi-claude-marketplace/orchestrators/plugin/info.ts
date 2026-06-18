@@ -317,9 +317,9 @@ async function composeResolvedComponents(
   // `narrowProbeError` classifies via the existing ladder (Open Question
   // 3 in 63-RESEARCH.md: no new REASON, no new code path).
   const hooks =
-    resolved.hooksConfigPath !== undefined
-      ? await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath)
-      : undefined;
+    resolved.hooksConfigPath === undefined
+      ? undefined
+      : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
 
   return {
     ...(agents.length > 0 && { agents }),

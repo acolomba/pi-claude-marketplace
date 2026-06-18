@@ -113,7 +113,7 @@ export const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
  * regex would add real complexity for marginal gain on a fail-OPEN
  * surface.
  */
-const INTERPOLATION_RE = /\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^}]+\}|\$\(|`/;
+const INTERPOLATION_RE = /\$[A-Za-z_]\w*|\$\{[^}]+\}|\$\(|`/;
 
 const MAX_RECURSION_DEPTH = 8;
 

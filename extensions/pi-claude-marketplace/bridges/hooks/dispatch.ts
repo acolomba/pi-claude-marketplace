@@ -197,10 +197,10 @@ async function reduceBucket(
     const r = await activeExecutor(entry, event, ctx, pi);
     switch (r.kind) {
       case "block":
-        finalResult = r;
-        attributedTo = entry;
-        return { result: finalResult, attributedTo };
       case "stop":
+        // Both terminal arms: the per-event adapter at exit decides
+        // whether to surface the kind on a Pi-side return slot (e.g.
+        // tool_call's deny) or to debug-log only (observation events).
         finalResult = r;
         attributedTo = entry;
         return { result: finalResult, attributedTo };

@@ -80,7 +80,7 @@ import {
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
-  addPluginConfigToCache,
+  readAndCachePluginHooks,
   rebuildRoutingTables,
   removeHookConfig,
   writeHookConfig,
@@ -99,7 +99,7 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
@@ -326,56 +326,6 @@ async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
   return loadMarketplaceManifest(manifestPath);
-}
-
-/**
- * D-59-02 cache lifecycle (install arm). Read the on-disk hooks.json the
- * resolver discovered, re-parse via the same domain seam the resolver used,
- * and on success populate the hooks bridge's in-memory parsed-config cache.
- *
- * Both failure arms (read-throw / parse-error) are non-fatal: the resolver
- * already validated the file at install entry, so a fresh failure here is
- * defensive only. The detail routes through the OBS-01 debug seam; reconcile
- * rehydrates the cache from disk on the next pass.
- */
-async function addInstalledPluginHooksToCache(
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-  resolvedSource: AbsolutePluginRoot,
-  hooksJsonPath: string,
-  cwd: string,
-): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(hooksJsonPath, "utf8");
-  } catch (err) {
-    hookDebugLog(
-      `install: hooks.json read failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-    return;
-  }
-
-  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot;
-  // homedir from `os.homedir()` anchors `~`-prefixed path globs in
-  // `if`-field rules.
-  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
-  if (!parsed.ok) {
-    hookDebugLog(
-      `install: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
-    );
-    return;
-  }
-
-  addPluginConfigToCache(
-    scope,
-    marketplace,
-    plugin,
-    resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
 }
 
 /**
@@ -837,7 +787,7 @@ export async function runInstallLedger(
           // the on-disk config back into `parsedConfigCache` on `/reload`.
           // When the resolver did not surface a hooks config, the
           // inventory stays empty.
-          hooks: c.resolved.hooksConfigPath !== undefined ? [c.plugin] : [],
+          hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
         },
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
@@ -1091,14 +1041,18 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // `hookDebugLog`.
       if (installCtx.resolved.hooksConfigPath !== undefined) {
         try {
-          await addInstalledPluginHooksToCache(
+          await readAndCachePluginHooks({
             scope,
             marketplace,
             plugin,
-            asAbsolutePluginRoot(installCtx.resolved.pluginRoot),
-            path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
+            resolvedSource: asAbsolutePluginRoot(installCtx.resolved.pluginRoot),
+            hooksJsonPath: path.join(
+              installCtx.resolved.pluginRoot,
+              installCtx.resolved.hooksConfigPath,
+            ),
             cwd,
-          );
+            logPrefix: "install",
+          });
 
           rebuildRoutingTables();
         } catch (cacheErr) {

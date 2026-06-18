@@ -14,6 +14,7 @@ export {
   addPluginConfigToCache,
   getRoutingBucket,
   hydrateProjectScopeForCwd,
+  readAndCachePluginHooks,
   registerHooksBridge,
   rebuildRoutingTables,
   removePluginConfigFromCache,

@@ -156,7 +156,7 @@ export function adaptToolCallResult(
 ): ToolCallEventResult | undefined {
   switch (result.kind) {
     case "block":
-      return result.reason !== undefined ? { block: true, reason: result.reason } : { block: true };
+      return result.reason === undefined ? { block: true } : { block: true, reason: result.reason };
 
     case "mutate":
       applyMutationInPlace(event, result);
@@ -203,12 +203,12 @@ export function adaptToolResultResult(
       // `isError: true` + a synthetic text block carrying the reason. The
       // reducer already short-circuited subsequent entries, so this is the
       // terminal Pi-side return for the bucket.
-      return result.reason !== undefined
-        ? {
+      return result.reason === undefined
+        ? { isError: true }
+        : {
             isError: true,
             content: [{ type: "text", text: result.reason }],
-          }
-        : { isError: true };
+          };
 
     case "mutate":
       applyMutationInPlace(event, result);

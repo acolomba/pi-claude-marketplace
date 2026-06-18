@@ -156,21 +156,58 @@ export interface CompileIfPredicateContext {
  * may be empty -- `compileIfPredicate` rejects empty-inner forms via
  * the per-prefix compile attempt.
  */
-const IF_PREFIX_REGEX = /^([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/;
+const IF_PREFIX_REGEX = /^([A-Za-z_]\w*)\((.*)\)$/;
 
 /**
- * MCP literal shape: exactly two `__`-segmented components after
- * `mcp__`. Segment-strict per the upstream `if`-field grammar.
+ * MCP segment shape: a single non-empty character class run. Anchored
+ * + bounded so a single linear scan decides the question (no
+ * backtracking).
  */
-const IF_MCP_LITERAL_REGEX = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
+const IF_MCP_SEGMENT_REGEX = /^[A-Za-z0-9_-]+$/;
 
 /**
- * MCP server-prefix shape: either bare `mcp__server` (no trailing
- * segment) or explicit `mcp__server__*`. Captures the server segment
- * (group 1); the compiled predicate carries `mcp__${server}__` as the
- * startsWith probe.
+ * Match an `mcp__<server>__<tool>` literal (`mcp__` prefix, two
+ * non-empty `[A-Za-z0-9_-]+` segments separated by `__`). Split-based
+ * to sidestep the regex backtracking that
+ * `/^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/` would have on inputs like
+ * `mcp__aaaa` (super-linear in the input length per S5852).
  */
-const IF_MCP_SERVER_PREFIX_REGEX = /^mcp__([A-Za-z0-9_-]+)(?:__\*)?$/;
+function matchMcpLiteral(raw: string): boolean {
+  if (!raw.startsWith("mcp__")) {
+    return false;
+  }
+
+  const body = raw.slice("mcp__".length);
+  const sepIdx = body.lastIndexOf("__");
+  if (sepIdx <= 0 || sepIdx >= body.length - 2) {
+    return false;
+  }
+
+  return (
+    IF_MCP_SEGMENT_REGEX.test(body.slice(0, sepIdx)) &&
+    IF_MCP_SEGMENT_REGEX.test(body.slice(sepIdx + 2))
+  );
+}
+
+/**
+ * Match an MCP server-prefix form: either bare `mcp__<server>` (no
+ * trailing segment) or explicit `mcp__<server>__*`. Returns the server
+ * segment on success or undefined. Split-based for the same
+ * backtracking-avoidance reason as `matchMcpLiteral`.
+ */
+function matchMcpServerPrefix(raw: string): string | undefined {
+  if (!raw.startsWith("mcp__")) {
+    return undefined;
+  }
+
+  const body = raw.slice("mcp__".length);
+  const server = body.endsWith("__*") ? body.slice(0, -3) : body;
+  if (server.length === 0 || !IF_MCP_SEGMENT_REGEX.test(server)) {
+    return undefined;
+  }
+
+  return server;
+}
 
 const TOOL_EVENT_MEMBERS_FOR_IF = new Set<string>(TOOL_EVENTS);
 
@@ -220,14 +257,13 @@ export function compileIfPredicate(
     return compileIfPrefixForm(trimmed, prefixMatch[1] ?? "", prefixMatch[2] ?? "", ctx);
   }
 
-  if (IF_MCP_LITERAL_REGEX.test(trimmed)) {
+  if (matchMcpLiteral(trimmed)) {
     return { kind: "mcp-literal", toolName: trimmed };
   }
 
-  const mcpServerMatch = IF_MCP_SERVER_PREFIX_REGEX.exec(trimmed);
-  if (mcpServerMatch !== null) {
-    const server = mcpServerMatch[1] ?? "";
-    return { kind: "mcp-server-prefix", serverPrefix: `mcp__${server}__` };
+  const mcpServer = matchMcpServerPrefix(trimmed);
+  if (mcpServer !== undefined) {
+    return { kind: "mcp-server-prefix", serverPrefix: `mcp__${mcpServer}__` };
   }
 
   hookDebugLog(`compileIfPredicate: unrecognized if shape "${trimmed}"; falling open`);

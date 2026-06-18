@@ -66,7 +66,7 @@ import {
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
-  addPluginConfigToCache,
+  readAndCachePluginHooks,
   rebuildRoutingTables,
   removeHookConfig,
   removePluginConfigFromCache,
@@ -85,12 +85,11 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   appendLeaks,
   assertNever,
@@ -1073,7 +1072,7 @@ async function finalizeUpdateRecord(
     // the inventory -- the failed-state truthful view is "we did not complete
     // the swap" and the existing slug stays.
     if (!failedPhases.has("hooks")) {
-      sRecord.resources.hooks = installable.hooksConfigPath !== undefined ? [plugin] : [];
+      sRecord.resources.hooks = installable.hooksConfigPath === undefined ? [] : [plugin];
     }
 
     // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
@@ -1134,65 +1133,21 @@ async function finalizeUpdateRecord(
     if (phase3aFailures.length === 0) {
       removePluginConfigFromCache(args.scope, marketplace, plugin);
       if (installable.hooksConfigPath !== undefined) {
-        await readAndCacheUpdatedPluginHooks(
-          args.scope,
+        await readAndCachePluginHooks({
+          scope: args.scope,
           marketplace,
           plugin,
-          asAbsolutePluginRoot(installable.pluginRoot),
-          path.join(installable.pluginRoot, installable.hooksConfigPath),
-          args.cwd,
-        );
+          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+          cwd: args.cwd,
+          logPrefix: "update",
+        });
       }
 
       rebuildRoutingTables();
     }
   });
   return { invalidConfigWriteBack };
-}
-
-/**
- * D-59-02 cache lifecycle (update arm). Mirror of the install /
- * reinstall helpers: read the just-staged hooks.json from disk, re-parse
- * via the same domain seam the resolver used, and populate the bridge
- * cache. Both failure arms (read, parse) are non-fatal and route through
- * the OBS-01 debug seam; reconcile rehydrates from disk on the next pass.
- */
-async function readAndCacheUpdatedPluginHooks(
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-  resolvedSource: AbsolutePluginRoot,
-  hooksJsonPath: string,
-  cwd: string,
-): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(hooksJsonPath, "utf8");
-  } catch (err) {
-    hookDebugLog(
-      `update: hooks.json read failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-    return;
-  }
-
-  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
-  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
-  if (!parsed.ok) {
-    hookDebugLog(
-      `update: parsed hooks.json failed re-parse for ${plugin}@${marketplace}: ${parsed.reason}`,
-    );
-    return;
-  }
-
-  addPluginConfigToCache(
-    scope,
-    marketplace,
-    plugin,
-    resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
@@ -1332,7 +1287,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // hint). Same recovery contract as reinstall.ts::commitHooks (see
   // WR-05).
   try {
-    if (preflight.installable.hooksConfigPath !== undefined) {
+    if (preflight.installable.hooksConfigPath === undefined) {
+      // Version B has no hooks: remove any stale file from version A.
+      await removeHookConfig({ locations: args.locations, pluginName: plugin });
+    } else {
       const raw = await readFile(
         path.join(preflight.installable.pluginRoot, preflight.installable.hooksConfigPath),
         "utf8",
@@ -1349,9 +1307,6 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
         pluginRoot: preflight.installable.pluginRoot,
         hooksValue: parsed.value,
       });
-    } else {
-      // Version B has no hooks: remove any stale file from version A.
-      await removeHookConfig({ locations: args.locations, pluginName: plugin });
     }
   } catch (err) {
     phase3aFailures.push({ phase: "hooks", msg: errorMessage(err), cause: err });

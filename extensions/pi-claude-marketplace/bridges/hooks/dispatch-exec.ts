@@ -68,6 +68,7 @@ import { translate as translatePreToolUse } from "./payloads/pre-tool-use.ts";
 import { translate as translateSessionEnd } from "./payloads/session-end.ts";
 import { translate as translateSessionStart } from "./payloads/session-start.ts";
 import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
+import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
@@ -82,8 +83,12 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 /** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
 const DEFAULT_TIMEOUT_MS = 600_000;
-/** EXEC-02: stdin payload cap before `_truncated: true` marker injection. */
-const STDIN_TRUNCATION_BYTES = 256 * 1024;
+// STDIN_TRUNCATION_BYTES + planSpawn + serializeWithTruncation are shared
+// with `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites
+// build the same `child_process.spawn` invocation against the same
+// `RoutingEntry` shape and both serialize stdin under the same EXEC-02
+// cap, so a single source of truth keeps the two execution paths from
+// drifting.
 /** EXEC-02: hard stdout buffer cap; overflow kills + noop. */
 const STDOUT_MAX_BYTES = 1024 * 1024;
 /** EXEC-02: hard stderr buffer cap; overflow kills + noop. */
@@ -262,51 +267,6 @@ function buildPayload(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Stdin payload serialization with 256 KB truncation marker
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * EXEC-02: cap the serialized stdin payload at 256 KB. When the raw JSON
- * exceeds the cap, re-serialize with a top-level `_truncated: true`
- * marker (Research Discretion: top-level placement preferred so a hook
- * author can detect truncation without knowing per-event nesting). The
- * marker takes precedence over the cap -- the JSON with the marker may
- * itself exceed the cap by a few bytes (marker overshoot <= 20 bytes by
- * construction), but the contract is honored.
- *
- * CR-02: cap comparison measures UTF-8 bytes (`Buffer.byteLength(...,
- * "utf8")`), not UTF-16 code units (`String.prototype.length`). For a
- * pure-ASCII payload the two are equal; for CJK / accented / emoji
- * payloads the byte count is 2-4x the code-unit count, so measuring code
- * units would silently relax the documented 256 KB stdin cap.
- *
- * WR-02: the `_truncated: true` marker is assigned LAST so a payload key
- * named `_truncated` cannot override it via spread order (defense in
- * depth; no v1.13 translator emits this key today).
- */
-function serializeWithTruncation(payload: unknown): string {
-  const raw = JSON.stringify(payload);
-  if (Buffer.byteLength(raw, "utf8") <= STDIN_TRUNCATION_BYTES) {
-    return raw;
-  }
-
-  // Inject the top-level marker by re-wrapping. When the payload is a
-  // plain object (the only shape the 8 translators emit), assign the
-  // marker AFTER the spread so a payload-supplied `_truncated` key
-  // cannot win.
-  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
-    const marked: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
-    marked._truncated = true;
-    return JSON.stringify(marked);
-  }
-
-  // Defensive arm: non-object payloads (shouldn't happen for v1.13
-  // translators) get wrapped under a synthetic envelope so the marker
-  // is still observable at the top level.
-  return JSON.stringify({ payload, _truncated: true });
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 // HOOK-05 env construction + D-60-06 _shared CLAUDE_ENV_FILE
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -349,35 +309,6 @@ async function prepareEnv(
 // ──────────────────────────────────────────────────────────────────────────
 // Spawn + stream-and-collect
 // ──────────────────────────────────────────────────────────────────────────
-
-interface SpawnPlan {
-  readonly command: string;
-  readonly args: readonly string[];
-  readonly shell: boolean | string;
-}
-
-/**
- * EXEC-04: `entry.handlerDecl.args !== undefined` -> exec-form
- * `spawn(command, args, { shell: false })`. Otherwise -> shell-form
- * `spawn(command, [], { shell: entry.handlerDecl.shell ?? true })`.
- * `args: []` is the exec-form arm -- the discriminator is "args
- * defined", not "args non-empty".
- */
-function planSpawn(entry: RoutingEntry): SpawnPlan {
-  const command = entry.handlerDecl.command ?? "";
-  const argsField = entry.handlerDecl.args;
-
-  if (Array.isArray(argsField)) {
-    const args: string[] = (argsField as readonly unknown[]).map((a): string =>
-      typeof a === "string" ? a : JSON.stringify(a),
-    );
-    return { command, args, shell: false };
-  }
-
-  const shellField = entry.handlerDecl.shell;
-  const shell: boolean | string = typeof shellField === "string" ? shellField : true;
-  return { command, args: [], shell };
-}
 
 async function spawnAndCollect(
   entry: RoutingEntry,

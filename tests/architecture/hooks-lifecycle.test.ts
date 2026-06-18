@@ -124,17 +124,27 @@ function assertMutatorFollowedByRebuilder(
 test("WR-03 Block A: install.ts pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
   const lines = await readNonCommentLines(INSTALL_PATH);
 
-  // install.ts wraps the cache-add in a helper (`addInstalledPluginHooksToCache`)
-  // because it ALSO performs the disk read + parse of the just-installed
-  // `<pluginRoot>/hooks/hooks.json`. The orchestrator invocation site is
-  // the helper call (`await addInstalledPluginHooksToCache(...)`), and the
-  // rebuild must follow IT -- not the inner `addPluginConfigToCache(...)`
-  // line buried in the helper body. Both shapes are valid; pin whichever
-  // form the source uses.
-  const usesHelper = lines.some(
-    (l) => /\baddInstalledPluginHooksToCache\(/.test(l) && !/\bimport\b/.test(l),
+  // install.ts wraps the cache-add in the bridge helper
+  // `readAndCachePluginHooks` because the call ALSO performs the disk read
+  // + parse of the just-installed `<pluginRoot>/hooks/hooks.json`. The
+  // orchestrator invocation site is the helper call
+  // (`await readAndCachePluginHooks({...})`), and the rebuild must follow
+  // IT -- not the inner `addPluginConfigToCache(...)` line buried in the
+  // helper body. Pin whichever form the source uses (helper, helper's
+  // predecessor `addInstalledPluginHooksToCache`, or the bare cache
+  // mutator) so a future refactor that inlines or renames stays gated.
+  const HELPER_FORMS = [
+    "readAndCachePluginHooks(",
+    "addInstalledPluginHooksToCache(",
+    "addPluginConfigToCache(",
+  ];
+  const mutator = HELPER_FORMS.find((form) =>
+    lines.some((l) => l.includes(form) && !/\bimport\b/.test(l)),
   );
-  const mutator = usesHelper ? "addInstalledPluginHooksToCache(" : "addPluginConfigToCache(";
+  assert.ok(
+    mutator,
+    `install.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
+  );
   assertMutatorFollowedByRebuilder(lines, mutator, "rebuildRoutingTables(", 20, "install.ts");
 });
 
@@ -163,16 +173,25 @@ test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuild
 test("WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
   const lines = await readNonCommentLines(REINSTALL_PATH);
 
-  // Both cache mutators must appear as call sites (not just imports).
+  // Both cache mutators must appear as call sites (not just imports). The
+  // add-side may flow through the bridge helper `readAndCachePluginHooks`
+  // which wraps `addPluginConfigToCache` with the disk read + parse.
   const hasRemove = lines.some(
     (l) => l.includes("removePluginConfigFromCache(") && !/\bimport\b/.test(l),
   );
-  const hasAdd = lines.some((l) => l.includes("addPluginConfigToCache(") && !/\bimport\b/.test(l));
+  const hasAdd = lines.some(
+    (l) =>
+      (l.includes("addPluginConfigToCache(") || l.includes("readAndCachePluginHooks(")) &&
+      !/\bimport\b/.test(l),
+  );
   const hasRebuild = lines.some(
     (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
   );
   assert.ok(hasRemove, "reinstall.ts: missing removePluginConfigFromCache call site");
-  assert.ok(hasAdd, "reinstall.ts: missing addPluginConfigToCache call site");
+  assert.ok(
+    hasAdd,
+    "reinstall.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
+  );
   assert.ok(hasRebuild, "reinstall.ts: missing rebuildRoutingTables call site");
 
   // The remove must be followed within window by the rebuild call.
@@ -196,12 +215,19 @@ test("WR-03 Block D: update.ts wires remove + add + rebuildRoutingTables in its 
   const hasRemove = lines.some(
     (l) => l.includes("removePluginConfigFromCache(") && !/\bimport\b/.test(l),
   );
-  const hasAdd = lines.some((l) => l.includes("addPluginConfigToCache(") && !/\bimport\b/.test(l));
+  const hasAdd = lines.some(
+    (l) =>
+      (l.includes("addPluginConfigToCache(") || l.includes("readAndCachePluginHooks(")) &&
+      !/\bimport\b/.test(l),
+  );
   const hasRebuild = lines.some(
     (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
   );
   assert.ok(hasRemove, "update.ts: missing removePluginConfigFromCache call site");
-  assert.ok(hasAdd, "update.ts: missing addPluginConfigToCache call site");
+  assert.ok(
+    hasAdd,
+    "update.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
+  );
   assert.ok(hasRebuild, "update.ts: missing rebuildRoutingTables call site");
 
   assertMutatorFollowedByRebuilder(

@@ -234,6 +234,59 @@ export function removePluginConfigFromCache(
 }
 
 /**
+ * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
+ * populate `parsedConfigCache`. Both failure arms (read-throw / parse-
+ * error) are non-fatal: the resolver already validated the file at
+ * orchestrator-entry time, so a fresh failure here is defensive only.
+ * The detail routes through the OBS-01 debug seam; reconcile rehydrates
+ * the cache from disk on the next pass.
+ *
+ * `logPrefix` distinguishes install / reinstall / update call sites in
+ * debug-log lines so the same shared helper can serve all three
+ * orchestrators without losing call-site attribution.
+ */
+export async function readAndCachePluginHooks(opts: {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly resolvedSource: AbsolutePluginRoot;
+  readonly hooksJsonPath: string;
+  readonly cwd: string;
+  readonly logPrefix: string;
+}): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readFile(opts.hooksJsonPath, "utf8");
+  } catch (err) {
+    hookDebugLog(
+      `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
+  // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot;
+  // homedir from `os.homedir()` anchors `~`-prefixed path globs in
+  // `if`-field rules.
+  const ifCtx = { homedir: homedir(), cwd: opts.cwd, projectRoot: opts.cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+  if (!parsed.ok) {
+    hookDebugLog(
+      `${opts.logPrefix}: parsed hooks.json failed re-parse for ${opts.plugin}@${opts.marketplace}: ${parsed.reason}`,
+    );
+    return;
+  }
+
+  addPluginConfigToCache(
+    opts.scope,
+    opts.marketplace,
+    opts.plugin,
+    opts.resolvedSource,
+    parsed.value,
+    parsed.ifPredicates,
+  );
+}
+
+/**
  * D-59-03: read-only accessor for the live epoch cell. Used by the
  * dispatch.ts composite handlers (which capture the value at
  * registerHooksBridge time and compare against `currentEpoch()` on every

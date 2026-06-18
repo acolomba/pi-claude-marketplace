@@ -56,6 +56,7 @@ import { translate as translatePreToolUse } from "../payloads/pre-tool-use.ts";
 import { translate as translateSessionEnd } from "../payloads/session-end.ts";
 import { translate as translateSessionStart } from "../payloads/session-start.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
+import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
 import { readPidTable, writePidTable, unlinkPidTable, type PidTableEntry } from "./pid-table.ts";
@@ -78,9 +79,6 @@ export const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
 /** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
 const DEFAULT_TIMEOUT_MS = 600_000;
-
-/** EXEC-02: stdin payload cap before `_truncated: true` marker injection. */
-const STDIN_TRUNCATION_BYTES = 256 * 1024;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";
@@ -226,7 +224,7 @@ export async function spawnAndRegister(
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
-    const planValue = planAsyncSpawn(entry);
+    const planValue = planSpawn(entry);
     const timeoutMsRaw = entry.handlerDecl.timeout;
     const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
 
@@ -540,41 +538,14 @@ export async function reapOrphans(loc: ScopedLocations): Promise<void> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Internal helpers (planSpawn / prepareEnv copies + persistence + probes)
+// Internal helpers (prepareEnv + persistence + probes)
+//
+// `planSpawn` and `serializeWithTruncation` live in `../spawn-helpers.ts`
+// alongside the synchronous dispatch-exec path; the two execution sites
+// share the same `RoutingEntry` shape and the same EXEC-02 stdin cap, so
+// keeping a single source of truth prevents the exec-form discriminator
+// and the truncation-marker placement from drifting.
 // ──────────────────────────────────────────────────────────────────────────
-
-interface SpawnPlan {
-  readonly command: string;
-  readonly args: readonly string[];
-  readonly shell: boolean | string;
-}
-
-/**
- * EXEC-04 discriminator: `entry.handlerDecl.args !== undefined` ->
- * exec-form `spawn(command, args, { shell: false })`; otherwise ->
- * shell-form `spawn(command, [], { shell: entry.handlerDecl.shell ??
- * true })`. `args: []` is the exec-form arm -- the discriminator is
- * "args defined", not "args non-empty".
- *
- * Copy of `dispatch-exec.ts:planSpawn`; a v1.14+ lockstep-helper
- * extraction may consolidate the two if duplication becomes
- * load-bearing.
- */
-function planAsyncSpawn(entry: RoutingEntry): SpawnPlan {
-  const command = entry.handlerDecl.command ?? "";
-  const argsField = entry.handlerDecl.args;
-
-  if (Array.isArray(argsField)) {
-    const args: string[] = (argsField as readonly unknown[]).map((a): string =>
-      typeof a === "string" ? a : JSON.stringify(a),
-    );
-    return { command, args, shell: false };
-  }
-
-  const shellField = entry.handlerDecl.shell;
-  const shell: boolean | string = typeof shellField === "string" ? shellField : true;
-  return { command, args: [], shell };
-}
 
 /**
  * HOOK-05 env construction with the asyncRewake marker added on top.
@@ -619,28 +590,6 @@ async function prepareAsyncEnv(
   }
 
   return env;
-}
-
-/**
- * EXEC-02 cap on the serialized stdin payload at 256 KB. Copy of
- * `dispatch-exec.ts:serializeWithTruncation` -- wire-protocol.ts does
- * NOT re-export the helper, and extracting it to a shared module is a
- * cross-plan refactor a future plan can lockstep with the dispatch
- * site if duplication becomes load-bearing.
- */
-function serializeWithTruncation(payload: unknown): string {
-  const raw = JSON.stringify(payload);
-  if (Buffer.byteLength(raw, "utf8") <= STDIN_TRUNCATION_BYTES) {
-    return raw;
-  }
-
-  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
-    const marked: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
-    marked._truncated = true;
-    return JSON.stringify(marked);
-  }
-
-  return JSON.stringify({ payload, _truncated: true });
 }
 
 /**
