@@ -1149,4 +1149,3 @@ seam. No new attack surface beyond what Phases 57/58 already established.
 
 **Research date:** 2026-06-14
 **Valid until:** 2026-07-14 (30 days; stable peer-dep major)
-
