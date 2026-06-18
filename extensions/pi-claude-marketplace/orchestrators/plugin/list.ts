@@ -785,8 +785,8 @@ function sortPluginsInBlock(
       case "will enable":
       case "will disable":
         // Unreachable on the list surface; renderer-as-spec guard. The
-        // DIFF-02 will-* preview variants are emitted only by
-        // `/claude:plugin preview`, which does not flow through this list
+        // DIFF-02 will-* pending variants are emitted only by
+        // `/claude:plugin pending`, which does not flow through this list
         // orchestrator.
         return marketplaceScope;
     }

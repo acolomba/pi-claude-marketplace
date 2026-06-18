@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- BREAKING: `/claude:plugin preview` is renamed to `/claude:plugin pending`. The read-only diff command's behavior and output rows are unchanged; only the verb in the slash-command surface and the catalog's `empty-steady-state` advisory body line (`Pending: next reload will apply 0 actions.`) move. Update any scripted invocations.
+
 ## [0.5.0] - 2026-06-12
 
 - New declarative config files. `claude-plugins.json` at each scope root (user `~/.pi/agent/`, project `<cwd>/.pi/`) is now the authoritative record of added marketplaces (source, autoupdate) and installed plugins; a gitignore-able `claude-plugins.local.json` overrides base entries wholesale at the entry level. A corrupt or 0-byte config is an abort signal for that scope -- it is never read as "uninstall everything". On the first load after upgrading, the config is generated losslessly from your existing installs; nothing is uninstalled, and scopes with nothing installed get no file at all.

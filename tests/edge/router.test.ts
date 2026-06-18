@@ -58,7 +58,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     reinstall: mk("reinstall"),
     list: mk("list"),
     pluginInfo: mk("pluginInfo"),
-    preview: mk("preview"),
+    pending: mk("pending"),
     enable: mk("enable"),
     disable: mk("disable"),
     import: mk("import"),

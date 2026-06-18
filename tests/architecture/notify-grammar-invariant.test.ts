@@ -307,10 +307,10 @@ test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] 
       );
     }
 
-    // Reload-hint trailer MUST NOT fire on a preview cascade.
+    // Reload-hint trailer MUST NOT fire on a pending-list cascade.
     assert.ok(
       !emitted.includes("/reload to pick up changes"),
-      `${fixture.label}: will-* preview rows must NOT emit the reload-hint trailer`,
+      `${fixture.label}: will-* pending rows must NOT emit the reload-hint trailer`,
     );
   }
 });

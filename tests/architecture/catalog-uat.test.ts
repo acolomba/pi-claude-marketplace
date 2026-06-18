@@ -2385,14 +2385,14 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // /claude:plugin preview -- DIFF-01 SC #2 / D-53-01 read-only diff command.
+  // /claude:plugin pending -- DIFF-01 SC #2 / D-53-01 read-only diff command.
   // -------------------------------------------------------------------------
-  "/claude:plugin preview": {
+  "/claude:plugin pending": {
     "empty-steady-state": {
       pi: piWithBothLoaded(),
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
-      message: { kind: "reconcile-preview-empty" },
+      message: { kind: "reconcile-pending-empty" },
     },
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),

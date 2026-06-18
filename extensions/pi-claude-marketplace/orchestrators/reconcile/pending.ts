@@ -1,7 +1,7 @@
-// orchestrators/reconcile/preview.ts
+// orchestrators/reconcile/pending.ts
 //
-// DIFF-01 SC #2 / DIFF-02 read-only preview surface for `/claude:plugin
-// preview` (D-53-01).
+// DIFF-01 SC #2 / DIFF-02 read-only diff surface for `/claude:plugin
+// pending` (D-53-01).
 //
 // MUST NOT touch the network (NFR-5) -- no `platform/git`, no
 // `DEFAULT_GIT_OPS`, no `refreshGitHubClone`. The architecture grep-gate
@@ -15,7 +15,7 @@
 // CFG-03: when EITHER `base` or `local` config arm is `invalid`, surface a
 // `(failed) {invalid manifest}` row for that scope and DO NOT call
 // `planReconcile` for it. Invalid input is NEVER silently coerced to empty
-// desired state (which would render as a mass-uninstall preview).
+// desired state (which would render as a mass-uninstall pending list).
 //
 // IL-2: exactly ONE `notify()` call per invocation -- the orchestrator
 // accumulates per-scope plans + invalid-config rows, builds a single
@@ -23,9 +23,9 @@
 //
 // Empty-plan case (DIFF-01 SC #2): when every plan is empty AND no scope
 // surfaced an invalid-config failure, the orchestrator dispatches the
-// dedicated `ReconcilePreviewEmptyMessage` standalone-arm variant whose
+// dedicated `ReconcilePendingEmptyMessage` standalone-arm variant whose
 // renderer arm hard-codes the catalog-locked advisory body line
-// `Preview: next reload will apply 0 actions.`. Routing the empty case
+// `Pending: next reload will apply 0 actions.`. Routing the empty case
 // through `notify()` preserves IL-2 and lets the catalog-uat byte-equality
 // runner exercise the empty path through the same public surface as every
 // other variant.
@@ -39,7 +39,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { buildReconcilePreviewNotification, isReconcilePlanListEmpty } from "./notify.ts";
+import { buildReconcilePendingNotification, isReconcilePlanListEmpty } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 
 import type { ReconcilePlan } from "./types.ts";
@@ -53,7 +53,7 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
-export interface PreviewReconcileOptions {
+export interface PendingReconcileOptions {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
   /** Project-scope cwd (ignored for user scope). */
@@ -99,8 +99,8 @@ function narrowStateLoadFailReason(err: unknown): ContentReason {
  * the planner runs against. When the BASE config file is ABSENT, the apply
  * path migrates FIRST inside its lock (apply.ts::readPassForScope step 1
  * writes `buildConfigFromState(state)` to `claude-plugins.json`, then plans
- * against the merged view). A preview that planned against the raw merged
- * view (absent base == empty desired state) would render a misleading
+ * against the merged view). A pending-list that planned against the raw
+ * merged view (absent base == empty desired state) would render a misleading
  * mass-uninstall plan for a populated state. Mirror the post-migration
  * merged view READ-ONLY instead: plan against the PURE
  * `buildConfigFromState` projection merged with the local arm -- no write,
@@ -118,7 +118,7 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
   return mergeScopeConfigs(buildConfigFromState(state), local);
 }
 
-export async function previewReconcile(opts: PreviewReconcileOptions): Promise<void> {
+export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
   // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
   // explicit scope only.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -133,7 +133,7 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
     // CFG-03 abort: if EITHER base or local config is invalid,
     // emit a (failed) {invalid manifest} row for that scope. Do NOT call
     // planReconcile -- invalid input must never be coerced into an empty
-    // desired-state diff that would render as a mass-uninstall preview.
+    // desired-state diff that would render as a mass-uninstall list.
     if (outcome.base.status === "invalid") {
       invalidBlocks.push(buildInvalidConfigBlock(scope, outcome.base.filePath));
     }
@@ -175,12 +175,12 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
   }
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
-  // is empty -> dispatch the dedicated ReconcilePreviewEmptyMessage variant
+  // is empty -> dispatch the dedicated ReconcilePendingEmptyMessage variant
   // (the renderer hard-codes the catalog-locked advisory body line, so the
   // byte form cannot drift from docs/output-catalog.md). IL-2 preserved by
   // routing through notify() exactly once.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.pi, { kind: "reconcile-preview-empty" });
+    notify(opts.ctx, opts.pi, { kind: "reconcile-pending-empty" });
     return;
   }
 
@@ -193,7 +193,7 @@ export async function previewReconcile(opts: PreviewReconcileOptions): Promise<v
   // collide on a key because the invalid path skips planReconcile for that
   // scope -- a scope can be EITHER in `plans` OR in `invalidBlocks`, never
   // both.
-  const projection = buildReconcilePreviewNotification(plans);
+  const projection = buildReconcilePendingNotification(plans);
   const message: CascadeNotificationMessage = {
     marketplaces: [...projection.marketplaces, ...invalidBlocks].sort((a, b) =>
       compareByNameThenScope(a, b),

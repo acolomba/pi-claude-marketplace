@@ -70,7 +70,7 @@ import type { GitOps } from "../marketplace/shared.ts";
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
- * `preview.ts::previewReconcile`'s scope fan-out).
+ * `pending.ts::pendingReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
   readonly ctx: ExtensionContext;

@@ -24,7 +24,7 @@
 // runtime mirror; this helper keeps the config-side cascade in ONE place so
 // `marketplace remove` callers cannot forget the plugin sweep -- which would
 // otherwise surface as a perpetual `<marketplace not declared>` source
-// mismatch on the next reconcile preview.
+// mismatch on the next `/claude:plugin pending` listing.
 //
 // schemaVersion is pinned to `1` on every write (D-11): the literal floor
 // for the schemaVersion-1 config family. Future schema versions land in a

@@ -6,9 +6,9 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 
 ### Glyphs
 
-- `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the preview pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the preview `(will add)`, and the list-surface label form).
-- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the preview pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the preview `(will remove)` arm (the marketplace-level analog of an uninstall).
-- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`, or the preview pending-tense `(will disable)`. On marketplace headers: `(failed)` only.
+- `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the pending `(will add)`, and the list-surface label form).
+- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the pending `(will remove)` arm (the marketplace-level analog of an uninstall).
+- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`, or the pending-tense `(will disable)`. On marketplace headers: `(failed)` only.
 
 ### Always-marketplace-header form
 
@@ -138,10 +138,10 @@ ______________________________________________________________________
 | `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
 | `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
 | `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                              |
-| `(will install)`                            | ●    | Plugin row -- `/claude:plugin preview` pending-tense install (DIFF-02).                                                                                                     |
-| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin preview` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                              |
-| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin preview` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                   |
-| `(will disable)`                            | ⊘    | Plugin row -- `/claude:plugin preview` pending-tense disable.                                                                                                               |
+| `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                     |
+| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                              |
+| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                   |
+| `(will disable)`                            | ⊘    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                               |
 
 Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -152,8 +152,8 @@ Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple;
 | `(updated)`     | ●    | Marketplace header -- `marketplace update`.                                                                                                    |
 | `(failed)`      | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
 | `(skipped)`     | ●    | Marketplace header -- mp-level skip (e.g. `{up-to-date}`); the autoupdate-idempotent reasons render the marker-as-outcome form instead.        |
-| `(will add)`    | ●    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace add (DIFF-02).                                                        |
-| `(will remove)` | ○    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace remove; the only `○` marketplace header.                              |
+| `(will add)`    | ●    | Marketplace header -- `/claude:plugin pending` pending-tense marketplace add (DIFF-02).                                                        |
+| `(will remove)` | ○    | Marketplace header -- `/claude:plugin pending` pending-tense marketplace remove; the only `○` marketplace header.                              |
 
 ______________________________________________________________________
 
@@ -1240,9 +1240,9 @@ Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is inv
 
 ______________________________________________________________________
 
-## `/claude:plugin preview`
+## `/claude:plugin pending`
 
-DIFF-01 SC #2 / D-53-01 read-only diff/preview surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`). The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- preview rows are pre-transition and the trailer would mislead the user.
+DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`). The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- pending rows are pre-transition and the trailer would mislead the user.
 
 ### Empty steady-state (no actions pending)
 
@@ -1251,7 +1251,7 @@ The merged config matches the recorded state byte-for-byte in every scope -- the
 <!-- catalog-state: empty-steady-state -->
 
 ```text
-Preview: next reload will apply 0 actions.
+Pending: next reload will apply 0 actions.
 ```
 
 ### Marketplace add with child plugin install
@@ -1302,7 +1302,7 @@ A declared marketplace whose recorded source string does not match the declarati
 
 ### Invalid config abort (CFG-03 -- Pitfall 53-1)
 
-A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unparseable, or schema-invalid. The orchestrator routes the scope through a structured `(failed) {invalid manifest}` row and does NOT call `planReconcile` for it -- invalid input is NEVER silently coerced to an empty desired state (which would otherwise render as a mass-uninstall preview). The row body carries the file BASENAME (never the absolute path -- RESEARCH Security Threat Pattern "Information disclosure" T-53-02-02). Severity `error`; summary line prepended.
+A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unparseable, or schema-invalid. The orchestrator routes the scope through a structured `(failed) {invalid manifest}` row and does NOT call `planReconcile` for it -- invalid input is NEVER silently coerced to an empty desired state (which would otherwise render as a mass-uninstall pending list). The row body carries the file BASENAME (never the absolute path -- RESEARCH Security Threat Pattern "Information disclosure" T-53-02-02). Severity `error`; summary line prepended.
 
 <!-- catalog-state: invalid-config-abort -->
 

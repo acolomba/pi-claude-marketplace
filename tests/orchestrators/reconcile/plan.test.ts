@@ -562,7 +562,7 @@ test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace
 
 test("Edge: malformed plugin keys -> diagnostic with raw key as subject, NEVER silently dropped (WR-02)", () => {
   // A user who declares "my-plugin": {} (forgot the @marketplace suffix)
-  // must get a (failed) diagnostic, not a preview that simply omits the
+  // must get a (failed) diagnostic, not a pending listing that simply omits the
   // entry -- the command's whole purpose is surfacing config<->state
   // divergence. Three malformed shapes: no `@`, leading `@`, trailing `@`.
   const state: ExtensionState = { schemaVersion: 1, marketplaces: {} };

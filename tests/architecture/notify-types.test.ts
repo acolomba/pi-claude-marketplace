@@ -98,7 +98,7 @@ type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual rec
 // cause / rollbackPartial / reasons / from / to).
 type _VPresent = Extract<PluginNotificationMessage, { status: "present" }>;
 // DIFF-02: the 4 new pending-tense plugin variants emitted
-// by `/claude:plugin preview`. Per-variant shape: REQUIRED `name`, OPTIONAL
+// by `/claude:plugin pending`. Per-variant shape: REQUIRED `name`, OPTIONAL
 // `scope`, no `dependencies` / `reasons` / `version` / `cause` / `rollbackPartial`
 // / `from` / `to` / `description`. The length-lock bumps PLUGIN_STATUSES
 // from 11 -> 15.
@@ -168,7 +168,7 @@ export const _l3: _Assert_DependenciesLen = true;
 // Bidirectional `extends` proves set-equality. UAT G-21-01: the `"present"`
 // literal is the list-only inventory token introduced to close the
 // reload-hint misfire on `/claude:plugin list`. DIFF-02: the 4 trailing
-// `"will *"` literals are the pending-tense preview tokens. ENBL-04:
+// `"will *"` literals are the pending-tense tokens. ENBL-04:
 // `"disabled"` is the list/info inventory token for a recorded-but-disabled
 // plugin (structurally distinct from `(unavailable)`).
 type _PluginStatusExpected =
@@ -1272,7 +1272,7 @@ type _Assert_NotifSixArms =
 export const _l12: _Assert_NotifSixArms = true;
 
 // --- DIFF-01 SC #2: 7-arm union arity locking the new
-//     `reconcile-preview-empty` standalone variant. ---
+//     `reconcile-pending-empty` standalone variant. ---
 
 type _Assert_NotifSevenArms =
   Extract<NotificationMessage, { marketplaces: readonly unknown[] }> extends never
@@ -1287,7 +1287,7 @@ type _Assert_NotifSevenArms =
             ? never
             : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
               ? never
-              : Extract<NotificationMessage, { kind: "reconcile-preview-empty" }> extends never
+              : Extract<NotificationMessage, { kind: "reconcile-pending-empty" }> extends never
                 ? never
                 : true;
 export const _l13: _Assert_NotifSevenArms = true;
@@ -1295,15 +1295,15 @@ export const _l13: _Assert_NotifSevenArms = true;
 // DIFF-01 SC #2: the empty-steady-state variant has EXACTLY `kind` -- no
 // fields beyond the discriminator. The renderer hard-codes the body line so
 // the byte form cannot drift from the catalog.
-type _VReconcilePreviewEmpty = Extract<NotificationMessage, { kind: "reconcile-preview-empty" }>;
-type _Assert_ReconcilePreviewEmptyShape = _VReconcilePreviewEmpty extends {
-  readonly kind: "reconcile-preview-empty";
+type _VReconcilePendingEmpty = Extract<NotificationMessage, { kind: "reconcile-pending-empty" }>;
+type _Assert_ReconcilePendingEmptyShape = _VReconcilePendingEmpty extends {
+  readonly kind: "reconcile-pending-empty";
 }
-  ? { readonly kind: "reconcile-preview-empty" } extends _VReconcilePreviewEmpty
+  ? { readonly kind: "reconcile-pending-empty" } extends _VReconcilePendingEmpty
     ? true
     : never
   : never;
-export const _rpe: _Assert_ReconcilePreviewEmptyShape = true;
+export const _rpe: _Assert_ReconcilePendingEmptyShape = true;
 
 // --- RECON-04: 8-arm union arity locking the new
 //     `reconcile-applied-cascade` standalone variant. ---
@@ -1326,7 +1326,7 @@ type _Assert_NotifEightArms =
             ? never
             : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
               ? never
-              : Extract<NotificationMessage, { kind: "reconcile-preview-empty" }> extends never
+              : Extract<NotificationMessage, { kind: "reconcile-pending-empty" }> extends never
                 ? never
                 : Extract<NotificationMessage, { kind: "reconcile-applied-cascade" }> extends never
                   ? never

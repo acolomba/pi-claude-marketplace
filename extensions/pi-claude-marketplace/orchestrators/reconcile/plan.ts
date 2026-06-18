@@ -74,9 +74,9 @@ import type { Scope } from "../../shared/types.ts";
  * marketplace). The caller surfaces such keys as a `PlannedSourceMismatch`
  * diagnostic carrying the raw key -- not-wedging (the CONFIG_SCHEMA upstream
  * permits any string key so a typo cannot wedge the planner) and
- * not-reporting are different requirements: a declared entry the preview
- * silently omits would hide exactly the config↔state divergence the command
- * exists to surface.
+ * not-reporting are different requirements: a declared entry the pending
+ * command silently omits would hide exactly the config↔state divergence the
+ * command exists to surface.
  */
 function parsePluginKey(key: string): { plugin: string; marketplace: string } | undefined {
   const at = key.lastIndexOf("@");

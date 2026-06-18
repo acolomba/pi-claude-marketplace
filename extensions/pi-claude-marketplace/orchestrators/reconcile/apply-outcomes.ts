@@ -146,7 +146,7 @@ export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
  * Source-mismatch outcome from `planReconcile`. Report-only: apply.ts does
  * NOT drive an orchestrator for these; the planner surfaces them on the
  * cascade as a `(failed) {source mismatch}` mp row with an optional plugin
- * child carrying the offending plugin name (mirrors the preview projection).
+ * child carrying the offending plugin name (mirrors the pending projection).
  *
  * The four per-cause variants mirror `PlannedSourceMismatch`: each carries
  * only the fields its diagnostic renders. The `marketplace` field on the

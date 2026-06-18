@@ -53,11 +53,11 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
-  // DIFF-01 SC #2: the reconcile preview/planner/projection
-  // family is read-only and pure. preview.ts is the user-facing orchestrator;
+  // DIFF-01 SC #2: the reconcile pending/planner/projection
+  // family is read-only and pure. pending.ts is the user-facing orchestrator;
   // plan.ts + notify.ts are belt-and-braces (plan.ts also has the stricter
   // reconcile-planner-purity gate -- this is cheap defensive cover).
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/preview.ts",
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
   // ENBL-03: the enable/disable orchestrator re-materializes from cache

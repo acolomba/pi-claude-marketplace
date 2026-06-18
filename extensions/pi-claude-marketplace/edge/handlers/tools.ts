@@ -332,7 +332,7 @@ function pluginScopeOrFallback(
     case "will enable":
     case "will disable":
       // Unreachable on the list surface; renderer-as-spec guard. The DIFF-02
-      // will-* variants are emitted only by `/claude:plugin preview`, which
+      // will-* variants are emitted only by `/claude:plugin pending`, which
       // does not project through this list-tool surface.
       return marketplaceScope;
   }
@@ -383,7 +383,7 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "will uninstall":
     case "will enable":
     case "will disable":
-      // DIFF-02 preview rows carry no version slot (the variant has no
+      // DIFF-02 pending-list rows carry no version slot (the variant has no
       // `version` field). Unreachable on the list surface.
       return undefined;
   }

@@ -391,7 +391,7 @@ export async function setPluginEnabled(
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
   // setPluginEnabled (the doc above promises "never re-throws") -- route it
   // through the same classifyTransactionThrow taxonomy the lower try/catch
-  // uses. Mirrors the read-only `listPlugins` containment in preview.ts.
+  // uses. Mirrors the read-only `listPlugins` containment in pending.ts.
   let resolution;
   try {
     // SCOPE-01 / ATTR-04: resolve the cross-scope target.

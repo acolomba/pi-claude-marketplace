@@ -246,8 +246,8 @@ export function redactAbsolutePaths(text: string): string {
  * renderer concern that branches at emission time.
  *
  * DIFF-02 (D-53-02): the 6 `"will *"` entries are the pending-tense tokens
- * emitted by `/claude:plugin preview` rows. They are STRUCTURALLY EXCLUDED
- * from `shouldEmitReloadHint`'s trigger set (preview rows are
+ * emitted by `/claude:plugin pending` rows. They are STRUCTURALLY EXCLUDED
+ * from `shouldEmitReloadHint`'s trigger set (pending rows are
  * pre-transition; `/reload to pick up changes` is grammatically false for
  * them) and sit AFTER the four head-of-tuple state-change tokens that
  * drive the reload-hint, so those positions stay unchanged. The
@@ -417,7 +417,7 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
  * brace slot.
  *
  * The `"present"` entry is the list-only inventory token (SNM-15); the four
- * `"will *"` entries are the DIFF-02 preview pending-tense tokens; the
+ * `"will *"` entries are the DIFF-02 pending-tense tokens; the
  * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
  * state-change tokens at the head of the tuple (`installed`, `updated`,
  * `reinstalled`, `uninstalled`) are the structurally-distinguished
@@ -454,7 +454,7 @@ export const PLUGIN_STATUSES = [
  * type-length-locked in tests/architecture/notify-types.test.ts).
  * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
  * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
- * preview pending-tense tokens. Order is normative -- the 4 leading entries
+ * pending-tense tokens. Order is normative -- the 4 leading entries
  * retain their position to match the `renderMpHeader` switch-arm ordering.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
@@ -769,7 +769,7 @@ export interface PluginManualRecoveryMessage {
 }
 
 /**
- * `(will install)` -- DIFF-02 preview row for a plugin declared in config but
+ * `(will install)` -- DIFF-02 pending-list row for a plugin declared in config but
  * not yet recorded. Carries NO `dependencies` (the soft-dep probe is
  * meaningless before installation); NO `reasons`; NO `version` (the recorded
  * version does not exist yet for an install).
@@ -781,7 +781,7 @@ export interface PluginWillInstallMessage {
 }
 
 /**
- * `(will uninstall)` -- DIFF-02 preview row for a plugin recorded in state
+ * `(will uninstall)` -- DIFF-02 pending-list row for a plugin recorded in state
  * but no longer declared. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
@@ -792,7 +792,7 @@ export interface PluginWillUninstallMessage {
 }
 
 /**
- * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
+ * `(will enable)` -- DIFF-02 pending-list row for a recorded plugin currently
  * marked disabled but newly declared `enabled: true`. The bucket is
  * populated only when the recorded-but-disabled marker (all four resource
  * arrays empty + `installable: true` -- see
@@ -806,7 +806,7 @@ export interface PluginWillEnableMessage {
 }
 
 /**
- * `(will disable)` -- DIFF-02 preview row for a recorded plugin newly
+ * `(will disable)` -- DIFF-02 pending-list row for a recorded plugin newly
  * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
@@ -917,16 +917,16 @@ interface MpSkipped extends MpCommon {
 }
 
 /**
- * `(will add)` marketplace block (DIFF-02). Preview row for a marketplace
+ * `(will add)` marketplace block (DIFF-02). Pending-list row for a marketplace
  * declared in config but not yet recorded. Never carries `reasons` /
- * `details` -- preview rows are pre-transition.
+ * `details` -- pending-list rows are pre-transition.
  */
 interface MpWillAdd extends MpCommon {
   readonly status: "will add";
 }
 
 /**
- * `(will remove)` marketplace block (DIFF-02). Preview row for a marketplace
+ * `(will remove)` marketplace block (DIFF-02). Pending-list row for a marketplace
  * recorded in state but no longer declared. Never carries `reasons` /
  * `details`.
  */
@@ -1164,23 +1164,23 @@ export interface PluginInfoCascadeMessage {
 
 /**
  * DIFF-01 SC #2 / D-53-01: the dedicated empty-steady-state
- * variant emitted by `/claude:plugin preview` when the next reload's
+ * variant emitted by `/claude:plugin pending` when the next reload's
  * reconcile would apply zero actions in every scope (no marketplaces /
  * plugins / source-mismatches / invalid-config rows). Routes through the
  * standalone-dispatched arm of `notify()` with severity `info` (no second
  * arg) and emits the catalog-locked free-form advisory body line:
  *
- *   Preview: next reload will apply 0 actions.
+ *   Pending: next reload will apply 0 actions.
  *
  * Carries NO fields -- the body is a hard-coded literal in
- * `renderReconcilePreviewEmpty` so the byte form cannot drift from the
+ * `renderReconcilePendingEmpty` so the byte form cannot drift from the
  * catalog state. `shouldEmitReloadHint` is structurally false on this arm
- * (preview rows are pre-transition; `/reload to pick up changes` is
+ * (pending rows are pre-transition; `/reload to pick up changes` is
  * grammatically false). `buildSummaryLine` returns the empty string
  * (info-severity -- no summary semantics apply).
  */
-export interface ReconcilePreviewEmptyMessage {
-  readonly kind: "reconcile-preview-empty";
+export interface ReconcilePendingEmptyMessage {
+  readonly kind: "reconcile-pending-empty";
 }
 
 /**
@@ -1247,7 +1247,7 @@ export type NotificationMessage =
   | MarketplaceInfoCascadeMessage
   | PluginInfoCascadeMessage
   | MarketplaceNotAddedMessage
-  | ReconcilePreviewEmptyMessage
+  | ReconcilePendingEmptyMessage
   | ReconcileAppliedCascadeMessage;
 
 /**
@@ -1269,7 +1269,7 @@ type StandaloneKind =
   | "marketplace-info-cascade"
   | "plugin-info-cascade"
   | "marketplace-not-added"
-  | "reconcile-preview-empty"
+  | "reconcile-pending-empty"
   | "reconcile-applied-cascade";
 
 /**
@@ -1288,7 +1288,7 @@ function isInfoKind(
     m.kind === "marketplace-info-cascade" ||
     m.kind === "plugin-info-cascade" ||
     m.kind === "marketplace-not-added" ||
-    m.kind === "reconcile-preview-empty" ||
+    m.kind === "reconcile-pending-empty" ||
     m.kind === "reconcile-applied-cascade"
   );
 }
@@ -1409,7 +1409,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           `(skipped)` token).
  *   "will add"           -> `${ICON_INSTALLED} ${name} [${scope}] (will add)`
  *   "will remove"        -> `${ICON_AVAILABLE} ${name} [${scope}] (will remove)`
- *                           (DIFF-02 preview pending-tense arms.)
+ *                           (DIFF-02 pending-tense arms.)
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -1419,7 +1419,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
  *       noise and meaningless for path-source marketplaces).
  *
- * The only ICON_AVAILABLE (○) marketplace arm is the preview
+ * The only ICON_AVAILABLE (○) marketplace arm is the pending
  * `"will remove"` (the marketplace-level analog of an uninstall); every
  * other arm is either ok (●) or failure-class (⊘). The other open-circle
  * uses are the available / uninstalled / will-uninstall PLUGIN rows that
@@ -1494,12 +1494,12 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     }
 
     case "will add":
-      // DIFF-02 / D-53-02: pending-tense preview row for a marketplace
+      // DIFF-02 / D-53-02: pending-tense row for a marketplace
       // declared in config but not yet recorded. Reuses ICON_INSTALLED (no
       // new icon constant).
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
     case "will remove":
-      // DIFF-02: pending-tense preview row for a marketplace recorded in
+      // DIFF-02: pending-tense row for a marketplace recorded in
       // state but no longer declared. Reuses ICON_AVAILABLE (`○`) -- the
       // same glyph the (uninstalled) plugin row carries, because a
       // `will remove` is the marketplace-level analog of an uninstall.
@@ -1879,9 +1879,9 @@ function renderPluginRow(
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
     case "will install":
-      // DIFF-02 / D-53-02: pending-tense preview row for a plugin declared in
+      // DIFF-02 / D-53-02: pending-tense row for a plugin declared in
       // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
-      // slot (the install hasn't happened yet); no reasons (preview rows are
+      // slot (the install hasn't happened yet); no reasons (pending rows are
       // pre-transition).
       return joinTokens([
         ICON_INSTALLED,
@@ -1890,7 +1890,7 @@ function renderPluginRow(
         "(will install)",
       ]);
     case "will uninstall":
-      // DIFF-02: pending-tense preview row for a plugin recorded in state but
+      // DIFF-02: pending-tense row for a plugin recorded in state but
       // no longer declared. Reuses ICON_AVAILABLE (open circle `○`) -- same
       // glyph as the realized (uninstalled) row, because a `will uninstall`
       // is its pre-transition analog.
@@ -1901,7 +1901,7 @@ function renderPluginRow(
         "(will uninstall)",
       ]);
     case "will enable":
-      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // DIFF-02: pending-tense row for a recorded plugin newly
       // declared `enabled: true` after being locally disabled. Reuses
       // ICON_INSTALLED. The bucket is populated only when the recorded-
       // but-disabled marker (empty resources + installable true) is paired
@@ -1914,7 +1914,7 @@ function renderPluginRow(
         "(will enable)",
       ]);
     case "will disable":
-      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // DIFF-02: pending-tense row for a recorded plugin newly
       // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) -- the
       // same glyph the (skipped) / (failed) rows carry, mirroring the
       // prohibited-symbol semantics of a deliberate disable.
@@ -2129,7 +2129,7 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
-      case "reconcile-preview-empty":
+      case "reconcile-pending-empty":
         // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
       default:
@@ -2294,7 +2294,7 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
-      case "reconcile-preview-empty":
+      case "reconcile-pending-empty":
         // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
       default:
@@ -2367,8 +2367,8 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "marketplace-not-added":
-      case "reconcile-preview-empty":
-        // DIFF-01 SC #2: preview rows are pre-transition; the trailer would
+      case "reconcile-pending-empty":
+        // DIFF-01 SC #2: pending-list rows are pre-transition; the trailer would
         // be grammatically false (`/reload` cannot pick up zero changes).
         return false;
       case "reconcile-applied-cascade":
@@ -2919,11 +2919,11 @@ function dispatchInfoMessage(
     case "marketplace-not-added":
       body = renderMarketplaceNotAdded(message, probe);
       break;
-    case "reconcile-preview-empty":
+    case "reconcile-pending-empty":
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
-      body = "Preview: next reload will apply 0 actions.";
+      body = "Pending: next reload will apply 0 actions.";
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders

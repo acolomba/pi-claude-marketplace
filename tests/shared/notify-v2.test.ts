@@ -3575,9 +3575,9 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
 });
 
 // ===========================================================================
-// DIFF-02 -- pending-tense `(will *)` preview rows.
+// DIFF-02 -- pending-tense `(will *)` pending rows.
 //
-// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin preview`.
+// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin pending`.
 // All are info-severity (no failure / skipped / manual-recovery semantics) so
 // the 2nd `ctx.ui.notify` arg is omitted. None are in shouldEmitReloadHint's
 // trigger set, so no `/reload to pick up changes` trailer is appended.
@@ -3684,7 +3684,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
   assert.equal(args[0], `● shared [project] (will add)\n  ● alpha [user] (will install)`);
 });
 
-test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (preview rows are pre-transition)", () => {
+test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pending rows are pre-transition)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -3704,7 +3704,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (previ
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
     !emitted.includes("/reload to pick up changes"),
-    "preview rows MUST NOT emit the reload-hint trailer",
+    "pending rows MUST NOT emit the reload-hint trailer",
   );
 });
 
