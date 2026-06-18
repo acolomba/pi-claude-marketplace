@@ -12,6 +12,7 @@ import {
   dispatchHookExec,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
@@ -187,7 +188,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: "test-plugin",
-    resolvedSource: "test://plugin-root",
+    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: { kind: "match-all" },
     rawMatcher: "",
@@ -278,7 +279,7 @@ test("EXEC-01 + HOOK-05: env contains process.env + CLAUDE_PROJECT_DIR + CLAUDE_
   // CLAUDE_PLUGIN_ROOT mirrors `RoutingEntry.resolvedSource` -- the actual
   // plugin source path on disk (state.json::resolvedSource), NOT a
   // synthesized `<extensionRoot>/plugins/<id>` path that never existed.
-  assert.equal(env.CLAUDE_PLUGIN_ROOT, "test://plugin-root");
+  assert.equal(env.CLAUDE_PLUGIN_ROOT, asAbsolutePluginRoot("/test/plugin-root"));
   assert.ok(env.CLAUDE_PLUGIN_DATA?.includes("/data/test-plugin"));
   assert.equal(env.CLAUDE_CODE_REMOTE, undefined);
 });

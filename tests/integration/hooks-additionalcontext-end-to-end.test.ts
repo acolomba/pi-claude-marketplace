@@ -27,7 +27,6 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
-  _drainPendingSessionStartContextForTest,
   _peekPendingSessionStartContextForTest,
   _resetForTest,
   beforeAgentStartHandlerFor,
@@ -136,10 +135,8 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
 
 test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async (t) => {
   _resetForTest();
-  _drainPendingSessionStartContextForTest();
   t.after(() => {
     _resetForTest();
-    _drainPendingSessionStartContextForTest();
   });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
@@ -227,7 +224,7 @@ JSON
     await sessionStartReg.handler(sessionStartEvent, placeholderCtx);
 
     assert.deepEqual(
-      _peekPendingSessionStartContextForTest(),
+      _peekPendingSessionStartContextForTest().map((e) => e.context),
       ["LEARN-MODE-MARK"],
       "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
     );
@@ -268,10 +265,8 @@ JSON
 
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async (t) => {
   _resetForTest();
-  _drainPendingSessionStartContextForTest();
   t.after(() => {
     _resetForTest();
-    _drainPendingSessionStartContextForTest();
   });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
@@ -329,7 +324,10 @@ JSON
     assert.ok(firstSessionStartReg);
     const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
     await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
-    assert.deepEqual(_peekPendingSessionStartContextForTest(), ["FIRST-LOAD-MARK"]);
+    assert.deepEqual(
+      _peekPendingSessionStartContextForTest().map((e) => e.context),
+      ["FIRST-LOAD-MARK"],
+    );
 
     // Second load (mirrors /reload re-emitting session_start with
     // reason="reload"): the buffer must be cleared by

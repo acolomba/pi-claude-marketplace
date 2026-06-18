@@ -2783,14 +2783,23 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
       );
 
       // Post-condition: the routing-table now reflects the installed plugin's
-      // PreToolUse entry. This proves WR-03's `rebuildRoutingTables(state,
-      // locations)` ran inside the per-plugin lock right after
-      // `addPluginConfigToCache`.
+      // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
+      // inside the per-plugin lock right after `addPluginConfigToCache`.
       const bucket = getRoutingBucket("PreToolUse");
       assert.equal(bucket.length, 1);
       assert.equal(bucket[0]?.pluginId, "p1");
       assert.equal(bucket[0]?.scope, "project");
       assert.equal(bucket[0]?.handlerDecl["command"], "echo hello");
+      // resolvedSource must propagate from the resolver -> cache -> routing
+      // table; without this assert a regression that drops the pluginRoot
+      // argument from addPluginConfigToCache(...) would not be caught at
+      // the orchestrator-test layer. CLAUDE_PLUGIN_ROOT export at dispatch
+      // depends on this field.
+      assert.equal(
+        bucket[0]?.resolvedSource,
+        afterState.marketplaces["mp"]?.plugins["p1"]?.resolvedSource,
+        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

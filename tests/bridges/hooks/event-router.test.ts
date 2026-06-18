@@ -27,10 +27,9 @@ import {
   type BucketAEvent,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
-import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionContext,
   ToolResultEvent,
@@ -56,46 +55,6 @@ import type {
 beforeEach(() => {
   _resetForTest();
 });
-
-// Build a minimal ExtensionState fixture with one or more plugins. The
-// state shape mirrors persistence/state-io.ts but is constructed in-memory
-// (no disk fixtures required for the rebuild path).
-function makeState(input: {
-  marketplaces: Record<
-    string,
-    {
-      scope: "user" | "project";
-      plugins: Record<string, { hooks: string[] }>;
-    }
-  >;
-}): ExtensionState {
-  const marketplaces: ExtensionState["marketplaces"] = {};
-  for (const [mpName, mp] of Object.entries(input.marketplaces)) {
-    const plugins: (typeof marketplaces)[string]["plugins"] = {};
-    for (const [pluginId, plugin] of Object.entries(mp.plugins)) {
-      plugins[pluginId] = {
-        version: "1.0.0",
-        resolvedSource: "test://",
-        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: plugin.hooks },
-        installedAt: "2026-06-14T00:00:00Z",
-        updatedAt: "2026-06-14T00:00:00Z",
-      };
-    }
-
-    marketplaces[mpName] = {
-      name: mpName,
-      scope: mp.scope,
-      source: { kind: "path", raw: "/tmp/test" },
-      addedFromCwd: "/tmp",
-      manifestPath: "/tmp/test/marketplace.json",
-      marketplaceRoot: "/tmp/test",
-      plugins,
-    };
-  }
-
-  return { schemaVersion: 1, marketplaces };
-}
 
 // Build a minimal HooksConfig with the given event -> matcher -> handler
 // shape. `matcher` defaults to "" (match-all).
@@ -128,8 +87,22 @@ function makeConfig(
 test("cache: addPluginConfigToCache + removePluginConfigFromCache are idempotent", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map()); // overwrite, not duplicate
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  ); // overwrite, not duplicate
   assert.equal(_parsedConfigCacheForTest().size, 1);
 
   removePluginConfigFromCache("user", "mp", "p1");
@@ -149,7 +122,7 @@ test("cache: key includes marketplace -- same (scope, pluginId) under different 
     "user",
     "mp-alpha",
     "shared-id",
-    "test://user/mp-alpha/shared-id",
+    asAbsolutePluginRoot("/test/user/mp-alpha/shared-id"),
     config,
     new Map(),
   );
@@ -157,7 +130,7 @@ test("cache: key includes marketplace -- same (scope, pluginId) under different 
     "user",
     "mp-beta",
     "shared-id",
-    "test://user/mp-beta/shared-id",
+    asAbsolutePluginRoot("/test/user/mp-beta/shared-id"),
     config,
     new Map(),
   );
@@ -167,14 +140,16 @@ test("cache: key includes marketplace -- same (scope, pluginId) under different 
 
 test("rebuildRoutingTables: produces 8 Claude-event buckets", () => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
 
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
-  });
-  const loc = locationsFor("user", "/tmp/cwd");
-
-  rebuildRoutingTables(state, loc);
+  rebuildRoutingTables();
 
   const table = _routingTableForTest();
   assert.equal(table.size, BUCKET_A_EVENTS.length);
@@ -191,19 +166,32 @@ test("rebuildRoutingTables: cross-plugin order matches compareByNameThenScope (a
   // scope, because rebuild walks the full cross-scope cache.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
 
-  addPluginConfigToCache("user", "mp", "alpha", "test://user/mp/alpha", config, new Map());
-  addPluginConfigToCache("project", "mp", "beta", "test://project/mp/beta", config, new Map());
-  addPluginConfigToCache("project", "mp", "gamma", "test://project/mp/gamma", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "alpha",
+    asAbsolutePluginRoot("/test/user/mp/alpha"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "project",
+    "mp",
+    "beta",
+    asAbsolutePluginRoot("/test/project/mp/beta"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "project",
+    "mp",
+    "gamma",
+    asAbsolutePluginRoot("/test/project/mp/gamma"),
+    config,
+    new Map(),
+  );
 
-  const state = makeState({
-    marketplaces: {
-      mp: {
-        scope: "project",
-        plugins: { beta: { hooks: ["s-beta"] }, gamma: { hooks: ["s-gamma"] } },
-      },
-    },
-  });
-  rebuildRoutingTables(state, locationsFor("project", "/tmp/cwd"));
+  rebuildRoutingTables();
 
   const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.deepEqual(
@@ -221,12 +209,16 @@ test("rebuildRoutingTables: within-plugin declaration order preserved via declar
     { event: "PreToolUse", matcher: "", handlers: 2 },
     { event: "PreToolUse", matcher: "", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
 
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug"] } } } },
-  });
-  rebuildRoutingTables(state, locationsFor("user", "/tmp/cwd"));
+  rebuildRoutingTables();
 
   const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.equal(bucket.length, 3);
@@ -249,20 +241,23 @@ test("rebuildRoutingTables: empty-cache rebuild clears stale entries", () => {
   // contract: a rebuild against an empty cache MUST produce empty
   // buckets across all eight Claude events.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
 
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["s-p1"] } } } },
-  });
-  const loc = locationsFor("user", "/tmp/cwd");
-  rebuildRoutingTables(state, loc);
+  rebuildRoutingTables();
   assert.equal((_routingTableForTest().get("PreToolUse") ?? []).length, 1);
 
   // Drop the cache entry (mirroring removePluginConfigFromCache in the
   // uninstall / disable per-plugin lock body); rebuild must clear the
   // PreToolUse bucket because the cache is now the source of truth.
   removePluginConfigFromCache("user", "mp", "p1");
-  rebuildRoutingTables(state, loc);
+  rebuildRoutingTables();
 
   const table = _routingTableForTest();
   for (const event of BUCKET_A_EVENTS) {
@@ -290,25 +285,19 @@ test("rebuildRoutingTables: sequential per-scope rebuild preserves entries acros
     "user",
     "mp",
     "learning-output-style",
-    "test://user/mp/learning-output-style",
+    asAbsolutePluginRoot("/test/user/mp/learning-output-style"),
     config,
     new Map(),
   );
 
-  const userState = makeState({
-    marketplaces: {
-      mp: { scope: "user", plugins: { "learning-output-style": { hooks: ["slug"] } } },
-    },
-  });
-  rebuildRoutingTables(userState, locationsFor("user", "/tmp/cwd"));
+  rebuildRoutingTables();
   assert.equal(
     (_routingTableForTest().get("SessionStart") ?? []).length,
     1,
     "user-scope rebuild should populate SessionStart with 1 entry",
   );
 
-  const emptyProjectState = makeState({ marketplaces: {} });
-  rebuildRoutingTables(emptyProjectState, locationsFor("project", "/tmp/cwd"));
+  rebuildRoutingTables();
   assert.equal(
     (_routingTableForTest().get("SessionStart") ?? []).length,
     1,
@@ -323,16 +312,25 @@ test("rebuildRoutingTables: cross-scope cache walk includes BOTH scopes' entries
   // one scope followed by a reconcile rebuild in the OTHER scope would
   // silently drop the install's entries.
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "alpha", "test://user/mp/alpha", config, new Map());
-  addPluginConfigToCache("project", "mp", "beta", "test://project/mp/beta", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "alpha",
+    asAbsolutePluginRoot("/test/user/mp/alpha"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "project",
+    "mp",
+    "beta",
+    asAbsolutePluginRoot("/test/project/mp/beta"),
+    config,
+    new Map(),
+  );
 
-  // Rebuild nominally for project scope; both entries must surface.
-  const projectState = makeState({
-    marketplaces: {
-      mp: { scope: "project", plugins: { beta: { hooks: ["s-beta"] } } },
-    },
-  });
-  rebuildRoutingTables(projectState, locationsFor("project", "/tmp/cwd"));
+  // Rebuild walks the full cross-scope cache; both entries must surface.
+  rebuildRoutingTables();
 
   const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.deepEqual(
@@ -347,13 +345,8 @@ test("rebuildRoutingTables: cache miss for a state-declared plugin is silent", (
   // entry for it. Rebuild MUST NOT throw, and the plugin's entries MUST NOT
   // appear in any bucket (the first-install-window case where install has
   // populated state but the cache is not yet hydrated).
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
-  });
-  const loc = locationsFor("user", "/tmp/cwd");
-
   assert.doesNotThrow(() => {
-    rebuildRoutingTables(state, loc);
+    rebuildRoutingTables();
   });
 
   for (const event of BUCKET_A_EVENTS) {
@@ -363,12 +356,14 @@ test("rebuildRoutingTables: cache miss for a state-declared plugin is silent", (
 
 test("rebuildRoutingTables: zero disk I/O on the hot path", (t) => {
   const config = makeConfig([{ event: "PreToolUse", handlers: 1 }]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
-
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug"] } } } },
-  });
-  const loc = locationsFor("user", "/tmp/cwd");
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
 
   // Wrap fs.promises.readFile to throw if invoked during rebuild. If the
   // rebuild path secretly reads from disk, the throw trips the
@@ -378,7 +373,7 @@ test("rebuildRoutingTables: zero disk I/O on the hot path", (t) => {
   });
 
   assert.doesNotThrow(() => {
-    rebuildRoutingTables(state, loc);
+    rebuildRoutingTables();
   });
 
   sentinel.mock.restore();
@@ -409,7 +404,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: input.pluginId,
-    resolvedSource: "test://plugin-root",
+    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,
@@ -684,7 +679,7 @@ test("WR-01: hydrateProjectScopeForCwd clears phantom project-arm cache entries 
     "project",
     "mp-phantom",
     "phantom-plugin",
-    "test://project/mp-phantom/phantom-plugin",
+    asAbsolutePluginRoot("/test/project/mp-phantom/phantom-plugin"),
     config,
     new Map(),
   );
@@ -709,7 +704,7 @@ test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched
     "user",
     "mp-u",
     "user-plugin",
-    "test://user/mp-u/user-plugin",
+    asAbsolutePluginRoot("/test/user/mp-u/user-plugin"),
     config,
     new Map(),
   );
@@ -717,7 +712,7 @@ test("WR-01: hydrateProjectScopeForCwd leaves user-scope cache entries untouched
     "project",
     "mp-p",
     "project-plugin",
-    "test://project/mp-p/project-plugin",
+    asAbsolutePluginRoot("/test/project/mp-p/project-plugin"),
     config,
     new Map(),
   );
@@ -745,7 +740,7 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
     "project",
     "mp-alpha",
     "p1",
-    "test://project/mp-alpha/p1",
+    asAbsolutePluginRoot("/test/project/mp-alpha/p1"),
     config,
     new Map(),
   );
@@ -753,7 +748,7 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
     "project",
     "mp-beta",
     "p2",
-    "test://project/mp-beta/p2",
+    asAbsolutePluginRoot("/test/project/mp-beta/p2"),
     config,
     new Map(),
   );
@@ -761,11 +756,18 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
     "project",
     "mp-gamma",
     "p3",
-    "test://project/mp-gamma/p3",
+    asAbsolutePluginRoot("/test/project/mp-gamma/p3"),
     config,
     new Map(),
   );
-  addPluginConfigToCache("user", "mp-u", "u1", "test://user/mp-u/u1", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp-u",
+    "u1",
+    asAbsolutePluginRoot("/test/user/mp-u/u1"),
+    config,
+    new Map(),
+  );
   assert.equal(_parsedConfigCacheForTest().size, 4);
 
   await hydrateProjectScopeForCwd("/nonexistent/cwd-for-wr-01-test");

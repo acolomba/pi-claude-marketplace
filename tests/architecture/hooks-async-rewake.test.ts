@@ -69,6 +69,7 @@ import {
   _resetForTest as _resetEventRouterForTest,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
@@ -313,7 +314,7 @@ function makeEntry(overrides: {
     scope: "user",
     marketplace: "mp",
     pluginId: overrides.pluginId ?? "rewake-plug",
-    resolvedSource: "test://plugin-root",
+    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
     claudeEvent: overrides.claudeEvent ?? "PreToolUse",
     matcher: { kind: "match-all" },
     rawMatcher: "",

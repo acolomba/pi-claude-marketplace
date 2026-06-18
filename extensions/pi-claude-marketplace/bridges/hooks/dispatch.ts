@@ -163,14 +163,26 @@ function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolea
  * Caller controls bucket selection + per-entry matcher filter; this
  * reducer just walks the pre-filtered entry list.
  */
+interface ReducedBucket {
+  readonly result: HookExecResult;
+  /**
+   * The last entry that produced a `mutate` or `block`/`stop` result.
+   * Carried so the per-event adapter at exit can attribute the result back
+   * to the contributing plugin (OBS-01 telemetry, SessionStart
+   * additionalContext buffer provenance).
+   */
+  readonly attributedTo: RoutingEntry | undefined;
+}
+
 async function reduceBucket(
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   matcherFires: (entry: RoutingEntry) => boolean,
-): Promise<HookExecResult> {
+): Promise<ReducedBucket> {
   let finalResult: HookExecResult = { kind: "noop" };
+  let attributedTo: RoutingEntry | undefined;
   for (const entry of bucket) {
     if (!matcherFires(entry)) {
       continue;
@@ -186,10 +198,12 @@ async function reduceBucket(
     switch (r.kind) {
       case "block":
         finalResult = r;
-        return finalResult;
+        attributedTo = entry;
+        return { result: finalResult, attributedTo };
       case "stop":
         finalResult = r;
-        return finalResult;
+        attributedTo = entry;
+        return { result: finalResult, attributedTo };
       case "mutate":
         applyMutationInPlace(event, r);
         // D-60-03: mutate also becomes the running finalResult so the
@@ -202,6 +216,7 @@ async function reduceBucket(
         // double-counting no-op against the already-mutated event
         // (applyMutationInPlace is idempotent on identical patches).
         finalResult = r;
+        attributedTo = entry;
         continue;
       case "noop":
         continue;
@@ -210,7 +225,7 @@ async function reduceBucket(
     }
   }
 
-  return finalResult;
+  return { result: finalResult, attributedTo };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -248,11 +263,11 @@ export function compositeHandlerFor<
       return undefined as CompositeReturnFor<E>;
     }
 
-    const finalResult = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
-    return adaptForEvent(claudeEvent, finalResult, event) as CompositeReturnFor<E>;
+    return adaptForEvent(claudeEvent, reduced, event) as CompositeReturnFor<E>;
   };
 }
 
@@ -281,11 +296,11 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const finalResult = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 
-    return adaptToolResultResult(finalResult, event);
+    return adaptToolResultResult(reduced.result, event);
   };
 }
 
@@ -301,24 +316,37 @@ export function toolResultCompositeHandler(
  */
 function adaptForEvent(
   claudeEvent: Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
-  result: HookExecResult,
+  reduced: ReducedBucket,
   event: unknown,
 ): ToolCallEventResult | InputEventResult | undefined {
   switch (claudeEvent) {
     case "PreToolUse":
-      return adaptToolCallResult(result, event as ToolCallEvent);
+      return adaptToolCallResult(reduced.result, event as ToolCallEvent);
     case "UserPromptSubmit":
-      return adaptInputResult(result, event as InputEvent);
+      return adaptInputResult(reduced.result, event as InputEvent);
     case "SessionStart":
     case "SessionEnd":
     case "PreCompact":
-    case "PostCompact":
+    case "PostCompact": {
       // adaptObservationResultForEvent narrows the silent-drop arms by
       // claudeEvent so a SessionStart mutate.additionalContext can be
       // captured into event-router.ts's pending buffer (drained by the
       // before_agent_start handler on the next agent turn).
-      adaptObservationResultForEvent(result, claudeEvent);
+      // `attributedTo` carries the routing entry that produced the
+      // mutate (or block/stop) result so the buffer entry carries
+      // scope/marketplace/pluginId provenance instead of a bare string.
+      // Falls back to a synthetic placeholder on a pure-noop bucket --
+      // observation events never reach the SessionStart-mutate path
+      // without `attributedTo` set, so the placeholder is only seen by
+      // the block/stop debug-log path's no-op semantics.
+      const provenance = reduced.attributedTo ?? {
+        scope: "user" as const,
+        marketplace: "",
+        pluginId: "",
+      };
+      adaptObservationResultForEvent(reduced.result, claudeEvent, provenance);
       return undefined;
+    }
   }
 }
 

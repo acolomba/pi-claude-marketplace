@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
   githubSource,
   pathSource,
@@ -2595,7 +2596,7 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
         "project",
         "mp",
         "hello",
-        "test://project/mp/hello",
+        asAbsolutePluginRoot("/test/project/mp/hello"),
         parsedOld.value,
         parsedOld.ifPredicates,
       );
@@ -2632,6 +2633,16 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
       assert.equal(postBucket.length, 1);
       assert.equal(postBucket[0]?.pluginId, "hello");
       assert.equal(postBucket[0]?.handlerDecl["command"], "echo NEW");
+      // resolvedSource must propagate from the resolver -> cache -> routing
+      // table after update. CLAUDE_PLUGIN_ROOT export at dispatch depends
+      // on it.
+      const updateLoc = locationsFor("project", cwd);
+      const postState = await loadState(updateLoc.extensionRoot);
+      assert.equal(
+        postBucket[0]?.resolvedSource,
+        postState.marketplaces["mp"]?.plugins["hello"]?.resolvedSource,
+        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource after update",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

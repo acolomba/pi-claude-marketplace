@@ -66,6 +66,7 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from "../../platform/pi-api.ts";
+import type { Scope } from "../../shared/types.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Mutation helper (D-60-02 / D-60-03)
@@ -306,6 +307,7 @@ export function adaptInputResult(
 export function adaptObservationResultForEvent(
   result: HookExecResult,
   claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
+  provenance: { readonly scope: Scope; readonly marketplace: string; readonly pluginId: string },
 ): undefined {
   switch (result.kind) {
     case "block":
@@ -320,7 +322,12 @@ export function adaptObservationResultForEvent(
         // drained one-shot by beforeAgentStartHandlerFor and cleared on
         // registerHooksBridge entry (so /reload does not leak stale
         // context across sessions).
-        appendPendingSessionStartContext(result.additionalContext);
+        appendPendingSessionStartContext({
+          context: result.additionalContext,
+          scope: provenance.scope,
+          marketplace: provenance.marketplace,
+          pluginId: provenance.pluginId,
+        });
       }
 
       // SessionEnd / PreCompact / PostCompact: no logical drain point for
@@ -358,6 +365,10 @@ export function adaptObservationResultForEvent(
  *
  * The adapter NEVER notifies and NEVER throws -- `assertNever` only fires
  * when the union grows a new arm, which is a compile-time failure.
+ *
+ * @internal Use `adaptObservationResultForEvent` in production dispatch
+ *   paths. This shim only exists to anchor the 4-arm exhaustiveness
+ *   architecture test; new call sites should pass the `claudeEvent`.
  */
 export function adaptObservationResult(result: HookExecResult): undefined {
   switch (result.kind) {

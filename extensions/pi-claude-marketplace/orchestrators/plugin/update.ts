@@ -85,6 +85,7 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -1137,13 +1138,13 @@ async function finalizeUpdateRecord(
           args.scope,
           marketplace,
           plugin,
-          installable.pluginRoot,
+          asAbsolutePluginRoot(installable.pluginRoot),
           path.join(installable.pluginRoot, installable.hooksConfigPath),
           args.cwd,
         );
       }
 
-      rebuildRoutingTables(s, locations);
+      rebuildRoutingTables();
     }
   });
   return { invalidConfigWriteBack };
@@ -1160,7 +1161,7 @@ async function readAndCacheUpdatedPluginHooks(
   scope: Scope,
   marketplace: string,
   plugin: string,
-  resolvedSource: string,
+  resolvedSource: AbsolutePluginRoot,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -1321,21 +1322,15 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // phase3aFailures and the loop continues; recovery is via the
   // RECOVERY_PLUGIN_REINSTALL_PREFIX hint -- there is no in-process restore.
   //
-  // WR-01 (Phase 63 review): the removeHookConfig() arm (version B drops
-  // hooks) is not atomic at the bridge level -- rm({recursive:true,
-  // force:true}) can throw partway through (EACCES on a child, EIO mid-
-  // walk). On such a throw, the on-disk hooks subtree may be partially
-  // deleted relative to state.json's still-old `resources.hooks: [plugin]`
-  // slug. The `failedPhases.has("hooks")` guard at finalize correctly
-  // keeps the OLD inventory slug, so the truthful "we did not complete
-  // the swap" view is preserved -- BUT the dispatcher's routing table
-  // (rebuilt from state.json on /reload) will point at a now-deleted
-  // file until the user runs `reinstall`. The RECOVERY_PLUGIN_REINSTALL_PREFIX
-  // hint emitted by the phase-3b path covers this case: a (failed)
-  // {rollback partial} row directs the user to reinstall, which writes
-  // a fresh hooks subtree from the resolved plugin source. The same
-  // recovery contract applies to reinstall.ts::commitHooks (see
-  // WR-05 documentation there).
+  // WR-01: removeHookConfig() (version B drops hooks) is non-atomic --
+  // `rm({recursive,force})` can throw partway and leave the hooks
+  // subtree partially deleted. The `failedPhases.has("hooks")` guard at
+  // finalize preserves the OLD `resources.hooks` inventory in
+  // state.json, keeping the truthful "swap incomplete" view. The
+  // /reload routing table will point at the partially-deleted file
+  // until the user runs reinstall (RECOVERY_PLUGIN_REINSTALL_PREFIX
+  // hint). Same recovery contract as reinstall.ts::commitHooks (see
+  // WR-05).
   try {
     if (preflight.installable.hooksConfigPath !== undefined) {
       const raw = await readFile(

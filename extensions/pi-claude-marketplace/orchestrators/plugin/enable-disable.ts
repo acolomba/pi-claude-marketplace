@@ -270,7 +270,6 @@ async function runDisableBranch(
   opts: EnableDisablePluginOptions,
   scope: Scope,
   locations: ScopedLocations,
-  state: ExtensionState,
   installed: InstalledPluginRecord,
 ): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean }> {
   const recordedVersion = installed.version;
@@ -287,18 +286,9 @@ async function runDisableBranch(
     // on-disk hooks.json (cascade.dropped.hooks is non-empty), drop the
     // parsed-config cache entry and rebuild the routing table in lockstep
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
-    // the uninstall.ts cache-mutation invariant. Wrapped in try/catch so
-    // a cache mutation throw cannot escalate a partial-cascade-failure
-    // disable into an unhandled exception.
+    // the uninstall.ts cache-mutation invariant.
     if (cascade.dropped.hooks.length > 0) {
-      try {
-        removePluginConfigFromCache(scope, opts.marketplace, opts.plugin);
-        rebuildRoutingTables(state, locations);
-      } catch (cacheErr) {
-        hookDebugLog(
-          `disable: partial-cascade cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
-        );
-      }
+      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ");
     }
 
     return {
@@ -328,19 +318,33 @@ async function runDisableBranch(
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
-  // Wrapped in try/catch so a cache mutation throw cannot escalate a
-  // successful disable into a failure -- the cache will be rebuilt from
-  // state.json on the next /reload's factory-time hydrate (D-59-02).
-  try {
-    removePluginConfigFromCache(scope, opts.marketplace, opts.plugin);
-    rebuildRoutingTables(state, locations);
-  } catch (cacheErr) {
-    hookDebugLog(
-      `disable: cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
-    );
-  }
+  dropCachedHooks(scope, opts.marketplace, opts.plugin, "");
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
+}
+
+/**
+ * WR-03: drop the parsed-config cache entry for a disabled plugin and
+ * rebuild the routing table in lockstep. Wrapped in try/catch so a cache
+ * mutation throw cannot escalate a successful disable into a failure --
+ * the cache is rebuilt from state.json on the next /reload's factory-time
+ * hydrate (D-59-02). The `logPrefix` distinguishes the partial-cascade
+ * branch from the clean-disable branch in debug logs.
+ */
+function dropCachedHooks(
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+  logPrefix: string,
+): void {
+  try {
+    removePluginConfigFromCache(scope, marketplace, plugin);
+    rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+    );
+  }
 }
 
 /**
@@ -513,7 +517,7 @@ export async function setPluginEnabled(
       if (enable) {
         outcome = await runEnableBranch(opts, scope, locations, state, installed.version);
       } else {
-        const disableResult = await runDisableBranch(opts, scope, locations, state, installed);
+        const disableResult = await runDisableBranch(opts, scope, locations, installed);
         outcome = disableResult.outcome;
         // I3: a partial disable cascade mutated `installed.resources.*` in
         // place to drop the artefacts already removed before the throw.

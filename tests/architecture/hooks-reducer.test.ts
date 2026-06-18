@@ -38,6 +38,7 @@ import {
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { type BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { HookExecResult } from "../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type {
@@ -61,7 +62,7 @@ function makeEntry(input: {
     scope: "user",
     marketplace: "mp",
     pluginId: input.pluginId,
-    resolvedSource: "test://plugin-root",
+    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,

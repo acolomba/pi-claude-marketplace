@@ -2528,6 +2528,15 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       assert.equal(postBucket.length, 1);
       assert.equal(postBucket[0]?.pluginId, "hello");
       assert.equal(postBucket[0]?.handlerDecl["command"], "echo hi");
+      // resolvedSource must propagate from the resolver -> cache -> routing
+      // table. CLAUDE_PLUGIN_ROOT export at dispatch depends on it.
+      const reinstallLoc = locationsFor("project", cwd);
+      const postState = await loadState(reinstallLoc.extensionRoot);
+      assert.equal(
+        postBucket[0]?.resolvedSource,
+        postState.marketplaces["mp"]?.plugins["hello"]?.resolvedSource,
+        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource after reinstall",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

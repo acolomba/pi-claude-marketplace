@@ -45,6 +45,7 @@ import {
   parseHooksConfig,
   parseMatcher,
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -870,53 +871,12 @@ test("MATCH-03: ifPredicate populates from parser side-Map into RoutingEntry (Ba
     "project",
     "mp",
     "p1",
-    "test://project/mp/p1",
+    asAbsolutePluginRoot("/test/project/mp/p1"),
     parsed.value,
     parsed.ifPredicates,
   );
 
-  // Synthetic state + locations fixture. The shape mirrors
-  // `persistence/state-io.ts` but is constructed in-memory; the cast is
-  // load-bearing because the architecture test does not import the
-  // full state-io surface. `rebuildRoutingTables` reads only `scope` +
-  // `plugins[*].resources.hooks.length` from the state record.
-  const stateRecord = {
-    schemaVersion: 1 as const,
-    marketplaces: {
-      mp: {
-        name: "mp",
-        scope: "project" as const,
-        source: { kind: "path", raw: "./src" },
-        addedFromCwd: "/projects/p",
-        manifestPath: "/projects/p/marketplace.json",
-        marketplaceRoot: "/projects/p",
-        plugins: {
-          p1: {
-            installedAt: "2026-06-15T00:00:00Z",
-            updatedAt: "2026-06-15T00:00:00Z",
-            resolvedSource: "test://",
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: {
-              skills: [],
-              prompts: [],
-              agents: [],
-              mcpServers: [],
-              hooks: ["p1"],
-            },
-            version: "1.0.0",
-          },
-        },
-      },
-    },
-  };
-  const loc = {
-    scope: "project" as const,
-    extensionRoot: "/projects/p/.pi/pi-claude-marketplace",
-  };
-  router.rebuildRoutingTables(
-    stateRecord,
-    loc as unknown as Parameters<typeof router.rebuildRoutingTables>[1],
-  );
+  router.rebuildRoutingTables();
 
   const bucket = router._routingTableForTest().get("PreToolUse");
   assert.ok(bucket !== undefined);

@@ -55,10 +55,9 @@ import {
   type BucketAEvent,
 } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
-import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { HooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
-import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -89,40 +88,6 @@ function makePiMock(): PiMock {
 
   const on = Object.assign(onFn, { bind: () => on });
   return { on, calls };
-}
-
-function makeState(input: {
-  marketplaces: Record<
-    string,
-    { scope: "user" | "project"; plugins: Record<string, { hooks: string[] }> }
-  >;
-}): ExtensionState {
-  const marketplaces: ExtensionState["marketplaces"] = {};
-  for (const [mpName, mp] of Object.entries(input.marketplaces)) {
-    const plugins: (typeof marketplaces)[string]["plugins"] = {};
-    for (const [pluginId, plugin] of Object.entries(mp.plugins)) {
-      plugins[pluginId] = {
-        version: "1.0.0",
-        resolvedSource: "test://",
-        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: plugin.hooks },
-        installedAt: "2026-06-14T00:00:00Z",
-        updatedAt: "2026-06-14T00:00:00Z",
-      };
-    }
-
-    marketplaces[mpName] = {
-      name: mpName,
-      scope: mp.scope,
-      source: { kind: "path", raw: "/tmp/test" },
-      addedFromCwd: "/tmp",
-      manifestPath: "/tmp/test/marketplace.json",
-      marketplaceRoot: "/tmp/test",
-      plugins,
-    };
-  }
-
-  return { schemaVersion: 1, marketplaces };
 }
 
 function makeConfig(
@@ -163,7 +128,7 @@ function makeEntry(input: {
     scope: input.scope ?? "user",
     marketplace: "mp",
     pluginId: input.pluginId,
-    resolvedSource: "test://plugin-root",
+    resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
     claudeEvent: input.claudeEvent ?? "PreToolUse",
     matcher: parseMatcher(rawMatcher),
     rawMatcher,
@@ -289,12 +254,16 @@ test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset 
     { event: "PostCompact", handlers: 1 },
     { event: "SessionEnd", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
+  );
 
-  const state = makeState({
-    marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug-p1"] } } } },
-  });
-  rebuildRoutingTables(state, locationsFor("user", "/tmp/cwd"));
+  rebuildRoutingTables();
 
   const tableKeys = Array.from(_routingTableForTest().keys()).sort();
   const expectedKeys = [...BUCKET_A_EVENTS].sort();
@@ -316,25 +285,36 @@ test("DISP-04: cross-plugin sort matches compareByNameThenScope (alphabetical, p
   // distinct names the expected cross-plugin order is strictly alphabetical
   // -- regardless of insertion scope, because rebuild walks the full
   // cross-scope cache.
-  addPluginConfigToCache("user", "mp", "alpha", "test://user/mp/alpha", config, new Map());
-  addPluginConfigToCache("project", "mp", "beta", "test://project/mp/beta", config, new Map());
-  addPluginConfigToCache("project", "mp", "gamma", "test://project/mp/gamma", config, new Map());
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "alpha",
+    asAbsolutePluginRoot("/test/user/mp/alpha"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "project",
+    "mp",
+    "beta",
+    asAbsolutePluginRoot("/test/project/mp/beta"),
+    config,
+    new Map(),
+  );
+  addPluginConfigToCache(
+    "project",
+    "mp",
+    "gamma",
+    asAbsolutePluginRoot("/test/project/mp/gamma"),
+    config,
+    new Map(),
+  );
 
   // Per-scope rebuild (the production wiring fires rebuildRoutingTables once
   // per scope inside applyReconcile's per-scope loop). Each call walks the
   // full cross-scope cache so the resulting bucket carries all three
-  // entries regardless of which scope's state is threaded through.
-  rebuildRoutingTables(
-    makeState({
-      marketplaces: {
-        mp: {
-          scope: "project",
-          plugins: { beta: { hooks: ["s-beta"] }, gamma: { hooks: ["s-gamma"] } },
-        },
-      },
-    }),
-    locationsFor("project", "/tmp/cwd"),
-  );
+  // entries.
+  rebuildRoutingTables();
   const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.deepEqual(
     bucket.map((e) => e.pluginId),
@@ -353,14 +333,16 @@ test("DISP-04: within-plugin declaration order preserved via monotonic declarati
     { event: "PreToolUse", matcher: "", handlers: 2 },
     { event: "PreToolUse", matcher: "", handlers: 1 },
   ]);
-  addPluginConfigToCache("user", "mp", "p1", "test://user/mp/p1", config, new Map());
-
-  rebuildRoutingTables(
-    makeState({
-      marketplaces: { mp: { scope: "user", plugins: { p1: { hooks: ["slug"] } } } },
-    }),
-    locationsFor("user", "/tmp/cwd"),
+  addPluginConfigToCache(
+    "user",
+    "mp",
+    "p1",
+    asAbsolutePluginRoot("/test/user/mp/p1"),
+    config,
+    new Map(),
   );
+
+  rebuildRoutingTables();
 
   const bucket = _routingTableForTest().get("PreToolUse") ?? [];
   assert.equal(bucket.length, 3, "expected 3 handler entries flattened from 2 groups");

@@ -891,8 +891,8 @@ async function rebuildScopeRoutingTable(scope: Scope, cwd: string): Promise<void
     return;
   }
 
-  await withLockedStateTransaction(loc, async (tx) => {
-    rebuildRoutingTables(tx.state, loc);
+  await withLockedStateTransaction(loc, async (_tx) => {
+    rebuildRoutingTables();
     // NO tx.save() -- read-only snapshot acquisition.
     await Promise.resolve();
   });

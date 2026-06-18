@@ -8,6 +8,7 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   AgentsUnstageFailureError,
@@ -1910,7 +1911,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         "project",
         "mp",
         "p1",
-        "test://project/mp/p1",
+        asAbsolutePluginRoot("/test/project/mp/p1"),
         parsed.value,
         parsed.ifPredicates,
       );
@@ -1919,7 +1920,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
           scope: "project",
           marketplace: "mp",
           pluginId: "p1",
-          resolvedSource: "test://plugin-root",
+          resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
           claudeEvent: "PreToolUse",
           matcher: parseMatcher(""),
           rawMatcher: "",

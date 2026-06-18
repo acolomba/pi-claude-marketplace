@@ -213,3 +213,153 @@ echo '{}'
     );
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Path-source spawn coverage: `dispatch-exec.ts` and `async-rewake/registry.ts`
+// dropped their `assertPathInside(extensionRoot, pluginRoot, ...)` containment
+// guards because path-source marketplaces deliberately point at user-chosen
+// external paths (a local development checkout, a sibling repo). This test
+// confirms that with `resolvedSource` set to a directory OUTSIDE
+// `<extensionRoot>/sources/...`, the bridge still spawns the hook handler
+// and `${CLAUDE_PLUGIN_ROOT}` resolves to the external path.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async (t) => {
+  _resetForTest();
+  t.after(() => {
+    _resetForTest();
+  });
+
+  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-spawn-pathsrc-"));
+  const agentDir = path.join(tmpRoot, "agent");
+  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+  // External path-source plugin -- a sibling directory OUTSIDE extensionRoot.
+  // This is the shape the assertPathInside guard removal allows: the user
+  // ran `marketplace add /path/to/external/checkout` and pointed at code that
+  // lives elsewhere on disk.
+  const externalPluginRoot = path.join(tmpRoot, "external-src", "plugins", "ext-plugin");
+  const sentinelPath = path.join(tmpRoot, "external-sentinel.log");
+
+  await mkdir(agentDir, { recursive: true });
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+
+  try {
+    // Lay out the external plugin tree.
+    const externalHandlersDir = path.join(externalPluginRoot, "hooks-handlers");
+    await mkdir(externalHandlersDir, { recursive: true });
+    const handlerScript = `#!/usr/bin/env bash
+set -euo pipefail
+printf 'external-fired at %s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${sentinelPath}"
+echo '{}'
+`;
+    await writeFile(path.join(externalHandlersDir, "session-start.sh"), handlerScript, {
+      mode: 0o755,
+    });
+
+    // Seed state.json: resolvedSource points OUTSIDE extensionRoot.
+    const externalState: ExtensionState = {
+      schemaVersion: 1,
+      marketplaces: {
+        "external-mp": {
+          name: "external-mp",
+          scope: "user",
+          source: { kind: "path", raw: path.join(tmpRoot, "external-src") },
+          addedFromCwd: tmpRoot,
+          manifestPath: path.join(tmpRoot, "external-src", ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: path.join(tmpRoot, "external-src"),
+          plugins: {
+            "ext-plugin": {
+              version: "1.0.0",
+              resolvedSource: externalPluginRoot,
+              compatibility: {
+                installable: true,
+                notes: [],
+                supported: ["hooks"],
+                unsupported: [],
+              },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["ext-plugin"],
+              },
+              installedAt: "2026-06-17T00:00:00Z",
+              updatedAt: "2026-06-17T00:00:00Z",
+            },
+          },
+        },
+      },
+    };
+
+    const installedHooksDir = path.join(extensionRoot, "hooks", "ext-plugin");
+    await mkdir(installedHooksDir, { recursive: true });
+    await saveState(extensionRoot, externalState);
+    await writeFile(
+      path.join(installedHooksDir, "hooks.json"),
+      JSON.stringify(
+        {
+          SessionStart: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.sh"',
+                },
+              ],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const { pi, registrations } = makeMockPi();
+    const placeholderCtx = {
+      cwd: extensionRoot,
+      ui: { notify: () => {} },
+      sessionManager: {
+        getSessionId: () => "hooks-spawn-pathsrc-session",
+        getSessionFile: () => undefined,
+      },
+    } as unknown as ExtensionContext;
+    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+
+    const sessionStartReg = registrations.find((r) => r.event === "session_start");
+    assert.ok(sessionStartReg);
+    const sessionStartEvent2: SessionStartEvent = {
+      type: "session_start",
+      reason: "startup",
+    };
+    await sessionStartReg.handler(sessionStartEvent2, placeholderCtx);
+
+    // The sentinel proves dispatch-exec exported the external resolvedSource
+    // as CLAUDE_PLUGIN_ROOT and bash resolved the interpolation. If the
+    // dropped `assertPathInside` had been re-added (or if the resolver had
+    // silently rejected the external path), bash would exit non-zero and
+    // the sentinel would never appear.
+    const sentinel = await readFile(sentinelPath, "utf8").catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `external-source sentinel at ${sentinelPath} was not written -- ` +
+          `path-source plugin OUTSIDE extensionRoot failed to spawn. Detail: ${detail}`,
+      );
+    });
+    assert.match(
+      sentinel,
+      /^external-fired at \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/,
+      "sentinel must prove the external-path handler ran",
+    );
+  } finally {
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+    }
+
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});

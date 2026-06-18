@@ -99,6 +99,7 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
@@ -341,7 +342,7 @@ async function addInstalledPluginHooksToCache(
   scope: Scope,
   marketplace: string,
   plugin: string,
-  resolvedSource: string,
+  resolvedSource: AbsolutePluginRoot,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -827,15 +828,15 @@ export async function runInstallLedger(
           prompts: [...c.stagedCommandNames],
           agents: [...c.stagedAgentNames],
           mcpServers: [...c.stagedMcpServerNames],
-          // HOOK-02 / D-57-01: additive required field. WR-03: when the
-          // resolver advertises a hooks config (i.e. `<pluginRoot>/hooks/
-          // hooks.json` exists and parses), record the plugin's id as the
-          // per-plugin hooks-container-dir slug so `rebuildRoutingTables`'
-          // state walk (gated on `resources.hooks.length > 0` per
-          // collectPluginsInScope) actually visits this plugin and pulls
-          // its `parsedConfigCache` entry into the routing table without
-          // requiring `/reload` (NFR-2). When the resolver did not surface
-          // a hooks config, the inventory stays empty.
+          // HOOK-02 / D-57-01: additive required field. When the resolver
+          // advertises a hooks config (i.e. `<pluginRoot>/hooks/hooks.json`
+          // exists and parses), record the plugin's id as the per-plugin
+          // hooks-container-dir slug. This is the inventory marker for
+          // `list` UI, the `uninstall` hooks-subtree cleanup gate, and the
+          // factory-time hydrate predicate that decides whether to re-read
+          // the on-disk config back into `parsedConfigCache` on `/reload`.
+          // When the resolver did not surface a hooks config, the
+          // inventory stays empty.
           hooks: c.resolved.hooksConfigPath !== undefined ? [c.plugin] : [],
         },
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
@@ -1082,32 +1083,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // starts dispatching to the new plugin's hooks immediately,
       // without requiring `/reload` (NFR-2).
       //
-      // WR-02 (Phase 63 review): the defensive try/catch around the
-      // cache+routing arm prevents a post-`tx.save()` throw from
-      // escaping the closure and surfacing as a `(failed)` notification
-      // while state.json on disk records the install as successful.
-      // Both `addInstalledPluginHooksToCache` (which calls `readFile` +
-      // `parseHooksConfig` internally) AND `rebuildRoutingTables`
-      // (which walks state and `collectPluginsInScope`) can throw, and
-      // either throw would create a state divergence: state.json claims
-      // success but the user sees failure. The cache will be rebuilt
-      // from state.json on the next `/reload`'s factory-time hydrate
-      // (D-59-03), so a cache-mutation failure must NOT falsely fail
-      // the install. Failures route through `hookDebugLog` only,
-      // matching the non-fatal discipline `addInstalledPluginHooksToCache`
-      // uses for its own internal read+parse arms.
+      // WR-02: post-`tx.save()` cache+routing mutations are non-fatal --
+      // state.json already records the install as successful, so a
+      // throw here must NOT surface as `(failed)`. `/reload`'s
+      // factory-time hydrate (D-59-03) rebuilds the cache from
+      // state.json, closing any divergence. Failures route through
+      // `hookDebugLog`.
       if (installCtx.resolved.hooksConfigPath !== undefined) {
         try {
           await addInstalledPluginHooksToCache(
             scope,
             marketplace,
             plugin,
-            installCtx.resolved.pluginRoot,
+            asAbsolutePluginRoot(installCtx.resolved.pluginRoot),
             path.join(installCtx.resolved.pluginRoot, installCtx.resolved.hooksConfigPath),
             cwd,
           );
 
-          rebuildRoutingTables(state, locations);
+          rebuildRoutingTables();
         } catch (cacheErr) {
           hookDebugLog(
             `install: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,

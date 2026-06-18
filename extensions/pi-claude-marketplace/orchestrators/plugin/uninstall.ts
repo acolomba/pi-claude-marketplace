@@ -461,7 +461,7 @@ export async function uninstallPlugin(
       // to spawn the uninstalled command (the never-throws contract would
       // convert ENOENT to `{ kind: "noop" }` + hookDebugLog -- correct but
       // wasteful). Synchronous + zero disk I/O per DISP-02.
-      rebuildRoutingTables(state, locations);
+      rebuildRoutingTables();
 
       // WB-01 / WR-09: delete the plugin entry from the user-authored config.
       // SKIPPED in orchestrated mode (reconcile derives desired state FROM

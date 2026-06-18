@@ -41,6 +41,7 @@ import {
   type HooksConfig,
   type ParsedMatcher,
 } from "../../domain/components/hooks.ts";
+import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -90,9 +91,10 @@ export interface RoutingEntry {
    * exports this as `CLAUDE_PLUGIN_ROOT` so hook handlers using the standard
    * `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolve to a real path on
    * disk. Carried on RoutingEntry so dispatch does not have to re-read
-   * state.json on every event.
+   * state.json on every event. Branded so the type system blocks
+   * unvalidated strings flowing to the subprocess env.
    */
-  readonly resolvedSource: string;
+  readonly resolvedSource: AbsolutePluginRoot;
   /**
    * D-60-01 / D-60-04: the Claude-side bucket this entry was flattened
    * into. The translator dispatch in `dispatch-exec.ts` keys on this
@@ -122,9 +124,10 @@ interface CacheEntry {
    * Absolute path of the plugin source dir; flows through to
    * `RoutingEntry.resolvedSource` so dispatch-exec can export
    * `CLAUDE_PLUGIN_ROOT` to a real path. Mirrors
-   * `state.json::marketplaces[mp].plugins[id].resolvedSource`.
+   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Branded
+   * so the type system blocks unvalidated strings.
    */
-  readonly resolvedSource: string;
+  readonly resolvedSource: AbsolutePluginRoot;
   readonly config: HooksConfig;
   /**
    * MATCH-03: compiled `if`-field predicates keyed on
@@ -162,8 +165,21 @@ const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
  * clears the buffer (one-shot drain). The buffer also resets on every
  * `registerHooksBridge` entry so `/reload` cannot leak stale context from
  * the prior session.
+ *
+ * Typed accumulator (not a string bag): each entry carries provenance
+ * (scope/marketplace/pluginId) so OBS-01 debug telemetry can attribute
+ * leaks back to the contributing plugin without re-deriving from a flat
+ * string. Provenance is dropped at drain time -- only the joined text
+ * reaches `before_agent_start.systemPrompt`.
  */
-let pendingSessionStartContext: string[] = [];
+export interface PendingSessionStartContext {
+  readonly context: string;
+  readonly pluginId: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
+let pendingSessionStartContext: PendingSessionStartContext[] = [];
 
 // ──────────────────────────────────────────────────────────────────────────
 // Cache key helper (D-59-02 + marketplace inclusion)
@@ -191,7 +207,7 @@ export function addPluginConfigToCache(
   scope: Scope,
   marketplace: string,
   pluginId: string,
-  resolvedSource: string,
+  resolvedSource: AbsolutePluginRoot,
   config: HooksConfig,
   ifPredicates: ReadonlyMap<string, IfPredicate>,
 ): void {
@@ -241,14 +257,16 @@ export function currentEpoch(): number {
  *
  * Idempotent for noop append (empty string): empty strings are silently
  * skipped so a buggy hook returning `additionalContext: ""` does not
- * pollute the join output with a leading blank line.
+ * pollute the join output with a leading blank line. Provenance is still
+ * required on the argument shape so the call site always carries
+ * attribution -- the skipped-empty arm just discards both.
  */
-export function appendPendingSessionStartContext(text: string): void {
-  if (text.length === 0) {
+export function appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
+  if (entry.context.length === 0) {
     return;
   }
 
-  pendingSessionStartContext.push(text);
+  pendingSessionStartContext.push(entry);
 }
 
 /**
@@ -289,7 +307,7 @@ export function beforeAgentStartHandlerFor(
       return Promise.resolve(undefined);
     }
 
-    const buffered = pendingSessionStartContext.join("\n\n");
+    const buffered = pendingSessionStartContext.map((e) => e.context).join("\n\n");
     pendingSessionStartContext = [];
     return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
   };
@@ -311,10 +329,7 @@ export function beforeAgentStartHandlerFor(
  * each scope's state at factory time). Rebuild walks the entire cache
  * so sequential per-scope rebuild calls (the registerHooksBridge boot
  * loop and applyReconcile's per-scope loop) do not wipe each other's
- * buckets. The `state` and `loc` parameters are retained for caller
- * compatibility (every orchestrator already threads them through the
- * locked transaction); they are intentionally unused at the rebuild
- * site itself.
+ * buckets.
  *
  * Bucket assignment is verbatim against the declared event name (D-58-06):
  * `hooks.json` declares either `PostToolUse` or `PostToolUseFailure`, and
@@ -330,7 +345,7 @@ export function beforeAgentStartHandlerFor(
  * Empty buckets get an empty array so downstream `routingTable.get(event)`
  * never observes `undefined`.
  */
-export function rebuildRoutingTables(_state: ExtensionState, _loc: ScopedLocations): void {
+export function rebuildRoutingTables(): void {
   // Pre-seed every bucket so an empty cache still clears any stale entries
   // from a prior rebuild (e.g. uninstall / disable of the last
   // hooks-declaring plugin across both scopes).
@@ -446,7 +461,7 @@ function flattenPluginIntoBuckets(
 /**
  * Result of the hydrate pass for a single scope: the loaded state AND the
  * fully-constructed ScopedLocations. registerHooksBridge needs both to
- * call rebuildRoutingTables(state, loc) per scope after hydrate completes.
+ * call rebuildRoutingTables() per scope after hydrate completes.
  */
 interface HydratedScope {
   readonly state: ExtensionState;
@@ -566,6 +581,20 @@ async function tryHydrateOnePlugin(
     return;
   }
 
+  // `resolvedSource` round-trips through `Type.String()` on state.json,
+  // which does not constrain shape. Brand-validate at the hydrate boundary
+  // so a corrupted record (empty / relative / traversal) is dropped here
+  // instead of silently flowing to `CLAUDE_PLUGIN_ROOT` on dispatch.
+  let branded: AbsolutePluginRoot;
+  try {
+    branded = asAbsolutePluginRoot(resolvedSource);
+  } catch (err) {
+    hookDebugLog(
+      `hydrate: invalid resolvedSource for ${scope}/${marketplace}/${pluginId}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
   let raw: string;
   try {
     raw = await readFile(hooksJsonPath, "utf8");
@@ -585,14 +614,7 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  addPluginConfigToCache(
-    scope,
-    marketplace,
-    pluginId,
-    resolvedSource,
-    result.value,
-    result.ifPredicates,
-  );
+  addPluginConfigToCache(scope, marketplace, pluginId, branded, result.value, result.ifPredicates);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -734,8 +756,8 @@ export async function registerHooksBridge(
   shutdownInMemoryChildren();
 
   const hydrated = await hydrateCacheFromDisk(opts);
-  for (const { state, loc } of hydrated) {
-    rebuildRoutingTables(state, loc);
+  for (const { loc } of hydrated) {
+    rebuildRoutingTables();
     // D-60-06: ensure the per-session `_shared` data dir exists so a
     // SessionStart hook's `CLAUDE_ENV_FILE = <dataRoot>/_shared/...` path
     // can be written by the hook without the bridge having to do it from
@@ -812,20 +834,8 @@ export function _resetForTest(): void {
  * buffer. Returns a snapshot of the buffer; mutating the returned array
  * does not affect the module state. Not part of the public surface.
  */
-export function _peekPendingSessionStartContextForTest(): ReadonlyArray<string> {
+export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingSessionStartContext> {
   return Array.from(pendingSessionStartContext);
-}
-
-/**
- * Test-only buffer drain. Returns the joined buffer contents and clears
- * the cell. Used by tests that want to exercise the drain primitive
- * without spinning up a `before_agent_start` handler closure. Not part of
- * the public surface.
- */
-export function _drainPendingSessionStartContextForTest(): string {
-  const joined = pendingSessionStartContext.join("\n\n");
-  pendingSessionStartContext = [];
-  return joined;
 }
 
 /**

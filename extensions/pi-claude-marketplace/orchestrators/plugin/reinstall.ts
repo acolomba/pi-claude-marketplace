@@ -64,6 +64,7 @@ import {
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -1121,19 +1122,12 @@ async function runLockedReinstall(
     // is the same defensive shape `install.ts` uses (failures route
     // through hookDebugLog and the next `/reload` rehydrates).
     //
-    // WR-03 (Phase 63 review): the defensive try/catch around the
-    // cache+routing arm mirrors install.ts's WR-02 fix. Without it, a
-    // throw from `removePluginConfigFromCache`,
-    // `readAndCacheReinstalledPluginHooks`, or `rebuildRoutingTables`
-    // would escape the closure AFTER `tx.save()` succeeded, hit the
-    // catch at the bottom of this block, and route through
-    // `errorWithManualRecovery`. The user would see a
-    // `(manual recovery)` row while state.json on disk has already
-    // persisted the new record -- a state divergence. The cache is
-    // rebuilt from state.json on the next `/reload`'s factory-time
-    // hydrate (D-59-03), so a cache-mutation failure must NOT
-    // falsely fail the reinstall. Failures route through
-    // `hookDebugLog` only.
+    // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
+    // mirrors install.ts's WR-02. A throw here would surface as
+    // `(manual recovery)` while state.json already persisted the new
+    // record (state divergence). `/reload`'s factory-time hydrate
+    // (D-59-03) rebuilds the cache from state.json. Failures route
+    // through `hookDebugLog`.
     try {
       removePluginConfigFromCache(scope, marketplace, plugin);
       if (installable.hooksConfigPath !== undefined) {
@@ -1141,13 +1135,13 @@ async function runLockedReinstall(
           scope,
           marketplace,
           plugin,
-          installable.pluginRoot,
+          asAbsolutePluginRoot(installable.pluginRoot),
           path.join(installable.pluginRoot, installable.hooksConfigPath),
           cwd,
         );
       }
 
-      rebuildRoutingTables(tx.state, locations);
+      rebuildRoutingTables();
     } catch (cacheErr) {
       hookDebugLog(
         `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
@@ -1182,7 +1176,7 @@ async function readAndCacheReinstalledPluginHooks(
   scope: Scope,
   marketplace: string,
   plugin: string,
-  resolvedSource: string,
+  resolvedSource: AbsolutePluginRoot,
   hooksJsonPath: string,
   cwd: string,
 ): Promise<void> {
@@ -1324,12 +1318,13 @@ async function replaceAll(
     // PLACE on a later-step failure (recovery is via the reinstall hint,
     // not in-process rollback, mirroring update.ts D-03 semantics).
     //
-    // WR-05 (Phase 63 review): the hooks-removed-then-later-step-failed
+    // WR-05: the hooks-removed-then-later-step-failed
     // window is a known manual-recovery case. When installable.hooksConfigPath
     // is undefined, commitHooks() calls removeHookConfig() to clean up any
     // stale subtree from the prior install. If that succeeds and a later
-    // step (mcp replace, state save) THROWS, the rollback loop at line
-    // 1301 cannot restore the hooks file -- and since `replacements[]`
+    // step (mcp replace, state save) THROWS, the catch's
+    // `rollbackReplacements` walk below cannot restore the hooks file --
+    // and since `replacements[]`
     // has no hooks entry, no in-process restore is possible. The
     // in-memory state still holds the OLD resources.hooks: [plugin]
     // slug, the throw routes through errorWithManualRecovery without
