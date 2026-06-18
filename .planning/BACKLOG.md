@@ -17,9 +17,9 @@ Candidate directions for later brainstorming:
   next extension event with a live UI (deterministic but late-arriving)
 - persistent `ui.setWidget` badge summarizing the last reconcile
 - upstream change: re-append extension notifications after the chat rebuild
-- do nothing: results remain verifiable via `/claude:plugin preview` / `list`
+- do nothing: results remain verifiable via `/claude:plugin pending` / `list`
 
-Workaround today: run `/claude:plugin preview` before reloading, or `list` after.
+Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.

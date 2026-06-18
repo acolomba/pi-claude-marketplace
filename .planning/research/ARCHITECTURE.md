@@ -25,7 +25,7 @@
 │                   plugin/{install,uninstall,update,reinstall,info,list,       │
 │                           enable-disable,bootstrap,discover-names}            │
 │                   import/{marketplaces(planner),execute,settings,refs}        │
-│                   reconcile/{plan,apply,preview,notify,apply-outcomes,types}  │
+│                   reconcile/{plan,apply,pending,notify,apply-outcomes,types}  │
 │                   discover.ts (resources_discover aggregator)                 │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ bridges/          skills | commands | agents | mcp  (stage/unstage)           │
