@@ -80,7 +80,7 @@ Veto destructive shell commands before they run.
 }
 ```
 
-When the assistant attempts to call the `Bash` tool with a command starting `rm -rf`, the bridge spawns `deny-rm-rf.sh`. The script can read the proposed command from stdin and either approve it (exit 0), deny it (exit 2 with a message on stderr explaining why), or rewrite it (emit a JSON object on stdout overriding the input). The `if` field uses Claude Code's permission-rule grammar; only `Bash(...)`-style literal and prefix-glob conditions are supported in v1.13.
+When the assistant attempts to call the `Bash` tool with a command starting `rm -rf`, the bridge spawns `deny-rm-rf.sh`. The script can read the proposed command from stdin and either approve it (exit 0), deny it (exit 2 with a message on stderr explaining why), or rewrite it (emit a JSON object on stdout overriding the input). The `if` field uses Claude Code's permission-rule grammar; see [The `if` field](#the-if-field) for the supported shapes and the fail-open behavior on the rest.
 
 ### Session start rule injection
 
@@ -179,6 +179,37 @@ Take a snapshot of the conversation before it is compacted.
 ```
 
 When a compaction is about to begin, the bridge spawns `snapshot-conversation.sh`. The script reads the current conversation from stdin (as a JSON document supplied by Claude Code's compaction payload) and writes a timestamped copy to `${CLAUDE_PLUGIN_DATA}/snapshots/`. Exiting with status 0 lets the compaction proceed; exiting with status 2 cancels it. A handler on `PostCompact` can then refresh any caches that depend on the post-compaction conversation state.
+
+## The `if` field
+
+The optional `if` field on a tool-event hook entry narrows when the handler fires. It uses [Claude Code's permission-rule grammar](https://code.claude.com/docs/en/permissions). The bridge applies the `if` field on `PreToolUse`, `PostToolUse`, and `PostToolUseFailure` only -- on any other event the field is silently ignored (matching upstream's "attaching to other events prevents the hook from running" behavior).
+
+### Supported shapes
+
+| Shape                              | Fires when                                                                             | Example                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| `Bash(<command-glob>)`             | the proposed Bash command matches the glob (after compound-command split + wrapper-strip) | `Bash(rm -rf:*)`              |
+| `Read(<path-glob>)`                | the proposed read path matches the glob; covers `read`, `grep`, `find`, `ls`           | `Read(src/**)`                |
+| `Edit(<path-glob>)`                | the proposed edit path matches the glob; covers `edit`, `write`                        | `Edit(*.ts)`                  |
+| `Write(<path-glob>)`               | the proposed write path matches the glob; narrower than `Edit`                         | `Write(/tmp/**)`              |
+| `mcp__<server>__<tool>`            | the called MCP tool's name matches the literal exactly                                 | `mcp__github__create_issue`   |
+| `mcp__<server>` / `mcp__<server>__*` | the called MCP tool's name starts with `mcp__<server>__`                              | `mcp__github`                 |
+
+Glob metacharacters: `*` matches anything within one path segment (or anywhere in a Bash command); `**` matches across segments; a trailing space before `*` enforces a word boundary (`Bash(ls *)` excludes `lsof`; `Bash(ls*)` includes both); the `:*` suffix is equivalent to a trailing ` *`. Path globs honor the four upstream anchors: `//abs` (filesystem root), `~/home` (your home directory), `/project-root` (the project root), and `./cwd` or a bare relative path (the current directory). Bare filenames match at any depth, so `Read(.env)` is equivalent to `Read(**/.env)`.
+
+Bash compound commands are split on `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines, and each subcommand is matched independently. The fixed process-wrapper set (`timeout`, `time`, `nice`, `nohup`, `stdbuf`, bare `xargs`) is stripped before matching, so `Bash(npm test *)` matches `timeout 30 npm test`. `$(...)`, backticks, and `$VAR` expansion always fire (the command is considered "uncertain" and the `if` field falls open per Claude Code's documented best-effort contract).
+
+### Fail-open shapes
+
+The following Claude Code `if` shapes parse to "match every call" in v1.13 -- the hook fires on every event the `matcher` accepted, and a debug-log warning records the cause. These are documented here so a plugin author who relies on them for narrowing knows the bridge won't enforce it:
+
+- **Bare tool names** without parens (`Bash`, `Read`, `WebFetch`, etc.). Claude Code treats these as "match every call"; the bridge does the same by falling open.
+- **`Tool(<param>:<value>)` parameter matching** -- the generic input-parameter rule family (`Agent(model:opus)`, `Agent(isolation:worktree)`, `Bash(run_in_background:true)`). The bridge does not inspect tool input parameters in the `if` layer.
+- **Tool-name wildcards** -- bare `*`, `mcp__*`, and mid-name globs like `mcp__github__get_*`.
+- **Tool prefixes the bridge does not implement** -- `PowerShell(...)`, `WebFetch(domain:host)`, `Agent(<AgentName>)`, `Cd(<path-pattern>)`. (`PowerShell` and `Cd` are out-of-scope tools on Pi; `WebFetch` and `Agent` have Pi analogs but no `if`-field support in v1.13.)
+- **`Grep`, `Glob`, `LS`, `MultiEdit`, `NotebookEdit`** -- the bridge uses upstream's cross-tool semantic instead: `Read` covers Pi `grep` / `find` / `ls`, and `Edit` covers Pi `write`. Writing `Grep(...)` directly falls open; rewrite as `Read(...)`.
+
+If you need any of the fail-open shapes to actually narrow, gate inside the handler script: read the tool call from stdin and exit 0 (allow) or 2 (deny) based on whatever predicate you would have written in the `if` field.
 
 ## Unsupported events
 
