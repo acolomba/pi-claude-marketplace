@@ -186,16 +186,16 @@ The optional `if` field on a tool-event hook entry narrows when the handler fire
 
 ### Supported shapes
 
-| Shape                              | Fires when                                                                             | Example                       |
-| ---------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
-| `Bash(<command-glob>)`             | the proposed Bash command matches the glob (after compound-command split + wrapper-strip) | `Bash(rm -rf:*)`              |
-| `Read(<path-glob>)`                | the proposed read path matches the glob; covers `read`, `grep`, `find`, `ls`           | `Read(src/**)`                |
-| `Edit(<path-glob>)`                | the proposed edit path matches the glob; covers `edit`, `write`                        | `Edit(*.ts)`                  |
-| `Write(<path-glob>)`               | the proposed write path matches the glob; narrower than `Edit`                         | `Write(/tmp/**)`              |
-| `mcp__<server>__<tool>`            | the called MCP tool's name matches the literal exactly                                 | `mcp__github__create_issue`   |
-| `mcp__<server>` / `mcp__<server>__*` | the called MCP tool's name starts with `mcp__<server>__`                              | `mcp__github`                 |
+| Shape                                | Fires when                                                                                | Example                     |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------- |
+| `Bash(<command-glob>)`               | the proposed Bash command matches the glob (after compound-command split + wrapper-strip) | `Bash(rm -rf:*)`            |
+| `Read(<path-glob>)`                  | the proposed read path matches the glob; covers `read`, `grep`, `find`, `ls`              | `Read(src/**)`              |
+| `Edit(<path-glob>)`                  | the proposed edit path matches the glob; covers `edit`, `write`                           | `Edit(*.ts)`                |
+| `Write(<path-glob>)`                 | the proposed write path matches the glob; narrower than `Edit`                            | `Write(/tmp/**)`            |
+| `mcp__<server>__<tool>`              | the called MCP tool's name matches the literal exactly                                    | `mcp__github__create_issue` |
+| `mcp__<server>` / `mcp__<server>__*` | the called MCP tool's name starts with `mcp__<server>__`                                  | `mcp__github`               |
 
-Glob metacharacters: `*` matches anything within one path segment (or anywhere in a Bash command); `**` matches across segments; a trailing space before `*` enforces a word boundary (`Bash(ls *)` excludes `lsof`; `Bash(ls*)` includes both); the `:*` suffix is equivalent to a trailing ` *`. Path globs honor the four upstream anchors: `//abs` (filesystem root), `~/home` (your home directory), `/project-root` (the project root), and `./cwd` or a bare relative path (the current directory). Bare filenames match at any depth, so `Read(.env)` is equivalent to `Read(**/.env)`.
+Glob metacharacters: `*` matches anything within one path segment (or anywhere in a Bash command); `**` matches across segments; a trailing space before `*` enforces a word boundary (`Bash(ls *)` excludes `lsof`; `Bash(ls*)` includes both); the `:*` suffix is equivalent to ending the pattern with `Bash(ls *)`-style space-then-asterisk. Path globs honor the four upstream anchors: `//abs` (filesystem root), `~/home` (your home directory), `/project-root` (the project root), and `./cwd` or a bare relative path (the current directory). Bare filenames match at any depth, so `Read(.env)` is equivalent to `Read(**/.env)`.
 
 Bash compound commands are split on `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines, and each subcommand is matched independently. The fixed process-wrapper set (`timeout`, `time`, `nice`, `nohup`, `stdbuf`, bare `xargs`) is stripped before matching, so `Bash(npm test *)` matches `timeout 30 npm test`. `$(...)`, backticks, and `$VAR` expansion always fire (the command is considered "uncertain" and the `if` field falls open per Claude Code's documented best-effort contract).
 
