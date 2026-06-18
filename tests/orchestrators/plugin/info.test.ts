@@ -322,7 +322,7 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
 // (c) single-scope unavailable with `{unsupported hooks}` reason.
 // ---------------------------------------------------------------------------
 
-test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {unsupported hooks}` + components: not resolved", async () => {
+test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {unsupported hooks}` without per-kind component lines when nothing is on disk", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -355,13 +355,17 @@ test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `�
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "unavailable is info, not error");
+    // INFO-05: path-source not-installable variant enumerates components
+    // from disk; with no skills/commands/agents/mcp seeded the components
+    // map is empty and no per-kind lines are emitted (and the
+    // `components: not resolved` marker is suppressed -- it is reserved
+    // for non-path sources).
     assert.equal(
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
         "  ⊘ legacy v0.1.0 (unavailable) {unsupported hooks}",
         "    Old plugin with a malformed hooks/hooks.json.",
-        "    components: not resolved",
       ].join("\n"),
     );
   });
@@ -722,13 +726,15 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     assert.equal(notifications.length, 1);
+    // INFO-05: path-source not-installable variant enumerates components
+    // from disk; with no skills/commands/agents/mcp seeded the components
+    // map is empty and no per-kind lines or `components: not resolved`
+    // marker is emitted -- only the `{unsupported hooks}` reasons brace.
     assert.equal(
       notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● legacy v0.1.0 (installed) {unsupported hooks}",
-        "    components: not resolved",
-      ].join("\n"),
+      ["● mp [user] <no autoupdate>", "  ● legacy v0.1.0 (installed) {unsupported hooks}"].join(
+        "\n",
+      ),
     );
   });
 });
@@ -1395,7 +1401,7 @@ test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-li
   });
 });
 
-test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) renders `components: not resolved` and NO `hooks:` line", async () => {
+test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) suppresses `hooks:` block and does NOT emit `components: not resolved` for a path source", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -1410,7 +1416,13 @@ test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) renders
       installablePluginDirs: ["legacy"],
     });
 
-    // Malformed hooks.json: resolver flips installable: false.
+    // Malformed hooks.json: resolver flips installable: false. The
+    // resolver does NOT record `hooksConfigPath` when the parse fails,
+    // so the not-installable variant carries no hooks bucket -- the
+    // row renders without a `hooks:` block. With no other components on
+    // disk the components map is empty, so the path-source INFO-05
+    // arm emits no per-kind lines and suppresses the
+    // `components: not resolved` marker (reserved for non-path sources).
     const pluginDir = path.join(mpRoot, "legacy");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
@@ -1419,10 +1431,8 @@ test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) renders
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    // Unavailable plugin: `components: not resolved` marker per the
-    // existing v1.0+ unavailable-row contract; NO `hooks:` line.
     assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
-    assert.match(msg, /components: not resolved/);
+    assert.doesNotMatch(msg, /components: not resolved/);
     assert.doesNotMatch(msg, /hooks:/);
   });
 });
@@ -1565,6 +1575,201 @@ test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and in
       assert.doesNotMatch(msg, /hooks:/);
     } finally {
       await chmod(hooksFile, 0o644).catch(() => undefined);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-05: path-source not-installable variants enumerate components from disk.
+// The gate excludes non-path sources, not the not-installable verdict.
+// ---------------------------------------------------------------------------
+
+test("INFO-05: (unavailable) {unsupported hooks} path-source plugin enumerates on-disk skills + commands", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            description: "Plugin with unsupported hooks and on-disk components.",
+            skills: "skills",
+            commands: "commands",
+          },
+        ],
+      },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+      componentFiles: { legacy: ["commands/c1.md"] },
+    });
+
+    // Malformed hooks.json flips installable: false.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    // Per-kind component lines appear even though the resolver returned
+    // not-installable; no `hooks:` line because the resolver bailed
+    // before recording `hooksConfigPath`; no `components: not resolved`
+    // marker (reserved for non-path sources).
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ legacy v0.1.0 (unavailable) {unsupported hooks}",
+        "    Plugin with unsupported hooks and on-disk components.",
+        "    commands: c1",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: (installed) {unsupported hooks} path-source plugin enumerates on-disk skills + commands", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+            commands: "commands",
+          },
+        ],
+      },
+      installed: { legacy: { version: "0.1.0" } },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+      componentFiles: { legacy: ["commands/c1.md"] },
+    });
+
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● legacy v0.1.0 (installed) {unsupported hooks}",
+        "    commands: c1",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: not-installed npm-source plugin still emits `components: not resolved` (non-path gate preserved)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+            description: "Remote plugin sourced from an external npm package.",
+          },
+        ],
+      },
+      // NOT installed -> buildNotInstalledRow path.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+        "    Remote plugin sourced from an external npm package.",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+    });
+
+    // Malformed hooks.json flips installable: false; then chmod 000 on the
+    // skills dir makes the on-disk discovery throw EACCES. The throw must
+    // propagate up to the unavailable-arm catch and fall back to
+    // `componentsResolved: false` with the merged reasons brace.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(pluginDir, "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      // Both reasons surface in the brace; order follows the
+      // composeReasons join (resolver notes first, then probe error).
+      assert.match(msg, /\(unavailable\) \{unsupported hooks, permission denied\}/);
+      assert.match(msg, /components: not resolved/);
+      assert.doesNotMatch(msg, /skills:/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
     }
   });
 });

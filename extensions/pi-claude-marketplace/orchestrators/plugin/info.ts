@@ -7,10 +7,16 @@
 // (it strips comments before searching). IL-2: exactly one `notify()`
 // call per invocation.
 //
-// Source-kind gate: only `"path"` sources are locally resolvable. Every
-// other source kind (`github` / `url` / `git-subdir` / `npm` /
-// `unknown`) emits `componentsResolved: false` -- fetching a remote
-// source to resolve components would violate NFR-5.
+// INFO-05 source-kind gate: only `"path"` sources are locally
+// resolvable. Every other source kind (`github` / `url` / `git-subdir`
+// / `npm` / `unknown`) emits `componentsResolved: false` -- fetching a
+// remote source to resolve components would violate NFR-5. The gate
+// excludes non-path SOURCES, not the not-installable verdict: a path-
+// source plugin whose resolver returned `installable: false` (e.g.
+// unsupported hooks, persistence-vs-disk disagreement) still enumerates
+// components from disk via `composeResolvedComponents` on the
+// not-installable variant -- both variants carry symmetric
+// `componentPaths` / `mcpServers` / `hooksConfigPath`.
 
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -84,6 +90,26 @@ function isLocallyResolvable(src: ParsedSource): boolean {
       assertNever(src);
       return false;
   }
+}
+
+/**
+ * Re-derive `pluginRoot` for a path-source plugin so the info surface
+ * can call `composeResolvedComponents` against the resolver's
+ * NOT-installable variant (NFR-7 keeps `pluginRoot` off that variant).
+ * Mirrors `preflightStages`'s derivation -- same `path.resolve` against
+ * `marketplaceRoot` + the raw user input. NFR-10 containment is NOT re-
+ * asserted here: the resolver's own `sourceEscapeReason` already
+ * accepted these paths before either variant was returned, and the
+ * info surface is read-only.
+ */
+function derivePluginRootForInfo(marketplaceRoot: string, source: ParsedSource): string {
+  // Caller must gate on `source.kind === "path"`; narrowing here keeps
+  // the helper's input type aligned with the discriminated union.
+  if (source.kind !== "path") {
+    throw new Error(`derivePluginRootForInfo requires a path source (got ${source.kind})`);
+  }
+
+  return path.resolve(marketplaceRoot, source.raw);
 }
 
 /**
@@ -406,9 +432,12 @@ async function buildBlock(
   const description = entry.description;
   const dependencies = normalizeDependencies((entry as Record<string, unknown>).dependencies);
 
-  // INFO-05 source-kind gate.
+  // INFO-05 source-kind gate. `parsedSource` is threaded into both row
+  // builders so the not-installable arms can enumerate components from
+  // disk against the resolver's not-installable variant when the source
+  // is path-resolvable; non-path sources still emit
+  // `componentsResolved: false`.
   const parsedSource = parsePluginSource((entry as Record<string, unknown>).source);
-  const resolvable = isLocallyResolvable(parsedSource);
 
   // (c) Installed bucket.
   if (installed !== undefined) {
@@ -419,15 +448,12 @@ async function buildBlock(
       dependencies,
       entry,
       mpRecord,
-      resolvable,
+      parsedSource,
     );
     return wrapBlock(marketplace, scope, marketplaceDetails, row);
   }
 
   // (d) / (e) Not installed -> resolve to classify available / unavailable.
-  // `resolvable` is not threaded: the `(unavailable)` arm catches every
-  // non-path source because `resolveStrict` returns `installable: false`
-  // for them, so the `(available)` arm is reached only with path sources.
   const row = await buildNotInstalledRow(
     pluginName,
     manifestVersion,
@@ -435,6 +461,7 @@ async function buildBlock(
     dependencies,
     entry,
     mpRecord,
+    parsedSource,
   );
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
@@ -455,10 +482,56 @@ function wrapBlock(
 }
 
 /**
+ * Build the `componentsResolved` arm for a path-source plugin whose
+ * resolver returned the not-installable variant. NFR-7 keeps
+ * `pluginRoot` off that variant, so it is re-derived locally; the
+ * not-installable variant carries the same `componentPaths` /
+ * `mcpServers` / `hooksConfigPath` shape `composeResolvedComponents`
+ * consumes. A discovery throw (EACCES on a component dir, etc.) falls
+ * back to `componentsResolved: false` with `narrowProbeError(err)`
+ * appended to the resolver reasons.
+ */
+async function buildNotInstallablePathRowFields(
+  resolved: { readonly notes: readonly string[] } & Parameters<typeof composeResolvedComponents>[1],
+  marketplaceRoot: string,
+  parsedSource: ParsedSource,
+): Promise<
+  | {
+      readonly reasons?: readonly ContentReason[];
+      readonly componentsResolved: true;
+      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>;
+    }
+  | {
+      readonly reasons: readonly ContentReason[];
+      readonly componentsResolved: false;
+    }
+> {
+  const resolverReasons = narrowResolverNotes(resolved.notes);
+  try {
+    const pluginRoot = derivePluginRootForInfo(marketplaceRoot, parsedSource);
+    const components = await composeResolvedComponents(pluginRoot, resolved);
+    return {
+      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      componentsResolved: true,
+      components,
+    };
+  } catch (err) {
+    return {
+      reasons: [...resolverReasons, narrowProbeError(err)],
+      componentsResolved: false,
+    };
+  }
+}
+
+/**
  * Build an `(installed)` row. When the source kind is `"path"` (the
  * only locally resolvable kind), run `resolveStrict` to compute the
  * per-kind component arrays + sort them. For all other source kinds,
- * emit `componentsResolved: false` (INFO-05 marker).
+ * emit `componentsResolved: false` (INFO-05 marker). When `resolveStrict`
+ * returns the not-installable variant for a path source,
+ * `buildNotInstallablePathRowFields` still enumerates components from
+ * disk so the row exposes the `{<reason>}` brace alongside the per-kind
+ * component lines instead of `not resolved`.
  */
 async function buildInstalledRow(
   pluginName: string,
@@ -467,9 +540,9 @@ async function buildInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
-  resolvable: boolean,
+  parsedSource: ParsedSource,
 ): Promise<PluginInfoRow> {
-  if (!resolvable) {
+  if (!isLocallyResolvable(parsedSource)) {
     return {
       status: "installed",
       name: pluginName,
@@ -495,19 +568,19 @@ async function buildInstalledRow(
 
     // resolveStrict returned NotInstallable but the state record says
     // installed -- the marketplace clone changed, OR the manifest now
-    // declares an unsupported field (`hooks` / `lspServers`). Surface
-    // the disagreement via `narrowResolverNotes` so the row does not
-    // render byte-identically to a deliberate external-source defer
-    // (which has no reason brace). Status stays `installed` because the
-    // state record confirms the install.
-    const resolverReasons = narrowResolverNotes(resolved.notes);
+    // declares an unsupported field (`hooks` / `lspServers`). Status
+    // stays `installed` because the state record confirms the install.
+    const fields = await buildNotInstallablePathRowFields(
+      resolved,
+      mpRecord.marketplaceRoot,
+      parsedSource,
+    );
     return {
       status: "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
-      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
-      componentsResolved: false,
+      ...fields,
     };
   } catch (err) {
     // Probe failure on disk -- classify the underlying failure via
@@ -540,6 +613,7 @@ async function buildNotInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
+  parsedSource: ParsedSource,
 ): Promise<PluginInfoRow> {
   let resolved;
   try {
@@ -548,7 +622,8 @@ async function buildNotInstalledRow(
     // Probe throw -> classify the underlying failure via the same
     // `narrowProbeError` ladder used by `list.ts`. Hardcoding
     // `"unreadable"` here would diverge from the list surface for the
-    // same `EACCES` / `ENOENT` failures.
+    // same `EACCES` / `ENOENT` failures. No `resolved` value exists, so
+    // there are no `componentPaths` to enumerate.
     const reasons: readonly ContentReason[] = [narrowProbeError(err)];
     return {
       status: "unavailable",
@@ -561,14 +636,31 @@ async function buildNotInstalledRow(
   }
 
   if (!resolved.installable) {
-    const reasons = narrowResolverNotes(resolved.notes);
+    if (!isLocallyResolvable(parsedSource)) {
+      const resolverReasons = narrowResolverNotes(resolved.notes);
+      return {
+        status: "unavailable",
+        name: pluginName,
+        ...(version !== undefined && { version }),
+        ...(description !== undefined && { description }),
+        ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+        componentsResolved: false,
+      };
+    }
+
+    // Path source whose resolver returned not-installable: enumerate
+    // components from disk against the not-installable variant.
+    const fields = await buildNotInstallablePathRowFields(
+      resolved,
+      mpRecord.marketplaceRoot,
+      parsedSource,
+    );
     return {
       status: "unavailable",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
-      ...(reasons.length > 0 && { reasons }),
-      componentsResolved: false,
+      ...fields,
     };
   }
 
@@ -576,7 +668,7 @@ async function buildNotInstalledRow(
   // `resolveStrict` returns `installable: false` for them -- so by the
   // time control gets here the source is path-resolvable and
   // `composeResolvedComponents` is safe to call without an external-
-  // source short-circuit. The `resolvable` parameter is informational.
+  // source short-circuit.
   return buildAvailableRow({
     pluginName,
     version,
