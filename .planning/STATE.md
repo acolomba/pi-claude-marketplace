@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED 11/11 (7 carried-forward + 4 new from gap closure); v1.13 milestone ready for close-out
 Plan: 11 of 11 complete (63-09 wrapper-format parser fix + Option A defer Stop; 63-10 install-cascade classifier parity arm; 63-11 README Hooks bullet + runtime UAT terminal)
 Status: Phase 63 fully closed; UAT gap closure landed; v1.13 ready for milestone close-out. Hookify@claude-plugins-official structurally `(unavailable) {unsupported hooks}` at runtime because Stop is not in v1.13's BUCKET_A_EVENTS — admission deferred to v1.14+ per 63-09 Option A user-decided checkpoint
-Last activity: 2026-06-16 -- 63-09 (5fa5543 fix GREEN + 02bb8ba WR-05 revert + f9dbb3f SUMMARY) → 63-10 (4e5adf9 fix GREEN + b28b0f7 parity test + a5c92da SUMMARY) → 63-11 (7967ea8 README + 939574d UAT verdicts + 919944e SUMMARY) → 53ab78a code review (0 Critical / 3 Warning / 3 Info) → 895dece + 3a00595 re-verification
+Last activity: 2026-06-18 -- Completed quick task 260618-qkz: Show components on info.ts (unavailable) and (installed)+not-installable-fallback rows (8a7c278)
 
 ## Performance Metrics
 
@@ -295,6 +295,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 | 260612-son | Resolve 3 SonarCloud PR #51 findings: dedupe `_` in redactAbsolutePaths character classes (S5869 x2); replace sanitizeStateLoadError's backtracking-prone regex with the shared redactAbsolutePaths seam (S5852 hotspot, failed quality gate); byte-neutral, check green | 2026-06-12 | aa42131 | Verified | (inline /gsd-fast, no task dir) |
 | 260612-liv | Fold both PR #51 CPD duplication sets into plugin/shared.ts helpers (maybeWritePluginConfigBack for the update/reinstall write-back gate; applyPartialCascadeFold for the uninstall/disable TR-03 mirror), byte-neutral; fix README user-scope config paths to ~/.pi/agent/ preserving operator wording edits | 2026-06-12 | 65d2323 | Verified | [260612-liv-fold-pr-51-cpd-duplication-sets-and-fix-](./quick/260612-liv-fold-pr-51-cpd-duplication-sets-and-fix-/) |
 | 260618-t0n | BREAKING: rename `/claude:plugin preview` to `/claude:plugin pending`. Renames source files, symbols (`previewReconcile`, `makePreviewHandler`, `PreviewReconcileOptions`, `reconcile-preview-empty`), tests in lockstep, catalog advisory line, and `docs/output-catalog.md` section header. Tests + check green. | 2026-06-18 | 2126d6f |          | [260618-t0n-rename-preview-to-pending](./quick/260618-t0n-rename-preview-to-pending/) |
+| 260618-qkz | Show components on info.ts (unavailable) and (installed)+not-installable-fallback rows by re-deriving `pluginRoot` from `marketplaceRoot + parsedSource.raw` and reusing `composeResolvedComponents` against the not-installable resolver variant (path sources only; non-path sources still defer per INFO-05). Shared helper `buildNotInstallablePathRowFields` keeps cognitive-complexity under the lint budget. 38/38 info.test.ts pass (+4 new, 3 updated); `npm run check` green for the touched files. | 2026-06-18 | 8a7c278 |          | [260618-qkz-show-components-on-unavailable-info-rows](./quick/260618-qkz-show-components-on-unavailable-info-rows/) |
 
 ## Deferred Items
 
