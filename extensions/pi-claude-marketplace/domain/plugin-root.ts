@@ -28,9 +28,13 @@ export type AbsolutePluginRoot = string & { readonly [__absolutePluginRootBrand]
  *   - empty string
  *   - null byte (POSIX/Windows path-truncation vector)
  *   - not absolute (`path.isAbsolute` -- handles both `/` and `C:\` shapes)
- *   - any normalized segment equals `..` (post-normalize traversal)
  *
  * Idempotent: callers can wrap an already-branded value without effect.
+ *
+ * `..` segments are not checked separately because `path.isAbsolute(v) ===
+ * true` guarantees `path.normalize(v)` collapses every `..` segment
+ * before they could escape -- there is no absolute path on POSIX or
+ * Windows whose normalized form retains a `..` segment.
  */
 export function asAbsolutePluginRoot(value: string): AbsolutePluginRoot {
   if (value.length === 0) {
@@ -43,11 +47,6 @@ export function asAbsolutePluginRoot(value: string): AbsolutePluginRoot {
 
   if (!path.isAbsolute(value)) {
     throw new Error(`AbsolutePluginRoot: not absolute: ${value}`);
-  }
-
-  const normalized = path.normalize(value);
-  if (normalized.split(path.sep).includes("..")) {
-    throw new Error(`AbsolutePluginRoot: traversal segment: ${value}`);
   }
 
   return value as AbsolutePluginRoot;

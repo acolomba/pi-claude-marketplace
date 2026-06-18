@@ -36,9 +36,7 @@ async function withHermeticProjectScope<T>(fn: (env: HermeticScope) => Promise<T
   try {
     return await fn({
       cwd,
-      cleanup: async () => {
-        // no-op -- finally below cleans up.
-      },
+      cleanup: () => Promise.resolve(),
     });
   } finally {
     if (originalHome === undefined) {
@@ -56,7 +54,7 @@ async function withHermeticProjectScope<T>(fn: (env: HermeticScope) => Promise<T
 }
 
 test("makeLocationsResolver: marketplaceNamesCachePath delegates to locationsFor for the requested scope", async () => {
-  await withHermeticProjectScope(async ({ cwd }) => {
+  await withHermeticProjectScope(({ cwd }) => {
     const resolver = makeLocationsResolver(cwd);
     const projectPath = resolver.marketplaceNamesCachePath("project");
     const userPath = resolver.marketplaceNamesCachePath("user");
@@ -64,6 +62,7 @@ test("makeLocationsResolver: marketplaceNamesCachePath delegates to locationsFor
     assert.equal(projectPath, locationsFor("project", cwd).marketplaceNamesCacheFile);
     assert.equal(userPath, locationsFor("user", cwd).marketplaceNamesCacheFile);
     assert.notEqual(projectPath, userPath);
+    return Promise.resolve();
   });
 });
 
@@ -95,7 +94,7 @@ test("makeLocationsResolver: loadStateForScope projects state.json into marketpl
           manifestPath: "/tmp/test-src/.claude-plugin/marketplace.json",
           marketplaceRoot: "/tmp/test-src",
           plugins: {
-            "p1": {
+            p1: {
               version: "1.0.0",
               resolvedSource: "/tmp/test-src/plugins/p1",
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
