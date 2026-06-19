@@ -36,6 +36,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
@@ -107,19 +108,32 @@ function isLocallyResolvable(src: ParsedSource): boolean {
  * can call `composeResolvedComponents` against the resolver's
  * NOT-installable variant (NFR-7 keeps `pluginRoot` off that variant).
  * Mirrors `preflightStages`'s derivation -- same `path.resolve` against
- * `marketplaceRoot` + the raw user input. NFR-10 containment is NOT re-
- * asserted here: the resolver's own `sourceEscapeReason` already
- * accepted these paths before either variant was returned, and the
- * info surface is read-only.
+ * `marketplaceRoot` + the raw user input -- AND re-asserts NFR-10
+ * containment via `assertPathInside`. The resolver's `sourceEscapeReason`
+ * accepted these paths at install time, but the marketplace clone can
+ * mutate between install and info-render (manifest edit, symlink swap),
+ * so a fresh check here prevents `composeResolvedComponents` from
+ * walking a directory outside the marketplace root. A containment
+ * failure throws `PathContainmentError`; the row builder's outer catch
+ * does NOT see it (Finding #6 narrows that try to wrap
+ * `composeResolvedComponents` only) -- it propagates to the caller and
+ * surfaces via `narrowProbeError`'s generic-Error arm (`unreadable`).
+ * The programmer-bug `throw new Error(...)` on the non-path source kind
+ * likewise propagates unmasked.
  */
-function derivePluginRootForInfo(marketplaceRoot: string, source: ParsedSource): string {
+async function derivePluginRootForInfo(
+  marketplaceRoot: string,
+  source: ParsedSource,
+): Promise<string> {
   // Caller must gate on `source.kind === "path"`; narrowing here keeps
   // the helper's input type aligned with the discriminated union.
   if (source.kind !== "path") {
     throw new Error(`derivePluginRootForInfo requires a path source (got ${source.kind})`);
   }
 
-  return path.resolve(marketplaceRoot, source.raw);
+  const pluginRoot = path.resolve(marketplaceRoot, source.raw);
+  await assertPathInside(marketplaceRoot, pluginRoot, `plugin source for "${source.raw}"`);
+  return pluginRoot;
 }
 
 /**
@@ -585,8 +599,16 @@ async function buildNotInstallablePathRowFields(
     }
 > {
   const resolverReasons = narrowResolverNotes(resolved.notes);
+  const pluginRoot = await derivePluginRootForInfo(marketplaceRoot, parsedSource);
+  // NFR-7 / INFO-05: only `composeResolvedComponents` failures
+  // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
+  // lenient reader propagates) fall into the `narrowProbeError(err)`
+  // arm here. `derivePluginRootForInfo`'s own throws -- the
+  // programmer-bug `Error` for a non-path source AND the
+  // `PathContainmentError` from `assertPathInside` -- propagate
+  // unmasked to the caller; classifying them as IO probe failures
+  // would mis-route a path-escape as a transient disk error.
   try {
-    const pluginRoot = derivePluginRootForInfo(marketplaceRoot, parsedSource);
     const components = await composeResolvedComponents(pluginRoot, resolved);
     return {
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
