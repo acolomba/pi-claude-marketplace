@@ -319,35 +319,42 @@ async function readHookSummaryEntries(
 
 /**
  * INFO-05 / HOOK-01: best-effort hooks reader for the info surface ONLY.
- * Runs when the resolver bailed (`resolved.hooksConfigPath === undefined`)
- * so a `(unavailable) {unsupported hooks}` row can still list the
- * top-level event keys the plugin declared. The strict resolver-side
- * parser (`domain/components/hooks.ts::parseHooksConfig`, HOOK-01) is
- * unchanged -- install correctness is non-negotiable; this helper is a
- * READ-ONLY info-surface augmentation that never feeds the install path.
+ * Runs whenever `resolved.hooksConfigPath === undefined`, which covers
+ * two distinct cases: (a) the resolver bailed on supportability (the
+ * strict parser flipped `installable: false` because declared events
+ * fall outside bucket A, the matcher-supportability gate refused, etc.)
+ * and (b) the plugin declares no hooks file at all -- `hooks/hooks.json`
+ * does not exist on disk. Case (b) is handled harmlessly by the ENOENT
+ * branch below, which returns `undefined` and the row simply omits the
+ * `hooks:` block. The strict resolver-side parser
+ * (`domain/components/hooks.ts::parseHooksConfig`, HOOK-01) is unchanged
+ * -- install correctness is non-negotiable; this helper is a READ-ONLY
+ * info-surface augmentation that never feeds the install path.
  *
  * Returns one lenient entry per declared event whose `groups` array is
- * non-empty, with `supported` set to the bucket-A membership of the
- * event key. ENOENT / ENOTDIR / unreadable / unparseable / wrong-shape
- * all collapse to `undefined`; the row-level `{unsupported hooks}` brace
- * already carries the user-visible signal on those paths. NFR-5: reads
+ * non-empty (entries with an empty / whitespace-only event key are
+ * skipped so a malformed `{"hooks": {"": [...]}}` payload cannot render
+ * as a blank row), with `supported` set to the bucket-A membership of
+ * the event key.
+ *
+ * Error contract -- parity with `readEntriesOrEmpty` and with the
+ * strict sibling `readHookSummaryEntries`: ENOENT / ENOTDIR / SyntaxError
+ * / wrong-shape collapse to `undefined`; EACCES / EPERM / EIO and every
+ * other programmer-bug throw PROPAGATE to the row builder's outer catch
+ * for classification via `narrowProbeError`. NFR-5: reads
  * `<pluginRoot>/hooks/hooks.json` only, no network.
  */
 async function readLenientHookSummary(
   pluginRoot: string,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   const p = path.join(pluginRoot, "hooks", "hooks.json");
-  let raw: string;
-  try {
-    raw = await readFile(p, "utf8");
-  } catch {
+  const raw = await readLenientHooksFile(p);
+  if (raw === undefined) {
     return undefined;
   }
 
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
+  const data = parseLenientHooksJson(raw);
+  if (data === undefined) {
     return undefined;
   }
 
@@ -362,6 +369,10 @@ async function readLenientHookSummary(
 
   const entries: HookSummaryEntry[] = [];
   for (const [eventName, groups] of Object.entries(hooks)) {
+    if (eventName.trim().length === 0) {
+      continue;
+    }
+
     const groupCount = Array.isArray(groups) ? groups.length : 0;
     if (groupCount === 0) {
       continue;
@@ -376,6 +387,45 @@ async function readLenientHookSummary(
   }
 
   return entries.length === 0 ? undefined : entries;
+}
+
+/**
+ * Lenient hooks file read. ENOENT / ENOTDIR collapse to `undefined`
+ * (no hooks file, or a parent path component is not a directory --
+ * legitimate "no hooks declared" state). Every other failure
+ * (EACCES / EPERM / EIO / programmer-bug) PROPAGATES.
+ */
+async function readLenientHooksFile(absPath: string): Promise<string | undefined> {
+  try {
+    return await readFile(absPath, "utf8");
+  } catch (err) {
+    if (err instanceof Error) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        return undefined;
+      }
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Lenient hooks file parse. `SyntaxError` collapses to `undefined`
+ * (unparseable JSON -- the row-level `{unsupported hooks}` brace already
+ * carries the user-visible signal). Every other throw (programmer-bug
+ * `TypeError`, etc.) PROPAGATES.
+ */
+function parseLenientHooksJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
 
 /**
