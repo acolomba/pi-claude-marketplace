@@ -1,5 +1,42 @@
 # Milestones: pi-claude-marketplace
 
+## v1.13 Claude Hook Bridge (Shipped: 2026-06-19)
+
+**Phases completed:** 7 phases, 32 plans, 52 tasks
+
+**Key accomplishments:**
+
+- 1. [Rule 3 - Blocking] Updated 13 pre-existing test fixtures + 3 production call sites for the widened schema
+- 1. [Rule 2 - Missing critical functionality] Removed unused `SupportedKind` alias then re-introduced as exported type alongside `SUPPORTED_COMPONENT_KINDS`
+- 1. [Rule 3 - Blocking] Exported `UNSUPPORTED_COMPONENT_KINDS` from `domain/resolver.ts`
+- 1. [Rule 3 - Blocking] PiToolName derivation: `Exclude<..., string>` evaluates to `never`
+- 1. [Rule 1 — Lint] Unnecessary escape character in `SAFE_MATCHER_CHARS` regex
+- OBS-01 debug-output seam re-homed at `shared/debug-log.ts` with a per-file ESLint override; Phase 57 stub and TODO retired; three call sites rewired byte-for-byte.
+- Hooks-bridge dispatch core landed -- liveEpoch + parsedConfigCache + routingTable module-state holder, 7-event pi.on factory with the `event.isError` PostToolUse/PostToolUseFailure split, no-op execution stub, and 21 unit tests pinning cache + rebuild + sort + epoch + composite-handler contracts.
+- Hooks-bridge dispatch wiring landed: async-factory contract with `await registerHooksBridge` blocks first session event until 7 pi.on registrations complete; per-scope `rebuildRoutingTables` in apply.ts after every reconcile (gated on pristine scopes); install/uninstall maintain the parsed-config cache inside the per-plugin lock; 10 unit tests across 7 architecture blocks pin DISP-01..04 + OBS-01 + D-59-05.
+- 8 hand-authored Pi -> Claude payload translators under `bridges/hooks/payloads/`, the `mapPiToClaudeToolName` TOOL-01 reuse helper colocated with the const map, and a `TranslationContext` factory ready for the Plan 60-02 exec body to consume.
+- `dispatchHookExec` body filled with the real spawn body + per-event payload translation + HOOK-05 env vars + EXEC-02 timer escalation + EXEC-03 stderr sole-sink; ships `HookExecResult` + `parseHookStdout` + `installTimerLadder` as siblings; architecture whitelist widened to 2 entries.
+- The dispatch chain is end-to-end live: a Pi event fires -> matcher narrows -> dispatchHookExec runs with the real spawn body (Plan 60-02) -> the D-60-02 reducer composes outcomes across entries with first-block-wins + left-to-right mutate -> the D-60-03 per-event adapter returns the Pi-shaped value the runtime expects.
+- Standalone install / uninstall / reinstall / update of hooks-bearing plugins now updates the hooks-bridge routing table inside the per-plugin lock; phantom project-arm cache entries no longer leak past `hydrateProjectScopeForCwd`'s re-hydrate path; REQUIREMENTS.md HOOK-05 wording matches the chosen `_shared` per-session path scheme.
+- Hand-authored glob engine + Bash subcommand parser + upstream-faithful prefix-to-Pi-event-set mapping + IfPredicate fall-open sentinel; parse-time-compile primitives for MATCH-03 with zero new runtime deps.
+- parse-time `if`-field compile attached to every RoutingEntry via a side-Map; D-61-02 fail-open everywhere; dispatch consult (Plan 03) is now a single-line insertion against `entry.ifPredicate`.
+- Phase 61 closes: `if`-field permission-rule matching ships in full -- AND composition with the group matcher, D-61-02 fail-open on every failure mode, D-61-03 substitute-cwd for path tools, D-61-04 Bash specificity-override + wrapper strip; REQUIREMENTS.md MATCH-03 amended atomically in the first commit.
+- Bridge-owned asyncRewake registry: detached=false spawn + ring-buffered stderr/stdout + EXEC-02 timer ladder + captured-epoch zombie defense + exit-code-2 pi.sendMessage injection + PID-table-backed orphan reap on `/reload` — the THIRD and FINAL sanctioned `node:child_process` site in the extension tree, atomically supersedes the 2-element whitelist to 3 in the same commit (D-58-01).
+- 1. [Rule 2 -- Missing critical functionality] Composite handler signatures widened beyond the plan's surface
+- HookSummaryEntry discriminated union + ClaudeHookEvent literal-union + multi-line `hooks:` renderer arm in shared/notify.ts, foundation for plans 63-02..05.
+- writeHookConfig + removeHookConfig at bridges/hooks/stage.ts with LIFE-03 subtree symlink walk + NFR-1 atomic write. Flatter verb pair per RESEARCH Open Question 2 -- the single-file artefact does not justify the mcp bridge's 3-verb prepare/commit/abort shape.
+- Closed-set `"orphan rewake"` REASONS token + resolver-side detection + catalog/UAT landing -- atomic per D-58-01.
+- Wires the hooks bridge into the install / update / reinstall / cascadeUnstagePlugin cascades between agents and mcp per D-63-01, and connects resolver-side `orphanRewake` to `PluginInstalledMessage.reasons` so `(installed) {orphan rewake}` surfaces through the existing v1.4 NotificationMessage cascade. Closes LIFE-01 and LIFE-02.
+- Wire `info <plugin>` to surface a multi-line `hooks:` block by extending `composeResolvedComponents` to re-parse `<pluginRoot>/hooks/hooks.json` and project entries to the `HookSummaryEntry[]` carrier defined in Plan 63-01. Closes SURF-01.
+- First-time-reader hook-support doc (docs/hooks.md, 257 lines, 9 sections, 8 supported events, 6 worked examples) plus README ## Hook support section linking to it, plus architecture-lint test pinning jargon prohibition, 8-event coverage, two cross-refs, and worked-example presence.
+- Single architecture-lint test pinning SURF-03 / SURF-04 NON-additions + HOOK-04 prior completion via 5 grep-by-readFile invariants — zero source edits, v1.13 milestone close-out ready.
+- 1. [Rule 3 - Blocking] ESLint cognitive-complexity ceiling required helper extraction
+- Two-arm `parseHooksConfig` unwraps the upstream PLUGIN-format wrapper `{description?, hooks: {...}}` per Claude Code `plugin-dev/skills/hook-development/SKILL.md`, closing the wire-contract bug that flipped every wrapper-shipping plugin (hookify and siblings) to `(unavailable) {unsupported hooks}` before the install cascade could reach the hooks-bridge slot.
+- New arm in `narrowResolverReasons` mirrors the four `hooks.json`-prefix families already recognised by `narrowResolverNotes`, closing the cross-surface REASONS asymmetry (SURF-01) so the install cascade and info/list probe surfaces emit the SAME `(unavailable) {unsupported hooks}` token for the SAME on-disk hooks-config failure -- pinned structurally by a new cross-surface parity test.
+- Closed the cosmetic UAT gap 3 (Hooks bullet in README `## Features` list) and recorded the binding runtime UAT against the pi-uat sandbox -- the wrapper-format fix (63-09) and cross-surface classifier parity (63-10) land correctly at runtime; the residual `(unavailable) {unsupported hooks}` trip on hookify is the honest v1.13 bucket-A supportability gate (Stop-event admission deferred to v1.14+ per 63-09 Option A), not a defect.
+
+---
+
 ## v1.12 Marketplace and Plugin Config Files (Shipped: 2026-06-11)
 
 **Phases completed:** 6 phases, 15 plans, 24 tasks
