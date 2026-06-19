@@ -1258,7 +1258,7 @@ test("ENBL-04: info on a recorded-but-disabled plugin renders the list-arm `(dis
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ⊘ foo v1.2.3 (disabled)"].join("\n"),
+      ["● mp [user]", "  ◌ foo v1.2.3 (disabled)"].join("\n"),
     );
   });
 });
@@ -1305,7 +1305,7 @@ test("ENBL-04: bare info (no --scope) with disabled record in one scope and info
     assert.equal(notifications.length, 2);
     const all = notifications.map((n) => n.message).join("\n---\n");
     assert.match(all, /● foo v1\.0\.0 \(installed\)/, all);
-    assert.match(all, /⊘ foo v1\.2\.3 \(disabled\)/, all);
+    assert.match(all, /◌ foo v1\.2\.3 \(disabled\)/, all);
   });
 });
 

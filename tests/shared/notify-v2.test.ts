@@ -3699,7 +3699,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", () => {
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ⊘ to-disable (will disable)`);
+  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ◌ to-disable (will disable)`);
 });
 
 test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", () => {
@@ -3790,7 +3790,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   // info severity -> no 2nd arg.
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user] <autoupdate>\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user] <autoupdate>\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", () => {
@@ -3808,7 +3808,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", () => {
@@ -3826,7 +3826,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● shared [user]\n  ⊘ foo-plugin [project] v1.2.3 (disabled)`);
+  assert.equal(args[0], `● shared [user]\n  ◌ foo-plugin [project] v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", () => {
@@ -3844,7 +3844,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
@@ -3874,7 +3874,7 @@ test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /
     args[0],
     [
       "● claude-plugins-official [user]",
-      "  ⊘ foo-plugin v1.2.3 (disabled)",
+      "  ◌ foo-plugin v1.2.3 (disabled)",
       "",
       "/reload to pick up changes",
     ].join("\n"),

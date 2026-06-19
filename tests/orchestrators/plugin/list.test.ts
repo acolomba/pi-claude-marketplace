@@ -426,9 +426,10 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    // Catalog `disabled-inventory` row form: ⊘ glyph, version pin rendered,
-    // `(disabled)` token. Severity info (inventory row, not a failure).
-    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    // Catalog `disabled-inventory` row form: ◌ glyph (ICON_DISABLED), version
+    // pin rendered, `(disabled)` token. Severity info (inventory row, not a
+    // failure).
+    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(installed)"), false, `must not render (installed): ${out}`);
     assert.equal(out.includes("(unavailable)"), false, `must not render (unavailable): ${out}`);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
@@ -454,7 +455,7 @@ test("ENBL-04: disabled record with drifted manifest version does NOT render `(u
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(upgradable)"), false, out);
   });
 });
@@ -481,7 +482,7 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ alpha v1\.0\.0 \(disabled\)/, out);
+    assert.match(out, /◌ alpha v1\.0\.0 \(disabled\)/, out);
     assert.equal(out.includes("○ beta"), false, out);
   });
 });

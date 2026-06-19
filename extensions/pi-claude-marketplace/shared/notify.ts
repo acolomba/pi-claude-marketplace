@@ -649,8 +649,8 @@ export interface PluginUninstalledMessage {
  * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
- * -- the inventory row is bare. The renderer arm reuses `ICON_UNINSTALLABLE`
- * (`⊘`) -- the same glyph the `will disable` row uses.
+ * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
+ * (`◌`) -- the same glyph the `will disable` row uses.
  */
 export interface PluginDisabledMessage {
   readonly status: "disabled";
@@ -1324,6 +1324,17 @@ function isInfoKind(
 const ICON_INSTALLED = "●";
 const ICON_AVAILABLE = "○";
 const ICON_UNINSTALLABLE = "⊘";
+/**
+ * D-54-01 / ENBL-04: dedicated glyph for the deliberate, user-requested
+ * disabled-class rows -- `(disabled)` (realized inventory) and
+ * `(will disable)` (pending-tense). Distinct from `ICON_UNINSTALLABLE`
+ * (`⊘`), which marks the error / blocked-state rows
+ * (`(unavailable)`, `(failed)`, `(skipped) {already disabled}`,
+ * `(manual recovery)`). Mirrors the realized + pending-tense precedent
+ * already in the grammar (`●` for `(installed)` / `(will add)`,
+ * `○` for `(available)` / `(will remove)`).
+ */
+const ICON_DISABLED = "◌";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1932,24 +1943,27 @@ function renderPluginRow(
         "(will enable)",
       ]);
     case "will disable":
-      // DIFF-02: pending-tense row for a recorded plugin newly
-      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) -- the
-      // same glyph the (skipped) / (failed) rows carry, mirroring the
-      // prohibited-symbol semantics of a deliberate disable.
+      // DIFF-02: pending-tense row for a recorded plugin newly declared
+      // `enabled: false`. Uses ICON_DISABLED (`◌`) -- the same glyph the
+      // realized `(disabled)` inventory row uses; this mirrors the precedent
+      // that realized + pending-tense rows for the same row class share a
+      // glyph (`●` for `(installed)` / `(will add)`, `○` for `(available)` /
+      // `(will remove)`).
       return joinTokens([
-        ICON_UNINSTALLABLE,
+        ICON_DISABLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
         "(will disable)",
       ]);
     case "disabled":
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
-      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) --
-      // the same glyph the `will disable` row carries. NO reasons -- the
-      // variant carries none; composeReasons receives undefined + both
-      // soft-dep flags false (the inventory row never emits soft-dep markers).
+      // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
+      // (`◌`) glyph, the same glyph the `(will disable)` pending-tense row
+      // carries. NO reasons -- the variant carries none; composeReasons
+      // receives undefined + both soft-dep flags false (the inventory row
+      // never emits soft-dep markers).
       return joinTokens([
-        ICON_UNINSTALLABLE,
+        ICON_DISABLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),

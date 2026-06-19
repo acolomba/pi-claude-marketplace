@@ -8,7 +8,8 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 
 - `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the pending `(will add)`, and the list-surface label form).
 - `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the pending `(will remove)` arm (the marketplace-level analog of an uninstall).
-- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`, or the pending-tense `(will disable)`. On marketplace headers: `(failed)` only.
+- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`. On marketplace headers: `(failed)` only.
+- `◌` -- dotted circle. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row. Not used on marketplace headers.
 
 ### Always-marketplace-header form
 
@@ -33,7 +34,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` per the effective-state rule above.
+- `<icon>` -- one of `●` / `○` / `⊘` / `◌` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
@@ -125,23 +126,24 @@ ______________________________________________________________________
 
 ## Status token reference
 
-| Token                                       | Icon | Where it appears                                                                                                                                                            |
-| ------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                        |
-| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01. |
-| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                      |
-| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
-| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
-| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
-| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.               |
-| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                          |
-| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
-| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
-| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                              |
-| `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                     |
-| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                              |
-| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                   |
-| `(will disable)`                            | ⊘    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                               |
+| Token                                       | Icon | Where it appears                                                                                                                                                                |
+| ------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                            |
+| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01.     |
+| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                          |
+| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                                |
+| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                 |
+| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                |
+| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.                   |
+| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                              |
+| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                           |
+| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                  |
+| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                  |
+| `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                         |
+| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                  |
+| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                       |
+| `(will disable)`                            | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                   |
+| `(disabled)`                                | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker. |
 
 Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -308,10 +310,10 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 
 ```text
 ● official [user] <autoupdate>
-  ⊘ foo-plugin v1.2.3 (disabled)
+  ◌ foo-plugin v1.2.3 (disabled)
 ```
 
-Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `⊘` glyph (shared with `will disable` per RESEARCH Pattern 5). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
+Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◌` glyph (shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will add)`, `○` for `(available)` / `(will remove)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
 PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`present`, `upgradable`, `available`, `unavailable`) all support the description field; cascade-only variants (`installed`, `updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
 
@@ -1276,16 +1278,16 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
   ○ old-plugin (will uninstall)
 ```
 
-### Enable / disable transitions (Phase 54 hand-off shape)
+### Enable / disable transitions
 
-A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `⊘` glyph). Phase 53 produces ZERO `will enable` rows in practice (Pitfall 53-4: the Phase 53 state model has no disabled marker on a recorded plugin); the variant and renderer arm ship so Phase 54's enable-bucket wiring lands against a type-complete model. Severity `info`; no reload-hint.
+A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◌` glyph). Severity `info`; no reload-hint.
 
 <!-- catalog-state: enable-disable-transitions -->
 
 ```text
 ● mp [user]
   ● to-enable (will enable)
-  ⊘ to-disable (will disable)
+  ◌ to-disable (will disable)
 ```
 
 ### Source mismatch (declared source diverges from recorded source)
@@ -1645,7 +1647,7 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/ag
 
 ```text
 ● claude-plugins-official [user]
-  ⊘ foo-plugin v1.2.3 (disabled)
+  ◌ foo-plugin v1.2.3 (disabled)
 
 /reload to pick up changes
 ```
