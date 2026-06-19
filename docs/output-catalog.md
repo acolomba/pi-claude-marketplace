@@ -141,7 +141,7 @@ ______________________________________________________________________
 | `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                  |
 | `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                         |
 | `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                  |
-| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                       |
+| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                            |
 | `(will disable)`                            | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                   |
 | `(disabled)`                                | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker. |
 
