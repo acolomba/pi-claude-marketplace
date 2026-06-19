@@ -3120,8 +3120,8 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
       componentsResolved: true,
       components: {
         hooks: [
-          { kind: "lenient", event: "Stop", groupCount: 1, supported: false },
-          { kind: "lenient", event: "PostToolUse", groupCount: 1, supported: true },
+          { kind: "lenient", event: "Stop", supported: false },
+          { kind: "lenient", event: "PostToolUse", supported: true },
         ],
       },
     },

@@ -381,7 +381,6 @@ async function readLenientHookSummary(
     entries.push({
       kind: "lenient",
       event: eventName,
-      groupCount,
       supported: BUCKET_A_EVENTS_SET.has(eventName),
     });
   }

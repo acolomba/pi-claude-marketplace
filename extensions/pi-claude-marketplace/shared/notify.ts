@@ -178,9 +178,9 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 //     lenient reader when the resolver bailed (it did NOT record
 //     `hooksConfigPath`). Carries an arbitrary `event: string` (the
 //     resolver rejected this key, so it may be `Stop`, `Notification`,
-//     or any other token the plugin author wrote) plus `groupCount`
-//     and a `supported: boolean` bucket-A membership flag. Rendered with
-//     a ` (unsupported)` suffix iff `supported === false`. The lenient
+//     or any other token the plugin author wrote) plus a
+//     `supported: boolean` bucket-A membership flag. Rendered with a
+//     ` (unsupported)` suffix iff `supported === false`. The lenient
 //     arm exists ONLY on the info surface; the resolver-side strict
 //     parser (`domain/components/hooks.ts::parseHooksConfig`) remains
 //     strict and never produces lenient entries.
@@ -213,7 +213,6 @@ export type HookSummaryEntry =
   | {
       readonly kind: "lenient";
       readonly event: string;
-      readonly groupCount: number;
       readonly supported: boolean;
     };
 
