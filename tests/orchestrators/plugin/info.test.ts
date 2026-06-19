@@ -1774,6 +1774,64 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
   });
 });
 
+test("INFO-05: composeResolvedComponents throw on the installed arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installed: { legacy: { version: "0.1.0" } },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+    });
+
+    // Malformed hooks.json flips installable: false; chmod 000 on the
+    // skills dir makes the on-disk discovery throw EACCES. Symmetric to
+    // the unavailable-arm test above -- the throw propagates to
+    // buildNotInstallablePathRowFields' narrowed catch and merges the
+    // resolver `unsupported hooks` note with the probe-classified
+    // `permission denied` reason. Status stays `installed` because the
+    // state record confirms the install.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(pluginDir, "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      assert.match(msg, /\(installed\) \{unsupported hooks, permission denied\}/);
+      assert.match(msg, /components: not resolved/);
+      assert.doesNotMatch(msg, /skills:/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // INFO-05: lenient hooks reader -- when the resolver bails because the
 // hooks file declares non-bucket-A events, the info surface STILL lists

@@ -594,6 +594,38 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
   });
 });
 
+test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {already disabled}` (no version, info severity)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+    assert.equal(notifications.length, 1);
+    // Full-message byte-lock -- the existing regex-match test at
+    // `Idempotency: disable on already-disabled` does not pin the
+    // marketplace header or the absence of a version slot / reload-hint
+    // trailer. The idempotent skip returns no version field, so the
+    // version slot is empty; no realized transition, so no
+    // `/reload to pick up changes` trailer.
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ⊘ foo (skipped) {already disabled}"].join("\n"),
+    );
+    assert.equal(notifications[0]!.severity, undefined, "info routing locked");
+  });
+});
+
 test("WR-03: enable on state-enabled plugin with config enabled:false lands the config-side truth (promotion, state untouched)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { statePath, configPath } = await writeUserState(home, {
