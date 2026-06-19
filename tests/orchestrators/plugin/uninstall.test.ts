@@ -8,6 +8,7 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   AgentsUnstageFailureError,
@@ -97,6 +98,7 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
       prompts: resources.prompts ?? [],
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
+      hooks: resources.hooks ?? [],
     },
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -716,7 +718,7 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -890,7 +892,7 @@ test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMe
         });
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -949,7 +951,7 @@ test("narrowCascadeFailure: EPERM maps to 'permission denied' in PluginFailedMes
         );
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1008,7 +1010,7 @@ test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessa
         );
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1064,7 +1066,7 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'un
         });
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: err,
         });
       };
@@ -1122,7 +1124,7 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'unreadable' (ATTR-09
         // the truthful "unreadable" (ATTR-09) via the final fallthrough.
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: new Error("plain failure"),
         });
       };
@@ -1188,7 +1190,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -1288,6 +1290,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
+            hooks: [],
             mcpServers: [],
           },
           cause: err,
@@ -1400,6 +1403,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
+            hooks: [],
             mcpServers: [],
           },
           cause: err,
@@ -1841,6 +1845,121 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       // WR-04: state.json bytes + mtime unchanged on the CFG-03 abort.
       assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
       assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WR-03 / D-60-05: after a successful uninstallPlugin, the hooks-bridge
+// routing table no longer contains entries for the uninstalled plugin.
+// Without the rebuildRoutingTables call inside the per-plugin lock,
+// dispatch would continue to fire stale handlers (which the never-throws
+// contract would convert to noop + hookDebugLog spawn-ENOENT entries --
+// correct but wasteful and a /reload-blocked NFR-2 regression).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
+  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { compileIfPredicate, MATCH_ALL_IF } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
+  const { parseHooksConfig, parseMatcher } =
+    await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wr03-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+
+      // Pre-seed state with a hooks-bearing plugin so the rebuild walk sees
+      // a hooks resource. The slug `"p1"` mirrors the install-arm convention
+      // (pluginId as the per-plugin hooks-container-dir slug).
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {
+              p1: makePluginRecord({ hooks: ["p1"] }),
+            },
+          },
+        },
+      });
+
+      // Pre-seed the parsed-config cache + routing table for the plugin so
+      // the uninstall has something visible to remove. Two parallel seeds:
+      // (a) cache so rebuild walks pick it up, (b) explicit routing-table
+      // injection so the test's pre-condition assertion is unambiguous.
+      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
+      const parsed = parseHooksConfig(
+        JSON.stringify({
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+        }),
+        TEST_IF_CTX,
+        compileIfPredicate,
+      );
+      assert.ok(parsed.ok);
+      addPluginConfigToCache(
+        "project",
+        "mp",
+        "p1",
+        asAbsolutePluginRoot("/test/project/mp/p1"),
+        parsed.value,
+        parsed.ifPredicates,
+      );
+      _setRoutingBucketForTest("PreToolUse", [
+        {
+          scope: "project",
+          marketplace: "mp",
+          pluginId: "p1",
+          resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
+          claudeEvent: "PreToolUse",
+          matcher: parseMatcher(""),
+          rawMatcher: "",
+          handlerDecl: { type: "command", command: "echo hi" },
+          declarationIndex: 0,
+          ifPredicate: MATCH_ALL_IF,
+        },
+      ]);
+
+      // Pre-condition: routing table holds the entry.
+      assert.equal(getRoutingBucket("PreToolUse").length, 1);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      // Confirm uninstall succeeded (notification reports `uninstalled`,
+      // not a failure marker).
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)"),
+        `expected clean uninstall notification; got: ${summary}`,
+      );
+
+      // Post-condition: the plugin is removed from state.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("p1" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+
+      // Post-condition: the routing-table entry for the uninstalled plugin
+      // is gone. This proves WR-03's `rebuildRoutingTables(state, locations)`
+      // ran inside `withLockedStateTransaction` right after
+      // `removePluginConfigFromCache`.
+      assert.equal(getRoutingBucket("PreToolUse").length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

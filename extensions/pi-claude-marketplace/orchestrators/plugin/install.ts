@@ -62,7 +62,8 @@
 // remove.ts / update.ts cycle). User-visible output flows through
 // shared/notify.ts; this file holds no rendering imports.
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -77,6 +78,13 @@ import {
   prepareStageCommands,
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
+import {
+  readAndCachePluginHooks,
+  rebuildRoutingTables,
+  removeHookConfig,
+  writeHookConfig,
+} from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -88,13 +96,16 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
+import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   assertNever,
   causeChainTrailer,
@@ -145,7 +156,7 @@ import type { Scope } from "../../shared/types.ts";
  * consumer.
  *
  * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
- * `⊘ hookify [user] (unavailable) {hooks}`.
+ * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
  */
 interface EntityErrorRow {
   readonly kind: "entity-error";
@@ -286,6 +297,10 @@ interface InstallCtx {
   commandsPrep?: PreparedCommandsStaging;
   agentsPrep?: PreparedAgentsStaging;
   mcpPrep?: PreparedMcpStaging;
+  // LIFE-01 / D-63-02: hooks bridge has no staging dir (writeHookConfig is
+  // the atomic write). Track whether the file was written so the phase undo
+  // path knows whether to call removeHookConfig.
+  hooksFileWritten: boolean;
   // Names captured for PluginInstallRecord.resources and reload-hint composition.
   stagedSkillNames: readonly string[];
   stagedCommandNames: readonly string[];
@@ -518,6 +533,7 @@ export async function runInstallLedger(
     resolved: installable,
     version,
     pluginDataDir,
+    hooksFileWritten: false,
     stagedSkillNames: [],
     stagedCommandNames: [],
     stagedAgentNames: [],
@@ -643,6 +659,51 @@ export async function runInstallLedger(
     },
   };
 
+  // LIFE-01 / D-63-01: 5th cascade slot. The hooks bridge owns one file per
+  // plugin (`<hooksDir>/<plugin>/hooks.json`) and has no staging dir per
+  // D-63-02 -- `writeHookConfig` is the atomic write. The phase body
+  // re-reads + re-parses the on-disk `hooks.json` because the resolver
+  // stores only `hooksConfigPath` (the relative path) on `c.resolved` and
+  // discards the parsed value after its own `parseHooksConfig` call
+  // returns. The parse is unconditional (no executor judgement); a fresh
+  // parse failure here is a defensive guard (the resolver already validated
+  // the file at install-entry under D-57-04) and unwinds the ledger.
+  // Mirrors the post-state-commit hydrate at lines 340-360 of this file.
+  const hooksPhase: Phase<InstallCtx> = {
+    name: "hooks",
+    do: async (c) => {
+      if (c.resolved.hooksConfigPath === undefined) {
+        return;
+      }
+
+      const raw = await readFile(
+        path.join(c.resolved.pluginRoot, c.resolved.hooksConfigPath),
+        "utf8",
+      );
+      // MATCH-03 / A1 projectRoot fallback: cwd doubles as projectRoot.
+      const ifCtx = { homedir: homedir(), cwd: c.cwd, projectRoot: c.cwd };
+      const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+      if (!parsed.ok) {
+        throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+      }
+
+      await writeHookConfig({
+        locations: c.locations,
+        pluginName: c.plugin,
+        pluginRoot: c.resolved.pluginRoot,
+        hooksValue: parsed.value,
+      });
+      c.hooksFileWritten = true;
+    },
+    undo: async (c) => {
+      if (!c.hooksFileWritten) {
+        return;
+      }
+
+      await removeHookConfig({ locations: c.locations, pluginName: c.plugin });
+    },
+  };
+
   const mcpPhase: Phase<InstallCtx> = {
     name: "mcp",
     do: async (c) => {
@@ -717,6 +778,16 @@ export async function runInstallLedger(
           prompts: [...c.stagedCommandNames],
           agents: [...c.stagedAgentNames],
           mcpServers: [...c.stagedMcpServerNames],
+          // HOOK-02 / D-57-01: additive required field. When the resolver
+          // advertises a hooks config (i.e. `<pluginRoot>/hooks/hooks.json`
+          // exists and parses), record the plugin's id as the per-plugin
+          // hooks-container-dir slug. This is the inventory marker for
+          // `list` UI, the `uninstall` hooks-subtree cleanup gate, and the
+          // factory-time hydrate predicate that decides whether to re-read
+          // the on-disk config back into `parsedConfigCache` on `/reload`.
+          // When the resolver did not surface a hooks config, the
+          // inventory stays empty.
+          hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
         },
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
@@ -732,12 +803,14 @@ export async function runInstallLedger(
   };
 
   // D-01 literal-array; order is part of the contract -- never refactor
-  // to a dynamic builder. The PRD-fixed sequence is
-  // [skills, commands, agents, mcp, state].
+  // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.
+  // The PRD-fixed sequence is
+  // [skills, commands, agents, hooks, mcp, state].
   const phases: readonly Phase<InstallCtx>[] = [
     skillsPhase,
     commandsPhase,
     agentsPhase,
+    hooksPhase,
     mcpPhase,
     statePhase,
   ];
@@ -936,6 +1009,58 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // config write-back (a write-back throw aborts the save, leaving the
       // state snapshot discarded exactly as before).
       await tx.save();
+
+      // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
+      // table rebuild. Moved AFTER `tx.save()` so a write-back throw
+      // (lines above) or a tx.save throw aborts BEFORE the cache mutates.
+      // Without this ordering, a closure-throw between cache mutation and
+      // tx.save() left a phantom routing entry that the next dispatch
+      // event would fire against -- state.json had no record of the
+      // install but the parsed-config cache + routing table did, and the
+      // next `/reload` was required to clear the strand.
+      //
+      // Post-save semantics are safe: state.json now matches in-memory
+      // state, so the next `/reload`'s factory-time hydrate (D-59-03)
+      // rebuilds the cache from the SAME source of truth.  Synchronous +
+      // zero disk I/O per DISP-02; the per-plugin lock still holds for
+      // the sub-millisecond cache+rebuild.  Skipped when the plugin
+      // declares no hooks.  Read+parse failures are non-fatal: the
+      // resolver already validated the config at install-entry time, and
+      // any defensive re-parse failure routes through OBS-01 debug only.
+      //
+      // WR-03: keep the routing table in lockstep with the parsed-config
+      // cache so a standalone install (outside a reconcile cascade)
+      // starts dispatching to the new plugin's hooks immediately,
+      // without requiring `/reload` (NFR-2).
+      //
+      // WR-02: post-`tx.save()` cache+routing mutations are non-fatal --
+      // state.json already records the install as successful, so a
+      // throw here must NOT surface as `(failed)`. `/reload`'s
+      // factory-time hydrate (D-59-03) rebuilds the cache from
+      // state.json, closing any divergence. Failures route through
+      // `hookDebugLog`.
+      if (installCtx.resolved.hooksConfigPath !== undefined) {
+        try {
+          await readAndCachePluginHooks({
+            scope,
+            marketplace,
+            plugin,
+            resolvedSource: asAbsolutePluginRoot(installCtx.resolved.pluginRoot),
+            hooksJsonPath: path.join(
+              installCtx.resolved.pluginRoot,
+              installCtx.resolved.hooksConfigPath,
+            ),
+            cwd,
+            logPrefix: "install",
+          });
+
+          rebuildRoutingTables();
+        } catch (cacheErr) {
+          hookDebugLog(
+            `install: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+          );
+        }
+      }
     });
   } catch (err) {
     // Pattern S-1 single chokepoint for user-visible errors (one
@@ -1221,11 +1346,23 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // suppresses the per-row bracket in that case -- matching the same
     // omit convention used by `uninstall.ts::uninstallPlugin` and
     // `reinstall.ts::reinstallPlugin`.
+    // SURF-05 / D-63-08: surface `(installed) {orphan rewake}` when the
+    // resolver flagged a handler with `rewakeMessage` / `rewakeSummary` but
+    // no `asyncRewake: true`. One-per-plugin -- the resolver records a
+    // single flag, the install row emits a single reason regardless of N
+    // orphan handlers. Reasons share the brace block with any companion
+    // soft-dep markers per MSG-GR-4.
+    const reasons: ContentReason[] = [];
+    if (installCtx.resolved.orphanRewake === true) {
+      reasons.push("orphan rewake");
+    }
+
     const installedRow: PluginInstalledMessage = {
       status: "installed",
       name: plugin,
       dependencies,
       version: installCtx.version,
+      ...(reasons.length > 0 && { reasons }),
     };
     // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
@@ -1460,27 +1597,33 @@ function classifyEntityShapeError(
 }
 
 // Manifest field names detected through the MSG-GR-4 carve-out. The closed
-// set holds the BARE camelCase token (`hooks`, `lspServers`) -- the DETECTION
-// key sliced from the resolver note, derived from the real `.claude-plugin/
+// set holds the BARE camelCase token (`lspServers`) -- the DETECTION key
+// sliced from the resolver note, derived from the real `.claude-plugin/
 // plugin.json` JSON key. The resolver prefixes the kind with `"contains "`
 // when populating `r.notes` (the `addUnsupportedKindNotes` helper pushes
 // a `contains ${kind}` note for every UNSUPPORTED_COMPONENT_KINDS member
 // it detects).
 // The carve-out: `startsWith("contains ")` strips the resolver's prefix,
 // then checks the remaining token against the set.
+// HOOK-04 / D-58-02: `lspServers` is now the SOLE manifest-field
+// carve-out. `hooks` was a supported component kind under v1.13 (the
+// `SUPPORTED_COMPONENT_KINDS` extension) so the resolver no longer
+// emits a `"contains hooks"` note; the dead carve-out entry was
+// dropped. The `{unsupported hooks}` reason is now a normal 2-word
+// REASON sourced through `shared/probe-classifiers.ts::narrowResolverNotes`
+// against the `parseHooksConfig` prefix tokens, not a manifest-field
+// carve-out emitted here.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
 // `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
-const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["hooks", "lspServers"]);
+const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 
 // SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
 // camelCase (matches the resolver note derived from the JSON manifest key);
 // the EMITTED closed-set Reason is the user-rendered value. `lspServers`
-// detects but renders as `lsp` (parallel to the single-word `hooks`
-// carve-out); `hooks` detects and renders unchanged.
+// detects but renders as `lsp`.
 const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, ContentReason>> = {
-  hooks: "hooks",
   lspServers: "lsp",
 };
 
@@ -1511,7 +1654,13 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
 /**
  * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
  * for renderer consumption. Classification order:
- *   1. manifest-field carve-out (`contains hooks` / `contains lspServers`)
+ *   0. four `hooks.json` prefix families
+ *      (`hooks.json is not valid JSON:` / `hooks.json failed schema validation:` /
+ *      `unsupported hooks:` / `malformed hooks.json:`) -> `unsupported hooks`
+ *      -- mirrors `shared/probe-classifiers.ts::narrowResolverNotes` for
+ *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
+ *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
+ *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
  *   2. "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
@@ -1519,10 +1668,29 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * the preferred path is typed errno-bearing Errors dispatched at the
  * orchestrator catch site via `.code`.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function narrowResolverReasons(reasons: readonly string[]): readonly ContentReason[] {
   const out: ContentReason[] = [];
   for (const reason of reasons) {
     if (reason === "") {
+      continue;
+    }
+
+    // Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
+    // The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
+    // rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
+    // classifier and the read-only probe classifier MUST emit the same
+    // `unsupported hooks` REASONS token for the same on-disk condition (SURF-01).
+    // Mirrors the probe-side prefix set verbatim -- if a prefix is added or
+    // renamed on one side, the other side MUST follow in lockstep (pinned by
+    // tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
+    const isHooksNote =
+      reason.startsWith("hooks.json is not valid JSON:") ||
+      reason.startsWith("hooks.json failed schema validation:") ||
+      reason.startsWith("unsupported hooks:") ||
+      reason.startsWith("malformed hooks.json:");
+    if (isHooksNote) {
+      out.push("unsupported hooks");
       continue;
     }
 

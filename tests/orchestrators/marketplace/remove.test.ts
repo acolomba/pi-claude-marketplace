@@ -65,6 +65,7 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
       prompts: resources.prompts ?? [],
       agents: resources.agents ?? [],
       mcpServers: resources.mcpServers ?? [],
+      hooks: resources.hooks ?? [],
     },
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -399,14 +400,14 @@ test("MR-4: cascade failure produces ONE V2 notification with severity=error (D-
         if (pluginName === "plugin-a") {
           return Promise.resolve({
             ok: false,
-            dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+            dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
             cause: new Error("forced cascade failure for plugin-a"),
           });
         }
 
         return Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
       };
 
@@ -468,7 +469,7 @@ test("MR-7: github-source clone dir retained when any plugin failed in cascade",
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: new Error("forced"),
         });
 
@@ -527,7 +528,7 @@ test("MR-7 inverse: github-source clone dir REMOVED on full cascade success", as
       const stubCascade: typeof cascadeUnstagePlugin = () =>
         Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
 
       await removeMarketplace({
@@ -740,6 +741,7 @@ test("TR-03 (non-AG-5 partial): failed plugin row filtered by outcome.dropped.*;
               skills: ["skill1"],
               commands: ["cmd1"],
               agents: [],
+              hooks: [],
               mcpServers: [],
             },
             cause: err,
@@ -748,7 +750,7 @@ test("TR-03 (non-AG-5 partial): failed plugin row filtered by outcome.dropped.*;
 
         return Promise.resolve({
           ok: true,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
         });
       };
 
@@ -847,6 +849,7 @@ test("TR-03 (AG-5 cause): failed plugin row preserved INTACT in remove.ts per-pl
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
+            hooks: [],
             mcpServers: [],
           },
           cause: err,
@@ -1036,14 +1039,14 @@ test("I1 / PR #51: orchestrated partial remove returns { status: 'partial' } car
         if (pluginName === "plugin-ok") {
           return Promise.resolve({
             ok: true,
-            dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+            dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           });
         }
 
         const code = pluginName === "plugin-fail-a" ? "EACCES" : "ENOENT";
         return Promise.resolve({
           ok: false,
-          dropped: { skills: [], commands: [], agents: [], mcpServers: [] },
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
           cause: Object.assign(new Error(`forced ${code}`), { code }),
         });
       };

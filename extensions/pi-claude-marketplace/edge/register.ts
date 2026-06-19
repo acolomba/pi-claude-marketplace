@@ -50,7 +50,7 @@ import { makeImportHandler } from "./handlers/plugin/import.ts";
 import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
-import { makePreviewHandler } from "./handlers/plugin/preview.ts";
+import { makePendingHandler } from "./handlers/plugin/pending.ts";
 import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
@@ -83,7 +83,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     reinstall: makeReinstallHandler(pi),
     list: makeListHandler(pi),
     pluginInfo: makePluginInfoHandler(pi),
-    preview: makePreviewHandler(pi),
+    pending: makePendingHandler(pi),
     enable: makeEnableDisableHandler(pi, true),
     disable: makeEnableDisableHandler(pi, false),
     import: makeImportHandler(pi, deps),

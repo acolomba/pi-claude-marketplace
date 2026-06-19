@@ -151,7 +151,7 @@ export async function installTargetWithMockPi(
   const target = targetByPlugin(plugin);
   const mock = makeMockPi(tools);
   const { ctx, notifications } = makeCtx(env.cwd);
-  claudeMarketplaceExtension(mock.pi);
+  await claudeMarketplaceExtension(mock.pi);
   const command = mock.commands.get("claude:plugin");
   if (command === undefined) {
     throw new Error("claude:plugin command was not registered");

@@ -269,11 +269,11 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["stale clone"],
               },
-              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+              { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
               {
                 status: "unavailable",
                 name: "epsilon",
-                reasons: ["hooks", "lsp"],
+                reasons: ["unsupported hooks", "lsp"],
               },
               { status: "available", name: "gamma", version: "2.0.0" },
             ],
@@ -504,7 +504,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "delta",
-                reasons: ["hooks"],
+                reasons: ["unsupported hooks"],
                 description: "Unavailable plugin that still surfaces its description.",
               },
             ],
@@ -568,6 +568,58 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SURF-05 / D-63-08: install succeeds but the parsed hooks.json carries
+    // an orphan-rewake handler (`rewakeMessage` / `rewakeSummary` without
+    // `asyncRewake: true`). The closed-set REASONS token rides the existing
+    // installed-row reasons brace. No soft-dep markers (both companion
+    // extensions are loaded), so the brace contains exactly one reason.
+    "success-with-orphan-rewake": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SURF-05 / D-63-08 + D-16-15: the orphan-rewake token and the soft-dep
+    // marker share ONE brace block. `composeReasons` appends the soft-dep
+    // markers AFTER the typed `reasons[]`, so the brace renders as
+    // `{orphan rewake, requires pi-subagents}`. Probe with only `mcp`
+    // loaded so the `agents` soft-dep marker fires.
+    "success-with-orphan-rewake-and-soft-dep": {
+      pi: piWithMcpLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents"],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
       message: {
@@ -579,7 +631,7 @@ const FIXTURES: FixtureMap = {
               {
                 status: "unavailable",
                 name: "helper",
-                reasons: ["hooks", "lsp"],
+                reasons: ["unsupported hooks", "lsp"],
               },
             ],
           },
@@ -826,7 +878,7 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: [],
               },
-              { status: "unavailable", name: "delta", reasons: ["hooks"] },
+              { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
             ],
           },
         ],
@@ -1172,7 +1224,7 @@ const FIXTURES: FixtureMap = {
             status: "added",
             plugins: [
               { status: "installed", name: "local-plugin", dependencies: [] },
-              { status: "unavailable", name: "unavailable-plugin", reasons: ["hooks"] },
+              { status: "unavailable", name: "unavailable-plugin", reasons: ["unsupported hooks"] },
             ],
           },
           {
@@ -1612,7 +1664,7 @@ const FIXTURES: FixtureMap = {
   //     * installed-single-scope                       (INFO-02 happy path)
   //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
   //     * available-single-scope                       (INFO-02 available bucket)
-  //     * unavailable-single-scope                     (INFO-02 unavailable + {hooks})
+  //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
   //   - Multi-scope fan-out:
   //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
   //   - Components arm (INFO-05):
@@ -1705,7 +1757,7 @@ const FIXTURES: FixtureMap = {
           name: "legacy-plugin",
           version: "0.1.0",
           description: "Old plugin that declares hooks; not installable in Pi.",
-          reasons: ["hooks"],
+          reasons: ["unsupported hooks"],
           componentsResolved: false,
         },
       } satisfies NotificationMessage,
@@ -2333,14 +2385,14 @@ const FIXTURES: FixtureMap = {
   },
 
   // -------------------------------------------------------------------------
-  // /claude:plugin preview -- DIFF-01 SC #2 / D-53-01 read-only diff command.
+  // /claude:plugin pending -- DIFF-01 SC #2 / D-53-01 read-only diff command.
   // -------------------------------------------------------------------------
-  "/claude:plugin preview": {
+  "/claude:plugin pending": {
     "empty-steady-state": {
       pi: piWithBothLoaded(),
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
-      message: { kind: "reconcile-preview-empty" },
+      message: { kind: "reconcile-pending-empty" },
     },
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),

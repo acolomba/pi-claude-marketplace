@@ -41,7 +41,7 @@ function stateWithOneGithubMarketplace(
       // array for any installable plugin per `requireInstallable`). Tests
       // that need a "currently disabled" record use `stateWithDisabledRecord`
       // (all four arrays empty -- A1).
-      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -79,7 +79,7 @@ function stateWithOnePathMarketplace(
       // array for any installable plugin per `requireInstallable`). Tests
       // that need a "currently disabled" record use `stateWithDisabledRecord`
       // (all four arrays empty -- A1).
-      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [] },
+      resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
@@ -330,7 +330,9 @@ function stateWithDisabledRecord(
             resolvedSource: "/abs/whatever",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             // All four arrays empty -- the disabled marker per A1.
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+            // HOOK-02 / D-57-01: `hooks: []` is the additive required field
+            // (also empty in the disabled-marker shape).
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             installedAt: "2025-01-01T00:00:00.000Z",
             updatedAt: "2025-01-01T00:00:00.000Z",
           },
@@ -560,7 +562,7 @@ test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace
 
 test("Edge: malformed plugin keys -> diagnostic with raw key as subject, NEVER silently dropped (WR-02)", () => {
   // A user who declares "my-plugin": {} (forgot the @marketplace suffix)
-  // must get a (failed) diagnostic, not a preview that simply omits the
+  // must get a (failed) diagnostic, not a pending listing that simply omits the
   // entry -- the command's whole purpose is surfacing config<->state
   // divergence. Three malformed shapes: no `@`, leading `@`, trailing `@`.
   const state: ExtensionState = { schemaVersion: 1, marketplaces: {} };
@@ -645,6 +647,7 @@ interface DisabledMarkerRecord {
     prompts: string[];
     agents: string[];
     mcpServers: string[];
+    hooks: string[];
   };
   version: string;
   resolvedSource: string;
@@ -652,53 +655,93 @@ interface DisabledMarkerRecord {
   updatedAt: string;
 }
 
-function recordWith(installable: boolean, populated: boolean): DisabledMarkerRecord {
+function recordWith(
+  installable: boolean,
+  populated: boolean,
+  hooksPopulated = false,
+): DisabledMarkerRecord {
   return {
     version: "1.0.0",
     resolvedSource: "/abs/whatever",
     compatibility: { installable, notes: [], supported: [], unsupported: [] },
-    resources: populated
-      ? { skills: ["s1"], prompts: [], agents: [], mcpServers: [] }
-      : { skills: [], prompts: [], agents: [], mcpServers: [] },
+    resources: {
+      skills: populated ? ["s1"] : [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: hooksPopulated ? ["h1"] : [],
+    },
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
-test("T5 / PR #51: isRecordedButDisabled truth table over the installable x populated matrix -- only the (installable: true, populated: false) cell is 'disabled'", () => {
+test("T5 / PR #51: isRecordedButDisabled truth table over the installable x populated x hooksPopulated matrix -- only the (installable: true, populated: false, hooksPopulated: false) cell is 'disabled'", () => {
+  // D-63-04: hooks is the fifth resource axis. The truth table now has
+  // three boolean dimensions; only the all-empty + installable: true cell
+  // is the ENBL-02 disabled marker. A hooks-only installed plugin
+  // (installable: true, populated: false, hooksPopulated: true) must NOT
+  // be classified as disabled -- that is the hooks-only-list-disabled
+  // regression this matrix pins.
   const cases: ReadonlyArray<{
     name: string;
     installable: boolean;
     populated: boolean;
+    hooksPopulated: boolean;
     expected: boolean;
   }> = [
     {
-      name: "installable: true,  populated: true  (currently installed and enabled)",
+      name: "installable: true,  populated: true,  hooksPopulated: false (installed + enabled, classic resources)",
       installable: true,
       populated: true,
+      hooksPopulated: false,
       expected: false,
     },
     {
-      name: "installable: true,  populated: false (the ENBL-02 disabled marker)",
+      name: "installable: true,  populated: false, hooksPopulated: false (the ENBL-02 disabled marker)",
       installable: true,
       populated: false,
+      hooksPopulated: false,
       expected: true,
     },
     {
-      name: "installable: false, populated: true  (impossible by construction; never disabled)",
-      installable: false,
-      populated: true,
+      name: "installable: true,  populated: false, hooksPopulated: true  (hooks-only installed -- D-63-04 regression cell)",
+      installable: true,
+      populated: false,
+      hooksPopulated: true,
       expected: false,
     },
     {
-      name: "installable: false, populated: false (soft-degraded -- D-04 / Rule 2; never disabled)",
+      name: "installable: true,  populated: true,  hooksPopulated: true  (installed + enabled, mixed resources)",
+      installable: true,
+      populated: true,
+      hooksPopulated: true,
+      expected: false,
+    },
+    {
+      name: "installable: false, populated: true,  hooksPopulated: false (impossible by construction; never disabled)",
+      installable: false,
+      populated: true,
+      hooksPopulated: false,
+      expected: false,
+    },
+    {
+      name: "installable: false, populated: false, hooksPopulated: false (soft-degraded -- D-04 / Rule 2; never disabled)",
       installable: false,
       populated: false,
+      hooksPopulated: false,
+      expected: false,
+    },
+    {
+      name: "installable: false, populated: false, hooksPopulated: true  (soft-degraded with hooks; never disabled)",
+      installable: false,
+      populated: false,
+      hooksPopulated: true,
       expected: false,
     },
   ];
   for (const c of cases) {
-    const rec = recordWith(c.installable, c.populated);
+    const rec = recordWith(c.installable, c.populated, c.hooksPopulated);
     assert.equal(
       isRecordedButDisabled(rec),
       c.expected,
@@ -742,6 +785,11 @@ test("T5 / PR #51: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- s
     "resources.prompts.length === 0",
     "resources.agents.length === 0",
     "resources.mcpServers.length === 0",
+    // D-63-04: hooks is the fifth resource axis. A drift twin that omits
+    // it (the v1.13 hook-bridge regression that surfaced as
+    // hooks-only-list-disabled) would misclassify a hooks-only installed
+    // plugin as disabled.
+    "resources.hooks.length === 0",
   ];
   for (const axis of requiredAxes) {
     assert.ok(

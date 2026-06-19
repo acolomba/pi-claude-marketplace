@@ -10,11 +10,70 @@ Fourteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.13 Claude Hook Bridge
+
+**Goal:** Add a hooks component bridge alongside the existing skills/commands/agents/MCP bridges, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Take hooks off the explicit Out of Scope list.
+
+**Target features:**
+
+- New `hooks` component type in the resolver + state schema (parallel to `skills` / `commands` / `agents` / `mcpServers`)
+- Bridge dispatch core: one composite `pi.on(...)` per Pi event type, internal per-plugin routing, literal + pipe-OR matcher translation with strict Claude-form tool-name semantics (full regex deferred — 100% first-party coverage without it)
+- Per-event payload translators for the **8 bucket-A direct-1:1-map events only**: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PreCompact`, `PostCompact`, `SessionEnd`. These are the events where dispatch fires with 100% fidelity to the Claude Code contract — no synthesis, no loss modes. Bidirectional Pi↔Claude tool-name translation table is the load-bearing primitive (Pi emits `bash`/`read`/`edit`/...; Claude expects `Bash`/`Read`/`Edit`/...).
+- Strict-supportability resolver gate: plugin `(unavailable) {unsupported hooks}` if its `hooks.json` references ANY event outside the bucket-A set OR a Claude tool with no Pi analog OR a regex matcher OR a non-`command` handler type. Bucket B (FileChanged), bucket D (Stop / CwdChanged / PostToolBatch / UserPromptExpansion / StopFailure), and soft-dep conditional Subagent events all flip plugins to unavailable in v1.13 — they are v1.14+ promotion candidates
+- `if` field implementation: full permission-rule-syntax glob matching with Bash subcommand parsing (compound-separator split, `$()`/backtick recursion, process-wrapper strip), per-tool argument extraction, AND-with-`matcher` composition, explicit fail-open on parse failure. Standard Claude Code field since v2.1.85; documented at `code.claude.com/docs/en/hooks-guide`
+- `asyncRewake` family implementation: bridge-owned `AsyncRewakeRegistry` spawns hooks detached, watches for exit code 2, on exit 2 injects via `pi.sendMessage({customType: "claude-hook-rewake", display: false, content: stderr_or_rewakeMessage}, { deliverAs: ctx.isIdle() ? "nextTurn" : "followUp" })`. Documented standard Claude Code field since v2.1.72; Pi has the matching primitives via `sendMessage` + `CustomMessage` with `display: false` (matches `<system-reminder>` user-invisible / model-visible semantic)
+- Lifecycle integration: install / uninstall / enable / disable reconcile hooks through the v1.12 config + reconcile planner; per-plugin `hooks/` subtree containment (NFR-10 extension)
+- Hook-payload-extension tolerance: schema `additionalProperties: true` at every nesting level; known additive-only extension set `{statusMessage, once, async, shell, args}` honored or silently dropped; unknown fields debug-log only
+
+**Out of scope for v1.13:**
+
+Four distinct categories of unsupported Claude hook events. All cause plugin `(unavailable) {unsupported hooks}` when referenced by a plugin's `hooks.json`:
+
+- **Deferred to v1.14+ for engineering reasons (8 events):**
+
+  These events ARE technically dispatchable but with documented fidelity gaps that conflict with the v1.13 strict-supportability stance. Each gets its own promotion REQ when v1.14+ adds it:
+
+  - `FileChanged` (bucket B) — needs `chokidar@^5` + cross-platform CI; deferred per `PAYL-V2-01`
+  - `CwdChanged` (bucket D) — bash-only filter + per-tool-call vs per-change discrepancy; deferred per `PAYL-V2-02`
+  - `PostToolBatch` (bucket D) — idle-window accumulation may miss deeply pipelined runs; deferred per `PAYL-V2-03`
+  - `Stop` (bucket D) — load-bearing canary for `ralph-wiggum`, `hookify`, `security-guidance`; needs idempotency guard + N-loop cap; deferred per `PAYL-V2-04`
+  - `UserPromptExpansion` (bucket D) — false-positive risk on system messages; deferred per `PAYL-V2-05`
+  - `StopFailure` (bucket D) — depends on Pi `agent_error` shape stability; deferred per `PAYL-V2-06`
+  - `SubagentStart` / `SubagentStop` (soft-dep conditional) — async runs reliable, sync runs synthesize from `tool_call`/`tool_result` filtered on `toolName === "subagent"`; deferred per `PAYL-V2-07`
+
+- **Blocked on upstream PRs not committed by v1.13 (9 events; documented as known limitations):**
+
+  These need somebody to land a PR (us, upstream, or a third party) before the bridge can observe them. v1.13 does NOT depend on any of these PRs and does NOT commit to sending them.
+
+  - 4 events needing `pi-coding-agent` runtime exposures: `Notification`, `PermissionRequest`, `PermissionDenied`, `MessageDisplay` (display-only semantic) — `EPROM-01`
+  - 1 event needing a new Pi feature: `TeammateIdle` (no agent-team primitive in Pi or pi-subagents) — `FPROM-01`
+  - 2 events needing two specific PRs to `pi-mcp-adapter`: `Elicitation`, `ElicitationResult` (register `ElicitRequestSchema` handler + publish on `pi.events`) — `GPROM-01`
+  - 2 events needing one PR to `@zenobius/pi-worktrees`: `WorktreeCreate`, `WorktreeRemove` (publish `worktree:created` / `worktree:removed` on `pi.events` from the existing command handlers) — `GPROM-01`
+
+- **Semantically inapplicable (5 events; permanently unsupportable, no upstream PR helps) — `HPROM-01` confirms permanent gate:**
+  - `ConfigChange` — matcher values (`user_settings` / `policy_settings` / etc.) are Claude paths and concepts that don't exist under Pi
+  - `Setup` — no Pi equivalent for Claude's `--init-only` CLI mode; the session model has no one-shot init phase
+  - `InstructionsLoaded` — fires for `CLAUDE.md` / `.claude/rules/*.md`; Pi reads `AGENTS.md` and a different context-file model
+  - `TaskCreated` / `TaskCompleted` — Pi has no canonical task primitive; rpiv-todo and pi-crew are competing extension takes with different semantics; Claude's TaskCreate sub-task-isolation model doesn't map to either
+
+- **Other v1.13 boundaries:**
+  - Full regex matchers (literal + pipe-OR covers 100% of first-party plugins) — `MATCH-V2-01`
+  - Non-`command` handler types (`http` / `mcp_tool` / `prompt` / `agent`) — `TYPES-V2-01`
+  - Claude tools with no Pi analog (`MultiEdit`, `NotebookEdit`, `NotebookRead`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `TodoRead`, `ExitPlanMode`, ...) — `PROM-01`
+
+**Marketplace coverage under v1.13 strict bucket-A scope:** 10/13 first-party plugins install (76.9%); 2/5 hook-using plugins (40%). `ralph-wiggum`, `hookify`, and `security-guidance` flip to UNAVAILABLE due to using `Stop` (bucket D); `security-guidance` is additionally blocked by `MultiEdit`/`NotebookEdit` tool-name gap. v1.14+ promotion of `PAYL-V2-04` (Stop synthesis with engineered safeguards) restores `ralph-wiggum` + `hookify`; `security-guidance` additionally needs `PROM-01` (tool-name mapping).
+
+**Authority sources:**
+
+- `docs/research/claude-hooks-vs-pi-events.md` — event taxonomy, bucket assignments, marketplace audit, soft-dep wiring
+- `docs/research/claude-hook-config-syntax.md` — full Claude Code hook config field reference; `if` / `asyncRewake` semantics; per-plugin audit; each field tagged IMPLEMENT / TOLERATE / ESCALATE
+- `.planning/REQUIREMENTS.md` — 30 REQs across 9 categories defining the v1.13 contract
+
 ## Current State
 
 **Shipped:** v1.12 Marketplace and Plugin Config Files (2026-06-11, Phases 51-56). Declarative per-scope `claude-plugins.json` (+ entry-level-override `claude-plugins.local.json`) is now the authoritative desired-state record: typebox-validated schema with a discriminated absent/invalid/valid load seam (corrupt files can never read as "uninstall everything"), lossless first-run migration from state.json, a pure reconcile planner behind the read-only `/claude:plugin preview` command, offline enable/disable with a distinct `(disabled)` token, automatic load-time reconciliation on every Pi startup//reload (per-entry network soft-fail, one structured cascade, fixed-point convergence, two-process safe), and config write-back on every mutating command with `--local` targeting. `npm run check` GREEN (1804 unit + 10 integration); npm 0.4.3.
 
-**Next:** planning the next milestone (`/gsd-new-milestone`). Backlog candidates: CFGV2-01..03 (version ranges, generation history, cross-scope conflict surfacing), Nyquist VALIDATION back-fill, zero-component/disabled-marker disambiguation.
+**Next:** v1.13 Claude Hook Bridge — milestone defined; requirements and roadmap to follow via `/gsd-new-milestone` continuation. Authority source `docs/research/claude-hooks-vs-pi-events.md` covers the full hook→event mapping and feasibility analysis.
 
 ## Requirements
 
@@ -121,18 +180,22 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 ### Active
 
-<!-- Next milestone not yet scoped. Run /gsd-new-milestone to define requirements. -->
+<!-- v1.13 requirements derived in REQUIREMENTS.md; counts populated by roadmapper. -->
 
-(None — v1.12 shipped; next milestone pending definition.)
+- v1.13 Claude Hook Bridge requirements (REQ-IDs assigned during requirements pass; see `.planning/REQUIREMENTS.md` after the roadmap step lands).
 
 ### Out of Scope
 
-<!-- Explicit V1 boundaries from PRD §1 non-goals + PRD §11. -->
+<!-- Explicit V1 boundaries from PRD §1 non-goals + PRD §11, plus v1.13 hook-bridge known limitations. -->
 
 - **Claude `local` scope** -- no Pi equivalent
 - **Plugin sources beyond local paths** -- `github` / `git` / `git-subdir` / `npm` object sources parse and surface as `unavailable`
 - **Marketplace source kinds beyond GitHub + local** -- SSH URLs, arbitrary HTTPS git URLs, remote `marketplace.json` URLs, sparse checkout, browser-paste tree URLs (`/tree/<ref>`)
-- **Components beyond skills/commands/agents/mcpServers** -- hooks, lspServers, monitors, themes, output styles, channels, userConfig, bin, settings (detected and surfaced as `unavailable`)
+- **Components beyond skills/commands/agents/mcpServers/hooks** -- lspServers, monitors, themes, output styles, channels, userConfig, bin, settings (detected and surfaced as `unavailable`). Hooks join the supported set in v1.13.
+- **9 Claude hook events out of scope for v1.13 (upstream-fixable)** -- `Notification`, `PermissionRequest`, `PermissionDenied`, `MessageDisplay` (need `pi-coding-agent` runtime exposures); `TeammateIdle` (no agent-team primitive in Pi or `pi-subagents`); `Elicitation`, `ElicitationResult` (need two specific PRs to `pi-mcp-adapter`); `WorktreeCreate`, `WorktreeRemove` (need one PR to `pi-worktrees` to publish events on `pi.events`). See `docs/research/claude-hooks-vs-pi-events.md` § "Upstream-fixable blockers" and § "Soft-dep extension event surfaces".
+- **5 Claude hook events permanently inapplicable to Pi** -- `ConfigChange` (Claude config paths irrelevant under Pi), `Setup` (no Pi `--init-only` equivalent), `InstructionsLoaded` (Pi reads a different context-file model), `TaskCreated` / `TaskCompleted` (no canonical Pi task primitive; rpiv-todo and pi-crew are competing takes with semantics that don't map to Claude's TaskCreate). Silently dropped at hook-config parse time; debug-logged only. See `docs/research/claude-hooks-vs-pi-events.md` § "H -- Semantically inapplicable to Pi".
+- **Hook-payload extensions** -- `asyncRewake` / `rewakeMessage` / `rewakeSummary` and any future Claude Code hook-entry payload fields are tolerated (ignored + debug-logged at parse, surfaced once at install) but not implemented. The supported event still fires synchronously in-band.
+- **Full regex matchers** -- v1.13 supports literal tool names and pipe-OR alternation (covers 100% of the official Claude marketplace today); full regex matchers deferred.
 - **Automatic dependency resolution / pruning** -- declared `dependencies` produce a manual-install warning only
 - **Custom component-path arrays as supplemental** -- explicit declaration replaces the default
 - **Mutating LLM tools for install/update/remove** -- only listing tools exposed
@@ -232,7 +295,9 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-06-11 after v1.12 milestone*
+*Last updated: 2026-06-14 — v1.13 Phase 57 (Schema, Component Type & Payload-Extension Tolerance) shipped: `hooks` admitted to `SUPPORTED_COMPONENT_KINDS` in `domain/resolver.ts`; `resources.hooks: string[]` added to `PLUGIN_INSTALL_RECORD_SCHEMA` as required field, default-filled by `ensurePluginResources` (D-57-01 dropped the `schemaVersion` bump as signaling-only ceremony); `HOOKS_CONFIG_SCHEMA` + `parseHooksConfig` discriminated parser shipped in `domain/components/hooks.ts` with lenient `Type.Record(Type.String(), …)` top-level (D-57-02) and `additionalProperties: true` at every nesting level (HOOK-03); invalid `hooks.json` flips plugins to `installable: false` via D-57-04. 4 plans, 18 commits, npm run check 1897/1897 unit + 10/10 integration GREEN; HOOK-01/02/03 marked validated.*
+
+*Earlier this milestone (pre-Phase-57): v1.13 requirements committed 2026-06-13 (31 REQs across 9 categories; scope tightened to bucket-A-only — 8 events, 100% fidelity; bucket B/D/soft-dep events deferred to v1.14+ as PAYL-V2-01..PAYL-V2-07; 14 architecturally-blocked events documented; 7-phase roadmap landed 2026-06-13 covering HOOK / MATCH / TOOL / DISP / EXEC / PAYL / SURF / LIFE / OBS).*
 
 *Earlier this milestone (pre-Phase-18): Phase 16 (2026-05-26) Renderer & Public API alongside V1: V2 public surface shipped to `extensions/pi-claude-marketplace/shared/notify.ts` -- `notify(ctx, pi, message): void` orchestrator (single `softDepStatus(pi)` probe at entry threaded into every row; caller-order iteration with no internal sort per D-16-06; multi-marketplace blocks joined with one blank line per D-16-07; 2/4/6-space indent ladder per D-16-08 via `renderIndentedCauseChain(cause, indent)`; reload-hint trailer per D-16-12/13 state-change ladder; computed severity per D-16-11 first-match ladder) plus 2-arg `notifyUsageError(ctx, UsageErrorMessage)` overload alongside the V1 3-arg form (byte-equal coexistence). Two file-private rendering helpers cover the full grammar chokepoint: `renderMpHeader` (5-arm switch with `assertNever(mp.status)`) and `renderPluginRow` (10-arm switch with `default: return assertNever(p)`). Bounded ESLint exemptions for `shared/notify.ts` added to MSG-Block 4a (reload-hint chokepoint) and MSG-Block 5 (soft-dep marker chokepoint), both ending at Phase 21 alongside the V1 chokepoint exemptions. New `tests/shared/notify-v2.test.ts` ships 32 byte-exact per-status unit tests (well above the D-16-17 floor of 22 and PATTERNS.md target of ~29) with a 118-line mini-spec header serving as the de facto v2 grammar spec until Phase 17 lifts it into `docs/output-catalog.md`; covers all 10 plugin variants + 4 marketplace statuses + cross-cutting cases (orphan-fold, rollbackPartial, multi-cause cascade, multi-marketplace, empty payloads, severity tiers, reload-hint trigger/suppression, notifyUsageError) plus BLOCKER-1 and BLOCKER-3 anti-pattern regression guards. V1 wrappers preserved bit-for-bit (no orchestrator call sites migrated yet -- that lands in Phases 18-20). Code review: 0 critical, 4 warning, 4 info (advisory; tracked for Phase 21 teardown). Closes SNM-12, SNM-13, SNM-14, SNM-15, SNM-16, SNM-17, SNM-18, SNM-30. Tests 1359/1359 GREEN (+32 from Phase 15's 1327). Milestone v1.4 progress: 2/7 phases. Earlier this milestone: Phase 15 (2026-05-25) shipped the v1.4 structured type model (10-variant `PluginNotificationMessage` discriminated union, runtime `PLUGIN_STATUSES`/`MARKETPLACE_STATUSES`/`DEPENDENCIES` `as const` tuples, compile-time arch test at `tests/architecture/notify-types.test.ts`); `docs/adr/v2-001-structured-notify.md` flipped Proposed -> Accepted with end-to-end Decision/Consequences/Migration refresh (Alt-2 ACCEPTED per D-15-16). Seeded from `docs/adr/v2-001-structured-notify.md` (commit `492d9c4`) plus design discussion refining the ADR: status renames, `Dependency = "agents" | "mcp"` replacing v1.3's two declares-* booleans, per-plugin causes replacing the top-level cause-chain trailer, rollback-partial as sub-state of `failed`, computed severity + computed reload hint, always-marketplace-header spec simplification. Targets ~4300 LoC net removal at Phase 21 final teardown. Last shipped: v1.3 (2026-05-25, 5 phases, 27 plans, 1249/1249 tests).*
 

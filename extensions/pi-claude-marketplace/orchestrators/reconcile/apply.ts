@@ -42,6 +42,7 @@
 
 import path from "node:path";
 
+import { rebuildRoutingTables } from "../../bridges/hooks/index.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
@@ -69,7 +70,7 @@ import type { GitOps } from "../marketplace/shared.ts";
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
- * `preview.ts::previewReconcile`'s scope fan-out).
+ * `pending.ts::pendingReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
   readonly ctx: ExtensionContext;
@@ -832,6 +833,13 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     if (readResult.plan !== undefined) {
       await applyPlan(opts, readResult.plan, outcomes);
     }
+
+    // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
+    // this scope's routing tables so the next Pi event fires against a
+    // bucket reflecting the post-reconcile state. WR-01-style isolation:
+    // a transient lock-held / EACCES throw is captured into a structured
+    // `invalid-block` outcome via `rebuildScopeRoutingTableIsolated`.
+    await rebuildScopeRoutingTableIsolated(scope, opts.cwd, outcomes);
   }
 
   // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
@@ -861,6 +869,59 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   // `install.ts::installPlugin` owns the orchestrated-mode collection
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
+}
+
+/**
+ * DISP-02: rebuild the per-scope routing tables under a brief read-only
+ * `withLockedStateTransaction` so the rebuild observes a consistent state
+ * snapshot. No `tx.save()` -- the rebuild is a pure cache walk that does
+ * not mutate state. A transient lock-held / EACCES throw propagates so the
+ * caller's WR-01 isolation arm coerces it into a structured
+ * `invalid-block` outcome.
+ *
+ * Pristine-scope gate (WR-05): skip the rebuild entirely when state.json
+ * does not exist -- the lock acquisition itself would mkdir the
+ * extensionRoot, violating the "clean reconcile creates no unsolicited
+ * files" contract. A scope without a state.json has zero installed plugins
+ * to register anyway.
+ */
+async function rebuildScopeRoutingTable(scope: Scope, cwd: string): Promise<void> {
+  const loc = locationsFor(scope, cwd);
+  if (!(await pathExists(loc.stateJsonPath))) {
+    return;
+  }
+
+  await withLockedStateTransaction(loc, async (_tx) => {
+    rebuildRoutingTables();
+    // NO tx.save() -- read-only snapshot acquisition.
+    await Promise.resolve();
+  });
+}
+
+/**
+ * WR-01-isolated wrapper around `rebuildScopeRoutingTable`. A transient
+ * lock-held / EACCES throw is captured as a structured `invalid-block`
+ * outcome (subject `state.json`, closed-set reason) so the rebuild's
+ * failure surfaces alongside the other per-scope outcomes instead of
+ * aborting `applyReconcile` wholesale.
+ */
+async function rebuildScopeRoutingTableIsolated(
+  scope: Scope,
+  cwd: string,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  try {
+    await rebuildScopeRoutingTable(scope, cwd);
+  } catch (err) {
+    const causeText = errorMessageOf(err);
+    outcomes.push({
+      kind: "invalid-block",
+      scope,
+      basename: "state.json",
+      reason: classifyReadPassThrow(err),
+      cause: new Error(redactAbsolutePaths(causeText)),
+    });
+  }
 }
 
 function surfacePostCommitWarnings(

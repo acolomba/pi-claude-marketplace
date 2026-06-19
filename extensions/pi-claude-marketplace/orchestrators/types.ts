@@ -102,7 +102,7 @@ export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "faile
  * `PluginFailedMessage.rollbackPartial[].phase` label, which also carries the
  * install path's `phase3a` / `phase3b` tokens.)
  */
-export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "mcp";
+export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mcp";
 
 /**
  * CMC-17 / MSG-RP-1: per-phase rollback-partial child

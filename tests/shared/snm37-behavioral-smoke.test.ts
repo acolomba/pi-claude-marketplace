@@ -45,7 +45,7 @@
 // `NotificationMessage` data driven straight through `notify(ctx, pi, message)`
 // (fastest, no fs install needed for byte-form
 // assertions). Shapes mirror `tests/architecture/catalog-uat.test.ts`
-// `single-mp-mixed` (installed/available mix + `{hooks, lsp}` reason brace) and
+// `single-mp-mixed` (installed/available mix + `{unsupported hooks, lsp}` reason brace) and
 // `hash-version-list` (`v#2ea95f8`).
 
 import assert from "node:assert/strict";
@@ -91,7 +91,7 @@ function piWithBothLoaded(): MockPi {
 // so NO `/reload` trailer fires). Locked minimums:
 //   - >=1 installed plugin per marketplace (both `official` and `community`
 //     carry a `present` row);
-//   - a `{...}` reason-brace row (`epsilon (unavailable) {hooks, lsp}`);
+//   - a `{...}` reason-brace row (`epsilon (unavailable) {unsupported hooks, lsp}`);
 //   - an installed/available mix (`present` + `available` rows);
 //   - >=1 hash-versioned plugin (`hashed-plugin` at `hash-2ea95f85703d`).
 // ---------------------------------------------------------------------------
@@ -112,8 +112,9 @@ const LIST_MESSAGE: NotificationMessage = {
           version: "hash-2ea95f85703d",
           dependencies: [],
         },
-        // Uninstallable, two-reason brace -> `{hooks, lsp}` (SNM-36).
-        { status: "unavailable", name: "epsilon", reasons: ["hooks", "lsp"] },
+        // Uninstallable, two-reason brace -> `{unsupported hooks, lsp}`
+        // (HOOK-04 / SNM-36).
+        { status: "unavailable", name: "epsilon", reasons: ["unsupported hooks", "lsp"] },
         // Available (installed/available mix).
         { status: "available", name: "gamma", version: "2.0.0" },
       ],

@@ -126,30 +126,289 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
-test("PR-2(5) / PR-3 declared unsupported component (hooks) -> notInstallable + 'contains hooks' note", async () => {
+// HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
+// `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
+// rejected with "contains hooks" -- the resolver only owns convention-file
+// discovery; entry/manifest-level hooks-field semantics are deferred to a
+// future dispatch milestone.
+test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", hooks: { onLoad: "x" } }), ctx);
-  assert.equal(r.installable, false);
-  assert.ok(
-    r.notes.some((n) => n === "contains hooks"),
-    `notes: ${r.notes.join(" / ")}`,
-  );
-  assert.ok(r.unsupported.includes("hooks"));
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    assert.ok(!r.supported.includes("hooks"));
+    assert.ok(
+      !r.notes.some((n) => n.includes("contains hooks")),
+      `notes must no longer contain "contains hooks": ${r.notes.join(" / ")}`,
+    );
+  }
 });
 
-test("PR-4 hooks/hooks.json convention -> notInstallable + 'contains hooks' note", async () => {
+// HOOK-01 / D-57-04: a parseable hooks/hooks.json on disk admits the plugin
+// with hooks added to the supported set (mirrors the supported-side
+// implicit-by-convention pattern used for skills/commands/agents).
+test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in supported", async () => {
   const localRoot = ROOT("./local");
   const ctx = mockCtx(MP, {
     [localRoot]: "dir",
-    [path.join(localRoot, "hooks", "hooks.json")]: { contents: JSON.stringify({ hooks: {} }) },
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    assert.ok(r.supported.includes("hooks"));
+    assert.ok(
+      !r.notes.some((n) => n.includes("contains hooks")),
+      `notes must no longer contain "contains hooks": ${r.notes.join(" / ")}`,
+    );
+  }
+});
+
+// D-57-04: structurally-malformed hooks/hooks.json flips installable: false
+// with the parse-failure detail surfaced in notes.
+test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: { contents: "not-valid-json" },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
   assert.ok(
-    r.notes.some((n) => n === "contains hooks"),
-    `notes: ${r.notes.join(" / ")}`,
+    r.notes.some((n) => n.includes("malformed hooks.json") || n.includes("hooks.json")),
+    `notes must mention hooks.json parse failure: ${r.notes.join(" / ")}`,
   );
-  assert.ok(r.unsupported.includes("hooks"));
+});
+
+// D-57-04 parse-fail second arm: structurally-malformed JSON (valid syntax,
+// wrong shape per HOOKS_VALIDATOR) also flips installable: false.
+test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    // Top-level value not an array -> HOOKS_VALIDATOR rejects.
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({ PreToolUse: "not-an-array" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, false);
+  assert.ok(
+    r.notes.some((n) => n.includes("hooks.json")),
+    `notes must mention hooks.json: ${r.notes.join(" / ")}`,
+  );
+});
+
+// WR-02 (D-58 review): an I/O failure reading hooks/hooks.json
+// PROPAGATES out of resolveStrict instead of being wrapped with the
+// `malformed hooks.json:` prefix and lumped into the `{unsupported hooks}`
+// bucket. The outer `narrowProbeError` ladder (used by list / info)
+// classifies the thrown error by `.code` so the row reports the truthful
+// failure class (e.g. `{permission denied}` for EACCES).
+test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrapped as malformed)", async () => {
+  const localRoot = ROOT("./local");
+  const hooksPath = path.join(localRoot, "hooks", "hooks.json");
+  // Custom context: statKind reports the file exists, readFileText
+  // throws EACCES (the file is readable to stat but not to read).
+  const ctx: ResolveContext = {
+    marketplaceRoot: MP,
+    statKind(p: string): Promise<"file" | "dir" | null> {
+      if (p === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (p === hooksPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText(p: string): Promise<string> {
+      if (p === hooksPath) {
+        return Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+      }
+
+      return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    },
+  };
+  await assert.rejects(
+    () => resolveStrict(basicEntry({ source: "./local" }), ctx),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "rejection must be an Error");
+      assert.equal(
+        (err as NodeJS.ErrnoException).code,
+        "EACCES",
+        "EACCES must propagate unchanged for narrowProbeError to classify",
+      );
+      return true;
+    },
+  );
+});
+
+// SURF-05 / D-63-08: a handler with `rewakeMessage` and NO `asyncRewake: true`
+// flips `partial.orphanRewake = true`. One-per-plugin invariant -- a single
+// orphan handler is enough.
+test("SURF-05 / D-63-08: rewakeMessage without asyncRewake -> orphanRewake === true", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "follow up please" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: the SAME handler with `asyncRewake: true` is no longer
+// orphan -- the companion field has its required parent. Resolver leaves
+// `orphanRewake` absent (absence-or-false invariant).
+test("SURF-05 / D-63-08: rewakeMessage WITH asyncRewake: true -> orphanRewake absent (no warning)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: "echo paired",
+                asyncRewake: true,
+                rewakeMessage: "follow up please",
+              },
+            ],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, undefined);
+  }
+});
+
+// SURF-05 / D-63-08: `rewakeSummary` is the second orphan-bearing companion
+// field; absence of `asyncRewake: true` ALSO flips the flag (covers both
+// fields in the family).
+test("SURF-05 / D-63-08: rewakeSummary without asyncRewake -> orphanRewake === true", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PostToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [{ type: "command", command: "echo summary", rewakeSummary: "what happened" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: one-per-plugin invariant -- multiple groups across
+// multiple events with ONLY ONE orphan handler still emit a single
+// plugin-level flag (no per-handler aggregation).
+test("SURF-05 / D-63-08: multi-event / multi-group config with ONE orphan -> orphanRewake === true (one-per-plugin)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo ok" }],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [
+              { type: "command", command: "echo first" },
+              {
+                type: "command",
+                command: "echo second",
+                rewakeMessage: "orphan #1",
+              },
+            ],
+          },
+          {
+            matcher: "Write",
+            hooks: [{ type: "command", command: "echo write" }],
+          },
+        ],
+        SessionStart: [{ hooks: [{ type: "command", command: "echo start" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    // boolean flag -- no count of N orphan handlers, just the single bit.
+    assert.equal(r.orphanRewake, true);
+  }
+});
+
+// SURF-05 / D-63-08: a hooks.json that exists and parses but contains NO
+// rewake companion fields at all leaves `orphanRewake` absent. Regression
+// guard for the no-op happy path.
+test("SURF-05 / D-63-08: hooks.json without any rewake fields -> orphanRewake absent", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.installable) {
+    assert.equal(r.orphanRewake, undefined);
+  }
+});
+
+// HOOK-01 regression guard: absent hooks/hooks.json + no entry/manifest
+// declaration -> installable: true and hooks NOT in supported. This is the
+// no-hooks happy path; the supported-side convention probe must not invent
+// a hooks entry where none exists on disk.
+test("HOOK-01: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true);
+
+  if (r.installable) {
+    assert.ok(!r.supported.includes("hooks"));
+  }
 });
 
 test("PR-4 discovers unsupported default component locations", async () => {

@@ -74,9 +74,9 @@ import type { Scope } from "../../shared/types.ts";
  * marketplace). The caller surfaces such keys as a `PlannedSourceMismatch`
  * diagnostic carrying the raw key -- not-wedging (the CONFIG_SCHEMA upstream
  * permits any string key so a typo cannot wedge the planner) and
- * not-reporting are different requirements: a declared entry the preview
- * silently omits would hide exactly the config↔state divergence the command
- * exists to surface.
+ * not-reporting are different requirements: a declared entry the pending
+ * command silently omits would hide exactly the config↔state divergence the
+ * command exists to surface.
  */
 function parsePluginKey(key: string): { plugin: string; marketplace: string } | undefined {
   const at = key.lastIndexOf("@");
@@ -267,10 +267,15 @@ interface DeclaredPluginAccumulator {
  * misclassify the `soft-degraded` fixture entry in
  * `state-populated-mixed.json` as `pluginsToEnable`, breaking the
  * deferred-convergence no-op proof. The disable orchestrator empties all
- * four arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
+ * five arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
  * preserving the previously-known `installable: true` flag), so the
  * empty-resources + installable-true intersection is the unambiguous
  * "currently disabled" marker. SPLIT-01 preserved -- no new schema field.
+ *
+ * D-63-04 / COMPONENT_KINDS 5-tuple: the `resources.hooks` axis joined
+ * the conjunction once the hook bridge added hooks to the state schema.
+ * Omitting it would over-classify a hooks-only installed plugin as
+ * "recorded but disabled".
  */
 export function isRecordedButDisabled(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
@@ -280,7 +285,8 @@ export function isRecordedButDisabled(
     record.resources.skills.length === 0 &&
     record.resources.prompts.length === 0 &&
     record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0
+    record.resources.mcpServers.length === 0 &&
+    record.resources.hooks.length === 0
   );
 }
 

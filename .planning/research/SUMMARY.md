@@ -1,393 +1,450 @@
-# Project Research Summary
+# Research Summary — v1.13 Claude Hook Bridge
 
-**Project:** pi-claude-marketplace v1.12 — Marketplace and Plugin Config Files
-**Domain:** Declarative desired-state config + load-time reconciler for an existing imperative
-plugin manager (Pi extension)
-**Researched:** 2026-06-09
-**Confidence:** HIGH
+**Project:** pi-claude-marketplace v1.13
+**Domain:** Subsequent-milestone bridge layer — Claude plugin hook events → Pi extension
+event bus, integrated into the locked v1.12 declarative config + reconcile architecture.
+**Researched:** 2026-06-13
+**Confidence:** HIGH (all four research docs grounded in live source: `types.d.ts` peer dep,
+`docs/research/claude-hooks-vs-pi-events.md` authority, real codebase file line citations,
+and npm registry queries.)
+
+---
 
 ## Executive Summary
 
-v1.12 introduces two user-facing JSON files (`claude-plugins.json` + `claude-plugins.local.json`)
-as the authoritative desired state for which marketplaces and plugins should be installed per
-scope, paired with a load-time reconciler that materializes declared state on every Pi startup
-and `/reload`. Research confirms this places the extension firmly at the **authoritative-pole**
-of declarative config tools — the same pole as nix home-manager and `brew bundle` — which is
-powerful but carries the highest density of data-loss failure modes of any milestone to date.
-The stack requires zero new runtime dependencies; every capability needed is already present in
-`write-file-atomic`, `typebox`, `proper-lockfile`, and `node:fs/promises`.
+The v1.13 hook bridge is a **brownfield addition** to a fully-shipped extension; it does
+not re-derive the v1.0–v1.12 technology choices. The one new runtime dependency is
+`chokidar@^5` (for `FileChanged` cross-platform watch synthesis), and the one API gate is
+`pi.sendUserMessage(reason, { deliverAs: "followUp" })`, present since
+`@earendil-works/pi-coding-agent` `>=0.74.0` (already within the existing peer floor). All
+other stack additions are zero: built-in `node:child_process.spawn`, existing TypeBox 1.x
+discriminated unions, existing `write-file-atomic`, existing `proper-lockfile`.
 
-The recommended approach mirrors the existing codebase's established patterns throughout. The
-reconciler reuses the D-28 pure-planner + effectful-executor split from `orchestrators/import/`;
-config I/O mirrors `persistence/state-io.ts` with a sibling `config-io.ts`; write-back composes
-inside the existing `withLockedStateTransaction` scope; and first-run migration follows the
-fire-and-forget model of `persistence/migrate.ts`. No new architectural patterns are introduced —
-the risk is in wiring, ordering, and the new safety rails required by full-declarative semantics,
-not in novel technology.
+The bridge's central structural constraint is that **`pi.on()` returns `void` with no
+`pi.off()` analogue**, verified in `dist/core/extensions/types.d.ts`. This forces the
+composite-per-Pi-event dispatch model: one handler per Pi event type registered exactly
+once at extension-factory time, with a mutable routing table (`shared/event-router.ts`)
+rebuilt on every `/reload`. Any per-plugin handler approach would accumulate stale handlers
+across reloads, permanently violating NFR-2. The routing-table rebuild is a sub-millisecond
+synchronous pass triggered from `orchestrators/reconcile/apply.ts` after each scope's
+apply pass, so the `/reload` lifecycle is the single path from config change to live
+dispatch — no hot-swap is possible or desirable.
 
-The dominant risk is **safety** around destructive reconciliation. Three non-negotiable gates must
-be engineered before the reconciler can run any prune: (1) migration-first ordering so an
-existing install is never reconciled against absence; (2) an absent/unparseable/empty config
-trichotomy that aborts reconciliation on bad input rather than interpreting it as "uninstall
-everything"; and (3) provenance-scoped removal so the reconciler only prunes artefacts this
-extension materialized, mirroring ArgoCD's ownership guard. The secondary risk cluster is
-behavioral integrity: reconcile convergence (fixed-point invariant), notification catalog
-compliance (byte-locked UAT), and cross-process lock coverage for the new internal bookkeeping
-file.
+The highest correctness risk is the `Stop` bucket-D synthesis: `pi.on("agent_end", ...)`
+is observation-only, so block-to-continue must be delivered as a synthetic user message via
+`pi.sendUserMessage`. The canary plugin `ralph-wiggum` depends on this contract and serves
+as the load-bearing integration test. Five bucket-D events have documented loss modes
+(Stop timing-shift, CwdChanged bash-only, PostToolBatch count race, UserPromptExpansion
+false-positive, StopFailure classifier). Five bucket-H events (`ConfigChange`, `Setup`,
+`InstructionsLoaded`, `TaskCreated`, `TaskCompleted`) are semantically inapplicable and
+silently dropped. Nine events are blocked on upstream PRs (buckets E/F/G); none of the 14
+unsupported events appear in the official Anthropic first-party plugin catalog.
+
+---
 
 ## Key Findings
 
-### Recommended Stack
+### Stack Delta (STACK.md)
 
-No new runtime dependencies are warranted. All required capabilities exist in the current
-dependency set. The single noteworthy stack decision is to route all config writes through the
-existing `shared/atomic-json.ts` seam (`write-file-atomic`) rather than adding a parallel
-mechanism. A thin `saveConfig` wrapper mirroring `saveState` is the right abstraction. The
-`typebox` pattern (`Type.Object` + `Compile` + `.Check`/`.Errors`) adds a new `CONFIG_SCHEMA`
-constant alongside `STATE_SCHEMA` — same pattern, different shape. An optional routine bump of
-the `typebox` dev-pin from `^1.1.38` to `^1.2.6` is available but not required.
+The v1.13 stack is the v1.12 stack plus exactly one new runtime dependency.
 
-**Core technologies (all already present):**
+**New runtime dep:**
 
-- `write-file-atomic@^8.0.0` — atomic JSON write for config files via the existing
-  `atomicWriteJson` seam (NFR-1)
-- `typebox@^1.1.38` — `CONFIG_SCHEMA` + compiled JIT validator for the new config-file shape;
-  same pattern as `STATE_SCHEMA`
-- `proper-lockfile@^4.1.2` — cross-process write serialization; config write-back joins the
-  existing `withLockedStateTransaction` scope (no new lock)
-- `node:fs/promises` (built-in) — `readFile` at load; ENOENT as migration trigger
-- `memfs@^4.57.2` (dev) — in-memory unit tests for merge/diff/reconcile logic
+| Dependency | Version | Purpose |
+|---|---|---|
+| `chokidar` | `^5.0.0` | Cross-platform `fs.watch` wrapper for `FileChanged` synthesis (bucket B). Pure-JS in v5; engines `>=20.19.0` exactly matches NFR-4 floor. No native bindings, no new floor pressure. |
 
-**What NOT to use:** `comment-json` or `jsonc-parser` (comment preservation is a losing battle
-against machine write-back); `deepmerge` / `lodash.merge` (entry-level override requires domain
-logic, not generic recursion); `chokidar` / `fs.watch` (reconcile is load-time-only by locked
-decision); `semver` (version pins are exact-equality strings, not ranges).
+**No change (already present):**
 
-### Expected Features
+| Item | Status |
+|---|---|
+| `@earendil-works/pi-coding-agent >=0.74.0` (peer floor) | `sendUserMessage` verified at `:292` and `:865` in `types.d.ts`; no peer-floor bump needed. |
+| `typebox ^1.1.38`, `write-file-atomic ^8.0.0`, `proper-lockfile ^4.1.2` | Unchanged; hook bridge reuses all three. |
+| `node:child_process.spawn`, `node:fs/promises`, `node:crypto` | No new built-in additions. |
+| `memfs ^4.57.2` (dev) | chokidar does NOT respect `memfs`; hook bridge unit tests must mock behind a `WatchHost` seam. |
 
-v1.12 is at the authoritative-pole: config = truth, reconcile is automatic at load, undeclared
-entries are removed. This is closest to home-manager's model and shares its pitfalls. The
-features that matter most are the safety rails around destructive reconcile, not the reconcile
-itself.
+**Rejected alternatives:** `@parcel/watcher` (native bindings; install-failure surface);
+`execa` (CLAUDE.md heuristic — `spawn` covers all needs); `p-debounce` / `lodash.debounce`
+(chokidar's `awaitWriteFinish` + one inline `setTimeout` are sufficient).
 
-**Must have (table stakes for v1.12):**
+**Do not add:** `fs.watchFile` (poll-based); `@types/chokidar` (chokidar v5 ships own `.d.ts`).
 
-- `claude-plugins.json` + `claude-plugins.local.json` schema, per scope — the artifact itself
-- State split: committed desired-state vs internal machine bookkeeping — required for safe
-  scoped removal and a reviewable committed file
-- First-run generate-only migration from `state.json` — prevents data loss on upgrade; must
-  precede any reconcile pass
-- Load-time reconcile with provenance-scoped removal + network soft-fail (NFR-5) + atomic saga
-  (v1.7)
-- Reconcile report through the existing structured-notification cascade (trust surface)
-- Write-back from every mutating command + `--local` flag
-- enable/disable commands with re-enable from persisted records, no network
-- gitignore handling / documentation for the `.local` file
+### Features (FEATURES.md)
 
-**Should have (P2 — consider pulling to v1.12):**
+**Table stakes (P1 — must ship in v1.13):**
 
-- Dry-run / preview of the next reconcile — unusually important because reconcile is automatic
-  (no explicit user gate like `brew bundle`); cost is LOW-MEDIUM since the diff is already
-  computed
+| Feature | Notes |
+|---|---|
+| `hooks` component type in resolver + state schema | Blocker for all other features. |
+| Bridge dispatch core (one composite `pi.on` per Pi event type) | NFR-2-forced; mutable routing table. |
+| Per-event payload translators (16 supported events) | Bucket A (8 direct), B (FileChanged), D (Stop/CwdChanged/PostToolBatch/UserPromptExpansion/StopFailure), soft-dep (SubagentStart/Stop). |
+| `Stop` JSON round-trip via `pi.sendUserMessage` — ralph-wiggum canary | Highest-risk synthesis; gates the milestone's correctness claim. |
+| Typed `HookSummary` in `shared/notify.ts` | Blocks `info` surface and install-time warnings. |
+| `info <plugin>`: `hooks:` line with matcher, gating, and soft-dep markers | `hooks` inserts between `commands` and `mcp` alphabetically. |
+| Install-time bucket-D synthesis warnings | Per (plugin, bucket-D event); closed-set reason tokens. |
+| Install-time hook-payload extension warnings | Known set: `asyncRewake`/`rewakeMessage`/`rewakeSummary`; unknown tolerated + debug-logged. |
+| Hook execution context: Pi `ctx.cwd`; dual `CLAUDE_*` + `PI_*` env; per-hook `timeout` (default 60s) | Claude Code parity on cwd and timeout. |
+| Lifecycle: hooks reconcile through v1.12 planner (`rebuildRoutingTables` call) | Zero new cascade rows; existing reload-hint trailer inherited. |
+| Debug-log dispatch surface via `shared/debug-log.ts` (operator-only; env-gated) | Never `ctx.ui.notify` (IL-2). |
+| H-bucket silent drop (5 events) at parse time | Debug-log only; no install-time warning. |
 
-**Defer (v2+):**
+**Differentiators:**
 
-- Per-entry version ranges / update policy in the committed file (conflicts with PI-7
-  exact-equality hash model)
-- Reconcile generation history (home-manager style)
-- Cross-scope merge conflict surfacing
+- Bucket-D synthesis caveats disclosed AT INSTALL (unique to a bridge architecture).
+- Per-entry gating disclosure on `info hooks:` line for G/H-bucket and soft-dep events.
+- Typed `HookSummary` discriminated model makes match-trace and future per-entry surfaces
+  cheap to add in v1.14+ without rebuilding.
 
-### Architecture Approach
+**Deferred to v1.14+ (P2/P3):** match-trace command; G-bucket promotion when upstream PRs
+land; full regex matcher support.
 
-v1.12 is a brownfield integration into an existing edge -> orchestrator -> bridge -> persistence
-layering. The reconciler hooks into the `resources_discover` event handler in `index.ts`, running
-before `aggregateDiscoveredResources` to guarantee ordering by construction. New persistence
-components (`config-io.ts`, `config-merge.ts`, `migrate-config.ts`) are siblings to the existing
-`state-io.ts`. A new `orchestrators/reconcile/` subtree mirrors `orchestrators/import/` in
-structure: pure planner (`plan.ts`) + effectful executor (`apply.ts`) + notification builder
-(`notify.ts`). Mutating commands each gain a config write-back step composed inside their
-existing `withLockedStateTransaction` closure. The `STATE_SCHEMA` loses its desired-state fields
-(autoupdate, enabled) which move to `CONFIG_SCHEMA`.
+**Anti-features (do not implement):** per-hook telemetry (IL-4); hot-reload without
+`/reload` (structurally impossible); per-hook enable/disable within a plugin; dedicated
+`/claude:plugin hooks <plugin>` command; hook-config DSL extensions; refusing install for
+H/G-bucket events; `list` hook-count column.
 
-**Major components:**
+### Architecture (ARCHITECTURE.md)
 
-1. `persistence/config-io.ts` — `CONFIG_SCHEMA`, `loadConfig`/`saveConfig`, entry-level
-   base+local merge producing `MergedConfig`
-2. `persistence/migrate-config.ts` — first-load generate-only migration from `state.json`;
-   analogue of `migrate.ts`
-3. `orchestrators/reconcile/plan.ts` — pure `planReconcile(merged, state) -> ReconcilePlan`;
-   template is `import/marketplaces.ts::buildClaudeImportPlan`
-4. `orchestrators/reconcile/apply.ts` — drives existing orchestrators serially (each owns its
-   scope lock); template is `import/execute.ts::executeScopedPlan`
-5. `orchestrators/plugin/enable.ts` / `disable.ts` — enable delegates to reinstall building
-   blocks (cached, no network); disable delegates to uninstall cascade minus data-dir removal
-6. `shared/config-writeback.ts` — `writeBackPluginEntry` / `writeBackMarketplaceEntry` invoked
-   inside existing locked closures
+The bridge is a **5th component bridge** parallel to skills/commands/agents/mcp, plus a
+dispatch layer unique to this bridge.
 
-**Critical wiring constraint:** existing orchestrators acquire the per-scope `proper-lockfile`
-with `retries: 0`. They cannot be nested. `applyReconcile` drives them sequentially with no
-outer lock, exactly as `import/execute.ts` does. Any attempt to wrap apply in an outer
-`withStateGuard` deadlocks.
+**New files (key items):**
 
-**Open feasibility question:** the `resources_discover` handler currently has no `ctx`/`pi` for
-`notify()`. Reconcile notifications need a notify sink. Two options: (a) deferred channel
-surfaced on `session_start`; (b) capture `pi` at extension-init. Flag for a spike in the
-load-wiring phase.
+| Component | Path | Responsibility |
+|---|---|---|
+| Hook domain primitive | `domain/components/hooks.ts` | TypeBox schema; forward-compatible parser (`additionalProperties: true`); bucket-H tagging. |
+| Bridge plan/stage/unstage/discover | `bridges/hooks/{plan,stage,unstage,discover}.ts` | Mirrors existing 4-bridge cascade; atomic `hooks.json` copy; idempotent `rm -rf`. |
+| Matcher compiler | `bridges/hooks/matcher.ts` | Literal + pipe-OR → `Set<string>`; empty = MATCH_ALL; no regex engine. |
+| Dispatch core | `bridges/hooks/dispatch.ts` | Composite `pi.on(...)` handlers; reads routing table. |
+| Lifecycle | `bridges/hooks/lifecycle.ts` | `installComposites(pi)` (once from `index.ts`) + `rebuildRoutingTables(state, loc)` (from `reconcile/apply.ts`). |
+| Routing-table singleton | `shared/event-router.ts` | Mutable `Map<PiEventName, Map<RoutingKey, RoutingEntry[]>>`; cleared + rebuilt per scope on every `/reload`. |
+| Spawn + parse | `bridges/hooks/spawn.ts` | `node:child_process.spawn`; bounded stdout; SIGTERM→SIGKILL; tolerant JSON parse. |
+| Per-event translators | `bridges/hooks/payloads/<event>.ts` (~16 files) | Bucket-D files carry loss-mode comment block from authority doc verbatim. |
 
-### Critical Pitfalls
+**Modified files:** `persistence/state-io.ts` (schemaVersion widened; `resources.hooks`
+added); `persistence/migrate.ts` (migrateV1ToV2); `domain/resolver.ts` (`hooks` moved to
+supported set); `orchestrators/plugin/{install,uninstall,update,reinstall}.ts` (5th cascade
+phase); `orchestrators/reconcile/apply.ts` (one-line rebuild call); `orchestrators/plugin/info.ts`
++ `list.ts` (hooks component); `shared/notify.ts` (`HookSummary`, new Reason member);
+`index.ts` (one-line `installComposites(pi)` call).
 
-1. **Empty / missing / unparseable config silently uninstalls everything** — Implement a strict
-   trichotomy: missing -> migrate-then-reconcile; unparseable -> abort reconcile, change nothing,
-   surface error; genuinely empty-but-valid -> apply ownership guard before any prune. A 0-byte
-   or truncated file must never trigger a mass uninstall.
+**Dispatch ordering:** sorted by `compareByNameThenScope` (project-first, alphabetical);
+within plugin, declaration order. Fan-out sequential and awaited within one handler
+invocation.
 
-2. **Migration is a one-way door** — Migration must be atomic (write config before touching any
-   bookkeeping), idempotent (ENOENT detection, not a half-set flag), lossless (all installed
-   entries including soft-degraded ones must appear in the generated config), and must preserve
-   `state.json` intact. Exit gate: migrate-then-reconcile is a strict no-op.
+### Critical Pitfalls (PITFALLS.md)
 
-3. **Write-back clobbers concurrent hand edits and the base/local split** — Write-back is a
-   targeted entry-level patch of the specific target file (base or `--local` -> local), re-read
-   under the scope lock immediately before write. Never serialize the merged view back to disk.
-   Never let a `--local` write touch the base file.
+Full catalog is 22 pitfalls + integration gotchas + security mistakes in PITFALLS.md.
+Top 5 by blast radius:
 
-4. **Reconcile -> mutate -> `/reload` -> reconcile loop** — Reconcile must converge to a fixed
-   point (second immediate reconcile is a no-op, config/internal file byte-unchanged). Reconcile
-   must never emit a reload hint. Reconcile writes only to the internal bookkeeping file, never
-   to the user config (except one-time migration).
+1. **Stale composite handler (zombie dispatch)** — `pi.on()` void return; handlers accumulate
+   across reloads. Prevention: epoch guard in every composite handler closure; double-load
+   test asserts exactly-one dispatch.
 
-5. **Concurrent reconcile corrupts the internal bookkeeping file** — The entire reconcile pass
-   must run under the existing cross-process scope lock extended to cover the new internal file.
-   Two Pi instances starting simultaneously must not double-apply or interleave writes.
+2. **`Stop` synthesis loop / contract break** — `agent_end` may fire multiple times; loop
+   can run indefinitely. Prevention: idempotency guard per (plugin, turn-id); N-loop cap
+   (default 10) with one-shot notify-warning; `ralph-wiggum` end-to-end integration test
+   gates the milestone.
 
-6. **Notification catalog compliance** — Reconcile is a brand-new emission context. All output
-   must go through the typed `notify`/`emitWithSummary` seam (IL-2). New status/reason tokens
-   require closed-set + catalog + byte-UAT amendment in the same atomic commit.
+3. **State.json schema bump corrupts cross-version concurrency** — TypeBox strict mode
+   rejects unknown fields in v1.12 reader. Prevention: widen `schemaVersion` to
+   `Literal(1)|Literal(2)`; additive migration inside `withLockedStateTransaction`.
 
-7. **enable/disable three-state confusion** — Model three orthogonal facts: declared / enabled /
-   available. `disabled` (deliberate) and `unavailable` (soft-degraded) must never collapse.
-   Reconcile's desired-materialized set = declared AND enabled; it must not re-materialize
-   disabled entries.
+4. **`fs.watch` cross-platform brittleness breaks `FileChanged`** — atomic-rename makes
+   watcher deaf after first save. Prevention: `chokidar@^5` with `awaitWriteFinish`;
+   mandatory CI on Linux + macOS + Windows.
+
+5. **Hook child-process timeout absent — agent loop hangs** — `spawn` defaults are wrong.
+   Prevention: 60s default timeout + SIGTERM→SIGKILL; `maxBuffer: 1MB`; orphan cleanup on
+   `session_shutdown`.
+
+---
+
+## Convergences
+
+Cross-doc consensus — most reliable decisions for requirements anchoring.
+
+| Convergence | Docs | Decision |
+|---|---|---|
+| Composite-per-Pi-event dispatch model | ARCHITECTURE §4 Pattern 1; PITFALLS §Pitfall 1 | Forced by `pi.on()` void return; only NFR-2-compliant design. |
+| TypeBox discriminated `HookEventPayload` union | STACK §Focus area 4; ARCHITECTURE | Mirrors v1.10 `MarketplaceNotificationMessage`; Ajv rejected (no static narrowing). |
+| `chokidar@^5` for `FileChanged` | STACK §Focus area 1; PITFALLS §Pitfall 4 | Sole new runtime dep; hand-rolled `fs.watch` rejected. |
+| Typed `HookSummary` in `shared/notify.ts` | FEATURES §differentiators; ARCHITECTURE §6.3 | Must land with dispatch core; every `info`/install-warning surface depends on it. |
+| `Stop` as milestone's load-bearing canary | FEATURES §MVP; ARCHITECTURE §Pattern 5; PITFALLS §Pitfall 6 | `ralph-wiggum` end-to-end test gates dispatch core phase. |
+| IL-2 hook stderr → debug-log only at runtime | FEATURES §operator table stakes; PITFALLS §Pitfall 12 | Never routed through `ctx.ui.notify`. |
+| Mid-reload event delivery is safe by Pi's call ordering | ARCHITECTURE §5.3; PITFALLS §Pitfall 2 | `resources_discover` is setup-phase; document assumption in `lifecycle.ts`. |
+| `node:child_process.spawn` (not `execa`) | STACK §Focus area 6; PITFALLS §Integration gotchas | CLAUDE.md heuristic; `spawn` covers all needs. |
+| Routing-table rebuild as side-effect of reconcile | ARCHITECTURE §Pattern 4; FEATURES §lifecycle | One `rebuildRoutingTables` call after each scope's apply pass; no parallel mechanism. |
+| `additionalProperties: true` on hook-config TypeBox schema | STACK §Focus area 4; PITFALLS §Pitfall 7 | Strict rejection would block `security-guidance`. Known-extension list for install warnings. |
+
+---
+
+## Divergences
+
+| Topic | Divergence | Consolidated decision |
+|---|---|---|
+| `Stop` synthesis disclosure | FEATURES: install warning; ARCHITECTURE: per-file comment; PITFALLS: idempotency guard + canary. | All three apply at different levels — not a conflict. |
+| `StopFailure` install disclosure | FEATURES: no install warning; PITFALLS: classifier table + contract test. | Aligned: no user-visible install warning; classifier is code + test only. |
+| Hook timeout default | FEATURES: 60s; PITFALLS: 30s. | 60s bridge-wide default when `timeout` field absent (matches Claude Code documented default). Per-hook-entry `timeout` field takes precedence. |
+| SubagentStart/Stop soft-dep marker reuse | ARCHITECTURE: reuse `Dependency = "agents"` token; FEATURES: per-entry suffix on `info hooks:` line. | Both correct at different levels: top-level plugin row reuses `"agents"` token (no closed-set bump); per-entry suffix on `hooks:` line is a new inline annotation, not a `Dependency` token. |
+| Debug-log seam | ARCHITECTURE: introduce `shared/debug-log.ts`; FEATURES: verify `pi.log`/`ctx.log.debug` at impl. | Introduce `shared/debug-log.ts`; check at Phase 5 implementation whether host exposes a preferred logger to route through. |
+
+---
+
+## What Requirements Should Anchor On
+
+Each item maps to a contract that REQUIREMENTS.md should encode as a REQ-ID.
+
+1. Bridge calls `pi.on(eventName, handler)` exactly once per supported Pi event type at
+   extension-factory time; handlers read routing state from `shared/event-router.ts`; table
+   is cleared and rebuilt synchronously in `rebuildRoutingTables(state, loc)` called from
+   `reconcile/apply.ts` after each scope's apply pass.
+
+2. Every composite handler closes over an epoch integer; a module-level `liveEpoch` cell
+   is bumped on each bridge load; stale handlers from prior loads are no-ops.
+
+3. `FileChanged` synthesis uses `chokidar@^5` with `awaitWriteFinish`; cross-platform CI
+   matrix (Linux + macOS + Windows) is mandatory, not optional.
+
+4. `Stop` synthesis intercepts `agent_end`; on hook returning `{decision: "block",
+   reason: "..."}`, bridge calls `pi.sendUserMessage(reason, { deliverAs: "followUp" })`
+   exactly once per logical agent end (idempotency guard); N-loop safety cap (default 10)
+   with one-shot notify-warning when cap is hit.
+
+5. Routing-table dispatch ordering is deterministic: entries sorted by
+   `compareByNameThenScope`; within one plugin, declaration order from `hooks.json`;
+   fan-out sequential and awaited within one handler invocation.
+
+6. Hook child processes: 60s bridge-wide default timeout (overridden by per-hook-entry
+   `timeout` field); SIGTERM after timeout, SIGKILL after 5s grace; `maxBuffer: 1MB`;
+   stdin payload truncated at 256KB with `_truncated: true` marker; stderr debug-log only
+   (never `ctx.ui.notify` — IL-2).
+
+7. Hook config parser: TypeBox with `additionalProperties: true` at every nesting level;
+   known payload-extension allow-list (`asyncRewake`, `rewakeMessage`, `rewakeSummary`);
+   known fields → one-shot install notify warning; unknown fields → debug-log only.
+
+8. Matcher translation: literal tool names and pipe-OR alternation only; regex matchers
+   detected and rejected at install with per-entry notify error; plugin install NOT blocked
+   (entry skipped, other entries install).
+
+9. State schema bumps to `schemaVersion: 2`; migration additive (`hooks ??= []`),
+   idempotent, inside `withLockedStateTransaction`; `schemaVersion` union widened to
+   `Literal(1)|Literal(2)`.
+
+10. Hook command path containment: every `command` must resolve (via `fs.realpath`) to a
+    path inside the plugin's own tree; violation rejected at install via `assertPathInside`.
+
+11. H-bucket events (5) silently dropped at parse; debug-log once per plugin per reload;
+    `info` shows `(never fires) {inapplicable to Pi}` per entry.
+
+12. G-bucket events (4) registered as never-fires; `info` shows
+    `(never fires) {requires pi-<dep>}`; no dispatcher registered.
+
+13. Soft-dep `SubagentStart`/`SubagentStop` wiring conditional on
+    `softDepStatus(pi).agents.present`; per-entry `{requires pi-subagents}` marker on
+    `info hooks:` line when probe reports unloaded.
+
+14. All hook install/uninstall operations emit a plugin row through the v1.4
+    `NotificationMessage` model, triggering the existing reload-hint cascade.
+
+15. `shared/debug-log.ts` is the sole debug output seam for the hook bridge; gated on
+    `PI_CLAUDE_MARKETPLACE_DEBUG=1`; never `console.error`, `process.stderr.write`, or
+    `ctx.ui.notify` for runtime hook diagnostic output.
+
+---
 
 ## Implications for Roadmap
 
-Based on research, the dependency graph mandates a foundation-before-behavior ordering. Persistence
-shapes are leaf dependencies of everything else; the pure planner and enable/disable are
-independently testable before any wiring; apply and load-wiring sit on top; write-back into
-existing commands lands last on a frozen foundation.
+The ARCHITECTURE.md §8 "Suggested Build Order" is the authoritative 9-phase structure.
 
-### Phase 1: Config Schema and Persistence Foundation
+### Phase 1: State Schema Bump + Migration
 
-**Rationale:** Every downstream component reads config shapes. Freezing them first avoids
-repeated rework. This is pure addition with no behavior change — the lowest-risk entry point.
+**Rationale:** LEAF dependency — every later phase's state mutations depend on the schema
+shape. REQ 9.
+**Code seam:** `persistence/state-io.ts::STATE_SCHEMA`, `persistence/migrate.ts::migrateV1ToV2`
+**Pitfall owned:** Pitfall 9 (schema bump corrupts cross-version concurrency)
+**Blocker for:** All phases. Must land first.
+**Research flag:** Standard pattern (mirrors v1.12 autoupdate-scrub migration); skip research.
 
-**Delivers:** `config-io.ts` (CONFIG_SCHEMA, loadConfig, saveConfig, atomicWriteJson seam),
-`config-merge.ts` (entry-level base+local merge -> MergedConfig), `locations.ts` additions
-(`configJsonPath`, `configLocalJsonPath` under `scopeRoot`), schema versioning field, lenient
-validation + unknown-key preservation.
+### Phase 2: Hook Parser + Matcher + Domain Primitive
 
-**Addresses:** Must-have schema artifact; state-split design (desired vs bookkeeping); Pitfall 9
-(merge semantics), Pitfall 10 (schema evolution).
+**Rationale:** Pure leaf-pure code; no I/O; depends on Phase 1 schema shape only. REQs 7, 8.
+**Code seam:** `domain/components/hooks.ts` (NEW); `bridges/hooks/matcher.ts` (NEW);
+`domain/resolver.ts` (move `hooks` to supported set)
+**Pitfall owned:** Pitfall 7 (strict TypeBox rejects `asyncRewake`); Pitfall 8 (regex
+matcher silently treated as literal)
+**Blocker for:** Phases 3 and 5. Parallel-eligible with nothing (depends on Phase 1 only).
+**Research flag:** Standard; skip research.
 
-**Avoids:** Pitfall 3 (write-back semantics established here, not later); Pitfall 9 (entry-level
-merge matrix unit-tested in isolation).
+### Phase 3: Hooks Bridge Plan/Stage/Unstage
 
-### Phase 2: State Split — Carve Desired Fields from STATE_SCHEMA
+**Rationale:** Depends on Phase 2. Mechanical copy of existing 4-bridge shape. REQ 10.
+**Code seam:** `bridges/hooks/{plan,stage,unstage,discover}.ts` (NEW)
+**Pitfall owned:** Pitfall 11 (containment escape); Pitfall 18 (exec bit absent); Pitfall 22
+(missing hooks.json tolerance)
+**Blocker for:** Phase 4. Parallel-eligible with Phase 5.
+**Research flag:** Standard; skip research.
 
-**Rationale:** Reconciler, write-back, and enable/disable all read the final shapes. Do early so
-no downstream code is written against a transitional shape.
+### Phase 4: Install Cascade Extension
 
-**Delivers:** `autoupdate` and `enabled` intent moved from `STATE_SCHEMA` to `CONFIG_SCHEMA`;
-`state.json` retains only machine bookkeeping (resolved versions, artefact records, timestamps).
-`schemaVersion` bump decision confirmed.
+**Rationale:** Depends on Phase 3. Extends from 4 bridges to 5 in `transaction/runPhases.ts`.
+REQs 14, 20 (reload-hint).
+**Code seam:** `orchestrators/plugin/{install,uninstall,update,reinstall}.ts`
+**Pitfall owned:** Pitfall 3 (multi-process scope — lock scope extension); Pitfall 20
+(reload-hint discipline)
+**Blocker for:** Phase 8. Parallel-eligible with Phase 5.
+**Research flag:** Standard; skip research.
 
-**Addresses:** State-split correctness; enables provenance-scoped removal (Pitfall 1 ownership
-guard).
+### Phase 5: Dispatch Core
 
-**Avoids:** Pitfall 2 (state-split leak in generated config); Pitfall 8 (disabled vs unavailable
-modeled from the start).
+**Rationale:** Depends on Phase 2 (matcher + RoutingEntry shape); independent of Phases 3
+and 4. REQs 1, 2, 5.
+**Code seam:** `shared/event-router.ts` (NEW); `bridges/hooks/dispatch.ts` (NEW);
+`bridges/hooks/lifecycle.ts` (NEW); `bridges/hooks/spawn.ts` (NEW); `index.ts` one-liner
+**Pitfall owned:** Pitfall 1 (zombie dispatch — epoch guard); Pitfall 2 (mid-reload race —
+document call ordering); Pitfall 17 (non-deterministic dispatch order)
+**Blocker for:** Phases 6a/6b/6c, 7. Parallel-eligible with Phases 3, 4.
+**Research flag:** Verify `pi.events` EventBus typing and `pi.on` overload signatures at
+implementation start.
 
-### Phase 3: First-Run Migration
+### Phase 6a: Bucket A Payload Translators (8 Events)
 
-**Rationale:** Migration must precede reconcile in execution order. A wrong migration is not a
-transient bug — it is the new ground truth. Must be provably correct before any reconcile code
-exists.
+**Rationale:** Field renaming only; ~30–50 LoC each; zero synthesis risk. REQ 1 (per-event
+round-trip).
+**Code seam:** `bridges/hooks/payloads/{session-start,user-prompt-submit,pre-tool-use,
+post-tool-use,post-tool-use-failure,pre-compact,post-compact,session-end}.ts`
+**Pitfall owned:** Pitfall 21 (hook input payload size — stdin truncation)
+**Parallel-eligible with 6b, 6c, 7.** Not a blocker for 6c.
+**Research flag:** Standard; verify `PreToolUse` `updatedInput` mutation semantics at impl.
 
-**Delivers:** `migrate-config.ts` — reads `state.json`, generates `claude-plugins.json` with all
-installed entries including soft-degraded ones, atomic write (tmp+rename), idempotent (ENOENT
-detection), fire-and-forget model. `state.json` left intact.
+### Phase 6b: Bucket B — FileChanged
 
-**Addresses:** Must-have migration; Pitfall 2 (lossless coverage, atomic, idempotent, no
-state-split leak).
+**Rationale:** One event; standalone cross-platform risk; mandates its own CI matrix. REQ 3.
+**Code seam:** `bridges/hooks/payloads/file-changed.ts` (NEW); chokidar lifecycle in
+`bridges/hooks/lifecycle.ts`
+**Pitfall owned:** Pitfall 4 (fs.watch cross-platform brittleness) — owns it completely;
+cross-platform CI matrix is this phase's gate.
+**Parallel-eligible with 6a, 6c, 7.** Not a blocker for downstream phases.
+**Research flag:** Confirm chokidar v5 `awaitWriteFinish` config options before implementation.
 
-**Exit gate:** Migrate a populated `state.json`, immediately run reconcile, assert zero net
-change (no installs, no uninstalls).
+### Phase 6c: Bucket D — Stop First, Then Rest
 
-**Avoids:** Pitfall 1 (migration-first ordering safety rail).
+**Rationale:** Stop separated — `ralph-wiggum` correctness gates the milestone. Stop ships
+with its own regression test before the remaining 4 bucket-D events. REQs 4, 6.
+**Code seam (Stop):** `bridges/hooks/payloads/stop.ts` (NEW); `tests/integration/ralph-wiggum.test.ts`
+**Code seam (rest):** `bridges/hooks/payloads/{cwd-changed,post-tool-batch,
+user-prompt-expansion,stop-failure}.ts` (NEW)
+**Pitfall owned:** Pitfall 6 (Stop loop / contract break); Pitfalls 13–16 (D-event loss modes)
+**Blocker for:** Phase 8 (dispatch fabric must be complete).
+**Research flag:** Re-verify `pi.sendUserMessage` `deliverAs: "followUp"` semantics against
+live peer dep at Phase 6c-stop start.
 
-### Phase 4: Pure Reconcile Planner
+### Phase 7: Soft-Dep Wiring (SubagentStart/SubagentStop)
 
-**Rationale:** Separating the pure diff from effectful apply makes the correctness logic
-exhaustively unit-testable without disk. Pin the full desired x actual matrix before any
-mutations are wired.
+**Rationale:** Depends on Phase 5. Reuses `softDepStatus(pi)` probe. REQ 13.
+**Code seam:** `bridges/hooks/lifecycle.ts::installComposites` (extend);
+`bridges/hooks/payloads/{subagent-start,subagent-stop}.ts`
+**Pitfall owned:** Pitfall 10 (soft-dep event-name drift — defensive try/catch)
+**Parallel-eligible with 6a/6b/6c.** Not a blocker for Phase 8.
+**Research flag:** Verify `pi.events.on` behavior when publisher absent; verify sync subagent
+`tool_call` emission at implementation start.
 
-**Delivers:** `orchestrators/reconcile/plan.ts` — pure `planReconcile(MergedConfig,
-ExtensionState) -> ReconcilePlan`; reuses `samePlannedSource` from `import/execute.ts`;
-bidirectional diff (adds and removes, unlike import which only adds). Architecture test
-`reconcile-plan-matrix.test.ts` covering the full matrix.
+### Phase 8: Lifecycle Integration with Reconcile
 
-**Addresses:** Correctness foundation; Pitfall 5 (planner logic provable without concurrency
-risk); Pitfall 8 (disabled entries excluded from desired-materialized set in the planner).
+**Rationale:** Depends on Phases 5, 6, 7 (dispatch fabric complete). One-line code change
++ integration test. REQs 1, 9.
+**Code seam:** `orchestrators/reconcile/apply.ts::applyPassForScope` (add
+`bridge.rebuildRoutingTables(state, loc)`)
+**Pitfall owned:** Pitfall 2 (mid-reload race — final verification); Pitfall 9 (schema bump —
+end-to-end migration test)
+**Cannot be parallel-eligible.** Depends on all Phase 6/7 work.
+**Research flag:** Standard; skip research.
 
-**Avoids:** Anti-pattern of re-deriving the orchestration loop from scratch (reuses import
-planner template).
+### Phase 9: Info/List Rendering + Install-Time Notify + Bucket-H/G Drop Policy
 
-### Phase 5: enable/disable Orchestrators
-
-**Rationale:** Independent of the reconciler apply step; can prove the three-state model and
-offline re-enable in isolation before wiring into reconcile.
-
-**Delivers:** `orchestrators/plugin/enable.ts` (delegates to `reinstallPlugin` building blocks,
-cached, no network, reads from persisted internal records not in-memory cache) and `disable.ts`
-(delegates to uninstall cascade core minus `pluginDataDir` removal, keeps config entry + version
-pin + cached clone). Config write-back included (`enabled: true/false`). Distinct list/info
-presentation for `disabled` vs `unavailable`.
-
-**Addresses:** Must-have enable/disable; Pitfall 8 (three-state model, offline re-enable,
-reconcile exclusion of disabled entries).
-
-**Exit gate:** `enable` re-materializes from cache with network unplugged and preserves the
-version pin. Reconcile plan excludes disabled entries from `pluginsToInstall`.
-
-### Phase 6: Reconcile Apply, Notification, and Load Wiring
-
-**Rationale:** Apply drives existing orchestrators; notification must comply with the byte-locked
-catalog; load wiring is the riskiest integration (the notify-sink feasibility question must be
-resolved first). Bundle these because notification and wiring are tightly coupled.
-
-**Delivers:** `orchestrators/reconcile/apply.ts` (drives add/remove/install/uninstall/
-enable/disable sequentially, no outer lock, continue-on-failure per-item, accumulates outcomes);
-`orchestrators/reconcile/notify.ts` (reconcile outcome -> `MarketplaceNotificationMessage[]`,
-mirrors `buildImportNotificationMarketplaces`); `index.ts` modification (reconcileAtLoad inside
-`resources_discover` before `aggregateDiscoveredResources`); notify-sink resolution; NFR-5
-soft-fail boundary (never re-throw past `resources_discover`); NFR-10 containment extension for
-config + internal file paths; architecture tests: no-throw-boundary, lock-discipline, catalog
-byte-UAT extension, config-containment.
-
-**Addresses:** Must-have load-time reconcile; must-have reconcile report; Pitfalls 4, 5, 6, 7.
-
-**Research flag:** Notify-sink mechanism needs a feasibility spike before implementation — the
-`resources_discover` handler has no `ctx`/`pi` in its current signature.
-
-**Avoids:** Anti-patterns: nesting orchestrator locks, allowing network failures to escape the
-boundary, emitting a reload hint from reconcile.
-
-### Phase 7: Write-Back Integration into Mutating Commands
-
-**Rationale:** Largest mechanical surface (every mutating command: add/remove/autoupdate/update/
-install/uninstall/reinstall/import/bootstrap). Lands last so config shapes are frozen. The
-targeted-patch and re-read-under-lock semantics established in Phase 1 are the foundation.
-
-**Delivers:** `shared/config-writeback.ts` (`writeBackPluginEntry`, `writeBackMarketplaceEntry`);
-`--local` flag threading through affected commands; write-back composed inside each command's
-existing `withLockedStateTransaction` closure; format contract documented and enforced (plain
-JSON, canonical on write, no no-op reformatting); unknown-key preservation on write-back;
-architecture test `config-state-consistency.test.ts`.
-
-**Addresses:** Must-have write-back + `--local`; Pitfall 3 (targeted patch, re-read under lock,
-`--local` never touches base); Pitfall 9 (explicit write-target selection).
-
-**Avoids:** The most dangerous shortcut: serializing the merged view back to the base file.
+**Rationale:** All "what the user sees" in one merge: info.ts/list.ts rendering, install-time
+cascade warnings, shared/notify.ts closed-set amendments, catalog-UAT byte-form lockstep.
+REQs 11, 12, 14, 15.
+**Code seam:** `orchestrators/plugin/info.ts` + `list.ts`; `shared/notify.ts` (new
+`HookSummary`, new Reason member, new ClaudeHookEvent/GatingReason/FidelityNote tuples);
+`docs/output-catalog.md` (byte-form additions); `bridges/hooks/plan.ts` (bucket-H drop)
+**Pitfall owned:** Pitfall 19 (bucket-H drop UX); Pitfall 20 (reload-hint cascade — catalog
+UAT fixture); Pitfall 12 (IL-2 — ESLint BLOCK A confirmed for all new files)
+**Must be the final merge for catalog UAT coherence.**
+**Research flag:** Standard; catalog UAT format well-established from v1.3/v1.4/v1.10/v1.11.
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 are leaf dependencies; everything downstream reads their output. Any phase that
-  starts before Phase 3 is complete risks building against transitional shapes.
-- Phase 4 (pure planner) and Phase 5 (enable/disable) are independently testable and can proceed
-  in parallel after Phases 1-2 deliver frozen shapes; Phase 3 (migration) should complete first
-  so its exit gate (migrate-then-reconcile no-op) is verifiable.
-- Phase 6 (apply + wiring) depends on Phases 4 and 5; it is the highest-integration phase and
-  carries the notify-sink uncertainty.
-- Phase 7 (write-back) lands last to avoid re-touching commands as shapes evolve; it is
-  mechanically broad but low-risk once the foundation is frozen.
-- The pitfall-to-phase mapping confirms this order: Pitfalls 1-2 are addressed in Phases 1-3
-  before any reconcile logic runs; Pitfalls 4-7 are addressed in Phase 6; Pitfall 3 spans
-  Phases 1 and 7.
+- Phase 1 must precede all — schema shape is the base.
+- Phase 2 must precede Phases 3 and 5 — both consume `ParsedHookEntry`.
+- Phases 3, 4, 5 are parallel-eligible (all depend on Phase 2 only).
+- Phases 6a, 6b, 6c, 7 are parallel-eligible (all depend on Phase 5 only).
+- Phase 6c-stop MUST ship before 6c-rest (ralph-wiggum canary gates milestone credibility).
+- Phase 8 must follow all Phase 6/7 work.
+- Phase 9 must be the final merge.
 
 ### Research Flags
 
-Phases needing a feasibility spike during planning:
+**Skip `/gsd-plan-phase --research-phase` for:** Phases 1, 2, 3, 4, 8, 9 (standard
+patterns, well-documented in codebase).
 
-- **Phase 6 (load wiring):** The notify-sink question — `resources_discover` currently has no
-  `ctx`/`pi`. Investigate whether (a) `pi` captured at extension-init is accessible in the
-  handler or (b) a deferred-notification channel surfaced on `session_start` is needed. Low
-  implementation cost either way, but the answer changes the wiring design.
+**Verify at implementation start for:** Phase 5 (`pi.events` EventBus typing); Phase 6b
+(chokidar v5 `awaitWriteFinish` options); Phase 6c-stop (`pi.sendUserMessage` `deliverAs`
+semantics); Phase 7 (`pi.events.on` behavior when publisher absent; sync subagent
+`tool_call` emission).
 
-Phases with well-documented patterns (standard implementation, skip dedicated research phase):
-
-- **Phase 1 (config schema):** Direct mirror of `state-io.ts`; typebox + atomicWriteJson pattern
-  fully established.
-- **Phase 2 (state split):** Schema field relocation; no new patterns.
-- **Phase 3 (migration):** Direct mirror of `migrate.ts` fire-and-forget model.
-- **Phase 4 (pure planner):** Direct mirror of `import/marketplaces.ts`; reuses
-  `samePlannedSource`.
-- **Phase 5 (enable/disable):** Direct mirror of reinstall + uninstall cascade; patterns
-  confirmed in source.
-- **Phase 7 (write-back):** Targeted-patch pattern defined in Phase 1; mechanical threading.
+---
 
 ## Confidence Assessment
 
-| Area         | Confidence | Notes                                                                                          |
-| ------------ | ---------- | ---------------------------------------------------------------------------------------------- |
-| Stack        | HIGH       | Grounded in real `package.json` + source files; zero new deps; all patterns confirmed in code. |
-| Features     | HIGH       | Authoritative sources: brew, home-manager, asdf, pre-commit, Claude Code docs, real GH issues. |
-| Architecture | HIGH       | Grounded in real codebase; every integration point cites a file path and line range.           |
-| Pitfalls     | HIGH       | System-specific pitfalls from locked decisions; ecosystem signal from IaC reconciler research. |
+| Area | Confidence | Notes |
+|---|---|---|
+| Stack (delta) | HIGH | npm registry queried 2026-06-13; chokidar v5 engines verified; `sendUserMessage` confirmed in `types.d.ts:292,865`. |
+| Features | HIGH | Grounded in locked authority doc + v1.12 output catalog discipline; PRD NFR/IL constraints are authoritative. |
+| Architecture | HIGH | Every integration point cites real file + line numbers; no web ecosystem research used. |
+| Pitfalls | HIGH (critical 1–12) / MEDIUM (bucket-D loss modes) | `pi.on()` non-removability and TypeBox strict-mode behavior verified; bucket-D synthesis failure modes documented but cannot be fully tested without live Pi runtime. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Notify-sink mechanism (Phase 6):** `resources_discover` has no `ctx`/`pi`. Spike before
-  designing apply + wiring. Low cost; high certainty once spiked.
-- **`STATE_SCHEMA` schemaVersion bump:** `autoupdate` is `Type.Optional` in the current schema,
-  so an old state.json with it still validates. Confirm during Phase 2 whether a version bump is
-  needed or optional; document the decision.
-- **enable/disable STATUS_TOKENS:** Are "enabled"/"disabled" new tokens in the closed set or do
-  they reuse "installed"/"uninstalled"? Decide in Phase 5 before any catalog forms are written.
-- **bootstrap / import write-back batching:** These commands make N changes in one invocation.
-  Write-back must be a batched multi-entry patch under one lock, not N full-file rewrites.
-  Confirm the `config-writeback.ts` API supports batching before Phase 7 wires the first command.
+- **Pi EventBus typing for `pi.events.on`** — confirm throw-on-absent-publisher behavior
+  at Phase 5/7 implementation start. Non-blocking: soft-dep wiring wraps in try/catch.
+- **Sync subagent `tool_call`/`tool_result` emission** — confirm at Phase 7 via real run.
+- **Chokidar v5 `awaitWriteFinish` exact config shape** — confirm defaults before Phase 6b.
+- **`pi.sendUserMessage` `deliverAs: "followUp"` semantic** — verify against live Pi process
+  as part of ralph-wiggum integration test in Phase 6c-stop.
+- **Downgrade safety from v1.13 to v1.12** — whether to ship a v1.12 schema-relaxation
+  patch before v1.13 is a release coordination decision not resolved in research. If not
+  shipped, downgrade requires state.json delete; document in CHANGELOG.
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- Real codebase `extensions/pi-claude-marketplace/` — `index.ts`, `edge/register.ts`,
-  `orchestrators/import/marketplaces.ts`, `import/execute.ts`, `plugin/install.ts`,
-  `plugin/uninstall.ts`, `plugin/reinstall.ts`, `transaction/with-state-guard.ts`,
-  `persistence/state-io.ts`, `persistence/migrate.ts`, `persistence/locations.ts`,
-  `shared/notify.ts`, `shared/atomic-json.ts`
-- `.planning/PROJECT.md` — milestone scope, locked decisions, NFR catalog
-- `package.json` — confirmed dep set (`write-file-atomic@^8.0.0`, `proper-lockfile@^4.1.2`,
-  `typebox` peer/dev, `memfs@^4.57.2`, `yaml@^2.9.0` dev)
-- npm registry (`npm view`, 2026-06-09) — `write-file-atomic@8.0.0`, `typebox@1.2.6`,
-  `comment-json@5.0.0`, `jsonc-parser@3.3.1`
+- `docs/research/claude-hooks-vs-pi-events.md` — authority doc: bucket assignments, synthesis
+  approaches, soft-dep audit (pi-subagents@0.24.3 + pi-mcp-adapter@2.6.1), `pi.on()`
+  non-removability, `ralph-wiggum` canary, `asyncRewake` discovery, official marketplace
+  audit at commit `ca9f6045fc90c8244f9e787fb57d54b380f9a27c`.
+- `@earendil-works/pi-coding-agent` `dist/core/extensions/types.d.ts` (at `^0.79.0`) —
+  `sendUserMessage` at `:292` and `:865`; `pi.on()` void return; no `pi.off()`.
+- npm registry (queried 2026-06-13) — `chokidar@5.0.0` engines `>=20.19.0`; pure-JS deps.
+- `extensions/pi-claude-marketplace/` live codebase — all integration points cite real
+  file + line numbers.
+- `.planning/PROJECT.md` v1.13 milestone scope — locked decisions.
+- `docs/prd/pi-claude-marketplace-prd.md` — NFR-1/2/3/5/7/10/11/12, IL-1/2/3/4, SC-1.
 
-### Secondary (MEDIUM confidence — ecosystem signal)
+### Secondary (MEDIUM confidence)
 
-- Homebrew/brew#22450 — `brew bundle cleanup` uninstalling unmanaged artefacts (provenance-scoped
-  removal evidence)
-- nix-community/home-manager docs — authoritative-pole semantics, silent-drop on declaration
-  removal
-- pre-commit docs + issues (#1354, #2366) — immutable `rev`, autoupdate drift
-- Claude Code settings docs + anthropics/claude-code#32606 — `enabledPlugins`, local override,
-  prompt-model failure
-- devcontainer lockfile spec + microsoft/vscode-remote-release#11616 — state-split leak
-- ArgoCD/Flux/kubebuilder prune safety — ownership guard pattern
-- Configuration files as user interfaces (HN) — round-trip clobber pattern
+- Node.js `fs.watch` platform-specific behavior (Node.js official docs).
+- chokidar v4→v5 migration notes (paulmillr/chokidar README).
+- `.planning/milestones/v1.12-research/` — v1.12 locked baseline; v1.13 inherits unchanged.
 
 ---
 
-*Research completed: 2026-06-09*
-*Ready for roadmap: yes*
+*Research completed: 2026-06-13*
+*Milestone: v1.13 Claude Hook Bridge*
+*Ready for requirements: yes*

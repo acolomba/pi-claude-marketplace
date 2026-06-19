@@ -689,7 +689,7 @@ test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched 
           supported: [],
           unsupported: [],
         },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },

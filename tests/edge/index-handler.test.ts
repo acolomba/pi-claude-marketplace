@@ -94,9 +94,9 @@ async function withHermeticEnv<T>(fn: (cwd: string, home: string) => Promise<T>)
   }
 }
 
-test("RECON-04 wiring: extension registers a resources_discover handler with bound ctx (the `unknown` cast is dropped)", () => {
+test("RECON-04 wiring: extension registers a resources_discover handler with bound ctx (the `unknown` cast is dropped)", async () => {
   const pi = makeMockPi();
-  claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
+  await claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
   // pi.on registers at least the resources_discover handler.
   assert.ok(
     pi.handlers.has("resources_discover"),
@@ -115,7 +115,7 @@ test("RECON-04 wiring: extension registers a resources_discover handler with bou
 test("RECON-04 wiring: a clean reconcile against an empty scope returns a ResourcesDiscoverResult (handler completes the round trip)", async () => {
   await withHermeticEnv(async (cwd, home) => {
     const pi = makeMockPi();
-    claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
+    await claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
     const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
     assert.ok(handler !== undefined);
 
@@ -167,7 +167,7 @@ test("NFR-2 boundary preservation: a real applyReconcile throw is caught, the ha
     await seedInvalidProjectConfig(cwd);
 
     const pi = makeMockPi();
-    claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
+    await claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
     const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
 
     // The FIRST ctx.ui.notify call (applyReconcile's cascade for the
@@ -210,7 +210,7 @@ test("NFR-2 boundary preservation: even when the last-ditch notify ALSO throws, 
     await seedInvalidProjectConfig(cwd);
 
     const pi = makeMockPi();
-    claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
+    await claudeMarketplaceExtension(pi as unknown as ExtensionAPI);
     const handler = pi.handlers.get("resources_discover") as ResourcesDiscoverHandler;
 
     // EVERY notify throws: applyReconcile's cascade notify throws (driving

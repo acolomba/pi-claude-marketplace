@@ -29,6 +29,7 @@
 
 import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
+import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -287,13 +288,18 @@ export function renderPartition(
  * committed.
  */
 export interface UnstageOutcome {
-  /** True when all four bridges' unstage* calls returned cleanly. */
+  /** True when all FIVE bridges' unstage* calls returned cleanly. */
   readonly ok: boolean;
-  /** Names actually removed across all four bridges. Empty when nothing was staged. */
+  /**
+   * Names actually removed across all five bridges. Empty when nothing was
+   * staged. LIFE-01 / D-63-01: `hooks` lands between `agents` and
+   * `mcpServers` (declaration order matches cascade order).
+   */
   readonly dropped: {
     readonly skills: readonly string[];
     readonly commands: readonly string[];
     readonly agents: readonly string[];
+    readonly hooks: readonly string[];
     readonly mcpServers: readonly string[];
   };
   /** Set on failure: the FIRST throw, wrapped to Error if needed (D-03 fail-fast). */
@@ -323,6 +329,7 @@ export async function cascadeUnstagePlugin(
     skills: [] as string[],
     commands: [] as string[],
     agents: [] as string[],
+    hooks: [] as string[],
     mcpServers: [] as string[],
   };
 
@@ -363,6 +370,12 @@ export async function cascadeUnstagePlugin(
       throw err;
     }
 
+    // LIFE-01 / D-63-01: 5th cascade slot between the agents foreign-content
+    // guard and mcp. removeHookConfig is idempotent (NFR-3) -- a plugin that
+    // never staged hooks returns `{ removed: pluginName }` cleanly.
+    const hooksResult = await removeHookConfig({ locations, pluginName: plugin });
+    dropped.hooks = [hooksResult.removed];
+
     const mcpResult = await unstageMcpServers({
       locations,
       marketplaceName: marketplace,
@@ -376,6 +389,7 @@ export async function cascadeUnstagePlugin(
         skills: Object.freeze([...dropped.skills]),
         commands: Object.freeze([...dropped.commands]),
         agents: Object.freeze([...dropped.agents]),
+        hooks: Object.freeze([...dropped.hooks]),
         mcpServers: Object.freeze([...dropped.mcpServers]),
       }),
     });
@@ -386,6 +400,7 @@ export async function cascadeUnstagePlugin(
         skills: Object.freeze([...dropped.skills]),
         commands: Object.freeze([...dropped.commands]),
         agents: Object.freeze([...dropped.agents]),
+        hooks: Object.freeze([...dropped.hooks]),
         mcpServers: Object.freeze([...dropped.mcpServers]),
       }),
       cause: err instanceof Error ? err : new Error(String(err)),

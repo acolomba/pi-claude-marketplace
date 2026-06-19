@@ -28,6 +28,7 @@ function makePluginRecord(
       prompts: over.resources?.prompts ?? [],
       agents: over.resources?.agents ?? [],
       mcpServers: over.resources?.mcpServers ?? [],
+      hooks: over.resources?.hooks ?? [],
     },
     installedAt: over.installedAt ?? "2026-01-01T00:00:00.000Z",
     updatedAt: over.updatedAt ?? "2026-01-01T00:00:00.000Z",
@@ -53,10 +54,23 @@ test("cascadeUnstagePlugin (a): empty resources -- all bridges return cleanly wi
       "hello",
       "valid-marketplace",
       locations,
-      makePluginRecord({ resources: { skills: [], prompts: [], agents: [], mcpServers: [] } }),
+      makePluginRecord({
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      }),
     );
     assert.equal(outcome.ok, true);
-    assert.deepEqual(outcome.dropped, { skills: [], commands: [], agents: [], mcpServers: [] });
+    // LIFE-01: removeHookConfig is idempotent (NFR-3) and always returns the
+    // plugin name regardless of whether the on-disk subtree existed; the
+    // dropped.hooks array records that name. Skills / commands / agents /
+    // mcpServers stay empty because the unstage*-by-name primitives have
+    // nothing to remove.
+    assert.deepEqual(outcome.dropped, {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["hello"],
+      mcpServers: [],
+    });
     assert.equal(outcome.cause, undefined);
   });
 });
@@ -75,7 +89,13 @@ test("cascadeUnstagePlugin (a): real skills unstage path -- pre-staged skill is 
       "valid-marketplace",
       locations,
       makePluginRecord({
-        resources: { skills: ["hello-greet"], prompts: [], agents: [], mcpServers: [] },
+        resources: {
+          skills: ["hello-greet"],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+        },
       }),
     );
     assert.equal(outcome.ok, true);
@@ -109,6 +129,7 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
           prompts: [],
           agents: ["pi-claude-marketplace-hello-greet-agent"],
           mcpServers: [],
+          hooks: [],
         },
       }),
     );
@@ -123,5 +144,80 @@ test("cascadeUnstagePlugin (c): bogus locations -- agents-index.json IO surface 
       // acceptable; the test guards the SHAPE.
       assert.deepEqual(outcome.dropped.agents, []);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFE-01: 5th cascade slot in cascadeUnstagePlugin -- removes
+// <hooksDir>/<plugin>/ subtree between the agents foreign-content guard
+// and the mcp unstage. dropped.hooks records the plugin name when the
+// resources inventory declared hooks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("LIFE-01: cascadeUnstagePlugin removes <hooksDir>/<plugin>/ and records dropped.hooks", async () => {
+  await withTmpScope(async ({ locations }) => {
+    // Pre-stage a hooks subtree at the documented bridge write path so we can
+    // observe its removal.
+    const hooksPluginDir = path.join(locations.hooksDir, "hello");
+    await mkdir(hooksPluginDir, { recursive: true });
+    await writeFile(
+      path.join(hooksPluginDir, "hooks.json"),
+      // HOOK-03 / LIFE-01: source-plugin seed uses the upstream PLUGIN-format
+      // wrapper per Claude Code `plugin-dev/skills/hook-development/SKILL.md`.
+      // This test does not compare on-disk bytes against the fixture -- it
+      // only observes removal of the subtree -- so no consumer assertion
+      // needs adjustment.
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo bye" }] }],
+        },
+      }),
+    );
+
+    const outcome = await cascadeUnstagePlugin(
+      "hello",
+      "valid-marketplace",
+      locations,
+      makePluginRecord({
+        resources: {
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: ["hello"],
+        },
+      }),
+    );
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(outcome.dropped.hooks, ["hello"]);
+
+    // The subtree must be gone.
+    let stillThere = true;
+    try {
+      const { readFile } = await import("node:fs/promises");
+      await readFile(path.join(hooksPluginDir, "hooks.json"), "utf8");
+    } catch {
+      stillThere = false;
+    }
+
+    assert.equal(stillThere, false, "cascadeUnstagePlugin must remove the hooks subtree");
+  });
+});
+
+test("LIFE-01: cascadeUnstagePlugin records dropped.hooks for the plugin name even with no on-disk subtree (idempotent)", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const outcome = await cascadeUnstagePlugin(
+      "hello",
+      "valid-marketplace",
+      locations,
+      makePluginRecord({
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hello"] },
+      }),
+    );
+    assert.equal(outcome.ok, true);
+    // removeHookConfig is idempotent (NFR-3) and always returns the plugin
+    // name; the dropped.hooks array carries that name regardless of whether
+    // the subtree existed on disk.
+    assert.deepEqual(outcome.dropped.hooks, ["hello"]);
   });
 });

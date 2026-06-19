@@ -6,9 +6,10 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 
 ### Glyphs
 
-- `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the preview pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the preview `(will add)`, and the list-surface label form).
-- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the preview pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the preview `(will remove)` arm (the marketplace-level analog of an uninstall).
-- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`, or the preview pending-tense `(will disable)`. On marketplace headers: `(failed)` only.
+- `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, the pending `(will add)`, and the list-surface label form).
+- `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers EXCEPT the pending `(will remove)` arm (the marketplace-level analog of an uninstall).
+- `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`. On marketplace headers: `(failed)` only.
+- `◌` -- dotted circle. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row. Not used on marketplace headers.
 
 ### Always-marketplace-header form
 
@@ -33,7 +34,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` per the effective-state rule above.
+- `<icon>` -- one of `●` / `○` / `⊘` / `◌` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
@@ -56,7 +57,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{hooks}`, `{lsp}`). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Manifest field names render verbatim as the sole carve-out (`{lsp}`). HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The closed-set membership is defined by `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`.
 
 The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. The 3 dep-bearing variants (`installed | updated | reinstalled`) carry the `dependencies` field per D-15-02; the other 7 variants cannot emit soft-dep markers structurally.
 
@@ -125,23 +126,24 @@ ______________________________________________________________________
 
 ## Status token reference
 
-| Token                                       | Icon | Where it appears                                                                                                                                                            |
-| ------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                        |
-| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01. |
-| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                      |
-| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                            |
-| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                             |
-| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                            |
-| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{hooks}` / `{lsp}` etc.                           |
-| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                          |
-| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                       |
-| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                              |
-| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                              |
-| `(will install)`                            | ●    | Plugin row -- `/claude:plugin preview` pending-tense install (DIFF-02).                                                                                                     |
-| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin preview` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                              |
-| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin preview` pending-tense enable (structurally empty in Phase 53 per Pitfall 53-4; Phase 54 wires the bucket).                                   |
-| `(will disable)`                            | ⊘    | Plugin row -- `/claude:plugin preview` pending-tense disable.                                                                                                               |
+| Token                                       | Icon | Where it appears                                                                                                                                                                |
+| ------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                            |
+| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01.     |
+| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                          |
+| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                                |
+| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                 |
+| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                |
+| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.                   |
+| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                              |
+| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                           |
+| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                  |
+| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                  |
+| `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                         |
+| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                  |
+| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                            |
+| `(will disable)`                            | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                   |
+| `(disabled)`                                | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker. |
 
 Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -152,8 +154,8 @@ Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple;
 | `(updated)`     | ●    | Marketplace header -- `marketplace update`.                                                                                                    |
 | `(failed)`      | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
 | `(skipped)`     | ●    | Marketplace header -- mp-level skip (e.g. `{up-to-date}`); the autoupdate-idempotent reasons render the marker-as-outcome form instead.        |
-| `(will add)`    | ●    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace add (DIFF-02).                                                        |
-| `(will remove)` | ○    | Marketplace header -- `/claude:plugin preview` pending-tense marketplace remove; the only `○` marketplace header.                              |
+| `(will add)`    | ●    | Marketplace header -- `/claude:plugin pending` pending-tense marketplace add (DIFF-02).                                                        |
+| `(will remove)` | ○    | Marketplace header -- `/claude:plugin pending` pending-tense marketplace remove; the only `○` marketplace header.                              |
 
 ______________________________________________________________________
 
@@ -179,8 +181,8 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
   ● beta v1.0.0 (upgradable) {stale clone}
-  ⊘ delta (unavailable) {hooks}
-  ⊘ epsilon (unavailable) {hooks, lsp}
+  ⊘ delta (unavailable) {unsupported hooks}
+  ⊘ epsilon (unavailable) {unsupported hooks, lsp}
   ○ gamma v2.0.0 (available)
 ```
 
@@ -298,7 +300,7 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
     A longer description that is exactly sixty-three characters lon...
   ○ gamma v2.0.0 (available)
     Installable plugin with a description.
-  ⊘ delta (unavailable) {hooks}
+  ⊘ delta (unavailable) {unsupported hooks}
     Unavailable plugin that still surfaces its description.
 ```
 
@@ -308,10 +310,10 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 
 ```text
 ● official [user] <autoupdate>
-  ⊘ foo-plugin v1.2.3 (disabled)
+  ◌ foo-plugin v1.2.3 (disabled)
 ```
 
-Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `⊘` glyph (shared with `will disable` per RESEARCH Pattern 5). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
+Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◌` glyph (shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will add)`, `○` for `(available)` / `(will remove)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
 PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`present`, `upgradable`, `available`, `unavailable`) all support the description field; cascade-only variants (`installed`, `updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
 
@@ -347,13 +349,39 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 
 `helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15).
 
+### Success with orphan-rewake warning (SURF-05 / D-63-08)
+
+<!-- catalog-state: success-with-orphan-rewake -->
+
+```text
+● official [user]
+  ● helper v1.0.0 (installed) {orphan rewake}
+
+/reload to pick up changes
+```
+
+`helper`'s `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on at least one handler WITHOUT `asyncRewake: true`. The companion field is admitted at the schema layer (HOOK-06 / EXEC-05) but produces no runtime effect; the install warns via the closed-set `{orphan rewake}` reason on the otherwise-successful install row. One row per plugin regardless of N orphan handlers. Severity `info` -- the install still succeeds.
+
+### Success with orphan-rewake AND a soft-dep marker in the same brace
+
+<!-- catalog-state: success-with-orphan-rewake-and-soft-dep -->
+
+```text
+● official [user]
+  ● helper v1.0.0 (installed) {orphan rewake, requires pi-subagents}
+
+/reload to pick up changes
+```
+
+The closed-set REASONS token and the soft-dep marker share ONE brace block per MSG-GR-4. The `composeReasons` helper appends the soft-dep markers AFTER the typed `reasons[]` so the orphan-rewake token leads.
+
 ### Failure -- unsupported features in manifest
 
 <!-- catalog-state: failure-unsupported-features -->
 
 ```text
 ● official [user]
-  ⊘ helper (unavailable) {hooks, lsp}
+  ⊘ helper (unavailable) {unsupported hooks, lsp}
 ```
 
 The manifest declares Claude features Pi doesn't support; the `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. No `cause:` trailer -- the reason carries the explanation. No reload-hint (no state-changing status); severity is info.
@@ -531,7 +559,7 @@ Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing
 ```text
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
-  ⊘ delta (unavailable) {hooks}
+  ⊘ delta (unavailable) {unsupported hooks}
 
 /reload to pick up changes
 ```
@@ -747,7 +775,7 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 
 ● directory-marketplace [user] (added)
   ● local-plugin (installed)
-  ⊘ unavailable-plugin (unavailable) {hooks}
+  ⊘ unavailable-plugin (unavailable) {unsupported hooks}
 
 ● github-marketplace [project] (added)
   ● github-plugin (installed)
@@ -1135,13 +1163,13 @@ The `info` surface conveys a recorded-but-disabled plugin via the SAME `(disable
 
 ### Success -- unavailable single scope
 
-Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `hooks` or `lspServers`). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
+Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `lspServers` or carries a `hooks/hooks.json` whose contents fail parse/schema/supportability). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{unsupported hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
 
 <!-- catalog-state: unavailable-single-scope -->
 
 ```text
 ● community-mp [user] <no autoupdate>
-  ⊘ legacy-plugin v0.1.0 (unavailable) {hooks}
+  ⊘ legacy-plugin v0.1.0 (unavailable) {unsupported hooks}
     Old plugin that declares hooks; not installable in Pi.
     components: not resolved
 ```
@@ -1214,9 +1242,9 @@ Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is inv
 
 ______________________________________________________________________
 
-## `/claude:plugin preview`
+## `/claude:plugin pending`
 
-DIFF-01 SC #2 / D-53-01 read-only diff/preview surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`). The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- preview rows are pre-transition and the trailer would mislead the user.
+DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will add` / `will remove` / `will install` / `will uninstall` / `will enable` / `will disable`). The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- pending rows are pre-transition and the trailer would mislead the user.
 
 ### Empty steady-state (no actions pending)
 
@@ -1225,7 +1253,7 @@ The merged config matches the recorded state byte-for-byte in every scope -- the
 <!-- catalog-state: empty-steady-state -->
 
 ```text
-Preview: next reload will apply 0 actions.
+Pending: next reload will apply 0 actions.
 ```
 
 ### Marketplace add with child plugin install
@@ -1250,16 +1278,16 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
   ○ old-plugin (will uninstall)
 ```
 
-### Enable / disable transitions (Phase 54 hand-off shape)
+### Enable / disable transitions
 
-A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `⊘` glyph). Phase 53 produces ZERO `will enable` rows in practice (Pitfall 53-4: the Phase 53 state model has no disabled marker on a recorded plugin); the variant and renderer arm ship so Phase 54's enable-bucket wiring lands against a type-complete model. Severity `info`; no reload-hint.
+A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◌` glyph). Severity `info`; no reload-hint.
 
 <!-- catalog-state: enable-disable-transitions -->
 
 ```text
 ● mp [user]
   ● to-enable (will enable)
-  ⊘ to-disable (will disable)
+  ◌ to-disable (will disable)
 ```
 
 ### Source mismatch (declared source diverges from recorded source)
@@ -1276,7 +1304,7 @@ A declared marketplace whose recorded source string does not match the declarati
 
 ### Invalid config abort (CFG-03 -- Pitfall 53-1)
 
-A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unparseable, or schema-invalid. The orchestrator routes the scope through a structured `(failed) {invalid manifest}` row and does NOT call `planReconcile` for it -- invalid input is NEVER silently coerced to an empty desired state (which would otherwise render as a mass-uninstall preview). The row body carries the file BASENAME (never the absolute path -- RESEARCH Security Threat Pattern "Information disclosure" T-53-02-02). Severity `error`; summary line prepended.
+A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unparseable, or schema-invalid. The orchestrator routes the scope through a structured `(failed) {invalid manifest}` row and does NOT call `planReconcile` for it -- invalid input is NEVER silently coerced to an empty desired state (which would otherwise render as a mass-uninstall pending list). The row body carries the file BASENAME (never the absolute path -- RESEARCH Security Threat Pattern "Information disclosure" T-53-02-02). Severity `error`; summary line prepended.
 
 <!-- catalog-state: invalid-config-abort -->
 
@@ -1619,7 +1647,7 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/ag
 
 ```text
 ● claude-plugins-official [user]
-  ⊘ foo-plugin v1.2.3 (disabled)
+  ◌ foo-plugin v1.2.3 (disabled)
 
 /reload to pick up changes
 ```

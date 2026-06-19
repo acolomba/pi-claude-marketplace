@@ -174,15 +174,55 @@ test("PR-3 loose: entry declares unsupported component -> notInstallable", async
   assert.ok(r.notes.some((n) => n === "contains themes"));
 });
 
-test("PR-4 loose: hooks/hooks.json convention -> notInstallable", async () => {
+// HOOK-01 loose: hooks/hooks.json present + parseable -> installable with
+// hooks supported. Mirrors the strict-mode admission path because the
+// convention-file discovery is mode-agnostic (it does not depend on
+// entry-vs-manifest declaration semantics).
+test("HOOK-01 loose: hooks/hooks.json present + parseable -> installable WITH hooks in supported", async () => {
   const localRoot = ROOT("./local");
   const ctx = mockCtx(MP, {
     [localRoot]: "dir",
-    [path.join(localRoot, "hooks", "hooks.json")]: { contents: JSON.stringify({ hooks: {} }) },
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+      }),
+    },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.installable) {
+    assert.ok(r.supported.includes("hooks"));
+    assert.ok(!r.notes.some((n) => n.includes("contains hooks")));
+  }
+});
+
+// D-57-04 loose: malformed hooks/hooks.json flips installable: false with
+// parse-failure detail.
+test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: { contents: "not-valid-json" },
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.installable, false);
-  assert.ok(r.notes.some((n) => n === "contains hooks"));
+  assert.ok(
+    r.notes.some((n) => n.includes("hooks.json")),
+    `notes must mention hooks.json: ${r.notes.join(" / ")}`,
+  );
+});
+
+// HOOK-01 loose regression guard: no declaration + no convention file ->
+// installable: true and hooks NOT in supported.
+test("HOOK-01 loose: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.installable, true);
+
+  if (r.installable) {
+    assert.ok(!r.supported.includes("hooks"));
+  }
 });
 
 test("PR-4 loose: discovers unsupported default component locations", async () => {

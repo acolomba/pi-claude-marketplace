@@ -21,7 +21,8 @@
 // carries the warning strings -- only the standalone-mode user-facing
 // surface is absent.
 
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -38,6 +39,14 @@ import {
   replacePreparedCommands,
   rollbackCommandsReplacement,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
+import {
+  readAndCachePluginHooks,
+  rebuildRoutingTables,
+  removeHookConfig,
+  removePluginConfigFromCache,
+  writeHookConfig,
+} from "../../bridges/hooks/index.ts";
 import {
   abortPreparedMcp,
   finalizeMcpReplacement,
@@ -52,12 +61,15 @@ import {
   replacePreparedSkills,
   rollbackSkillsReplacement,
 } from "../../bridges/skills/index.ts";
+import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   assertNever,
   composeErrorWithCauseChain,
@@ -1063,7 +1075,12 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsSourceDir: generated.agentsSourceDir,
   });
-  const replacements = await replaceAll(handles, force);
+  const replacements = await replaceAll(handles, force, {
+    locations,
+    cwd,
+    plugin,
+    installable,
+  });
 
   let invalidConfigWriteBack: boolean;
   try {
@@ -1085,6 +1102,52 @@ async function runLockedReinstall(
     invalidConfigWriteBack = writeResult.invalidConfig;
 
     await tx.save();
+
+    // WR-06 + WR-03 + D-60-05: reinstall does NOT delegate to install/
+    // uninstall, so the parsed-config cache + routing table would
+    // otherwise stay pinned to the OLD plugin's hooks config (or be
+    // entirely absent if the previous install pre-dated the bridge).
+    // Mirror the install / uninstall pattern explicitly inside the
+    // per-plugin lock: drop the old cache entry, re-populate from the
+    // just-installed `hooks.json` (when present), then rebuild the
+    // routing table once.
+    //
+    // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
+    // aborts BEFORE the cache mutates -- otherwise a phantom routing
+    // entry survives a closure throw and the next dispatch fires against
+    // a record state.json never wrote.  Post-save semantics are safe:
+    // state.json now matches in-memory state, and the next `/reload`'s
+    // factory-time hydrate (D-59-03) rebuilds the cache from disk.
+    // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
+    // is the same defensive shape `install.ts` uses (failures route
+    // through hookDebugLog and the next `/reload` rehydrates).
+    //
+    // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
+    // mirrors install.ts's WR-02. A throw here would surface as
+    // `(manual recovery)` while state.json already persisted the new
+    // record (state divergence). `/reload`'s factory-time hydrate
+    // (D-59-03) rebuilds the cache from state.json. Failures route
+    // through `hookDebugLog`.
+    try {
+      removePluginConfigFromCache(scope, marketplace, plugin);
+      if (installable.hooksConfigPath !== undefined) {
+        await readAndCachePluginHooks({
+          scope,
+          marketplace,
+          plugin,
+          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+          cwd,
+          logPrefix: "reinstall",
+        });
+      }
+
+      rebuildRoutingTables();
+    } catch (cacheErr) {
+      hookDebugLog(
+        `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+      );
+    }
   } catch (err) {
     throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
   }
@@ -1189,6 +1252,7 @@ async function prepareAllHandles(input: {
 async function replaceAll(
   handles: PreparedHandles,
   force: boolean | undefined,
+  hooks: HooksReplaceArgs,
 ): Promise<readonly ReplacementEntry[]> {
   const replacements: ReplacementEntry[] = [];
   try {
@@ -1201,6 +1265,30 @@ async function replaceAll(
       force === undefined ? {} : { force },
     );
     replacements.push({ phase: "agents", handle: agents });
+    // LIFE-01 / D-63-01: 5th cascade slot between agents and mcp. The hooks
+    // bridge has no staging dir per D-63-02; writeHookConfig IS the atomic
+    // write. NOT pushed onto `replacements[]` -- the hooks file STAYS IN
+    // PLACE on a later-step failure (recovery is via the reinstall hint,
+    // not in-process rollback, mirroring update.ts D-03 semantics).
+    //
+    // WR-05: the hooks-removed-then-later-step-failed
+    // window is a known manual-recovery case. When installable.hooksConfigPath
+    // is undefined, commitHooks() calls removeHookConfig() to clean up any
+    // stale subtree from the prior install. If that succeeds and a later
+    // step (mcp replace, state save) THROWS, the catch's
+    // `rollbackReplacements` walk below cannot restore the hooks file --
+    // and since `replacements[]`
+    // has no hooks entry, no in-process restore is possible. The
+    // in-memory state still holds the OLD resources.hooks: [plugin]
+    // slug, the throw routes through errorWithManualRecovery without
+    // saving, and the user-visible row is (manual recovery). On the
+    // next /reload, the dispatcher's routing table is rebuilt from
+    // the still-old state.json and points at a now-deleted hooks file.
+    // The manual-recovery hint directs the user to re-run reinstall,
+    // which re-resolves version B (no hooks) and persists the truthful
+    // state. The same recovery contract applies to update.ts (see
+    // WR-01 documentation there).
+    await commitHooks(hooks);
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (err) {
@@ -1209,6 +1297,45 @@ async function replaceAll(
   }
 
   return Object.freeze(replacements);
+}
+
+interface HooksReplaceArgs {
+  readonly locations: ScopedLocations;
+  readonly cwd: string;
+  readonly plugin: string;
+  readonly installable: ResolvedPluginInstallable;
+}
+
+/**
+ * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
+ * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
+ * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
+ * When the resolved plugin has no hooks, remove any stale subtree (defensive
+ * cleanup of an artefact a prior install left behind).
+ */
+async function commitHooks(args: HooksReplaceArgs): Promise<void> {
+  const { locations, cwd, plugin, installable } = args;
+  if (installable.hooksConfigPath === undefined) {
+    await removeHookConfig({ locations, pluginName: plugin });
+    return;
+  }
+
+  const raw = await readFile(
+    path.join(installable.pluginRoot, installable.hooksConfigPath),
+    "utf8",
+  );
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+  if (!parsed.ok) {
+    throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+  }
+
+  await writeHookConfig({
+    locations,
+    pluginName: plugin,
+    pluginRoot: installable.pluginRoot,
+    hooksValue: parsed.value,
+  });
 }
 
 function updateStateRecord(
@@ -1235,18 +1362,32 @@ function updateStateRecord(
       supported: [...installable.supported],
       unsupported: [...installable.unsupported],
     },
-    resources: resourcesFromHandles(handles),
+    resources: resourcesFromHandles(handles, plugin, installable),
     installedAt: oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
   };
 }
 
-function resourcesFromHandles(handles: PreparedHandles): PluginRecord["resources"] {
+function resourcesFromHandles(
+  handles: PreparedHandles,
+  plugin?: string,
+  installable?: ResolvedPluginInstallable,
+): PluginRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),
     prompts: handles.commands.result.recorded.map((r) => r.generatedName),
     agents: handles.agents.result.recorded.map((r) => r.generatedName),
     mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
+    // HOOK-02 / D-57-01: additive required field. WR-03: mirror install.ts
+    // -- when the resolver advertises a hooks config, record the plugin's
+    // id as the slug so `rebuildRoutingTables`' state walk (gated on
+    // `resources.hooks.length > 0`) visits this plugin and pulls its
+    // refreshed `parsedConfigCache` entry into the routing table without
+    // requiring `/reload` (NFR-2). The `successOutcome` caller only needs
+    // the agents / mcpServers entries from this record, so it omits the
+    // `plugin` / `installable` args and the hooks inventory stays empty
+    // for that path (no state write occurs there either).
+    hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
   };
 }
 
@@ -1535,6 +1676,8 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
       prompts: [...record.resources.prompts],
       agents: [...record.resources.agents],
       mcpServers: [...record.resources.mcpServers],
+      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
+      hooks: [...record.resources.hooks],
     },
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,

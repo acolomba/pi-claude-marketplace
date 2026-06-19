@@ -1,7 +1,7 @@
-// tests/orchestrators/reconcile/preview.test.ts
+// tests/orchestrators/reconcile/pending.test.ts
 //
 // DIFF-01 SC #2 + DIFF-02 + CFG-03 abort proofs for
-// `orchestrators/reconcile/preview.ts`. The suite covers:
+// `orchestrators/reconcile/pending.ts`. The suite covers:
 //
 //   1. Idempotency: two consecutive invocations against unchanged state +
 //      config produce byte-identical `ctx.ui.notify` argument lists.
@@ -12,11 +12,11 @@
 //      a `(failed) {invalid manifest}` row carrying the BASENAME (never the
 //      absolute path) AND `planReconcile`'s side effects (any plan content)
 //      do NOT appear for that scope. Invalid input is NEVER coerced into an
-//      empty desired state that would render as a mass-uninstall preview.
+//      empty desired state that would render as a mass-uninstall pending list.
 //   4. Scope fan-out: omitted `--scope` walks both scopes project-first;
 //      explicit `--scope user` walks only user.
 //   5. Single-notify (IL-2): exactly one ctx.ui.notify call per invocation.
-//   6. Empty-steady-state: the dedicated ReconcilePreviewEmptyMessage
+//   6. Empty-steady-state: the dedicated ReconcilePendingEmptyMessage
 //      variant emits the catalog-locked advisory body line.
 
 import assert from "node:assert/strict";
@@ -25,7 +25,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { mock } from "node:test";
 
-import { previewReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/preview.ts";
+import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -45,8 +45,8 @@ async function withHermeticHome<T>(
 ): Promise<T> {
   const originalHome = process.env.HOME;
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "preview-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "preview-cwd-"));
+  const home = await mkdtemp(path.join(tmpdir(), "pending-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "pending-cwd-"));
   process.env.HOME = home;
   // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
   // to homedir(). Clear it so the hermetic HOME above actually governs the
@@ -76,13 +76,13 @@ async function withHermeticHome<T>(
 test("DIFF-01 SC #2 / empty-steady-state: bare invocation against zero config + zero state emits the advisory once", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const ctx = makeCtx(cwd);
-    await previewReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
+    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
     // IL-2: exactly one notify call.
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const args = ctx.ui.notify.mock.calls[0]!.arguments;
     // info severity -> no 2nd arg.
     assert.equal(args.length, 1);
-    assert.equal(args[0], "Preview: next reload will apply 0 actions.");
+    assert.equal(args[0], "Pending: next reload will apply 0 actions.");
   });
 });
 
@@ -90,8 +90,8 @@ test("DIFF-01 SC #2 / idempotency: two invocations against unchanged state -> by
   await withHermeticHome(async ({ cwd }) => {
     const ctxA = makeCtx(cwd);
     const ctxB = makeCtx(cwd);
-    await previewReconcile({ ctx: ctxA as unknown as ExtensionContext, pi: STUB_PI, cwd });
-    await previewReconcile({ ctx: ctxB as unknown as ExtensionContext, pi: STUB_PI, cwd });
+    await pendingReconcile({ ctx: ctxA as unknown as ExtensionContext, pi: STUB_PI, cwd });
+    await pendingReconcile({ ctx: ctxB as unknown as ExtensionContext, pi: STUB_PI, cwd });
     assert.deepEqual(
       ctxA.ui.notify.mock.calls[0]!.arguments,
       ctxB.ui.notify.mock.calls[0]!.arguments,
@@ -99,7 +99,7 @@ test("DIFF-01 SC #2 / idempotency: two invocations against unchanged state -> by
   });
 });
 
-test("DIFF-01 SC #2 / no-mutation: preview run leaves config + state file mtimes + bytes unchanged", async () => {
+test("DIFF-01 SC #2 / no-mutation: pending run leaves config + state file mtimes + bytes unchanged", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Lay down a minimal project-scope config + empty state directory so the
     // orchestrator reads real on-disk files (rather than absent-arms).
@@ -121,13 +121,13 @@ test("DIFF-01 SC #2 / no-mutation: preview run leaves config + state file mtimes
     const beforeStateMtime = (await stat(statePath)).mtimeMs;
 
     const ctx = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
       scope: "project",
     });
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -139,17 +139,17 @@ test("DIFF-01 SC #2 / no-mutation: preview run leaves config + state file mtimes
     const afterState = await readFile(statePath, "utf8");
     const afterStateMtime = (await stat(statePath)).mtimeMs;
 
-    assert.equal(beforeConfig, afterConfig, "config bytes must be unchanged across preview runs");
+    assert.equal(beforeConfig, afterConfig, "config bytes must be unchanged across pending runs");
     assert.equal(
       beforeConfigMtime,
       afterConfigMtime,
-      "config mtime must be unchanged across preview runs",
+      "config mtime must be unchanged across pending runs",
     );
-    assert.equal(beforeState, afterState, "state bytes must be unchanged across preview runs");
+    assert.equal(beforeState, afterState, "state bytes must be unchanged across pending runs");
     assert.equal(
       beforeStateMtime,
       afterStateMtime,
-      "state mtime must be unchanged across preview runs",
+      "state mtime must be unchanged across pending runs",
     );
   });
 });
@@ -164,7 +164,7 @@ test("CFG-03 abort: malformed claude-plugins.json -> (failed) {invalid manifest}
     await writeFile(badConfigPath, "{", "utf8");
 
     const ctx = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -195,7 +195,7 @@ test("CFG-03 abort: malformed claude-plugins.json -> (failed) {invalid manifest}
     // invalid config NEVER coerced to an empty desired state.
     assert.ok(
       !emitted.includes("will uninstall"),
-      `CFG-03 abort must NEVER render as a mass-uninstall preview; got:\n${emitted}`,
+      `CFG-03 abort must NEVER render as a mass-uninstall pending list; got:\n${emitted}`,
     );
   });
 });
@@ -219,7 +219,7 @@ test("failure containment (WR-04): corrupt state.json -> (failed) {unparseable} 
 
     const ctx = makeCtx(cwd);
     // Must NOT throw.
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -272,7 +272,7 @@ test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks
     );
 
     const ctx = makeCtx(cwd);
-    await previewReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
+    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
 
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
@@ -292,11 +292,11 @@ test("scope fan-out: omitted --scope walks both scopes project-first (advisory i
     const ctx = makeCtx(cwd);
     // No --scope -> both scopes. Both are empty so the empty-steady-state
     // advisory fires.
-    await previewReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
+    await pendingReconcile({ ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd });
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     assert.equal(
       ctx.ui.notify.mock.calls[0]!.arguments[0],
-      "Preview: next reload will apply 0 actions.",
+      "Pending: next reload will apply 0 actions.",
     );
   });
 });
@@ -361,14 +361,14 @@ test("MIG-01 pre-migration window: absent config + populated state -> EMPTY advi
   await withHermeticHome(async ({ cwd }) => {
     // Populated state.json, NO claude-plugins.json: the post-upgrade,
     // pre-first-/reload window. The apply path migrates FIRST (the next
-    // load's reconcile is a no-op), so the preview must converge on the
+    // load's reconcile is a no-op), so the pending must converge on the
     // same answer -- planning against the absent-as-empty merged view would
     // render `(will uninstall)` / `(will remove)` rows for everything in
     // state (the DIFF-01 'exactly what the next load would do' violation).
     await writePopulatedProjectState(cwd);
 
     const ctx = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -378,7 +378,7 @@ test("MIG-01 pre-migration window: absent config + populated state -> EMPTY advi
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const args = ctx.ui.notify.mock.calls[0]!.arguments;
     assert.equal(args.length, 1, "empty advisory is info severity (no 2nd arg)");
-    assert.equal(args[0], "Preview: next reload will apply 0 actions.");
+    assert.equal(args[0], "Pending: next reload will apply 0 actions.");
   });
 });
 
@@ -390,13 +390,13 @@ test("MIG-01 pre-migration window: idempotent + READ-ONLY -- run twice, byte-ide
 
     const ctxA = makeCtx(cwd);
     const ctxB = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctxA as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
       scope: "project",
     });
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctxB as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -408,13 +408,13 @@ test("MIG-01 pre-migration window: idempotent + READ-ONLY -- run twice, byte-ide
       ctxA.ui.notify.mock.calls[0]!.arguments,
       ctxB.ui.notify.mock.calls[0]!.arguments,
     );
-    // NFR-5 read-surface discipline: the preview projection must NOT have
+    // NFR-5 read-surface discipline: the pending projection must NOT have
     // performed the migration -- no claude-plugins.json appears.
     const configPath = path.join(cwd, ".pi", "claude-plugins.json");
     await assert.rejects(
       stat(configPath),
       (err: NodeJS.ErrnoException) => err.code === "ENOENT",
-      "preview must NEVER create claude-plugins.json (migration is the apply path's job)",
+      "pending must NEVER create claude-plugins.json (migration is the apply path's job)",
     );
     // state.json bytes + mtime untouched.
     assert.equal(await readFile(statePath, "utf8"), beforeState);
@@ -426,7 +426,7 @@ test("MIG-01 pre-migration window: local arm still merges over the projection (w
   await withHermeticHome(async ({ cwd }) => {
     // Populated state + absent BASE config + a local config declaring one
     // EXTRA marketplace: the post-migration merged view is
-    // projection + local, so the preview must show exactly the local-only
+    // projection + local, so the pending must show exactly the local-only
     // addition -- and must NOT plan uninstalls for the recorded entries.
     await writePopulatedProjectState(cwd);
     await writeFile(
@@ -440,7 +440,7 @@ test("MIG-01 pre-migration window: local arm still merges over the projection (w
     );
 
     const ctx = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -463,7 +463,7 @@ test("MIG-01 pre-migration window: local arm still merges over the projection (w
 test("scope routing: explicit --scope user routes to user-scope load only (still emits the empty advisory in a clean env)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const ctx = makeCtx(cwd);
-    await previewReconcile({
+    await pendingReconcile({
       ctx: ctx as unknown as ExtensionContext,
       pi: STUB_PI,
       cwd,
@@ -472,7 +472,7 @@ test("scope routing: explicit --scope user routes to user-scope load only (still
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     assert.equal(
       ctx.ui.notify.mock.calls[0]!.arguments[0],
-      "Preview: next reload will apply 0 actions.",
+      "Pending: next reload will apply 0 actions.",
     );
   });
 });

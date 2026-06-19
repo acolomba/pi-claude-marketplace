@@ -66,27 +66,50 @@ export function narrowProbeError(
 }
 
 /**
- * Narrow resolver `notes` strings to closed-set REASONS members. The
- * manifest field carve-out passes `hooks` verbatim and maps the
- * manifest-field detection token `lspServers` to the emitted Reason
- * `lsp`; any other unsupported-source note falls through to
+ * Narrow resolver `notes` strings to closed-set REASONS members.
+ *
+ * HOOK-04 detection is anchored on the three reason-prefix tokens emitted
+ * by `domain/components/hooks.ts::parseHooksConfig` plus the
+ * `malformed hooks.json: ` wrapper applied at the resolver call site --
+ * substring-match was tightened to `startsWith` checks so a free-form
+ * note that happens to contain the word `hooks` mid-string does NOT
+ * classify as `unsupported hooks`.
+ *
+ * The manifest-field detection token `lspServers` (camelCase, sliced from
+ * the resolver's `"contains lspServers"` note) maps to the emitted
+ * Reason `lsp`. Any other unsupported-source note falls through to
  * `unsupported source`. Empty notes -> empty reasons array.
+ *
+ * Each note classifies into EXACTLY ONE bucket; once a bucket has been
+ * pushed, repeated notes for the same bucket are no-ops (and crucially do
+ * NOT fall through to the catch-all `unsupported source` arm -- WR-01).
  */
 export function narrowResolverNotes(
   notes: readonly string[],
-): readonly ("hooks" | "lsp" | "unsupported source")[] {
-  const out: ("hooks" | "lsp" | "unsupported source")[] = [];
+): readonly ("unsupported hooks" | "lsp" | "unsupported source")[] {
+  const out: ("unsupported hooks" | "lsp" | "unsupported source")[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
-    if (note.includes("hooks") && !seen.has("hooks")) {
-      out.push("hooks");
-      seen.add("hooks");
+    const isHooksNote =
+      note.startsWith("hooks.json is not valid JSON:") ||
+      note.startsWith("hooks.json failed schema validation:") ||
+      note.startsWith("unsupported hooks:") ||
+      note.startsWith("malformed hooks.json:");
+    if (isHooksNote) {
+      if (!seen.has("unsupported hooks")) {
+        out.push("unsupported hooks");
+        seen.add("unsupported hooks");
+      }
+
       continue;
     }
 
-    if (note.includes("lspServers") && !seen.has("lsp")) {
-      out.push("lsp");
-      seen.add("lsp");
+    if (note.includes("lspServers")) {
+      if (!seen.has("lsp")) {
+        out.push("lsp");
+        seen.add("lsp");
+      }
+
       continue;
     }
 

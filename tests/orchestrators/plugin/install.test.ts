@@ -154,6 +154,12 @@ async function seedPathMarketplaceWithPlugin(opts: {
   };
   /** Override the entry's `source` field with a non-path source (PI-4). */
   rawSourceOverride?: unknown;
+  /**
+   * WR-03: seed a `<pluginRoot>/hooks/hooks.json` payload so the resolver
+   * advertises `hooksConfigPath` and the install/reinstall/update
+   * orchestrators run their parsed-config-cache mutation path.
+   */
+  hooksJson?: object;
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
   const scope = opts.scope ?? "project";
@@ -217,6 +223,15 @@ async function seedPathMarketplaceWithPlugin(opts: {
     );
   }
 
+  // Hooks (WR-03): seed `<pluginRoot>/hooks/hooks.json` so the resolver
+  // populates `installable.hooksConfigPath` and the install ledger's
+  // cache+rebuild path actually executes.
+  if (opts.hooksJson !== undefined) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
+  }
+
   // Marketplace manifest
   const entry: Record<string, unknown> = {
     name: pluginName,
@@ -263,7 +278,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
                     supported: [],
                     unsupported: [],
                   },
-                  resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -297,6 +312,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
             prompts: cp.commandName === undefined ? [] : [cp.commandName],
             agents: cp.agentName === undefined ? [] : [cp.agentName],
             mcpServers: [],
+            hooks: [],
           },
           installedAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
@@ -2103,8 +2119,16 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   // The resolver's `r.notes` carry the
   // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
   // carve-out in `narrowResolverReasons` strips the prefix and emits
-  // the bare token as the Reason. The test matches the actual upstream
-  // form so we exercise the live code path.
+  // the bare token as the Reason. HOOK-04 / D-58-02 dropped the
+  // `contains hooks` half of the carve-out (under v1.13 `hooks` is a
+  // supported component kind, so the resolver no longer emits a
+  // `"contains hooks"` note in real traffic; the dead branch was
+  // removed). `contains lspServers` remains the SOLE manifest-field
+  // carve-out and maps to `lsp` per SNM-36 / D-24-04. The test pins
+  // the post-D-58-02 behavior: a synthetic input mixing `contains hooks`
+  // with `contains lspServers` extracts only `lsp` (the `contains hooks`
+  // arm falls through to the permissive `unsupported source` fallback,
+  // but is dedup-suppressed when another permissive arm already fired).
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2117,10 +2141,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  // MSG-GR-4 carve-out: the manifest-field detection token `lspServers`
-  // (camelCase) is detected and emitted as the closed-set Reason `lsp`
-  // (SNM-36 / D-24-04); `hooks` emits unchanged.
-  assert.deepEqual(row.reasons, ["hooks", "lsp"]);
+  assert.deepEqual(row.reasons, ["lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
@@ -2220,27 +2241,30 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
 // `unsupported source` fallback runs only when no classifier matched.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr B2 / C5: narrowResolverReasons -> `contains hooks` extracts the bare `hooks` Reason", () => {
-  // The predicate matches the resolver's actual emission form
-  // (`"contains hooks"`). The user-visible catalog row shape
-  // (`(unavailable) {hooks}`) is unchanged.
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+test("HOOK-04 / D-58-02: narrowResolverReasons drops the dead `contains hooks` carve-out -> permissive fallback `unsupported source`", () => {
+  // Under v1.13, `hooks` is a SUPPORTED component kind
+  // (`SUPPORTED_COMPONENT_KINDS` in `domain/resolver.ts` includes
+  // `"hooks"`), so the resolver no longer emits a
+  // `"contains hooks"` note in real traffic. D-58-02 dropped the
+  // dead branch from `MANIFEST_FIELD_REASONS` / `MANIFEST_FIELD_TO_REASON`;
+  // a synthetic `"contains hooks"` input now misses the carve-out and
+  // falls through to the permissive `unsupported source` fallback.
+  // The real `{unsupported hooks}` reason is sourced through
+  // `shared/probe-classifiers.ts::narrowResolverNotes` against the
+  // `parseHooksConfig` prefix tokens, not through this carve-out.
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["unsupported source"]);
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
-test("260525-cjr C5: narrowResolverReasons recognises the resolver's `contains hooks` prefix and emits bare `hooks`", () => {
-  // The resolver's `addUnsupportedKindNotes` writes
-  // `partial.notes.push("contains " + kind)` for
-  // every UNSUPPORTED_COMPONENT_KINDS member. The narrower strips
-  // the `contains ` prefix and re-checks `MANIFEST_FIELD_REASONS`; the
-  // mapped Reason is emitted, matching the catalog's
-  // `(unavailable) {hooks}` / `(unavailable) {lsp}` forms (the
-  // `lspServers` detection token maps to the `lsp` Reason per
-  // SNM-36 / D-24-04).
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["hooks"]);
+test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as the sole remaining manifest-field carve-out", () => {
+  // HOOK-04 / D-58-02: `lspServers` is now the SOLE
+  // `MANIFEST_FIELD_REASONS` member. The `contains hooks` half was
+  // dropped (dead under v1.13). The `lspServers` detection token maps
+  // to the `lsp` Reason per SNM-36 / D-24-04; the catalog row form is
+  // `(unavailable) {lsp}`.
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
@@ -2689,6 +2713,260 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 
       // Local file untouched.
       assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WR-03 / D-60-05: after a successful installPlugin for a plugin declaring a
+// hooks.json, the hooks-bridge routing table reflects the new entry. Without
+// the rebuildRoutingTables call inside the per-plugin lock, the routing table
+// would stay pinned to whatever the last reconcile produced and the new
+// plugin would not receive dispatch until `/reload` (NFR-2 violation).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
+  const { _resetForTest, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+
+      // Pre-condition: the routing table's PreToolUse bucket is empty.
+      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      // Confirm install succeeded (no "failed" / "unavailable" notification).
+      // The first notification carries the cascade text; we only need the
+      // routing-table effect to be observable.
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)") && !summary.includes("(unavailable)"),
+        `expected clean install notification; got: ${summary}`,
+      );
+
+      // The plugin must have its hooks resource recorded -- otherwise the
+      // bridge cache lookup at rebuild time would silently skip it.
+      const afterState = await loadState(locations.extensionRoot);
+      assert.ok(
+        afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks !== undefined,
+        `expected hooks resource recorded; full notification text: ${summary}`,
+      );
+      assert.ok(
+        (afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks ?? []).length > 0,
+        `expected non-empty hooks resource; got ${JSON.stringify(afterState.marketplaces["mp"]?.plugins["p1"]?.resources)}; notification: ${summary}`,
+      );
+
+      // Post-condition: the routing-table now reflects the installed plugin's
+      // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
+      // inside the per-plugin lock right after `addPluginConfigToCache`.
+      const bucket = getRoutingBucket("PreToolUse");
+      assert.equal(bucket.length, 1);
+      assert.equal(bucket[0]?.pluginId, "p1");
+      assert.equal(bucket[0]?.scope, "project");
+      assert.equal(bucket[0]?.handlerDecl["command"], "echo hello");
+      // resolvedSource must propagate from the resolver -> cache -> routing
+      // table; without this assert a regression that drops the pluginRoot
+      // argument from addPluginConfigToCache(...) would not be caught at
+      // the orchestrator-test layer. CLAUDE_PLUGIN_ROOT export at dispatch
+      // depends on this field.
+      assert.equal(
+        bucket[0]?.resolvedSource,
+        afterState.marketplaces["mp"]?.plugins["p1"]?.resolvedSource,
+        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LIFE-01 / LIFE-02 / SURF-05: 5th cascade slot in install.ts -- a plugin
+// declaring `hooks/hooks.json` writes `<hooksDir>/<plugin>/hooks.json` via
+// the bridge `writeHookConfig`; the cascade row surfaces orphan-rewake when
+// the resolver flagged it; rollback removes the just-written file.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      const hooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo life01" }] }],
+      };
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        hooksJson,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !summary.includes("(failed)") && !summary.includes("(unavailable)"),
+        `expected clean install; got: ${summary}`,
+      );
+
+      // LIFE-01: the bridge wrote the file at the documented path.
+      const written = await readFile(path.join(locations.hooksDir, "p1", "hooks.json"), "utf8");
+      assert.deepEqual(JSON.parse(written), hooksJson);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // SURF-05 fixture: rewakeMessage WITHOUT asyncRewake: true triggers
+      // detectOrphanRewake -> partial.orphanRewake = true (per resolver
+      // applyHooksConfig success branch, Plan 63-03).
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "orphan",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: "echo orphan",
+                  rewakeMessage: "wake me",
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "orphan",
+      });
+
+      const message = notifications.map((n) => n.message).join("\n");
+      // Renderer composes `(installed) {orphan rewake}` via the existing
+      // composeReasons helper on PluginInstalledMessage.reasons.
+      assert.ok(
+        message.includes("(installed) {orphan rewake}"),
+        `expected '(installed) {orphan rewake}' in cascade; got:\n${message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "async-rewake",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: "echo paired",
+                  rewakeMessage: "wake me",
+                  asyncRewake: true,
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "async-rewake",
+      });
+
+      const message = notifications.map((n) => n.message).join("\n");
+      assert.ok(
+        !message.includes("{orphan rewake}"),
+        `expected no '{orphan rewake}' brace; got:\n${message}`,
+      );
+      assert.ok(
+        message.includes("(installed)"),
+        `expected clean (installed) row; got:\n${message}`,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -23,7 +23,7 @@
 //                            (recorded-but-disabled detection via the
 //                            empty-resources marker)
 //
-// The empty-plan case is handled by the orchestrator (`preview.ts`) which
+// The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
 // for the catalog's `empty-steady-state` byte form. The projection itself
 // returns a `CascadeNotificationMessage` with the marketplaces array empty
@@ -51,9 +51,9 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 
 /**
- * S8 (PR #51): `status` is narrowed to the closed set the preview /
+ * S8 (PR #51): `status` is narrowed to the closed set the pending /
  * applied-cascade projections actually assign (`"will add"` / `"will remove"`
- * from the preview; `"added"` / `"removed"` / `"failed"` from the apply
+ * from the pending list; `"added"` / `"removed"` / `"failed"` from the apply
  * cascade). The `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"`
  * / `"skipped"` members of `MarketplaceStatus` belong to other surfaces
  * (autoupdate flip, marketplace update); the reconcile projection never sets
@@ -194,7 +194,7 @@ function applySourceMismatch(
  * block preserve insertion order per their owning bucket -- the apply path
  * will re-order at execution time if needed.
  */
-export function buildReconcilePreviewNotification(
+export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
 ): CascadeNotificationMessage {
   const byMp = new Map<string, MarketplaceBlock>();
@@ -265,7 +265,7 @@ export function buildReconcilePreviewNotification(
 
 /**
  * DIFF-01 SC #2 empty-plan helper. Returns `true` iff every action bucket on
- * every plan is empty. Consumed by `orchestrators/reconcile/preview.ts` so
+ * every plan is empty. Consumed by `orchestrators/reconcile/pending.ts` so
  * the orchestrator can route the empty case to the catalog's
  * `empty-steady-state` advisory body line BEFORE invoking the projection
  * (which would otherwise emit the `(no marketplaces)` sentinel).

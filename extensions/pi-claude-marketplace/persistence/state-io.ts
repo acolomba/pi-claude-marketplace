@@ -35,7 +35,17 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
-/** ST-3: per-plugin install record (D-09 nesting under marketplaces.<mp>.plugins). */
+/**
+ * ST-3: per-plugin install record (D-09 nesting under marketplaces.<mp>.plugins).
+ *
+ * HOOK-02 / D-57-01: `resources.hooks` is REQUIRED (string[]). It holds
+ * the plugin's hooks-container-dir generatedName per D-57-03 (zero or one
+ * entry; mirrors the skills/prompts/agents/mcpServers generatedName
+ * discipline -- state.json never holds absolute paths). The migration is
+ * additive: `ensurePluginResources` in persistence/migrate.ts fills
+ * `hooks: []` before validation runs, so v1.0..v1.12 state.json files
+ * load cleanly without a STATE_SCHEMA.schemaVersion bump (D-57-01).
+ */
 const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   version: Type.String(),
   resolvedSource: Type.String(),
@@ -50,6 +60,7 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
     prompts: Type.Array(Type.String()),
     agents: Type.Array(Type.String()),
     mcpServers: Type.Array(Type.String()),
+    hooks: Type.Array(Type.String()),
   }),
   installedAt: Type.String(),
   updatedAt: Type.String(),

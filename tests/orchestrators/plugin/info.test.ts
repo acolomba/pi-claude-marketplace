@@ -10,7 +10,7 @@
 // Coverage:
 //   (a) single-scope installed with resolved components + description
 //   (b) single-scope available with description
-//   (c) single-scope unavailable with `{hooks}` reason
+//   (c) single-scope unavailable with `{unsupported hooks}` reason
 //   (d) single-scope external source -> componentsResolved: false marker
 //   (e) both-scopes fan-out (project-first per MSG-GR-3 / INFO-03)
 //   (f) `--scope` mismatch -> INFO-04 `{not added}` row with
@@ -159,8 +159,8 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       // an enabled installed record always has >= 1 populated array.
       resources:
         info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
+          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -319,13 +319,13 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
 });
 
 // ---------------------------------------------------------------------------
-// (c) single-scope unavailable with `{hooks}` reason.
+// (c) single-scope unavailable with `{unsupported hooks}` reason.
 // ---------------------------------------------------------------------------
 
-test("INFO-02: single-scope unavailable (declares hooks) renders `⊘ ... (unavailable) {hooks}` + components: not resolved", async () => {
+test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `⊘ ... (unavailable) {unsupported hooks}` without per-kind component lines when nothing is on disk", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
+    const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
       cwd,
@@ -337,25 +337,35 @@ test("INFO-02: single-scope unavailable (declares hooks) renders `⊘ ... (unava
             name: "legacy",
             source: "./legacy",
             version: "0.1.0",
-            description: "Old plugin that declares hooks.",
-            hooks: { path: "./hooks.json" },
+            description: "Old plugin with a malformed hooks/hooks.json.",
           },
         ],
       },
       installablePluginDirs: ["legacy"],
     });
 
+    // HOOK-01 / D-57-04: plugin admission now depends on the convention file
+    // parse result, not on entry-level hooks-field declaration. Seed an
+    // unparseable hooks/hooks.json so resolveStrict flips installable: false.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "unavailable is info, not error");
+    // INFO-05: path-source not-installable variant enumerates components
+    // from disk; with no skills/commands/agents/mcp seeded the components
+    // map is empty and no per-kind lines are emitted (and the
+    // `components: not resolved` marker is suppressed -- it is reserved
+    // for non-path sources).
     assert.equal(
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        "  ⊘ legacy v0.1.0 (unavailable) {hooks}",
-        "    Old plugin that declares hooks.",
-        "    components: not resolved",
+        "  ⊘ legacy v0.1.0 (unavailable) {unsupported hooks}",
+        "    Old plugin with a malformed hooks/hooks.json.",
       ].join("\n"),
     );
   });
@@ -683,10 +693,10 @@ test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NO
 // row instead of swallowing them silently.
 // ---------------------------------------------------------------------------
 
-test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` on the (installed) row", async () => {
+test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsupported hooks}` on the (installed) row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
+    const mpRoot = await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
       cwd,
@@ -698,10 +708,6 @@ test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` o
             name: "legacy",
             source: "./legacy",
             version: "0.1.0",
-            // Declares hooks -> resolveStrict returns NotInstallable
-            // with a note like "contains hooks" that
-            // `narrowResolverNotes` maps to the `hooks` Reason.
-            hooks: { path: "./hooks.json" },
           },
         ],
       },
@@ -709,16 +715,26 @@ test("WR-01: installed plugin whose manifest declares hooks surfaces `{hooks}` o
       installablePluginDirs: ["legacy"],
     });
 
+    // HOOK-01 / D-57-04: a malformed hooks/hooks.json now flips the
+    // resolver to NotInstallable with a parse-failure note that
+    // narrowResolverNotes maps to the `unsupported hooks` Reason via
+    // prefix-anchored detection (HOOK-04 tightening).
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     assert.equal(notifications.length, 1);
+    // INFO-05: path-source not-installable variant enumerates components
+    // from disk; with no skills/commands/agents/mcp seeded the components
+    // map is empty and no per-kind lines or `components: not resolved`
+    // marker is emitted -- only the `{unsupported hooks}` reasons brace.
     assert.equal(
       notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● legacy v0.1.0 (installed) {hooks}",
-        "    components: not resolved",
-      ].join("\n"),
+      ["● mp [user] <no autoupdate>", "  ● legacy v0.1.0 (installed) {unsupported hooks}"].join(
+        "\n",
+      ),
     );
   });
 });
@@ -1165,7 +1181,13 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
               // Populated resources: an ENABLED installed record (empty
               // resources + installable:true would read as disabled per
               // ENBL-04 and route to the `(disabled)` inventory arm).
-              resources: { skills: ["local-plug-skill"], prompts: [], agents: [], mcpServers: [] },
+              resources: {
+                skills: ["local-plug-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -1236,7 +1258,7 @@ test("ENBL-04: info on a recorded-but-disabled plugin renders the list-arm `(dis
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ⊘ foo v1.2.3 (disabled)"].join("\n"),
+      ["● mp [user]", "  ◌ foo v1.2.3 (disabled)"].join("\n"),
     );
   });
 });
@@ -1283,6 +1305,649 @@ test("ENBL-04: bare info (no --scope) with disabled record in one scope and info
     assert.equal(notifications.length, 2);
     const all = notifications.map((n) => n.message).join("\n---\n");
     assert.match(all, /● foo v1\.0\.0 \(installed\)/, all);
-    assert.match(all, /⊘ foo v1\.2\.3 \(disabled\)/, all);
+    assert.match(all, /◌ foo v1\.2\.3 \(disabled\)/, all);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SURF-01 / D-63-04 / D-63-07: `info <plugin>` for an installable plugin
+// with `hooks/hooks.json` renders the multi-line `hooks:` block. The
+// block slots alphabetically between `commands` and `mcp` (driven by
+// the 5-tuple `COMPONENT_KINDS`). Tool events render as
+// `<event>(<matcher>)`; non-tool events render as bare `<event>`.
+// Declaration order from the parsed file is preserved.
+//
+// The byte-form of the `hooks:` block itself is locked end-to-end in
+// `tests/shared/notify-v2.test.ts` (renderer unit tests). These
+// orchestrator-level fixtures verify the integration: the info.ts
+// re-parse from disk produces the `HookSummaryEntry[]` that flows into
+// the renderer at the correct alphabetical slot.
+// ---------------------------------------------------------------------------
+
+test("SURF-01 / D-63-04: installed plugin with hooks/hooks.json renders multi-line `hooks:` block between `commands:` and `mcp:`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "h",
+            source: "./h",
+            version: "1.0.0",
+            commands: "commands",
+          },
+        ],
+      },
+      installed: { h: { version: "1.0.0" } },
+      installablePluginDirs: ["h"],
+      componentFiles: { h: ["commands/c1.md"] },
+    });
+
+    // Seed a parseable hooks/hooks.json with two PreToolUse groups, one
+    // PostToolUse group, and one SessionStart group. Declaration order
+    // is preserved end-to-end: PreToolUse(Bash) -> PreToolUse(Edit|Write)
+    // -> PostToolUse(Edit) -> SessionStart.
+    const pluginDir = path.join(mpRoot, "h");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [
+          { matcher: "Bash", hooks: [{ type: "command", command: "echo pre-bash" }] },
+          { matcher: "Edit|Write", hooks: [{ type: "command", command: "echo pre-edit-write" }] },
+        ],
+        PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "echo post-edit" }] }],
+        SessionStart: [{ hooks: [{ type: "command", command: "echo session-start" }] }],
+      }),
+      "utf8",
+    );
+
+    // Also seed a `mcpServers` field so we can verify the alphabetical
+    // slot of `hooks:` BETWEEN `commands:` and `mcp:`.
+    await mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "h",
+        version: "1.0.0",
+        mcpServers: { "my-mcp": { command: "echo" } },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "h", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● h v1.0.0 (installed)",
+        "    commands: c1",
+        "    hooks:",
+        "      PreToolUse(Bash)",
+        "      PreToolUse(Edit|Write)",
+        "      PostToolUse(Edit)",
+        "      SessionStart",
+        "    mcp: my-mcp",
+      ].join("\n"),
+    );
+  });
+});
+
+test("SURF-01 / D-63-04: unavailable plugin (malformed hooks/hooks.json) suppresses `hooks:` block and does NOT emit `components: not resolved` for a path source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "legacy", source: "./legacy", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["legacy"],
+    });
+
+    // Malformed hooks.json: resolver flips installable: false. The
+    // resolver does NOT record `hooksConfigPath` when the parse fails,
+    // so the not-installable variant carries no hooks bucket -- the
+    // row renders without a `hooks:` block. With no other components on
+    // disk the components map is empty, so the path-source INFO-05
+    // arm emits no per-kind lines and suppresses the
+    // `components: not resolved` marker (reserved for non-path sources).
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    assert.doesNotMatch(msg, /components: not resolved/);
+    assert.doesNotMatch(msg, /hooks:/);
+  });
+});
+
+test("SURF-01 / D-63-04: installable plugin with NO hooks/hooks.json renders NO `hooks:` line (legacy 4-kind output unchanged)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "no-hooks",
+            source: "./no-hooks",
+            version: "1.0.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installed: { "no-hooks": { version: "1.0.0" } },
+      installablePluginDirs: ["no-hooks"],
+      componentDirs: { "no-hooks": ["skills/s1"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "no-hooks",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ● no-hooks v1.0.0 (installed)", "    skills: s1"].join(
+        "\n",
+      ),
+    );
+    assert.doesNotMatch(notifications[0]!.message, /hooks:/);
+  });
+});
+
+test("SURF-01 / D-63-04: available plugin (not-installed) with hooks/hooks.json also renders the `hooks:` block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "ah", source: "./ah", version: "0.2.0" }],
+      },
+      // NOT installed -> goes through buildAvailableRow.
+      installablePluginDirs: ["ah"],
+    });
+
+    const pluginDir = path.join(mpRoot, "ah");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        UserPromptSubmit: [{ hooks: [{ type: "command", command: "echo ups" }] }],
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ah", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ ah v0.2.0 (available)",
+        "    hooks:",
+        "      UserPromptSubmit",
+      ].join("\n"),
+    );
+  });
+});
+
+test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and info-render surfaces probe-classifier reason via narrowProbeError (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "hr", source: "./hr", version: "1.0.0" }],
+      },
+      installed: { hr: { version: "1.0.0" } },
+      installablePluginDirs: ["hr"],
+    });
+
+    // Seed a parseable hooks.json so the resolver records `hooksConfigPath`
+    // (`installable: true`), then chmod 000 the file so the info-time
+    // re-read raises EACCES. The narrowProbeError ladder must classify
+    // the failure as `permission denied` -- the SAME closed-set REASON
+    // the other component-probe failures (e.g. skills dir EACCES) emit.
+    const pluginDir = path.join(mpRoot, "hr");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    const hooksFile = path.join(pluginDir, "hooks", "hooks.json");
+    await writeFile(
+      hooksFile,
+      JSON.stringify({
+        SessionStart: [{ hooks: [{ type: "command", command: "echo s" }] }],
+      }),
+      "utf8",
+    );
+
+    const { chmod } = await import("node:fs/promises");
+    await chmod(hooksFile, 0o000);
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hr", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      // The closed-set REASON form for unreadable probes flows through
+      // the EXISTING narrowProbeError ladder (Open Question 3: no new
+      // REASON, no new code path). Permission-denied is the expected
+      // classification for an EACCES on the hooks.json read.
+      assert.match(msg, /\(installed\) \{permission denied\}/);
+      // No partial `hooks:` block under a permission-denied row.
+      assert.doesNotMatch(msg, /hooks:/);
+    } finally {
+      await chmod(hooksFile, 0o644).catch(() => undefined);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-05: path-source not-installable variants enumerate components from disk.
+// The gate excludes non-path sources, not the not-installable verdict.
+// ---------------------------------------------------------------------------
+
+test("INFO-05: (unavailable) {unsupported hooks} path-source plugin enumerates on-disk skills + commands", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            description: "Plugin with unsupported hooks and on-disk components.",
+            skills: "skills",
+            commands: "commands",
+          },
+        ],
+      },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+      componentFiles: { legacy: ["commands/c1.md"] },
+    });
+
+    // Malformed hooks.json flips installable: false.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    // Per-kind component lines appear even though the resolver returned
+    // not-installable; no `hooks:` line because the resolver bailed
+    // before recording `hooksConfigPath`; no `components: not resolved`
+    // marker (reserved for non-path sources).
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ legacy v0.1.0 (unavailable) {unsupported hooks}",
+        "    Plugin with unsupported hooks and on-disk components.",
+        "    commands: c1",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: (installed) {unsupported hooks} path-source plugin enumerates on-disk skills + commands", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+            commands: "commands",
+          },
+        ],
+      },
+      installed: { legacy: { version: "0.1.0" } },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+      componentFiles: { legacy: ["commands/c1.md"] },
+    });
+
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● legacy v0.1.0 (installed) {unsupported hooks}",
+        "    commands: c1",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: not-installed npm-source plugin still emits `components: not resolved` (non-path gate preserved)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+            description: "Remote plugin sourced from an external npm package.",
+          },
+        ],
+      },
+      // NOT installed -> buildNotInstalledRow path.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+        "    Remote plugin sourced from an external npm package.",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+    });
+
+    // Malformed hooks.json flips installable: false; then chmod 000 on the
+    // skills dir makes the on-disk discovery throw EACCES. The throw must
+    // propagate up to the unavailable-arm catch and fall back to
+    // `componentsResolved: false` with the merged reasons brace.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(pluginDir, "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      // Both reasons surface in the brace; order follows the
+      // composeReasons join (resolver notes first, then probe error).
+      assert.match(msg, /\(unavailable\) \{unsupported hooks, permission denied\}/);
+      assert.match(msg, /components: not resolved/);
+      assert.doesNotMatch(msg, /skills:/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
+    }
+  });
+});
+
+test("INFO-05: composeResolvedComponents throw on the installed arm falls back to `componentsResolved: false` with merged reasons (POSIX)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based EACCES fault injection is POSIX-only");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            skills: "skills",
+          },
+        ],
+      },
+      installed: { legacy: { version: "0.1.0" } },
+      installablePluginDirs: ["legacy"],
+      componentDirs: { legacy: ["skills/s1"] },
+    });
+
+    // Malformed hooks.json flips installable: false; chmod 000 on the
+    // skills dir makes the on-disk discovery throw EACCES. Symmetric to
+    // the unavailable-arm test above -- the throw propagates to
+    // buildNotInstallablePathRowFields' narrowed catch and merges the
+    // resolver `unsupported hooks` note with the probe-classified
+    // `permission denied` reason. Status stays `installed` because the
+    // state record confirms the install.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { chmod } = await import("node:fs/promises");
+    const skillsDir = path.join(pluginDir, "skills");
+    await chmod(skillsDir, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      const msg = notifications[0]!.message;
+      assert.match(msg, /\(installed\) \{unsupported hooks, permission denied\}/);
+      assert.match(msg, /components: not resolved/);
+      assert.doesNotMatch(msg, /skills:/);
+    } finally {
+      await chmod(skillsDir, 0o755).catch(() => undefined);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-05: lenient hooks reader -- when the resolver bails because the
+// hooks file declares non-bucket-A events, the info surface STILL lists
+// the declared events with a `(unsupported)` suffix on each non-bucket-A
+// one. The strict resolver-side parser (HOOK-01) remains unchanged; the
+// lenient reader runs ONLY on the path-resolvable
+// `(unavailable) {unsupported hooks}` carrier row.
+// ---------------------------------------------------------------------------
+
+test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(unavailable) {unsupported hooks}` row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "ralph", source: "./ralph", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["ralph"],
+    });
+
+    // ralph-loop fixture shape: a single top-level `Stop` event, which is
+    // not in v1.13's BUCKET_A_EVENTS. The strict resolver flips
+    // installable: false; the lenient reader still enumerates `Stop`.
+    const pluginDir = path.join(mpRoot, "ralph");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }] },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // The hooks: block lists Stop with the (unsupported) suffix.
+    assert.match(msg, /\n {4}hooks:\n {6}Stop \(unsupported\)/);
+  });
+});
+
+test("INFO-05: lenient reader lists BOTH events in declaration order on a mixed `PostToolUse` + `Stop` row; only the non-bucket-A one carries `(unsupported)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "mixed", source: "./mixed", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["mixed"],
+    });
+
+    // Mixed shape: PostToolUse (bucket-A, with a matcher) + Stop
+    // (non-bucket-A). The strict resolver still flips installable: false
+    // because Stop trips TOOL-02. The lenient reader does NOT extract
+    // matchers (it only enumerates event keys), so PostToolUse renders
+    // bare on this rejected-by-resolver code path.
+    const pluginDir = path.join(mpRoot, "mixed");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo p" }] }],
+          Stop: [{ hooks: [{ type: "command", command: "echo s" }] }],
+        },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // Declaration order: PostToolUse first (no suffix), then Stop with suffix.
+    assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\n {6}Stop \(unsupported\)/);
+  });
+});
+
+test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on the `(unavailable) {unsupported hooks}` row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "broken", source: "./broken", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["broken"],
+    });
+
+    const pluginDir = path.join(mpRoot, "broken");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // Unparseable hooks.json -> lenient reader returns undefined ->
+    // appendHooksBlock's length-zero guard suppresses the header.
+    assert.doesNotMatch(msg, /hooks:/);
   });
 });

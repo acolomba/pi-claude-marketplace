@@ -1,19 +1,19 @@
-// tests/edge/handlers/plugin/preview.test.ts
+// tests/edge/handlers/plugin/pending.test.ts
 //
-// Thin-shim tests for `edge/handlers/plugin/preview.ts`. Verifies argument
+// Thin-shim tests for `edge/handlers/plugin/pending.ts`. Verifies argument
 // parsing + USAGE routing without exercising the orchestrator's I/O surface
 // (the orchestrator's idempotency / CFG-03 tests live in
-// `tests/orchestrators/reconcile/preview.test.ts`).
+// `tests/orchestrators/reconcile/pending.test.ts`).
 //
 // The shim contract:
-//   - bare `preview` -> dispatches with scope undefined (orchestrator fans out)
-//   - `preview --scope user` -> dispatches with scope: "user"
-//   - `preview --scope project` -> dispatches with scope: "project"
-//   - `preview --scope foo` -> notifyUsageError (invalid scope value)
-//   - `preview foo` -> notifyUsageError ("Too many arguments.")
-//   - `preview --bogus` -> notifyUsageError ("Unknown option")
+//   - bare `pending` -> dispatches with scope undefined (orchestrator fans out)
+//   - `pending --scope user` -> dispatches with scope: "user"
+//   - `pending --scope project` -> dispatches with scope: "project"
+//   - `pending --scope foo` -> notifyUsageError (invalid scope value)
+//   - `pending foo` -> notifyUsageError ("Too many arguments.")
+//   - `pending --bogus` -> notifyUsageError ("Unknown option")
 //
-// The shim's orchestrator dispatch reaches `previewReconcile`, which in a
+// The shim's orchestrator dispatch reaches `pendingReconcile`, which in a
 // hermetic empty-env emits the empty-steady-state advisory. We assert the
 // advisory line shape as a proxy for "dispatched successfully" -- a
 // USAGE-routed call instead carries a `Usage:` block.
@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { makePreviewHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/preview.ts";
+import { makePendingHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
@@ -48,14 +48,14 @@ function makeCtx(cwd: string): { ctx: ExtensionCommandContext; notifications: No
 
 const STUB_PI = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
 
-const ADVISORY = "Preview: next reload will apply 0 actions.";
-const USAGE_PREFIX = "Usage: /claude:plugin preview";
+const ADVISORY = "Pending: next reload will apply 0 actions.";
+const USAGE_PREFIX = "Usage: /claude:plugin pending";
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
   const originalHome = process.env.HOME;
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "preview-shim-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "preview-shim-cwd-"));
+  const home = await mkdtemp(path.join(tmpdir(), "pending-shim-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "pending-shim-cwd-"));
   process.env.HOME = home;
   // SC-1: getAgentDir() honors PI_CODING_AGENT_DIR FIRST and only falls back
   // to homedir(). Clear it so the hermetic HOME above actually governs the
@@ -82,10 +82,10 @@ async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Pr
   }
 }
 
-test("shim :: bare /preview dispatches with scope undefined (advisory line confirms successful dispatch)", async () => {
+test("shim :: bare /pending dispatches with scope undefined (advisory line confirms successful dispatch)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, ADVISORY);
@@ -97,7 +97,7 @@ test("shim :: bare /preview dispatches with scope undefined (advisory line confi
 test("shim :: --scope user dispatches with scope: 'user'", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("--scope user", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, ADVISORY);
@@ -107,7 +107,7 @@ test("shim :: --scope user dispatches with scope: 'user'", async () => {
 test("shim :: --scope project dispatches with scope: 'project'", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("--scope project", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.message, ADVISORY);
@@ -117,7 +117,7 @@ test("shim :: --scope project dispatches with scope: 'project'", async () => {
 test("shim :: --scope foo (invalid value) -> notifyUsageError", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("--scope foo", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -135,7 +135,7 @@ test("shim :: --scope foo (invalid value) -> notifyUsageError", async () => {
 test("shim :: positional argument -> notifyUsageError ('Too many arguments.')", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("foo", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -150,7 +150,7 @@ test("shim :: positional argument -> notifyUsageError ('Too many arguments.')", 
 test("shim :: unknown flag -> notifyUsageError ('Unknown option')", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("--bogus", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -162,7 +162,7 @@ test("shim :: unknown flag -> notifyUsageError ('Unknown option')", async () => 
 test("shim :: --scope without value -> notifyUsageError", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
-    const handler = makePreviewHandler(STUB_PI);
+    const handler = makePendingHandler(STUB_PI);
     await handler("--scope", ctx);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");

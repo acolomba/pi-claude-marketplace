@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   buildReconcileAppliedCascade,
-  buildReconcilePreviewNotification,
+  buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
 
@@ -32,12 +32,12 @@ function emptyPlan(scope: Scope): ReconcilePlan {
 }
 
 test("empty plan list -> empty marketplaces array", () => {
-  const msg = buildReconcilePreviewNotification([]);
+  const msg = buildReconcilePendingNotification([]);
   assert.deepEqual(msg, { marketplaces: [] });
 });
 
 test("plan with no actions -> empty marketplaces array", () => {
-  const msg = buildReconcilePreviewNotification([emptyPlan("project")]);
+  const msg = buildReconcilePendingNotification([emptyPlan("project")]);
   assert.deepEqual(msg.marketplaces, []);
 });
 
@@ -48,7 +48,7 @@ test("one plan with one MarketplaceAdd -> one MarketplaceNotificationMessage", (
       { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
     ],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
@@ -71,7 +71,7 @@ test("blocks ordered by name-then-scope (alpha before zebra)", () => {
       { scope: "project", marketplace: "alpha", source: "acme/a", configSource: "base" },
     ],
   };
-  const msg = buildReconcilePreviewNotification([userZebra, projectAlpha]);
+  const msg = buildReconcilePendingNotification([userZebra, projectAlpha]);
   assert.equal(msg.marketplaces.length, 2);
   const first = msg.marketplaces[0];
   const second = msg.marketplaces[1];
@@ -94,7 +94,7 @@ test("same-name marketplaces ordered project-before-user", () => {
       { scope: "project", marketplace: "shared", source: "p/r", configSource: "base" },
     ],
   };
-  const msg = buildReconcilePreviewNotification([userMp, projectMp]);
+  const msg = buildReconcilePendingNotification([userMp, projectMp]);
   assert.equal(msg.marketplaces.length, 2);
   const first = msg.marketplaces[0];
   const second = msg.marketplaces[1];
@@ -112,7 +112,7 @@ test("one plan with one PluginInstall under one MarketplaceAdd -> plugin nested 
     ],
     pluginsToInstall: [{ scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" }],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
@@ -130,7 +130,7 @@ test("MarketplaceRemove projection -> block.status='will remove'", () => {
     ...emptyPlan("project"),
     marketplacesToRemove: [{ scope: "project", marketplace: "old-mp" }],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
@@ -151,7 +151,7 @@ test("sourceMismatch projection -> block.status='failed' + reasons=['source mism
       },
     ],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
@@ -162,7 +162,7 @@ test("sourceMismatch projection -> block.status='failed' + reasons=['source mism
   assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["source mismatch"]);
 });
 
-test("Y2 byte-neutral preview projection: all four PlannedSourceMismatch causes produce identical block bytes (failed + reasons=['source mismatch'])", () => {
+test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes produce identical block bytes (failed + reasons=['source mismatch'])", () => {
   // The Y2 widening of PlannedSourceMismatch from a fused 2-discriminant
   // shape (with sentinel strings in data fields) to four per-cause variants
   // MUST keep the rendered byte form identical to the pre-cut output. The
@@ -226,7 +226,7 @@ test("Y2 byte-neutral preview projection: all four PlannedSourceMismatch causes 
       ...emptyPlan("project"),
       sourceMismatches: [c.mismatch],
     };
-    const msg = buildReconcilePreviewNotification([plan]);
+    const msg = buildReconcilePendingNotification([plan]);
     assert.equal(msg.marketplaces.length, 1, `${c.name}: expected one block`);
     const block = msg.marketplaces[0];
     assert.ok(block, `${c.name}: block missing`);
@@ -252,7 +252,7 @@ test("Y2 byte-neutral preview projection: all four PlannedSourceMismatch causes 
 });
 
 test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome causes produce identical block bytes", () => {
-  // Mirror of the Y2 preview table for the apply-cascade projection. The
+  // Mirror of the Y2 pending table for the apply-cascade projection. The
   // SourceMismatchOutcome variants propagate the per-cause discriminant
   // from PlannedSourceMismatch -- the renderer derives the byte-stable
   // header + plugin children from each variant identically.
@@ -376,7 +376,7 @@ test("dangling-reference mismatch (plugin attributed) -> child (failed) {source 
       },
     ],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
@@ -399,7 +399,7 @@ test("PluginUninstall projection -> plugin row under marketplace block with (wil
     ...emptyPlan("project"),
     pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   // The marketplace block is implicitly created with no status (the
   // ensureMarketplaceBlock factory does not require a marketplace-level
   // action), and the plugin row is nested under it.
@@ -419,7 +419,7 @@ test("PluginDisable projection -> plugin row with (will disable) status", () => 
     ...emptyPlan("project"),
     pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
   };
-  const msg = buildReconcilePreviewNotification([plan]);
+  const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);

@@ -686,12 +686,19 @@ export async function maybeWritePluginConfigBack(opts: {
  */
 export function applyPartialCascadeFold(
   installed: {
-    resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[] };
+    resources: {
+      skills: string[];
+      prompts: string[];
+      agents: string[];
+      mcpServers: string[];
+      hooks: string[];
+    };
   },
   dropped: {
     readonly skills: readonly string[];
     readonly commands: readonly string[];
     readonly agents: readonly string[];
+    readonly hooks: readonly string[];
     readonly mcpServers: readonly string[];
   },
 ): void {
@@ -707,4 +714,9 @@ export function applyPartialCascadeFold(
   installed.resources.mcpServers = installed.resources.mcpServers.filter(
     (n) => !dropped.mcpServers.includes(n),
   );
+  // D-63-04: the cascade primitive (cascadeUnstagePlugin) surfaces
+  // dropped.hooks alongside the other four axes; the partial-cascade fold
+  // must subtract them so a disable / uninstall partial-cascade failure
+  // does not leave a stale hooks entry in the in-memory record.
+  installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
 }

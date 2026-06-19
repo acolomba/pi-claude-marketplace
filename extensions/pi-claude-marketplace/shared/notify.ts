@@ -78,7 +78,7 @@ export const REASONS = [
   "invalid manifest",
   "no longer installable",
   "unsupported source",
-  "hooks",
+  "unsupported hooks",
   "lsp",
   "requires pi-subagents",
   "requires pi-mcp",
@@ -101,6 +101,15 @@ export const REASONS = [
   "source missing",
   "network unreachable",
   "not added",
+  // SURF-05 / D-63-08: a hook handler declared `rewakeMessage` or
+  // `rewakeSummary` without `asyncRewake: true`. The orphan companion-field
+  // family is admitted at the schema layer (HOOK-06 / EXEC-05) but produces
+  // no runtime effect; this REASONS member surfaces the config bug as
+  // `(installed) {orphan rewake}` on the install-cascade row. Detection
+  // lives in `domain/resolver.ts::applyHooksConfig`; install row composition
+  // reads `resolved.orphanRewake` and pushes this token into `reasons[]`.
+  // One row per plugin regardless of N orphan handlers.
+  "orphan rewake",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -148,6 +157,69 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
   return reasons !== undefined && reasons.length > 0 && reasons.every((r) => BENIGN_REASONS.has(r));
 }
 
+// ---------------------------------------------------------------------------
+// SURF-02 / D-63-06 / D-63-07: hook summary type seam.
+//
+// `ClaudeHookEvent` is the public literal-union of the 8 supported Claude
+// hook events. Type definitions live here (in `shared/`) so the rendering
+// surface can consume them without violating the `shared/` -> `domain/`
+// import-direction fence (`import-x/no-restricted-paths`). The matching
+// runtime tuples `BUCKET_A_EVENTS` / `TOOL_EVENTS` in
+// `domain/components/hook-events.ts` are pinned to these literal unions
+// via a `satisfies readonly ClaudeHookEvent[]` (and respectively
+// `satisfies readonly _ToolEvent[]`) assertion in that file -- one
+// drifts, the typecheck breaks at the source-of-truth assertion site.
+//
+// `HookSummaryEntry` is the discriminated union the info-surface renderer
+// consumes. Three arms:
+//   - tool event (untagged): statically carries `matcher: string`.
+//   - non-tool event (untagged): statically cannot carry a matcher.
+//   - lenient (tagged `kind: "lenient"`): produced by the info-surface
+//     lenient reader when the resolver bailed (it did NOT record
+//     `hooksConfigPath`). Carries an arbitrary `event: string` (the
+//     resolver rejected this key, so it may be `Stop`, `Notification`,
+//     or any other token the plugin author wrote) plus a
+//     `supported: boolean` bucket-A membership flag. Rendered with a
+//     ` (unsupported)` suffix iff `supported === false`. The lenient
+//     arm exists ONLY on the info surface; the resolver-side strict
+//     parser (`domain/components/hooks.ts::parseHooksConfig`) remains
+//     strict and never produces lenient entries.
+// Discriminator is structural: the untagged arms have no `kind` field;
+// the lenient arm is the only one carrying `kind: "lenient"`. The
+// renderer branches on `"kind" in entry` first, then on `"matcher" in
+// entry` for the tool/non-tool split.
+//
+// `HookSummary` is the public wrapper interface. The payload boundary uses
+// the raw `readonly HookSummaryEntry[]` shape (see
+// `PluginInfoComponentsResolved.components.hooks?` below); `HookSummary`
+// exists as a labelled handle for consumers that want the named wrapper.
+// ---------------------------------------------------------------------------
+
+export type ClaudeHookEvent =
+  | "SessionStart"
+  | "UserPromptSubmit"
+  | "PreToolUse"
+  | "PostToolUse"
+  | "PostToolUseFailure"
+  | "PreCompact"
+  | "PostCompact"
+  | "SessionEnd";
+
+type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
+
+export type HookSummaryEntry =
+  | { readonly event: _ToolEvent; readonly matcher: string }
+  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> }
+  | {
+      readonly kind: "lenient";
+      readonly event: string;
+      readonly supported: boolean;
+    };
+
+export interface HookSummary {
+  readonly entries: readonly HookSummaryEntry[];
+}
+
 /**
  * I5 / PR #51 / T-53-02-02 / T-55-02-01: collapse any absolute-path token
  * (POSIX `/...` or Windows `<drive>:\...` / `\\?\...`) in a free-text
@@ -191,8 +263,8 @@ export function redactAbsolutePaths(text: string): string {
  * renderer concern that branches at emission time.
  *
  * DIFF-02 (D-53-02): the 6 `"will *"` entries are the pending-tense tokens
- * emitted by `/claude:plugin preview` rows. They are STRUCTURALLY EXCLUDED
- * from `shouldEmitReloadHint`'s trigger set (preview rows are
+ * emitted by `/claude:plugin pending` rows. They are STRUCTURALLY EXCLUDED
+ * from `shouldEmitReloadHint`'s trigger set (pending rows are
  * pre-transition; `/reload to pick up changes` is grammatically false for
  * them) and sit AFTER the four head-of-tuple state-change tokens that
  * drive the reload-hint, so those positions stay unchanged. The
@@ -309,6 +381,27 @@ export function notifyDiagnostic(
   ctx.ui.notify(`${header}\n\n${lines.join("\n")}`, "warning");
 }
 
+/**
+ * T-62-09 IL-2 EXEMPTION: surfaces the `rewakeSummary` UI message at
+ * `"info"` severity from the asyncRewake exit handler. This is the
+ * single sanctioned runtime notify call originating from
+ * `bridges/hooks/async-rewake/registry.ts`; the exemption exists
+ * because `rewakeSummary` is the upstream Claude-Code-mandated UI
+ * status surface declared in the plugin author's hook handler -- the
+ * hooks bridge does not have a structured `NotificationMessage` arm
+ * for it (HOOK-06).
+ *
+ * Empty strings are silently ignored so the caller can pass an
+ * `entry.rewakeSummary` field unconditionally without a guard.
+ */
+export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string): void {
+  if (summary.length === 0) {
+    return;
+  }
+
+  ctx.ui.notify(summary, "info");
+}
+
 // ---------------------------------------------------------------------------
 // Structured notification type model.
 //
@@ -341,7 +434,7 @@ export function notifyDiagnostic(
  * brace slot.
  *
  * The `"present"` entry is the list-only inventory token (SNM-15); the four
- * `"will *"` entries are the DIFF-02 preview pending-tense tokens; the
+ * `"will *"` entries are the DIFF-02 pending-tense tokens; the
  * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
  * state-change tokens at the head of the tuple (`installed`, `updated`,
  * `reinstalled`, `uninstalled`) are the structurally-distinguished
@@ -378,7 +471,7 @@ export const PLUGIN_STATUSES = [
  * type-length-locked in tests/architecture/notify-types.test.ts).
  * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
  * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
- * preview pending-tense tokens. Order is normative -- the 4 leading entries
+ * pending-tense tokens. Order is normative -- the 4 leading entries
  * retain their position to match the `renderMpHeader` switch-arm ordering.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
@@ -482,6 +575,17 @@ export interface UsageErrorMessage {
  * `dependencies` (SNM-06) so the renderer can emit the
  * `requires pi-subagents` / `requires pi-mcp` probe reasons; no `reasons`
  * because installed rows never emit a `{<reason>}` brace.
+ *
+ * SURF-05 / D-63-08: as of v1.13 the installed row CAN carry a
+ * `readonly reasons?: ContentReason[]` brace -- the `"orphan rewake"`
+ * token surfaces a hook-config bug (`rewakeMessage` / `rewakeSummary`
+ * declared on a handler without `asyncRewake: true`) on the otherwise-
+ * successful install row (`(installed) {orphan rewake}`). The reasons
+ * brace renders through the existing `composeReasons` helper so the
+ * soft-dep markers and reasons share one brace block per MSG-GR-4
+ * (`(installed) {orphan rewake, requires pi-subagents}`). Plan 63-04
+ * pushes the resolver-side `resolved.orphanRewake === true` plugins
+ * into `reasons[]`; this plan only extends the type seam + renderer.
  */
 export interface PluginInstalledMessage {
   readonly status: "installed";
@@ -489,6 +593,7 @@ export interface PluginInstalledMessage {
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -543,8 +648,8 @@ export interface PluginUninstalledMessage {
  * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
- * -- the inventory row is bare. The renderer arm reuses `ICON_UNINSTALLABLE`
- * (`⊘`) -- the same glyph the `will disable` row uses.
+ * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
+ * (`◌`) -- the same glyph the `will disable` row uses.
  */
 export interface PluginDisabledMessage {
   readonly status: "disabled";
@@ -681,7 +786,7 @@ export interface PluginManualRecoveryMessage {
 }
 
 /**
- * `(will install)` -- DIFF-02 preview row for a plugin declared in config but
+ * `(will install)` -- DIFF-02 pending-list row for a plugin declared in config but
  * not yet recorded. Carries NO `dependencies` (the soft-dep probe is
  * meaningless before installation); NO `reasons`; NO `version` (the recorded
  * version does not exist yet for an install).
@@ -693,7 +798,7 @@ export interface PluginWillInstallMessage {
 }
 
 /**
- * `(will uninstall)` -- DIFF-02 preview row for a plugin recorded in state
+ * `(will uninstall)` -- DIFF-02 pending-list row for a plugin recorded in state
  * but no longer declared. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
@@ -704,7 +809,7 @@ export interface PluginWillUninstallMessage {
 }
 
 /**
- * `(will enable)` -- DIFF-02 preview row for a recorded plugin currently
+ * `(will enable)` -- DIFF-02 pending-list row for a recorded plugin currently
  * marked disabled but newly declared `enabled: true`. The bucket is
  * populated only when the recorded-but-disabled marker (all four resource
  * arrays empty + `installable: true` -- see
@@ -718,7 +823,7 @@ export interface PluginWillEnableMessage {
 }
 
 /**
- * `(will disable)` -- DIFF-02 preview row for a recorded plugin newly
+ * `(will disable)` -- DIFF-02 pending-list row for a recorded plugin newly
  * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
@@ -829,16 +934,16 @@ interface MpSkipped extends MpCommon {
 }
 
 /**
- * `(will add)` marketplace block (DIFF-02). Preview row for a marketplace
+ * `(will add)` marketplace block (DIFF-02). Pending-list row for a marketplace
  * declared in config but not yet recorded. Never carries `reasons` /
- * `details` -- preview rows are pre-transition.
+ * `details` -- pending-list rows are pre-transition.
  */
 interface MpWillAdd extends MpCommon {
   readonly status: "will add";
 }
 
 /**
- * `(will remove)` marketplace block (DIFF-02). Preview row for a marketplace
+ * `(will remove)` marketplace block (DIFF-02). Pending-list row for a marketplace
  * recorded in state but no longer declared. Never carries `reasons` /
  * `details`.
  */
@@ -1022,6 +1127,7 @@ interface PluginInfoComponentsResolved {
   readonly components: {
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
+    readonly hooks?: readonly HookSummaryEntry[];
     readonly mcp?: readonly string[];
     readonly skills?: readonly string[];
   };
@@ -1075,23 +1181,23 @@ export interface PluginInfoCascadeMessage {
 
 /**
  * DIFF-01 SC #2 / D-53-01: the dedicated empty-steady-state
- * variant emitted by `/claude:plugin preview` when the next reload's
+ * variant emitted by `/claude:plugin pending` when the next reload's
  * reconcile would apply zero actions in every scope (no marketplaces /
  * plugins / source-mismatches / invalid-config rows). Routes through the
  * standalone-dispatched arm of `notify()` with severity `info` (no second
  * arg) and emits the catalog-locked free-form advisory body line:
  *
- *   Preview: next reload will apply 0 actions.
+ *   Pending: next reload will apply 0 actions.
  *
  * Carries NO fields -- the body is a hard-coded literal in
- * `renderReconcilePreviewEmpty` so the byte form cannot drift from the
+ * `renderReconcilePendingEmpty` so the byte form cannot drift from the
  * catalog state. `shouldEmitReloadHint` is structurally false on this arm
- * (preview rows are pre-transition; `/reload to pick up changes` is
+ * (pending rows are pre-transition; `/reload to pick up changes` is
  * grammatically false). `buildSummaryLine` returns the empty string
  * (info-severity -- no summary semantics apply).
  */
-export interface ReconcilePreviewEmptyMessage {
-  readonly kind: "reconcile-preview-empty";
+export interface ReconcilePendingEmptyMessage {
+  readonly kind: "reconcile-pending-empty";
 }
 
 /**
@@ -1158,7 +1264,7 @@ export type NotificationMessage =
   | MarketplaceInfoCascadeMessage
   | PluginInfoCascadeMessage
   | MarketplaceNotAddedMessage
-  | ReconcilePreviewEmptyMessage
+  | ReconcilePendingEmptyMessage
   | ReconcileAppliedCascadeMessage;
 
 /**
@@ -1180,7 +1286,7 @@ type StandaloneKind =
   | "marketplace-info-cascade"
   | "plugin-info-cascade"
   | "marketplace-not-added"
-  | "reconcile-preview-empty"
+  | "reconcile-pending-empty"
   | "reconcile-applied-cascade";
 
 /**
@@ -1199,7 +1305,7 @@ function isInfoKind(
     m.kind === "marketplace-info-cascade" ||
     m.kind === "plugin-info-cascade" ||
     m.kind === "marketplace-not-added" ||
-    m.kind === "reconcile-preview-empty" ||
+    m.kind === "reconcile-pending-empty" ||
     m.kind === "reconcile-applied-cascade"
   );
 }
@@ -1217,6 +1323,17 @@ function isInfoKind(
 const ICON_INSTALLED = "●";
 const ICON_AVAILABLE = "○";
 const ICON_UNINSTALLABLE = "⊘";
+/**
+ * D-54-01 / ENBL-04: dedicated glyph for the deliberate, user-requested
+ * disabled-class rows -- `(disabled)` (realized inventory) and
+ * `(will disable)` (pending-tense). Distinct from `ICON_UNINSTALLABLE`
+ * (`⊘`), which marks the error / blocked-state rows
+ * (`(unavailable)`, `(failed)`, `(skipped) {already disabled}`,
+ * `(manual recovery)`). Mirrors the realized + pending-tense precedent
+ * already in the grammar (`●` for `(installed)` / `(will add)`,
+ * `○` for `(available)` / `(will remove)`).
+ */
+const ICON_DISABLED = "◌";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1320,7 +1437,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           `(skipped)` token).
  *   "will add"           -> `${ICON_INSTALLED} ${name} [${scope}] (will add)`
  *   "will remove"        -> `${ICON_AVAILABLE} ${name} [${scope}] (will remove)`
- *                           (DIFF-02 preview pending-tense arms.)
+ *                           (DIFF-02 pending-tense arms.)
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -1330,7 +1447,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
  *       noise and meaningless for path-source marketplaces).
  *
- * The only ICON_AVAILABLE (○) marketplace arm is the preview
+ * The only ICON_AVAILABLE (○) marketplace arm is the pending
  * `"will remove"` (the marketplace-level analog of an uninstall); every
  * other arm is either ok (●) or failure-class (⊘). The other open-circle
  * uses are the available / uninstalled / will-uninstall PLUGIN rows that
@@ -1405,12 +1522,12 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
     }
 
     case "will add":
-      // DIFF-02 / D-53-02: pending-tense preview row for a marketplace
+      // DIFF-02 / D-53-02: pending-tense row for a marketplace
       // declared in config but not yet recorded. Reuses ICON_INSTALLED (no
       // new icon constant).
       return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
     case "will remove":
-      // DIFF-02: pending-tense preview row for a marketplace recorded in
+      // DIFF-02: pending-tense row for a marketplace recorded in
       // state but no longer declared. Reuses ICON_AVAILABLE (`○`) -- the
       // same glyph the (uninstalled) plugin row carries, because a
       // `will remove` is the marketplace-level analog of an uninstall.
@@ -1684,10 +1801,31 @@ function renderPluginRow(
   mpScope: Scope,
 ): string {
   switch (p.status) {
+    // `installed` (cascade transition) -- SURF-05 / D-63-08 threads
+    // the optional `reasons` brace through composeReasons; soft-dep
+    // markers append into the SAME brace block per MSG-GR-4 (a plugin
+    // with orphan-rewake AND a missing companion extension renders as
+    // `(installed) {orphan rewake, requires pi-subagents}`).
+    case "installed":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        renderScopeBracket(p.scope, mpScope),
+        renderVersion(p.version),
+        "(installed)",
+        composeReasons(
+          p.reasons,
+          p.dependencies.includes("agents"),
+          p.dependencies.includes("mcp"),
+          probe,
+        ),
+      ]);
     // `present` (UAT G-21-01) is a list-only inventory row that renders
     // byte-identically to `installed`; it stays a distinct status so
-    // shouldEmitReloadHint suppresses the /reload trailer for inventory rows.
-    case "installed":
+    // shouldEmitReloadHint suppresses the /reload trailer for inventory
+    // rows. SURF-05 / D-63-08: `present` is list-only and carries NO
+    // `reasons` field by design -- the orphan-rewake warning is an
+    // install-cascade surface, not a steady-state inventory surface.
     case "present":
       return joinTokens([
         ICON_INSTALLED,
@@ -1769,9 +1907,9 @@ function renderPluginRow(
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
     case "will install":
-      // DIFF-02 / D-53-02: pending-tense preview row for a plugin declared in
+      // DIFF-02 / D-53-02: pending-tense row for a plugin declared in
       // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
-      // slot (the install hasn't happened yet); no reasons (preview rows are
+      // slot (the install hasn't happened yet); no reasons (pending rows are
       // pre-transition).
       return joinTokens([
         ICON_INSTALLED,
@@ -1780,7 +1918,7 @@ function renderPluginRow(
         "(will install)",
       ]);
     case "will uninstall":
-      // DIFF-02: pending-tense preview row for a plugin recorded in state but
+      // DIFF-02: pending-tense row for a plugin recorded in state but
       // no longer declared. Reuses ICON_AVAILABLE (open circle `○`) -- same
       // glyph as the realized (uninstalled) row, because a `will uninstall`
       // is its pre-transition analog.
@@ -1791,7 +1929,7 @@ function renderPluginRow(
         "(will uninstall)",
       ]);
     case "will enable":
-      // DIFF-02: pending-tense preview row for a recorded plugin newly
+      // DIFF-02: pending-tense row for a recorded plugin newly
       // declared `enabled: true` after being locally disabled. Reuses
       // ICON_INSTALLED. The bucket is populated only when the recorded-
       // but-disabled marker (empty resources + installable true) is paired
@@ -1804,24 +1942,27 @@ function renderPluginRow(
         "(will enable)",
       ]);
     case "will disable":
-      // DIFF-02: pending-tense preview row for a recorded plugin newly
-      // declared `enabled: false`. Reuses ICON_UNINSTALLABLE (`⊘`) -- the
-      // same glyph the (skipped) / (failed) rows carry, mirroring the
-      // prohibited-symbol semantics of a deliberate disable.
+      // DIFF-02: pending-tense row for a recorded plugin newly declared
+      // `enabled: false`. Uses ICON_DISABLED (`◌`) -- the same glyph the
+      // realized `(disabled)` inventory row uses; this mirrors the precedent
+      // that realized + pending-tense rows for the same row class share a
+      // glyph (`●` for `(installed)` / `(will add)`, `○` for `(available)` /
+      // `(will remove)`).
       return joinTokens([
-        ICON_UNINSTALLABLE,
+        ICON_DISABLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
         "(will disable)",
       ]);
     case "disabled":
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
-      // plugin. Subject-first grammar; reuses ICON_UNINSTALLABLE (`⊘`) --
-      // the same glyph the `will disable` row carries. NO reasons -- the
-      // variant carries none; composeReasons receives undefined + both
-      // soft-dep flags false (the inventory row never emits soft-dep markers).
+      // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
+      // (`◌`) glyph, the same glyph the `(will disable)` pending-tense row
+      // carries. NO reasons -- the variant carries none; composeReasons
+      // receives undefined + both soft-dep flags false (the inventory row
+      // never emits soft-dep markers).
       return joinTokens([
-        ICON_UNINSTALLABLE,
+        ICON_DISABLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
@@ -2019,7 +2160,7 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
-      case "reconcile-preview-empty":
+      case "reconcile-pending-empty":
         // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
       default:
@@ -2184,7 +2325,7 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
-      case "reconcile-preview-empty":
+      case "reconcile-pending-empty":
         // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
       default:
@@ -2257,8 +2398,8 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "marketplace-not-added":
-      case "reconcile-preview-empty":
-        // DIFF-01 SC #2: preview rows are pre-transition; the trailer would
+      case "reconcile-pending-empty":
+        // DIFF-01 SC #2: pending-list rows are pre-transition; the trailer would
         // be grammatically false (`/reload` cannot pick up zero changes).
         return false;
       case "reconcile-applied-cascade":
@@ -2552,26 +2693,63 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
 }
 
 // Derive the tuple's element type from the interface so the two
-// declarations cannot drift. The tuple is sized exactly (4 entries):
-// adding a 5th key to `PluginInfoComponentsResolved.components` without
+// declarations cannot drift. The tuple is sized exactly (5 entries):
+// adding a 6th key to `PluginInfoComponentsResolved.components` without
 // extending this tuple breaks the typecheck here -- TS rejects the
 // literal because `ComponentKind` would no longer cover every keyof
 // the interface. Without the explicit tuple length, the renderer
 // would silently omit the new kind from output.
 type ComponentKind = keyof PluginInfoComponentsResolved["components"];
-const COMPONENT_KINDS: readonly [ComponentKind, ComponentKind, ComponentKind, ComponentKind] = [
-  "agents",
-  "commands",
-  "mcp",
-  "skills",
-];
+const COMPONENT_KINDS: readonly [
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+  ComponentKind,
+] = ["agents", "commands", "hooks", "mcp", "skills"];
+
+/**
+ * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
+ * carries one or more entries. Emits a 4-space-indent header followed by
+ * one 6-space-indent line per entry. Three arm shapes:
+ *   - lenient arm (`kind === "lenient"`): bare `<event>`, with a
+ *     ` (unsupported)` suffix iff `supported === false`. Produced only
+ *     by the info-surface lenient reader on rows where the resolver did
+ *     NOT record `hooksConfigPath`.
+ *   - tool event (untagged, has `matcher`): `<event>(<matcher>)`.
+ *   - non-tool event (untagged, no `matcher`): bare `<event>`.
+ * Reads `entry.event` / `entry.matcher` directly -- no re-derivation
+ * from a closed-set tuple, no runtime guard (the union is exhaustive,
+ * every arm renders).
+ */
+function appendHooksBlock(lines: string[], entries: readonly HookSummaryEntry[] | undefined): void {
+  if (entries === undefined || entries.length === 0) {
+    return;
+  }
+
+  lines.push("    hooks:");
+  for (const entry of entries) {
+    if ("kind" in entry) {
+      lines.push(`      ${entry.event}${entry.supported ? "" : " (unsupported)"}`);
+    } else if ("matcher" in entry) {
+      lines.push(`      ${entry.event}(${entry.matcher})`);
+    } else {
+      lines.push(`      ${entry.event}`);
+    }
+  }
+}
 
 /**
  * Append the per-kind component lines + optional dependencies line
  * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
- * (`agents`, `commands`, `mcp`, `skills`); within each kind, names
- * render in the caller-supplied order. The orchestrator pre-sorts;
+ * (`agents`, `commands`, `hooks`, `mcp`, `skills`); within each kind,
+ * names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
+ *
+ * SURF-02 / D-63-04: the `hooks` kind is the only multi-line member;
+ * the per-arm rendering is owned by `appendHooksBlock`. Every other
+ * kind keeps the single-line `<kind>: <name>, <name>, ...` comma-join
+ * shape.
  */
 function appendResolvedComponentLines(
   lines: string[],
@@ -2579,6 +2757,11 @@ function appendResolvedComponentLines(
   dependencies: readonly string[] | undefined,
 ): void {
   for (const kind of COMPONENT_KINDS) {
+    if (kind === "hooks") {
+      appendHooksBlock(lines, components.hooks);
+      continue;
+    }
+
     const names = components[kind];
     if (names !== undefined && names.length > 0) {
       lines.push(`    ${kind}: ${names.join(", ")}`);
@@ -2774,11 +2957,11 @@ function dispatchInfoMessage(
     case "marketplace-not-added":
       body = renderMarketplaceNotAdded(message, probe);
       break;
-    case "reconcile-preview-empty":
+    case "reconcile-pending-empty":
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
-      body = "Preview: next reload will apply 0 actions.";
+      body = "Pending: next reload will apply 0 actions.";
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders

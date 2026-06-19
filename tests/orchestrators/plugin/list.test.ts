@@ -112,9 +112,12 @@ interface SeedMarketplaceOpts {
    * always has at least one populated resources array (the resolver's
    * `requireInstallable` gate rules out zero-component installables), and
    * the empty-resources + installable:true intersection IS the load-bearing
-   * "currently disabled" marker (D-54-01 / ENBL-04).
+   * "currently disabled" marker (D-54-01 / ENBL-04). `hooksOnly: true`
+   * (D-63-04) seeds a hooks-only installed record (resources.hooks
+   * populated, every other axis empty) -- the exact shape that triggered
+   * the hooks-only-list-disabled regression.
    */
-  installed?: Record<string, { version: string; disabled?: boolean }>;
+  installed?: Record<string, { version: string; disabled?: boolean; hooksOnly?: boolean }>;
   /** When provided, sets `autoupdate` on the marketplace record. */
   autoupdate?: boolean;
   /** When provided, plugin source dirs at these names get created so resolver probes find them. */
@@ -162,16 +165,31 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
+    // ENBL-04: empty resources + installable:true IS the disabled marker;
+    // an enabled installed record always has >= 1 populated array.
+    // D-63-04: hooksOnly seeds the resources.hooks axis populated while
+    // every other axis is empty (the production shape of a hooks-only
+    // installed plugin like learning-output-style).
+    let resources: {
+      skills: string[];
+      prompts: string[];
+      agents: string[];
+      mcpServers: string[];
+      hooks: string[];
+    };
+    if (info.disabled === true) {
+      resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    } else if (info.hooksOnly === true) {
+      resources = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [name] };
+    } else {
+      resources = { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] };
+    }
+
     plugins[name] = {
       version: info.version,
       resolvedSource: "./placeholder",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      // ENBL-04: empty resources + installable:true IS the disabled marker;
-      // an enabled installed record always has >= 1 populated array.
-      resources:
-        info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [] },
+      resources,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -408,9 +426,10 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    // Catalog `disabled-inventory` row form: ⊘ glyph, version pin rendered,
-    // `(disabled)` token. Severity info (inventory row, not a failure).
-    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    // Catalog `disabled-inventory` row form: ◌ glyph (ICON_DISABLED), version
+    // pin rendered, `(disabled)` token. Severity info (inventory row, not a
+    // failure).
+    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(installed)"), false, `must not render (installed): ${out}`);
     assert.equal(out.includes("(unavailable)"), false, `must not render (unavailable): ${out}`);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
@@ -436,7 +455,7 @@ test("ENBL-04: disabled record with drifted manifest version does NOT render `(u
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(upgradable)"), false, out);
   });
 });
@@ -463,8 +482,41 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ alpha v1\.0\.0 \(disabled\)/, out);
+    assert.match(out, /◌ alpha v1\.0\.0 \(disabled\)/, out);
     assert.equal(out.includes("○ beta"), false, out);
+  });
+});
+
+// D-63-04: hooks-only installed plugin must render `(installed)`, NOT
+// `(disabled)`. Regression pin for the hooks-only-list-disabled bug --
+// the phase-63 hook bridge added resources.hooks to the state schema
+// but did not extend the 4-axis empty-resources predicate, so a
+// hooks-only installed plugin satisfied isRecordedButDisabled and the
+// list renderer routed the row to the (disabled) arm.
+test("D-63-04: hooks-only installed plugin renders `(installed)` -- NOT `(disabled)` -- on /claude:plugin list", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "hookplug", source: "./hookplug", version: "1.0.0" }],
+      },
+      // hooksOnly: true seeds resources.hooks = ["hookplug"], every
+      // other axis empty, installable: true -- the production shape of a
+      // hooks-only installed plugin (e.g. learning-output-style).
+      installed: { hookplug: { version: "1.0.0", hooksOnly: true } },
+      installablePluginDirs: ["hookplug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /● hookplug v1\.0\.0 \(installed\)/, out);
+    assert.equal(out.includes("(disabled)"), false, `must not render (disabled): ${out}`);
   });
 });
 
@@ -632,7 +684,13 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
               // Populated resources: an ENABLED installed record (empty
               // resources + installable:true would read as disabled per
               // ENBL-04 and render `(disabled)` instead of `(installed)`).
-              resources: { skills: ["alpha-skill"], prompts: [], agents: [], mcpServers: [] },
+              resources: {
+                skills: ["alpha-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },
@@ -1067,12 +1125,13 @@ test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumula
 // Uncovered-path gap tests
 // ──────────────────────────────────────────────────────────────────────────
 
-// Gap 1: hooks unsupported kind via declared field
-// resolveStrict reaches step 9 (addUnsupportedKindNotes) and finds
-// "hooks" in declaresUnsupportedKind; pushes note "contains hooks"; the
-// manifestEntryStatus returns {status:"uninstallable", notes:["contains
-// hooks"]} via the notes.length > 0 branch.
-test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' note", async () => {
+// HOOK-01: hooks moved from UNSUPPORTED_COMPONENT_KINDS to the supported
+// set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
+// on disk is no longer rejected -- the resolver owns convention-file
+// discovery only; entry/manifest-level hooks-field semantics are deferred
+// to a future dispatch milestone. The plugin now lands as `available`
+// (not installed, no admission blocker).
+test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1082,21 +1141,18 @@ test("gap: plugin declaring hooks field buckets as ⊘ with 'contains hooks' not
       mpName: "mp1",
       manifest: {
         name: "mp1",
-        plugins: [
-          // hooks declared at entry level -- declaresUnsupportedKind fires.
-          { name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] },
-        ],
+        plugins: [{ name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] }],
       },
-      // Source dir must exist so the resolver passes the "dir does not exist"
-      // preflight check and reaches the unsupported-kind step.
       installablePluginDirs: ["hooks-plugin"],
     });
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ hooks-plugin/);
-    assert.match(out, /{hooks}/);
+    // Plugin admits cleanly (no hooks.json on disk -> no parse-fail flip).
+    assert.match(out, /○ hooks-plugin/);
+    assert.doesNotMatch(out, /\{hooks\}/);
+    assert.doesNotMatch(out, /contains hooks/);
   });
 });
 
@@ -1125,11 +1181,10 @@ test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspSe
   });
 });
 
-// Gap 3: hooks unsupported kind via file convention (UNSUPPORTED_COMPONENT_CONVENTIONS)
-// Plugin dir exists but contains hooks/hooks.json -- detected via
-// hasUnsupportedConvention; resolver returns installable:false with note
-// "contains hooks".
-test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convention", async () => {
+// HOOK-01 + D-57-04: hooks/hooks.json convention file now drives admission.
+// A PARSEABLE file admits the plugin (no longer unavailable); a MALFORMED
+// file flips to unavailable with the parse-failure note.
+test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
@@ -1146,8 +1201,6 @@ test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convent
       installablePluginDirs: ["hooks-conv"],
     });
 
-    // Write hooks/hooks.json inside the plugin source dir AFTER seeding so
-    // resolver's hasUnsupportedConvention probe finds it.
     const pluginDir = path.join(mpRoot, "hooks-conv");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
@@ -1155,8 +1208,41 @@ test("gap: plugin dir with hooks/hooks.json file buckets as ⊘ via file convent
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
+    assert.match(out, /○ hooks-conv/);
+    assert.doesNotMatch(out, /\{hooks\}/);
+  });
+});
+
+// D-57-04 / HOOK-04: malformed hooks/hooks.json flips to ⊘ with
+// {unsupported hooks} reason (the parse-failure detail flows through
+// narrowResolverNotes's prefix-anchored detection on the resolver's
+// `"malformed hooks.json: "` wrapper).
+test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {unsupported hooks} reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "mp1");
+
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "hooks-conv", source: "./hooks-conv" }],
+      },
+      installablePluginDirs: ["hooks-conv"],
+    });
+
+    const pluginDir = path.join(mpRoot, "hooks-conv");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
-    assert.match(out, /{hooks}/);
+    assert.match(out, /\{unsupported hooks\}/);
   });
 });
 

@@ -7,14 +7,27 @@
 // (it strips comments before searching). IL-2: exactly one `notify()`
 // call per invocation.
 //
-// Source-kind gate: only `"path"` sources are locally resolvable. Every
-// other source kind (`github` / `url` / `git-subdir` / `npm` /
-// `unknown`) emits `componentsResolved: false` -- fetching a remote
-// source to resolve components would violate NFR-5.
+// INFO-05 source-kind gate: only `"path"` sources are locally
+// resolvable. Every other source kind (`github` / `url` / `git-subdir`
+// / `npm` / `unknown`) emits `componentsResolved: false` -- fetching a
+// remote source to resolve components would violate NFR-5. The gate
+// excludes non-path SOURCES, not the not-installable verdict: a path-
+// source plugin whose resolver returned `installable: false` (e.g.
+// unsupported hooks, persistence-vs-disk disagreement) still enumerates
+// components from disk via `composeResolvedComponents` on the
+// not-installable variant -- both variants carry symmetric
+// `componentPaths` / `mcpServers` / `hooksConfigPath`.
 
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
+import {
+  BUCKET_A_EVENTS,
+  TOOL_EVENTS,
+  type ToolEvent,
+} from "../../domain/components/hook-events.ts";
+import { parseHooksConfig, type HooksConfig } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
@@ -23,18 +36,31 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ClaudeHookEvent,
   ContentReason,
+  HookSummaryEntry,
   MarketplaceNotificationMessage,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+
+// SURF-01 / Pitfall 7: TOOL_EVENTS is a string[] tuple; rewrap as a Set
+// for O(1) membership tests in the HookSummaryEntry projector. Module-
+// scope so the Set is allocated once across all info.ts call sites.
+const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
+
+// INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
+// membership tests in `readLenientHookSummary`'s per-event supported flag.
+// Module-scope so the Set is allocated once across all info.ts call sites.
+const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS);
 
 export interface GetPluginInfoOptions {
   readonly ctx: ExtensionContext;
@@ -75,6 +101,39 @@ function isLocallyResolvable(src: ParsedSource): boolean {
       assertNever(src);
       return false;
   }
+}
+
+/**
+ * Re-derive `pluginRoot` for a path-source plugin so the info surface
+ * can call `composeResolvedComponents` against the resolver's
+ * NOT-installable variant (NFR-7 keeps `pluginRoot` off that variant).
+ * Mirrors `preflightStages`'s derivation -- same `path.resolve` against
+ * `marketplaceRoot` + the raw user input -- AND re-asserts NFR-10
+ * containment via `assertPathInside`. The resolver's `sourceEscapeReason`
+ * accepted these paths at install time, but the marketplace clone can
+ * mutate between install and info-render (manifest edit, symlink swap),
+ * so a fresh check here prevents `composeResolvedComponents` from
+ * walking a directory outside the marketplace root. A containment
+ * failure throws `PathContainmentError`; the row builder's outer catch
+ * does NOT see it (Finding #6 narrows that try to wrap
+ * `composeResolvedComponents` only) -- it propagates to the caller and
+ * surfaces via `narrowProbeError`'s generic-Error arm (`unreadable`).
+ * The programmer-bug `throw new Error(...)` on the non-path source kind
+ * likewise propagates unmasked.
+ */
+async function derivePluginRootForInfo(
+  marketplaceRoot: string,
+  source: ParsedSource,
+): Promise<string> {
+  // Caller must gate on `source.kind === "path"`; narrowing here keeps
+  // the helper's input type aligned with the discriminated union.
+  if (source.kind !== "path") {
+    throw new Error(`derivePluginRootForInfo requires a path source (got ${source.kind})`);
+  }
+
+  const pluginRoot = path.resolve(marketplaceRoot, source.raw);
+  await assertPathInside(marketplaceRoot, pluginRoot, `plugin source for "${source.raw}"`);
+  return pluginRoot;
 }
 
 /**
@@ -179,12 +238,209 @@ function normalizeDependencies(raw: unknown): readonly string[] | undefined {
 }
 
 /**
+ * SURF-01 / D-63-04 / D-63-06: project a parsed `HooksConfig` to the
+ * `HookSummaryEntry[]` shape the renderer consumes. One entry per
+ * (event, group) tuple in declaration order from the parsed file --
+ * `Object.entries` and `Array` iteration both preserve insertion order
+ * for plain objects (the JSON.parse output `parseHooksConfig` returns),
+ * so the rendered order matches the on-disk authoring order.
+ *
+ * Tool events (`PreToolUse` / `PostToolUse` / `PostToolUseFailure`)
+ * carry the group's `matcher` (defaulting to the empty string when the
+ * group's `matcher` is absent -- match-all per MATCH-01); non-tool
+ * events do not carry one. Granularity is per-GROUP, not per-handler:
+ * the renderer surfaces `event(matcher)` once per group regardless of
+ * how many handlers the group declares.
+ *
+ * Pure and total: never throws. The supportability gate in
+ * `checkMatcherSupportability` has already accepted every event key as
+ * a `BucketAEvent`, so the tool-event discriminator is a closed-set
+ * membership check against `TOOL_EVENTS`.
+ */
+function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEntry[] {
+  const entries: HookSummaryEntry[] = [];
+  for (const [eventName, groups] of Object.entries(parsed)) {
+    for (const group of groups) {
+      if (TOOL_EVENT_SET.has(eventName)) {
+        entries.push({
+          event: eventName as ToolEvent,
+          matcher: group.matcher ?? "",
+        });
+      } else {
+        // Cast: the assertion is upheld by the supportability gate's
+        // bucket-A admission check (every event key surviving
+        // `parseHooksConfig.ok = true` is a `ClaudeHookEvent`, and the
+        // tool-event guard above excludes the `ToolEvent` subset).
+        entries.push({
+          event: eventName as Exclude<ClaudeHookEvent, ToolEvent>,
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Read & re-parse `<pluginRoot>/<resolved.hooksConfigPath>` from disk
+ * and project to `HookSummaryEntry[]`. The resolver discards the parsed
+ * value (it only records `hooksConfigPath`), so the info renderer must
+ * re-open the file at info-render time. Returns `undefined` when the
+ * file has no `hooksConfigPath` (the plugin declares no hooks), or
+ * when the re-parse fails (the resolver would also have flipped
+ * `installable: false`, so this branch is defensive only -- the file
+ * was parseable at resolve time).
+ *
+ * I/O failures (EACCES / ENOENT after resolve) PROPAGATE so the row
+ * builder's outer catch can classify via the existing `narrowProbeError`
+ * ladder unchanged. The error never reaches the user as a hooks-specific
+ * REASON -- it surfaces as the same `{permission denied}` / `{unreadable}`
+ * the other component-kind probes emit.
+ */
+async function readHookSummaryEntries(
+  pluginRoot: string,
+  hooksConfigPath: string,
+): Promise<readonly HookSummaryEntry[] | undefined> {
+  const raw = await readFile(path.join(pluginRoot, hooksConfigPath), "utf8");
+  // MATCH-03 / A1 projectRoot fallback: mirrors the resolver's
+  // `readStandaloneHooks` call site. The info surface only consumes the
+  // installable-verdict + parsed value; the `if`-field side-Map is
+  // discarded via `skipIfMap: true`, and the no-op `compileIf` is never
+  // invoked.
+  const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
+  const noopCompileIf = (): null => null;
+  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+  if (!parsed.ok) {
+    return undefined;
+  }
+
+  return projectHookSummaryEntries(parsed.value);
+}
+
+/**
+ * INFO-05 / HOOK-01: best-effort hooks reader for the info surface ONLY.
+ * Runs whenever `resolved.hooksConfigPath === undefined`, which covers
+ * two distinct cases: (a) the resolver bailed on supportability (the
+ * strict parser flipped `installable: false` because declared events
+ * fall outside bucket A, the matcher-supportability gate refused, etc.)
+ * and (b) the plugin declares no hooks file at all -- `hooks/hooks.json`
+ * does not exist on disk. Case (b) is handled harmlessly by the ENOENT
+ * branch below, which returns `undefined` and the row simply omits the
+ * `hooks:` block. The strict resolver-side parser
+ * (`domain/components/hooks.ts::parseHooksConfig`, HOOK-01) is unchanged
+ * -- install correctness is non-negotiable; this helper is a READ-ONLY
+ * info-surface augmentation that never feeds the install path.
+ *
+ * Returns one lenient entry per declared event whose `groups` array is
+ * non-empty (entries with an empty / whitespace-only event key are
+ * skipped so a malformed `{"hooks": {"": [...]}}` payload cannot render
+ * as a blank row), with `supported` set to the bucket-A membership of
+ * the event key.
+ *
+ * Error contract -- parity with `readEntriesOrEmpty` and with the
+ * strict sibling `readHookSummaryEntries`: ENOENT / ENOTDIR / SyntaxError
+ * / wrong-shape collapse to `undefined`; EACCES / EPERM / EIO and every
+ * other programmer-bug throw PROPAGATE to the row builder's outer catch
+ * for classification via `narrowProbeError`. NFR-5: reads
+ * `<pluginRoot>/hooks/hooks.json` only, no network.
+ */
+async function readLenientHookSummary(
+  pluginRoot: string,
+): Promise<readonly HookSummaryEntry[] | undefined> {
+  const p = path.join(pluginRoot, "hooks", "hooks.json");
+  const raw = await readLenientHooksFile(p);
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  const data = parseLenientHooksJson(raw);
+  if (data === undefined) {
+    return undefined;
+  }
+
+  if (typeof data !== "object" || data === null || !("hooks" in data)) {
+    return undefined;
+  }
+
+  const hooks = data.hooks;
+  if (typeof hooks !== "object" || hooks === null || Array.isArray(hooks)) {
+    return undefined;
+  }
+
+  const entries: HookSummaryEntry[] = [];
+  for (const [eventName, groups] of Object.entries(hooks)) {
+    if (eventName.trim().length === 0) {
+      continue;
+    }
+
+    const groupCount = Array.isArray(groups) ? groups.length : 0;
+    if (groupCount === 0) {
+      continue;
+    }
+
+    entries.push({
+      kind: "lenient",
+      event: eventName,
+      supported: BUCKET_A_EVENTS_SET.has(eventName),
+    });
+  }
+
+  return entries.length === 0 ? undefined : entries;
+}
+
+/**
+ * Lenient hooks file read. ENOENT / ENOTDIR collapse to `undefined`
+ * (no hooks file, or a parent path component is not a directory --
+ * legitimate "no hooks declared" state). Every other failure
+ * (EACCES / EPERM / EIO / programmer-bug) PROPAGATES.
+ */
+async function readLenientHooksFile(absPath: string): Promise<string | undefined> {
+  try {
+    return await readFile(absPath, "utf8");
+  } catch (err) {
+    if (err instanceof Error) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        return undefined;
+      }
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Lenient hooks file parse. `SyntaxError` collapses to `undefined`
+ * (unparseable JSON -- the row-level `{unsupported hooks}` brace already
+ * carries the user-visible signal). Every other throw (programmer-bug
+ * `TypeError`, etc.) PROPAGATES.
+ */
+function parseLenientHooksJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return undefined;
+    }
+
+    throw err;
+  }
+}
+
+/**
  * Compose the resolved-components field of a `PluginInfoRow`. Walks
  * `resolved.componentPaths` to discover per-kind component names on
  * disk; for mcpServers, the `resolved.mcpServers` keys ARE the names.
- * Empty per-kind arrays return `undefined` so the renderer omits the
- * line (the renderer assumes pre-sorted input and does not sort
- * defensively).
+ * For hooks, re-parses `<pluginRoot>/<resolved.hooksConfigPath>` and
+ * projects the result to `HookSummaryEntry[]` (the resolver discards
+ * the parsed value -- info.ts must re-open the file). Empty per-kind
+ * arrays return `undefined` so the renderer omits the line (the
+ * renderer assumes pre-sorted input and does not sort defensively).
+ *
+ * SURF-01 / Pitfall 7: object-literal field placement is documentation
+ * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
+ * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
+ * placement matches the alphabetical order for readability.
  */
 async function composeResolvedComponents(
   pluginRoot: string,
@@ -195,10 +451,12 @@ async function composeResolvedComponents(
       readonly agents: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
+    readonly hooksConfigPath?: string;
   },
 ): Promise<{
   readonly agents?: readonly string[];
   readonly commands?: readonly string[];
+  readonly hooks?: readonly HookSummaryEntry[];
   readonly mcp?: readonly string[];
   readonly skills?: readonly string[];
 }> {
@@ -213,9 +471,27 @@ async function composeResolvedComponents(
     a.localeCompare(b, undefined, { sensitivity: "base" }),
   );
 
+  // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
+  // message-construction time (no string re-derivation at render time).
+  // I/O failures propagate to the row-builder catch where
+  // `narrowProbeError` classifies via the existing ladder (Open Question
+  // 3 in 63-RESEARCH.md: no new REASON, no new code path).
+  //
+  // INFO-05: when the resolver did NOT record `hooksConfigPath` (the
+  // strict parser bailed; row is a path-resolvable
+  // `(unavailable) {unsupported hooks}` carrier), fall back to the
+  // best-effort `readLenientHookSummary` so the info surface still lists
+  // every top-level event the plugin declared, tagging non-bucket-A
+  // events as `(unsupported)`.
+  const hooks =
+    resolved.hooksConfigPath === undefined
+      ? await readLenientHookSummary(pluginRoot)
+      : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
+
   return {
     ...(agents.length > 0 && { agents }),
     ...(commands.length > 0 && { commands }),
+    ...(hooks !== undefined && hooks.length > 0 && { hooks }),
     ...(mcp.length > 0 && { mcp }),
     ...(skills.length > 0 && { skills }),
   };
@@ -297,9 +573,12 @@ async function buildBlock(
   const description = entry.description;
   const dependencies = normalizeDependencies((entry as Record<string, unknown>).dependencies);
 
-  // INFO-05 source-kind gate.
+  // INFO-05 source-kind gate. `parsedSource` is threaded into both row
+  // builders so the not-installable arms can enumerate components from
+  // disk against the resolver's not-installable variant when the source
+  // is path-resolvable; non-path sources still emit
+  // `componentsResolved: false`.
   const parsedSource = parsePluginSource((entry as Record<string, unknown>).source);
-  const resolvable = isLocallyResolvable(parsedSource);
 
   // (c) Installed bucket.
   if (installed !== undefined) {
@@ -310,15 +589,12 @@ async function buildBlock(
       dependencies,
       entry,
       mpRecord,
-      resolvable,
+      parsedSource,
     );
     return wrapBlock(marketplace, scope, marketplaceDetails, row);
   }
 
   // (d) / (e) Not installed -> resolve to classify available / unavailable.
-  // `resolvable` is not threaded: the `(unavailable)` arm catches every
-  // non-path source because `resolveStrict` returns `installable: false`
-  // for them, so the `(available)` arm is reached only with path sources.
   const row = await buildNotInstalledRow(
     pluginName,
     manifestVersion,
@@ -326,6 +602,7 @@ async function buildBlock(
     dependencies,
     entry,
     mpRecord,
+    parsedSource,
   );
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
@@ -346,10 +623,73 @@ function wrapBlock(
 }
 
 /**
+ * Build the `componentsResolved` arm for a path-source plugin whose
+ * resolver returned the not-installable variant. NFR-7 keeps
+ * `pluginRoot` off that variant, so it is re-derived locally; the
+ * not-installable variant carries the same `componentPaths` /
+ * `mcpServers` / `hooksConfigPath` shape `composeResolvedComponents`
+ * consumes. A discovery throw (EACCES on a component dir, etc.) falls
+ * back to `componentsResolved: false` with `narrowProbeError(err)`
+ * appended to the resolver reasons.
+ *
+ * Called from two arms:
+ *   - `buildInstalledRow` when the state record says installed but
+ *     `resolveStrict` returned the not-installable variant
+ *     (persistence-vs-disk disagreement -- the marketplace clone
+ *     changed, or the manifest now declares an unsupported field).
+ *   - `buildNotInstalledRow` when the plugin is not installed and
+ *     `resolveStrict` returned the not-installable variant (path
+ *     source with unsupported manifest fields / unsupported hooks).
+ */
+async function buildNotInstallablePathRowFields(
+  resolved: { readonly notes: readonly string[] } & Parameters<typeof composeResolvedComponents>[1],
+  marketplaceRoot: string,
+  parsedSource: ParsedSource,
+): Promise<
+  | {
+      readonly reasons?: readonly ContentReason[];
+      readonly componentsResolved: true;
+      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>;
+    }
+  | {
+      readonly reasons: readonly ContentReason[];
+      readonly componentsResolved: false;
+    }
+> {
+  const resolverReasons = narrowResolverNotes(resolved.notes);
+  const pluginRoot = await derivePluginRootForInfo(marketplaceRoot, parsedSource);
+  // NFR-7 / INFO-05: only `composeResolvedComponents` failures
+  // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
+  // lenient reader propagates) fall into the `narrowProbeError(err)`
+  // arm here. `derivePluginRootForInfo`'s own throws -- the
+  // programmer-bug `Error` for a non-path source AND the
+  // `PathContainmentError` from `assertPathInside` -- propagate
+  // unmasked to the caller; classifying them as IO probe failures
+  // would mis-route a path-escape as a transient disk error.
+  try {
+    const components = await composeResolvedComponents(pluginRoot, resolved);
+    return {
+      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      componentsResolved: true,
+      components,
+    };
+  } catch (err) {
+    return {
+      reasons: [...resolverReasons, narrowProbeError(err)],
+      componentsResolved: false,
+    };
+  }
+}
+
+/**
  * Build an `(installed)` row. When the source kind is `"path"` (the
  * only locally resolvable kind), run `resolveStrict` to compute the
  * per-kind component arrays + sort them. For all other source kinds,
- * emit `componentsResolved: false` (INFO-05 marker).
+ * emit `componentsResolved: false` (INFO-05 marker). When `resolveStrict`
+ * returns the not-installable variant for a path source,
+ * `buildNotInstallablePathRowFields` still enumerates components from
+ * disk so the row exposes the `{<reason>}` brace alongside the per-kind
+ * component lines instead of `not resolved`.
  */
 async function buildInstalledRow(
   pluginName: string,
@@ -358,9 +698,9 @@ async function buildInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
-  resolvable: boolean,
+  parsedSource: ParsedSource,
 ): Promise<PluginInfoRow> {
-  if (!resolvable) {
+  if (!isLocallyResolvable(parsedSource)) {
     return {
       status: "installed",
       name: pluginName,
@@ -386,19 +726,19 @@ async function buildInstalledRow(
 
     // resolveStrict returned NotInstallable but the state record says
     // installed -- the marketplace clone changed, OR the manifest now
-    // declares an unsupported field (`hooks` / `lspServers`). Surface
-    // the disagreement via `narrowResolverNotes` so the row does not
-    // render byte-identically to a deliberate external-source defer
-    // (which has no reason brace). Status stays `installed` because the
-    // state record confirms the install.
-    const resolverReasons = narrowResolverNotes(resolved.notes);
+    // declares an unsupported field (`hooks` / `lspServers`). Status
+    // stays `installed` because the state record confirms the install.
+    const fields = await buildNotInstallablePathRowFields(
+      resolved,
+      mpRecord.marketplaceRoot,
+      parsedSource,
+    );
     return {
       status: "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
-      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
-      componentsResolved: false,
+      ...fields,
     };
   } catch (err) {
     // Probe failure on disk -- classify the underlying failure via
@@ -431,6 +771,7 @@ async function buildNotInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
+  parsedSource: ParsedSource,
 ): Promise<PluginInfoRow> {
   let resolved;
   try {
@@ -439,7 +780,8 @@ async function buildNotInstalledRow(
     // Probe throw -> classify the underlying failure via the same
     // `narrowProbeError` ladder used by `list.ts`. Hardcoding
     // `"unreadable"` here would diverge from the list surface for the
-    // same `EACCES` / `ENOENT` failures.
+    // same `EACCES` / `ENOENT` failures. No `resolved` value exists, so
+    // there are no `componentPaths` to enumerate.
     const reasons: readonly ContentReason[] = [narrowProbeError(err)];
     return {
       status: "unavailable",
@@ -452,14 +794,31 @@ async function buildNotInstalledRow(
   }
 
   if (!resolved.installable) {
-    const reasons = narrowResolverNotes(resolved.notes);
+    if (!isLocallyResolvable(parsedSource)) {
+      const resolverReasons = narrowResolverNotes(resolved.notes);
+      return {
+        status: "unavailable",
+        name: pluginName,
+        ...(version !== undefined && { version }),
+        ...(description !== undefined && { description }),
+        ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+        componentsResolved: false,
+      };
+    }
+
+    // Path source whose resolver returned not-installable: enumerate
+    // components from disk against the not-installable variant.
+    const fields = await buildNotInstallablePathRowFields(
+      resolved,
+      mpRecord.marketplaceRoot,
+      parsedSource,
+    );
     return {
       status: "unavailable",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
-      ...(reasons.length > 0 && { reasons }),
-      componentsResolved: false,
+      ...fields,
     };
   }
 
@@ -467,7 +826,7 @@ async function buildNotInstalledRow(
   // `resolveStrict` returns `installable: false` for them -- so by the
   // time control gets here the source is path-resolvable and
   // `composeResolvedComponents` is safe to call without an external-
-  // source short-circuit. The `resolvable` parameter is informational.
+  // source short-circuit.
   return buildAvailableRow({
     pluginName,
     version,

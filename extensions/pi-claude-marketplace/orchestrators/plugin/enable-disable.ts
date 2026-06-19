@@ -52,8 +52,10 @@
 
 import path from "node:path";
 
+import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -179,6 +181,7 @@ function isCurrentlyDisabled(installed: {
     prompts: readonly string[];
     agents: readonly string[];
     mcpServers: readonly string[];
+    hooks: readonly string[];
   };
 }): boolean {
   return (
@@ -186,7 +189,8 @@ function isCurrentlyDisabled(installed: {
     installed.resources.skills.length === 0 &&
     installed.resources.prompts.length === 0 &&
     installed.resources.agents.length === 0 &&
-    installed.resources.mcpServers.length === 0
+    installed.resources.mcpServers.length === 0 &&
+    installed.resources.hooks.length === 0
   );
 }
 
@@ -264,6 +268,7 @@ async function runEnableBranch(
  */
 async function runDisableBranch(
   opts: EnableDisablePluginOptions,
+  scope: Scope,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
 ): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean }> {
@@ -277,6 +282,15 @@ async function runDisableBranch(
     // surfacing the failure.
     applyPartialCascadeFold(installed, cascade.dropped);
     installed.updatedAt = new Date().toISOString();
+    // WR-03: when the partial cascade DID succeed in unstaging the
+    // on-disk hooks.json (cascade.dropped.hooks is non-empty), drop the
+    // parsed-config cache entry and rebuild the routing table in lockstep
+    // so dispatch does not try to spawn a now-deleted handler. Mirrors
+    // the uninstall.ts cache-mutation invariant.
+    if (cascade.dropped.hooks.length > 0) {
+      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ");
+    }
+
     return {
       outcome: {
         kind: "disable-failed",
@@ -289,13 +303,48 @@ async function runDisableBranch(
 
   // PRESERVE version / resolvedSource / compatibility / installedAt;
   // RESET resources.*; BUMP updatedAt.
+  // D-63-04 / COMPONENT_KINDS 5-tuple: cascadeUnstagePlugin physically
+  // unstages hooks via removeHookConfig, so the in-memory record's hooks
+  // array must be zeroed alongside the other four axes to stay consistent
+  // with what landed on disk.
   installed.resources.skills = [];
   installed.resources.prompts = [];
   installed.resources.agents = [];
   installed.resources.mcpServers = [];
+  installed.resources.hooks = [];
   installed.updatedAt = new Date().toISOString();
 
+  // WR-03: the cascade unstaged the on-disk hooks.json via removeHookConfig;
+  // drop the parsed-config cache entry and rebuild the routing table in
+  // lockstep so subsequent dispatch events bypass the now-disabled plugin
+  // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
+  dropCachedHooks(scope, opts.marketplace, opts.plugin, "");
+
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
+}
+
+/**
+ * WR-03: drop the parsed-config cache entry for a disabled plugin and
+ * rebuild the routing table in lockstep. Wrapped in try/catch so a cache
+ * mutation throw cannot escalate a successful disable into a failure --
+ * the cache is rebuilt from state.json on the next /reload's factory-time
+ * hydrate (D-59-02). The `logPrefix` distinguishes the partial-cascade
+ * branch from the clean-disable branch in debug logs.
+ */
+function dropCachedHooks(
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+  logPrefix: string,
+): void {
+  try {
+    removePluginConfigFromCache(scope, marketplace, plugin);
+    rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+    );
+  }
 }
 
 /**
@@ -342,7 +391,7 @@ export async function setPluginEnabled(
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
   // setPluginEnabled (the doc above promises "never re-throws") -- route it
   // through the same classifyTransactionThrow taxonomy the lower try/catch
-  // uses. Mirrors the read-only `listPlugins` containment in preview.ts.
+  // uses. Mirrors the read-only `listPlugins` containment in pending.ts.
   let resolution;
   try {
     // SCOPE-01 / ATTR-04: resolve the cross-scope target.
@@ -468,7 +517,7 @@ export async function setPluginEnabled(
       if (enable) {
         outcome = await runEnableBranch(opts, scope, locations, state, installed.version);
       } else {
-        const disableResult = await runDisableBranch(opts, locations, installed);
+        const disableResult = await runDisableBranch(opts, scope, locations, installed);
         outcome = disableResult.outcome;
         // I3: a partial disable cascade mutated `installed.resources.*` in
         // place to drop the artefacts already removed before the throw.

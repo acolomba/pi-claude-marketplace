@@ -98,7 +98,7 @@ type _VManualRecovery = Extract<PluginNotificationMessage, { status: "manual rec
 // cause / rollbackPartial / reasons / from / to).
 type _VPresent = Extract<PluginNotificationMessage, { status: "present" }>;
 // DIFF-02: the 4 new pending-tense plugin variants emitted
-// by `/claude:plugin preview`. Per-variant shape: REQUIRED `name`, OPTIONAL
+// by `/claude:plugin pending`. Per-variant shape: REQUIRED `name`, OPTIONAL
 // `scope`, no `dependencies` / `reasons` / `version` / `cause` / `rollbackPartial`
 // / `from` / `to` / `description`. The length-lock bumps PLUGIN_STATUSES
 // from 11 -> 15.
@@ -168,7 +168,7 @@ export const _l3: _Assert_DependenciesLen = true;
 // Bidirectional `extends` proves set-equality. UAT G-21-01: the `"present"`
 // literal is the list-only inventory token introduced to close the
 // reload-hint misfire on `/claude:plugin list`. DIFF-02: the 4 trailing
-// `"will *"` literals are the pending-tense preview tokens. ENBL-04:
+// `"will *"` literals are the pending-tense tokens. ENBL-04:
 // `"disabled"` is the list/info inventory token for a recorded-but-disabled
 // plugin (structurally distinct from `(unavailable)`).
 type _PluginStatusExpected =
@@ -554,8 +554,13 @@ type _Assert_ReasonsNotOptionalManualRecovery = undefined extends _VManualRecove
   : true;
 export const _rnMR: _Assert_ReasonsNotOptionalManualRecovery = true;
 
-// @ts-expect-error -- D-15-01: installed has NO reasons field
-export type _NoReasonsOnInstalled = _VInstalled["reasons"];
+// SURF-05 / D-63-08: installed now CARRIES an OPTIONAL `reasons?` field
+// (the `"orphan rewake"` token rides the install-cascade row). The legacy
+// D-15-01 "no reasons" constraint is superseded for installed only; the
+// optional-vs-required discipline is preserved (installed.reasons is
+// `readonly ContentReason[] | undefined`, not `readonly ContentReason[]`).
+type _Assert_InstalledReasonsOptional = undefined extends _VInstalled["reasons"] ? true : never;
+export const _riInstalledOpt: _Assert_InstalledReasonsOptional = true;
 // @ts-expect-error -- D-15-01: updated has NO reasons field
 export type _NoReasonsOnUpdated = _VUpdated["reasons"];
 // @ts-expect-error -- D-15-01: reinstalled has NO reasons field
@@ -904,12 +909,15 @@ export const _vD: _Assert_VersionOnDisabled = true;
 // 2); `_l4` / `_l4b` here and `_l5..._l9` cover the info variants below.
 // ============================================================================
 
-// D-54-01 / ENBL-04: REASONS tuple length is now 31
-// (29 existing + `"already enabled"` + `"already disabled"`). Both new
-// members are in BENIGN_REASONS so idempotent enable/disable cascades route
-// to info severity via the UXG-02 / D-28-06 first-match ladder (mirrors the
-// `already autoupdate` / `already no autoupdate` precedent).
-type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 31 ? true : never;
+// D-54-01 / ENBL-04 / SURF-05 / D-63-08: REASONS tuple length is now 32
+// (29 + `"already enabled"` + `"already disabled"` + `"orphan rewake"`).
+// `"already enabled"` / `"already disabled"` are in BENIGN_REASONS so
+// idempotent enable/disable cascades route to info severity via the UXG-02
+// / D-28-06 first-match ladder. `"orphan rewake"` is NOT benign -- it rides
+// the install-cascade `(installed)` row as a config-bug warning when a hook
+// handler declares `rewakeMessage` / `rewakeSummary` without
+// `asyncRewake: true`.
+type _Assert_ReasonsLen = (typeof REASONS)["length"] extends 32 ? true : never;
 export const _l4: _Assert_ReasonsLen = true;
 
 type _Assert_NotAddedMember = "not added" extends (typeof REASONS)[number] ? true : never;
@@ -1264,7 +1272,7 @@ type _Assert_NotifSixArms =
 export const _l12: _Assert_NotifSixArms = true;
 
 // --- DIFF-01 SC #2: 7-arm union arity locking the new
-//     `reconcile-preview-empty` standalone variant. ---
+//     `reconcile-pending-empty` standalone variant. ---
 
 type _Assert_NotifSevenArms =
   Extract<NotificationMessage, { marketplaces: readonly unknown[] }> extends never
@@ -1279,7 +1287,7 @@ type _Assert_NotifSevenArms =
             ? never
             : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
               ? never
-              : Extract<NotificationMessage, { kind: "reconcile-preview-empty" }> extends never
+              : Extract<NotificationMessage, { kind: "reconcile-pending-empty" }> extends never
                 ? never
                 : true;
 export const _l13: _Assert_NotifSevenArms = true;
@@ -1287,15 +1295,15 @@ export const _l13: _Assert_NotifSevenArms = true;
 // DIFF-01 SC #2: the empty-steady-state variant has EXACTLY `kind` -- no
 // fields beyond the discriminator. The renderer hard-codes the body line so
 // the byte form cannot drift from the catalog.
-type _VReconcilePreviewEmpty = Extract<NotificationMessage, { kind: "reconcile-preview-empty" }>;
-type _Assert_ReconcilePreviewEmptyShape = _VReconcilePreviewEmpty extends {
-  readonly kind: "reconcile-preview-empty";
+type _VReconcilePendingEmpty = Extract<NotificationMessage, { kind: "reconcile-pending-empty" }>;
+type _Assert_ReconcilePendingEmptyShape = _VReconcilePendingEmpty extends {
+  readonly kind: "reconcile-pending-empty";
 }
-  ? { readonly kind: "reconcile-preview-empty" } extends _VReconcilePreviewEmpty
+  ? { readonly kind: "reconcile-pending-empty" } extends _VReconcilePendingEmpty
     ? true
     : never
   : never;
-export const _rpe: _Assert_ReconcilePreviewEmptyShape = true;
+export const _rpe: _Assert_ReconcilePendingEmptyShape = true;
 
 // --- RECON-04: 8-arm union arity locking the new
 //     `reconcile-applied-cascade` standalone variant. ---
@@ -1318,7 +1326,7 @@ type _Assert_NotifEightArms =
             ? never
             : Extract<NotificationMessage, { kind: "marketplace-not-added" }> extends never
               ? never
-              : Extract<NotificationMessage, { kind: "reconcile-preview-empty" }> extends never
+              : Extract<NotificationMessage, { kind: "reconcile-pending-empty" }> extends never
                 ? never
                 : Extract<NotificationMessage, { kind: "reconcile-applied-cascade" }> extends never
                   ? never

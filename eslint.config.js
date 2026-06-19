@@ -145,6 +145,19 @@ export default tseslint.config(
     },
   },
   {
+    // Per-file override (OBS-01 / D-59-05) -- shared/debug-log.ts IS the
+    // sole sanctioned runtime debug-output seam for the hooks dispatch
+    // path, so its env-gated `console.error` call must be allowed. Mirrors
+    // BLOCK B's authorization for shared/notify.ts (sanctioned escape from
+    // IL-2 / IL-3). Scope is the single literal file path so a glob-widening
+    // drift surfaces in code review.
+    files: ["extensions/pi-claude-marketplace/shared/debug-log.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
+      "no-console": "off",
+    },
+  },
+  {
     // Per-file override -- migrate.ts emits the single sanctioned
     // legacy-migration console.warn (IL-3). That one callsite trips BOTH
     // rules: the explicit `console.warn` selector in `no-restricted-syntax`

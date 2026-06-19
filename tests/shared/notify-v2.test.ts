@@ -135,6 +135,8 @@ import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shar
 import {
   notify,
   notifyUsageError,
+  REASONS,
+  type HookSummaryEntry,
   type NotificationMessage,
   type UsageErrorMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
@@ -373,7 +375,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
           {
             status: "unavailable",
             name: "commit-commands",
-            reasons: ["hooks"],
+            reasons: ["unsupported hooks"],
           },
         ],
       },
@@ -383,7 +385,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Variant has no `version` set -> renderVersion("") -> "" slot collapsed.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user]\n  ⊘ commit-commands (unavailable) {hooks}`,
+    `● demo [user]\n  ⊘ commit-commands (unavailable) {unsupported hooks}`,
   ]);
 });
 
@@ -1061,7 +1063,7 @@ test("PL-4: unavailable row with description emits description line", () => {
           {
             status: "unavailable",
             name: "delta",
-            reasons: ["hooks"],
+            reasons: ["unsupported hooks"],
             description: "Unavailable plugin that still surfaces its description.",
           },
         ],
@@ -1072,7 +1074,7 @@ test("PL-4: unavailable row with description emits description line", () => {
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.equal(
     body,
-    "● official [user]\n  ⊘ delta (unavailable) {hooks}\n    Unavailable plugin that still surfaces its description.",
+    "● official [user]\n  ⊘ delta (unavailable) {unsupported hooks}\n    Unavailable plugin that still surfaces its description.",
   );
 });
 
@@ -2946,6 +2948,200 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
 });
 
 // ===========================================================================
+// SURF-02 / D-63-04 / D-63-06 / D-63-07 -- HookSummaryEntry discriminator
+// + the multi-line `hooks:` block emitted by appendResolvedComponentLines.
+//
+// The renderer is the only public-facing consumer of `HookSummaryEntry`
+// in v1.13; these tests pin the discriminator's compile-time exhaustiveness
+// AND the byte form of the rendered block (4-space `hooks:` header +
+// 6-space-indent per-entry lines, `<event>(<matcher>)` for tool events,
+// bare `<event>` for non-tool events).
+// ===========================================================================
+
+test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for tool events, FORBIDS it for non-tool events", () => {
+  // Compile-time exhaustiveness pin: tool events (PreToolUse, PostToolUse,
+  // PostToolUseFailure) carry a `matcher: string` field; non-tool events
+  // (SessionStart, etc.) cannot. The `@ts-expect-error` directives below
+  // assert that the misuse cases fail to typecheck.
+
+  // Valid: tool event with matcher.
+  const validToolEntry: HookSummaryEntry = { event: "PreToolUse", matcher: "Bash" };
+  // Valid: non-tool event without matcher.
+  const validNonToolEntry: HookSummaryEntry = { event: "SessionStart" };
+
+  // @ts-expect-error PreToolUse requires matcher per D-63-06
+  const missingMatcher: HookSummaryEntry = { event: "PreToolUse" };
+  // @ts-expect-error SessionStart forbids matcher per D-63-06
+  const extraneousMatcher: HookSummaryEntry = { event: "SessionStart", matcher: "anything" };
+
+  // Reference the locals so TS does not flag them unused (the assertions
+  // ABOVE -- not the runtime body -- are the actual contract).
+  assert.equal(validToolEntry.event, "PreToolUse");
+  assert.equal(validToolEntry.matcher, "Bash");
+  assert.equal(validNonToolEntry.event, "SessionStart");
+  assert.equal((missingMatcher as { event: string }).event, "PreToolUse");
+  assert.equal((extraneousMatcher as { event: string }).event, "SessionStart");
+});
+
+test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", () => {
+  // Task 1 Test 4 fixture: 3 tool events with matchers + 1 non-tool event
+  // without one. Lock the exact 5-line block (header + 4 entries) in the
+  // exact order supplied by the caller (the renderer does NOT sort).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        hooks: [
+          { event: "PreToolUse", matcher: "Bash" },
+          { event: "PreToolUse", matcher: "Edit|Write" },
+          { event: "PostToolUse", matcher: "Edit" },
+          { event: "SessionStart" },
+        ],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ● alpha v1.0.0 (installed)",
+      "    hooks:",
+      "      PreToolUse(Bash)",
+      "      PreToolUse(Edit|Write)",
+      "      PostToolUse(Edit)",
+      "      SessionStart",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks kinds still render their single-line comma-join", () => {
+  // Empty hooks array MUST NOT push a bare `hooks:` header. Other kinds
+  // continue to render through the legacy single-line path -- this test
+  // pins the regression guard that the hooks arm does not leak into the
+  // other kinds.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        agents: ["agent-a"],
+        hooks: [],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    ["● official [user] <autoupdate>", "  ● alpha v1.0.0 (installed)", "    agents: agent-a"].join(
+      "\n",
+    ),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` header; legacy 4-kind comma-join output is byte-stable", () => {
+  // Regression guard: a payload with every non-hooks kind populated and
+  // NO `hooks` field must render the legacy 4-line output unchanged --
+  // proves the kind === "hooks" arm does not affect the existing
+  // per-kind single-line path.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        agents: ["a"],
+        commands: ["b"],
+        mcp: ["c"],
+        skills: ["d"],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ● alpha v1.0.0 (installed)",
+      "    agents: a",
+      "    commands: b",
+      "    mcp: c",
+      "    skills: d",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` when supported=false, bare `<event>` when supported=true", () => {
+  // Byte-lock the lenient arm's renderer behavior at the unit level.
+  // `supported: false` => ` (unsupported)` suffix; `supported: true` =>
+  // bare `<event>` (no suffix), so a future lenient-reader change that
+  // emits bucket-A events does not accidentally suffix them.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "unavailable",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        hooks: [
+          { kind: "lenient", event: "Stop", supported: false },
+          { kind: "lenient", event: "PostToolUse", supported: true },
+        ],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ⊘ alpha v1.0.0 (unavailable)",
+      "    hooks:",
+      "      Stop (unsupported)",
+      "      PostToolUse",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
+// ===========================================================================
 // INFO-03 -- MarketplaceInfoCascadeMessage fan-out variant.
 //
 // Per-status byte tests for the 4th NotificationMessage arm. The
@@ -3419,9 +3615,9 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
 });
 
 // ===========================================================================
-// DIFF-02 -- pending-tense `(will *)` preview rows.
+// DIFF-02 -- pending-tense `(will *)` pending rows.
 //
-// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin preview`.
+// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin pending`.
 // All are info-severity (no failure / skipped / manual-recovery semantics) so
 // the 2nd `ctx.ui.notify` arg is omitted. None are in shouldEmitReloadHint's
 // trigger set, so no `/reload to pick up changes` trailer is appended.
@@ -3503,7 +3699,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", () => {
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ⊘ to-disable (will disable)`);
+  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ◌ to-disable (will disable)`);
 });
 
 test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", () => {
@@ -3528,7 +3724,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
   assert.equal(args[0], `● shared [project] (will add)\n  ● alpha [user] (will install)`);
 });
 
-test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (preview rows are pre-transition)", () => {
+test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pending rows are pre-transition)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -3548,7 +3744,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (previ
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
     !emitted.includes("/reload to pick up changes"),
-    "preview rows MUST NOT emit the reload-hint trailer",
+    "pending rows MUST NOT emit the reload-hint trailer",
   );
 });
 
@@ -3594,7 +3790,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   // info severity -> no 2nd arg.
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user] <autoupdate>\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user] <autoupdate>\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", () => {
@@ -3612,7 +3808,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", () => {
@@ -3630,7 +3826,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● shared [user]\n  ⊘ foo-plugin [project] v1.2.3 (disabled)`);
+  assert.equal(args[0], `● shared [user]\n  ◌ foo-plugin [project] v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", () => {
@@ -3648,7 +3844,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ⊘ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
@@ -3678,7 +3874,7 @@ test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /
     args[0],
     [
       "● claude-plugins-official [user]",
-      "  ⊘ foo-plugin v1.2.3 (disabled)",
+      "  ◌ foo-plugin v1.2.3 (disabled)",
       "",
       "/reload to pick up changes",
     ].join("\n"),
@@ -3949,4 +4145,50 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
     args[0],
     `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
   );
+});
+
+// ===========================================================================
+// SURF-05 / D-63-08 -- orphan-rewake closed-set REASONS token
+// ===========================================================================
+
+test("SURF-05 / D-63-08: REASONS tuple includes the literal 'orphan rewake' member", () => {
+  // Closed-set membership proof. The tuple addition is the only seam the
+  // resolver-side `partial.orphanRewake` and the install row composition
+  // (Plan 63-04) depend on; if the tuple ever drops the member the
+  // composition site stops typechecking.
+  assert.ok(
+    (REASONS as readonly string[]).includes("orphan rewake"),
+    `REASONS tuple must include "orphan rewake"; got: ${REASONS.join(" / ")}`,
+  );
+});
+
+test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via the existing reasons brace", () => {
+  // End-to-end byte form: the new REASONS token rides the existing v1.4
+  // installed-row reasons brace; the renderer needs ZERO changes. This
+  // test pins the catalog-mirrored row form so a future renderer
+  // refactor cannot silently drop the token.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "helper",
+            version: "1.0.0",
+            dependencies: [],
+            reasons: ["orphan rewake"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● official [user]\n  ● helper v1.0.0 (installed) {orphan rewake}\n\n/reload to pick up changes`,
+  ]);
 });

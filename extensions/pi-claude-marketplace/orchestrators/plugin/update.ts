@@ -50,6 +50,8 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -62,6 +64,14 @@ import {
   commitPreparedCommands,
   prepareStageCommands,
 } from "../../bridges/commands/index.ts";
+import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
+import {
+  readAndCachePluginHooks,
+  rebuildRoutingTables,
+  removeHookConfig,
+  removePluginConfigFromCache,
+  writeHookConfig,
+} from "../../bridges/hooks/index.ts";
 import {
   abortPreparedMcp,
   commitPreparedMcp,
@@ -72,8 +82,10 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
+import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -838,7 +850,9 @@ async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[
 
 const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
 
-const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "mcp"] as const;
+// D-63-01: hooks slot lands between agents and mcp -- mirrors install.ts
+// runPhases literal-array order.
+const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**
@@ -949,7 +963,8 @@ function isRecordedButDisabled(
     record.resources.skills.length === 0 &&
     record.resources.prompts.length === 0 &&
     record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0
+    record.resources.mcpServers.length === 0 &&
+    record.resources.hooks.length === 0
   );
 }
 
@@ -1001,6 +1016,12 @@ async function finalizeUpdateRecord(
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion } = preflight;
   let invalidConfigWriteBack = false;
+  // Per-bridge finalize is a sequence of independent `failedPhases.has(...)`
+  // guards (one per cascade slot); the cognitive-complexity counter sums
+  // each guard arm but the body is intentionally flat -- a helper extraction
+  // would obscure the per-bridge orthogonality the SC#2 contract requires.
+  // Mirrors the install.ts cognitive-complexity disable on installPlugin.
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
@@ -1041,6 +1062,19 @@ async function finalizeUpdateRecord(
       sRecord.resources.mcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
     }
 
+    // LIFE-01 / WR-03: hooks-inventory toggle mirrors install.ts /
+    // reinstall.ts but is now gated on hooks-phase success (per-bridge
+    // orthogonality, matching the skills / commands / agents / mcp slots
+    // above). When the hooks commit slot succeeded, write the slug based on
+    // version B's hooks declaration (slug appears when installable.hooksConfigPath
+    // !== undefined, empty when version B dropped hooks). When the hooks
+    // commit failed (entry in phase3aFailures for "hooks"), do NOT update
+    // the inventory -- the failed-state truthful view is "we did not complete
+    // the swap" and the existing slug stays.
+    if (!failedPhases.has("hooks")) {
+      sRecord.resources.hooks = installable.hooksConfigPath === undefined ? [] : [plugin];
+    }
+
     // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
     // happen ONLY on the all-success path. On failure the intent-mark
     // `compatibility` set by `markUpdateInProgress` carries forward
@@ -1076,6 +1110,41 @@ async function finalizeUpdateRecord(
       if (writeResult.invalidConfig) {
         invalidConfigWriteBack = true;
       }
+    }
+
+    // WR-06 + WR-03 + D-60-05: update does NOT delegate to install/
+    // uninstall, so without an explicit cache+rebuild step the parsed-
+    // config cache would still hold the PRE-update hooks config and
+    // dispatch would fire the old command paths until `/reload`. Mirror
+    // the install / uninstall pattern explicitly inside the existing
+    // per-plugin lock: drop the old cache entry, repopulate from the
+    // just-staged `hooks.json` (when present), then rebuild the routing
+    // table once. The cache step ONLY runs on the all-success arm; an
+    // aggregated phase-3 failure leaves the OLD config in place
+    // (truthful "we did not complete the swap" view that mirrors the
+    // SC#2 compatibility/resolvedSource decision above).
+    //
+    // Moved AFTER `maybeWritePluginConfigBack` so a write-back throw
+    // aborts BEFORE the cache mutates -- tightens the WR-06 strand
+    // window to just the `withStateGuard` auto-save tail.  A full close
+    // would require exposing `tx.save()` from `withStateGuard` (a
+    // larger refactor); a future phase can complete the restructure if
+    // tx.save throws become observable in practice.
+    if (phase3aFailures.length === 0) {
+      removePluginConfigFromCache(args.scope, marketplace, plugin);
+      if (installable.hooksConfigPath !== undefined) {
+        await readAndCachePluginHooks({
+          scope: args.scope,
+          marketplace,
+          plugin,
+          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+          cwd: args.cwd,
+          logPrefix: "update",
+        });
+      }
+
+      rebuildRoutingTables();
     }
   });
   return { invalidConfigWriteBack };
@@ -1199,6 +1268,48 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     }
   } catch (err) {
     phase3aFailures.push({ phase: "agents", msg: errorMessage(err), cause: err });
+  }
+
+  // LIFE-01 / D-63-01: 5th cascade slot. The hooks bridge has NO staging
+  // dir (D-63-02) so the prepare/commit split does not apply -- writeHookConfig
+  // IS the atomic write. Lives BETWEEN agents and mcp to mirror the install
+  // Phase ledger order. D-03 fail-continue: a throw here lands in
+  // phase3aFailures and the loop continues; recovery is via the
+  // RECOVERY_PLUGIN_REINSTALL_PREFIX hint -- there is no in-process restore.
+  //
+  // WR-01: removeHookConfig() (version B drops hooks) is non-atomic --
+  // `rm({recursive,force})` can throw partway and leave the hooks
+  // subtree partially deleted. The `failedPhases.has("hooks")` guard at
+  // finalize preserves the OLD `resources.hooks` inventory in
+  // state.json, keeping the truthful "swap incomplete" view. The
+  // /reload routing table will point at the partially-deleted file
+  // until the user runs reinstall (RECOVERY_PLUGIN_REINSTALL_PREFIX
+  // hint). Same recovery contract as reinstall.ts::commitHooks (see
+  // WR-05).
+  try {
+    if (preflight.installable.hooksConfigPath === undefined) {
+      // Version B has no hooks: remove any stale file from version A.
+      await removeHookConfig({ locations: args.locations, pluginName: plugin });
+    } else {
+      const raw = await readFile(
+        path.join(preflight.installable.pluginRoot, preflight.installable.hooksConfigPath),
+        "utf8",
+      );
+      const ifCtx = { homedir: homedir(), cwd: args.cwd, projectRoot: args.cwd };
+      const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+      if (!parsed.ok) {
+        throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+      }
+
+      await writeHookConfig({
+        locations: args.locations,
+        pluginName: plugin,
+        pluginRoot: preflight.installable.pluginRoot,
+        hooksValue: parsed.value,
+      });
+    }
+  } catch (err) {
+    phase3aFailures.push({ phase: "hooks", msg: errorMessage(err), cause: err });
   }
 
   try {
