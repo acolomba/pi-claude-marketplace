@@ -1,6 +1,7 @@
 ---
 phase: 260618-uns
 plan: 01
+status: complete
 subsystem: spec-docs
 tags: [docs, requirements, prd, info-surface, glyph-catalog]
 dependency-graph:

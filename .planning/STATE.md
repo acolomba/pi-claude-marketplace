@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.13
 milestone_name: Claude Hook Bridge
-status: Phase 63 fully closed; UAT gap closure landed (63-09 / 63-10 / 63-11); v1.13 ready for milestone close-out
-stopped_at: Completed 63-11-PLAN.md (UAT loop closed with Stop admission deferred to v1.14+ per Option A)
-last_updated: "2026-06-16T22:30:00.000Z"
-last_activity: 2026-06-16 -- Phase 63 re-verified 11/11 truths PASSED + 1 deferral (Stop event admission to BUCKET_A_EVENTS, v1.14+)
+status: Awaiting next milestone
+stopped_at: Completed 63-05-PLAN.md (SURF-01)
+last_updated: "2026-06-19T15:05:39.561Z"
+last_activity: 2026-06-19 — Milestone v1.13 completed and archived
 progress:
   total_phases: 7
   completed_phases: 7
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 63 (lifecycle-cascade-user-facing-surface-docs) — VERIFIED 11/11 (7 carried-forward + 4 new from gap closure); v1.13 milestone ready for close-out
-Plan: 11 of 11 complete (63-09 wrapper-format parser fix + Option A defer Stop; 63-10 install-cascade classifier parity arm; 63-11 README Hooks bullet + runtime UAT terminal)
-Status: Phase 63 fully closed; UAT gap closure landed; v1.13 ready for milestone close-out. Hookify@claude-plugins-official structurally `(unavailable) {unsupported hooks}` at runtime because Stop is not in v1.13's BUCKET_A_EVENTS — admission deferred to v1.14+ per 63-09 Option A user-decided checkpoint
-Last activity: 2026-06-19 -- Completed quick task 260619-9ul: Apply 9 of 10 PR #60 review findings (3097a1d)
+Phase: Milestone v1.13 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-19 — Milestone v1.13 completed and archived
 
 ## Performance Metrics
 
@@ -308,6 +308,7 @@ Genuinely-open deferral (v1.4.1 scope):
 | Category           | Item                                                                                                                                                                                                                                                                                                                                                                                    | Status                                                                                                                                                                                                         | Deferred At |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | state_migration    | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer                                                                                                                                                                                                                                                                                      | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34                                                                                                                       | 2026-05-28  |
+| testing            | Coverage sweep: rare failure arms in update/reinstall/install ([.planning/todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md](./todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md))                                                                                                                       | acknowledged at v1.13 close 2026-06-19; deferred to v1.14+; testing-only, no runtime impact                                                                                                                   | 2026-06-19  |
 
 Resolved / no longer open:
 
@@ -328,5 +329,4 @@ Resume File: None
 
 ## Operator Next Steps
 
-- Run `/gsd-execute-phase 63` to execute the 7-plan / 4-wave Phase 63 (Lifecycle Cascade, User-Facing Surface & Docs -- LIFE-01..03, SURF-01..06; final v1.13 phase).
-- Carry forward Phase 62's three manual-only verifications during Phase 63 verification (live `/reload` orphan reap across process death, end-to-end model-injection observability on exit-code-2, `rewakeSummary` Pi UI visibility) -- captured in 63-VALIDATION.md Manual-Only Verifications.
+- Start the next milestone with /gsd-new-milestone

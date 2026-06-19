@@ -1,7 +1,7 @@
 ---
 phase: quick-260618-tzl
 plan: 01
-status: completed
+status: complete
 requirements_satisfied:
   - D-54-01
   - ENBL-04

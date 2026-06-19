@@ -2,6 +2,44 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.13 -- Claude Hook Bridge
+
+**Shipped:** 2026-06-19 as `pi-claude-marketplace@0.6.0`
+**Phases:** 7 (Phases 57-63) | **Plans:** 32 | **Tasks:** 52 | **Tests:** 1897 → 2317 unit + 14 integration | **PRs:** #60 (squash merged)
+
+### What Was Built
+Claude Code hooks bridge translating plugin `hooks/hooks.json` into Pi event subscriptions for the 8 bucket-A events (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) at 100% dispatch fidelity. Strict-supportability resolver gate flips plugins to `(unavailable) {unsupported hooks}` for non-bucket-A events, unmapped tools, regex matchers, or non-`command` handlers. Forward-compat investments shipped: `if` field permission-rule matcher (MATCH-03), `asyncRewake` registry with detached background-spawn + ring-buffered stdio + exit-code-2 model-context injection + PID-table orphan reap (HOOK-06 + EXEC-05). Lifecycle cascade: install/uninstall/reinstall/update/enable/disable keep the routing table in lockstep with `state.json` so dispatch fires immediately without `/reload` (NFR-2).
+
+### What Worked
+- Strict-supportability stance as a single closed-set decision drove every downstream gate (resolver, install cascade, info surface, lenient reader) — zero "what does this mean for plugin X?" debates mid-execution.
+- Atomic catalog-lockstep amendments held across `{unsupported hooks}`, `(disabled)`/`(will disable)`, `orphan rewake`, `(will enable)` — the byte fixtures landed in the same commit as the renderer arm in all four cases.
+- 5-agent post-PR review (code, tests, comments, errors, types) on `c4d1a4b..HEAD` caught 10 findings; 9 were applied as a follow-up `/gsd-quick` cleanup pass; one deferred with explicit layering-fence rationale.
+- Lenient reader on the info surface lets `(unavailable) {unsupported hooks}` rows enumerate components and tag the offending event — visibility without changing install correctness.
+
+### What Was Inefficient
+- Worktree isolation misfired on the very first executor dispatch (base mismatch on a fresh session); fell back to sequential mode for the rest of the session. The harness's session-start HEAD snapshot was stale relative to the pre-dispatch plan commit.
+- Spec docs drifted from shipped behavior across 3 quick-task changes (info components / lenient hooks / glyph split). A fourth quick task had to sync REQUIREMENTS.md + PRD post-hoc. Pattern: when shipping behavior changes inside an open milestone, the spec-sync should land in the same commit, not a follow-up.
+- Phase 62 (HOOK-06 / EXEC-05) shipped but the REQUIREMENTS.md checkboxes + traceability rows stayed `[ ]` / `Pending` until milestone close. Needs a phase.complete gate that flips REQ checkboxes against the shipped state.
+- Audit-open found 9 items needing decisions at close: 4 stale debug-session locations (resolved but not moved to `resolved/`), 5 non-canonical SUMMARY frontmatter (`completed` vs `complete`, missing `status:`). All cheap fixes but accumulated across the milestone.
+
+### Patterns Established
+- **Lenient discriminated arm on a strict-resolver-side type:** `HookSummaryEntry { kind: "lenient" }` arm produced ONLY by the info-surface reader, never by the resolver. Render-side branches on `"kind" in entry` first, then `"matcher" in entry`. Same pattern can apply to any "strict at install, lenient at info" type seam.
+- **Glyph catalog as a closed set with role legends:** `●` realized, `○` available/will-remove, `⊘` failure-class (unavailable/failed/skipped/manual-recovery), `◌` disabled/will-disable. Amendments require renderer + catalog + byte-tests + grammar invariant in one commit.
+- **Pre-dispatch plan commit + sequential-mode fallback:** when the worktree base goes stale, the executor halts cleanly via the `worktree_branch_check` HALT; re-dispatch in sequential mode keeps the session moving without losing the plan.
+- **5-agent parallel post-merge review:** code-reviewer + pr-test-analyzer + comment-analyzer + silent-failure-hunter + type-design-analyzer surface complementary findings; cluster overlap (e.g. `groupCount` is dead carry flagged by 3 of 5) is high-signal.
+
+### Key Lessons
+1. **Spec sync is part of the behavior change.** REQUIREMENTS.md / PRD updates belong in the commit that ships the behavior, not a follow-up. Same for output-catalog.md amendments.
+2. **Phase complete must flip REQ checkboxes.** Audit-open at milestone close caught `[ ] HOOK-06` / `[ ] EXEC-05` while the code had shipped weeks earlier. Worth a phase.complete gate that diffs REQ state against the traceability table.
+3. **Operator runtime probes need an explicit "ran/verified" marker.** `resolved-pending-runtime` is a useful state but the verification evidence path was implicit. A `runtime_verified_at: <date>` field would make audit-open's job clean.
+4. **Lenient readers must mirror their strict siblings' error contract.** The first cut of `readLenientHookSummary` collapsed EACCES + programmer bugs into "no hooks" via bare `catch {}` — silent-failure-hunter caught it. Restored parity with `readHookSummaryEntries` (ENOENT/SyntaxError narrow, IO errors propagate to row-builder's `narrowProbeError`).
+5. **`(disabled)` and `(unavailable)` are different conceptual classes.** They share a glyph in v1.12 but the v1.13 split (`◌` vs `⊘`) makes the disabled = user-requested-state vs unavailable = error/blocked-state distinction structural.
+
+### Cost Observations
+- Model mix: opus executors/planners/researchers, sonnet checkers/verifiers; review agents inherited the harness model (Opus 4.7).
+- Sessions: 1 long execution session (this one), 6 `/gsd-quick` tasks + the merge/release flow.
+- Notable: the 5-agent parallel review (10 findings → 9 applied as cleanup → all green) was the highest signal-per-token segment; the worktree misfire was the highest waste segment.
+
 ## Milestone: v1.12 -- Marketplace and Plugin Config Files
 
 **Shipped:** 2026-06-11
