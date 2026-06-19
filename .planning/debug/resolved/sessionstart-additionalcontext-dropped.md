@@ -1,8 +1,8 @@
 ---
-status: resolved-pending-runtime
+status: resolved
 trigger: "After installing a hooks-only user-scope plugin whose SessionStart hook emits a Claude-style `{hookSpecificOutput: {additionalContext: \"...\"}}` JSON on stdout (e.g. learning-output-style), the hook fires end-to-end at Pi launch (proven by sentinel touch-file probe at 2026-06-17T08:17:47-04:00), but the additionalContext never reaches Pi's session prompt. The model's behavior is identical with the plugin installed vs uninstalled -- the prompt the plugin is supposed to inject (in this case the `learning-mode` prompt that should make Pi prefix educational notes with the literal `★ Insight` box and pause to request user code contributions at design decision points) has no observable effect on Pi's responses."
 created: 2026-06-17T08:30:00Z
-updated: 2026-06-17T09:30:00Z
+updated: 2026-06-19T00:00:00Z
 ---
 
 > Pre-filled from operator-verified runtime evidence:

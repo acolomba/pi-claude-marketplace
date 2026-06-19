@@ -1,8 +1,8 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "hookify@claude-plugins-official is classified (unavailable) {unsupported hooks} via /claude:plugin info and (unavailable) {unsupported source} via /claude:plugin install cascade. Install never reaches the hooks-bridge slot — resolver flips installable: false earlier."
 created: 2026-06-16T00:00:00Z
-updated: 2026-06-16T00:00:00Z
+updated: 2026-06-19T00:00:00Z
 ---
 
 > Correction (63-09 closure): the original trigger claimed hookify uses

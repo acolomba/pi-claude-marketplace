@@ -1,6 +1,7 @@
 ---
 phase: 260612-liv
 plan: 01
+status: complete
 subsystem: orchestrators/plugin + docs
 tags: [cpd, refactor, docs, readme, sonarcloud]
 dependency_graph:
