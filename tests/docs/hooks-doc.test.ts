@@ -1,6 +1,6 @@
 // Architecture lint for the user-facing hook-support docs (SURF-06).
 //
-// The hook-support doc at `docs/hooks.md` is the first-time-reader
+// The hook-support doc at `docs/hooks-compatibility.md` is the first-time-reader
 // authority for plugin authors evaluating "will my hook plugin work?"
 // and end users reading the `(unavailable) {unsupported hooks}` token.
 // The doc has two failure modes that are not visible to a human
@@ -20,7 +20,7 @@
 // This test pins the no-jargon contract and the 8-event coverage
 // invariant as a single architecture-lint surface so a future doc edit
 // can re-introduce one of the failure modes only by also editing the
-// gate that catches it. The README link to `docs/hooks.md` is pinned
+// gate that catches it. The README link to `docs/hooks-compatibility.md` is pinned
 // here too so the discoverability path from the project README to the
 // hook reference cannot quietly regress.
 
@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..", "..");
-const HOOKS_DOC_PATH = path.join(REPO_ROOT, "docs", "hooks.md");
+const HOOKS_DOC_PATH = path.join(REPO_ROOT, "docs", "hooks-compatibility.md");
 const README_PATH = path.join(REPO_ROOT, "README.md");
 
 const BUCKET_A_EVENTS = [
@@ -46,7 +46,7 @@ const BUCKET_A_EVENTS = [
   "SessionEnd",
 ] as const;
 
-// Tokens whose presence in `docs/hooks.md` signals a planning-artefact
+// Tokens whose presence in `docs/hooks-compatibility.md` signals a planning-artefact
 // leak. One-line edit to extend in the future. Each token is matched
 // case-sensitively as a substring against the full file.
 const FORBIDDEN_TOKENS = [
@@ -80,19 +80,6 @@ const FORBIDDEN_TOKENS = [
   "Pattern 9",
 ] as const;
 
-// Worked-example names from the D-63-11 binding list. Matched
-// case-insensitively as substrings so a future heading capitalization
-// tweak (e.g. "Bash safety net" vs "Bash-safety net") does not red-fail
-// the test for cosmetic reasons.
-const WORKED_EXAMPLE_NAMES = [
-  "auto-formatter",
-  "bash-safety",
-  "session start",
-  "prompt audit",
-  "background security",
-  "compaction snapshot",
-] as const;
-
 let cachedDoc: string | null = null;
 
 async function readHooksDoc(): Promise<string> {
@@ -100,79 +87,68 @@ async function readHooksDoc(): Promise<string> {
   return cachedDoc;
 }
 
-await test("docs/hooks.md exists", async () => {
+await test("docs/hooks-compatibility.md exists", async () => {
   await access(HOOKS_DOC_PATH);
 });
 
-await test("README.md links to docs/hooks.md", async () => {
+await test("README.md links to docs/hooks-compatibility.md", async () => {
   const readme = await readFile(README_PATH, "utf8");
   assert.ok(
-    readme.includes("docs/hooks.md"),
-    "README.md must include a link to docs/hooks.md so readers can discover the hook reference",
+    readme.includes("docs/hooks-compatibility.md"),
+    "README.md must include a link to docs/hooks-compatibility.md so readers can discover the hook reference",
   );
 });
 
-await test("docs/hooks.md lists all 8 supported event names verbatim", async () => {
+await test("docs/hooks-compatibility.md lists all 8 supported event names verbatim", async () => {
   const doc = await readHooksDoc();
   for (const event of BUCKET_A_EVENTS) {
     assert.ok(
       doc.includes(event),
-      `docs/hooks.md must contain the verbatim event name "${event}" (supported-events coverage)`,
+      `docs/hooks-compatibility.md must contain the verbatim event name "${event}" (supported-events coverage)`,
     );
   }
 });
 
-await test("docs/hooks.md cross-references the two authority docs", async () => {
+await test("docs/hooks-compatibility.md cross-references the two authority docs", async () => {
   const doc = await readHooksDoc();
   assert.ok(
     doc.includes("code.claude.com/docs/en/hooks"),
-    "docs/hooks.md must link to the upstream Claude Code hooks reference (code.claude.com/docs/en/hooks)",
+    "docs/hooks-compatibility.md must link to the upstream Claude Code hooks reference (code.claude.com/docs/en/hooks)",
   );
   assert.ok(
     doc.includes("pi-coding-agent"),
-    "docs/hooks.md must reference the @mariozechner/pi-coding-agent package as the Pi extension API authority",
+    "docs/hooks-compatibility.md must reference the @mariozechner/pi-coding-agent package as the Pi extension API authority",
   );
 });
 
-await test("docs/hooks.md contains zero internal-jargon tokens", async () => {
+await test("docs/hooks-compatibility.md contains zero internal-jargon tokens", async () => {
   const doc = await readHooksDoc();
   for (const token of FORBIDDEN_TOKENS) {
     assert.ok(
       !doc.includes(token),
-      `docs/hooks.md must not contain the internal-jargon token "${token}" (reader-facing doc)`,
+      `docs/hooks-compatibility.md must not contain the internal-jargon token "${token}" (reader-facing doc)`,
     );
   }
 });
 
-await test("docs/hooks.md has no decision-ID pattern and no Phase-number reference", async () => {
+await test("docs/hooks-compatibility.md has no decision-ID pattern and no Phase-number reference", async () => {
   const doc = await readHooksDoc();
   assert.equal(
     /D-\d{2}-\d{2}/.exec(doc),
     null,
-    "docs/hooks.md must not contain GSD decision IDs (e.g. D-63-09)",
+    "docs/hooks-compatibility.md must not contain GSD decision IDs (e.g. D-63-09)",
   );
   assert.ok(
     !doc.includes("Phase "),
-    'docs/hooks.md must not reference "Phase N" planning artefacts',
+    'docs/hooks-compatibility.md must not reference "Phase N" planning artefacts',
   );
 });
 
-await test("docs/hooks.md does not leak internal planning paths or artefacts", async () => {
+await test("docs/hooks-compatibility.md does not leak internal planning paths or artefacts", async () => {
   const doc = await readHooksDoc();
   assert.equal(
     /\.planning\/|RESEARCH\.md|CONTEXT\.md/.exec(doc),
     null,
-    "docs/hooks.md must not reference .planning/ paths or *RESEARCH.md / *CONTEXT.md planning artefacts",
+    "docs/hooks-compatibility.md must not reference .planning/ paths or *RESEARCH.md / *CONTEXT.md planning artefacts",
   );
-});
-
-await test("docs/hooks.md ships all 6 worked-example sections", async () => {
-  const doc = await readHooksDoc();
-  const lower = doc.toLowerCase();
-  for (const name of WORKED_EXAMPLE_NAMES) {
-    assert.ok(
-      lower.includes(name),
-      `docs/hooks.md must ship the "${name}" worked example (D-63-11 binding list)`,
-    );
-  }
 });

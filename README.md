@@ -25,7 +25,7 @@ Installs plugins from the Claude plugin marketplace that contain these component
 - Commands.
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
-- Hooks. See [Hook support reference](docs/hooks.md).
+- Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
 Plugins that contain unsupported components are marked as "unavailable".
@@ -168,12 +168,6 @@ In the project scope, commit `claude-plugins.json` so collaborators install the 
 ```
 
 User-scope files live in your home directory; they are personal and never shared.
-
-## Hook support
-
-Claude Code plugins can ship hook handlers that fire on session events and tool calls. This marketplace translates those hooks into Pi event subscriptions so they run under Pi the same way they would under Claude Code.
-
-See [Hook support reference](docs/hooks.md) for the supported events, worked examples, and a per-plugin compatibility guide.
 
 ## Command reference
 
