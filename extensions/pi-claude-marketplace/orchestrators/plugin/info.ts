@@ -631,6 +631,15 @@ function wrapBlock(
  * consumes. A discovery throw (EACCES on a component dir, etc.) falls
  * back to `componentsResolved: false` with `narrowProbeError(err)`
  * appended to the resolver reasons.
+ *
+ * Called from two arms:
+ *   - `buildInstalledRow` when the state record says installed but
+ *     `resolveStrict` returned the not-installable variant
+ *     (persistence-vs-disk disagreement -- the marketplace clone
+ *     changed, or the manifest now declares an unsupported field).
+ *   - `buildNotInstalledRow` when the plugin is not installed and
+ *     `resolveStrict` returned the not-installable variant (path
+ *     source with unsupported manifest fields / unsupported hooks).
  */
 async function buildNotInstallablePathRowFields(
   resolved: { readonly notes: readonly string[] } & Parameters<typeof composeResolvedComponents>[1],
