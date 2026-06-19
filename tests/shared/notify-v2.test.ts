@@ -3101,6 +3101,46 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
   assert.equal(args.length, 1);
 });
 
+test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` when supported=false, bare `<event>` when supported=true", () => {
+  // Byte-lock the lenient arm's renderer behavior at the unit level.
+  // `supported: false` => ` (unsupported)` suffix; `supported: true` =>
+  // bare `<event>` (no suffix), so a future lenient-reader change that
+  // emits bucket-A events does not accidentally suffix them.
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: true },
+    plugin: {
+      status: "unavailable",
+      name: "alpha",
+      version: "1.0.0",
+      componentsResolved: true,
+      components: {
+        hooks: [
+          { kind: "lenient", event: "Stop", groupCount: 1, supported: false },
+          { kind: "lenient", event: "PostToolUse", groupCount: 1, supported: true },
+        ],
+      },
+    },
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(
+    args[0],
+    [
+      "● official [user] <autoupdate>",
+      "  ⊘ alpha v1.0.0 (unavailable)",
+      "    hooks:",
+      "      Stop (unsupported)",
+      "      PostToolUse",
+    ].join("\n"),
+  );
+  assert.equal(args.length, 1);
+});
+
 // ===========================================================================
 // INFO-03 -- MarketplaceInfoCascadeMessage fan-out variant.
 //

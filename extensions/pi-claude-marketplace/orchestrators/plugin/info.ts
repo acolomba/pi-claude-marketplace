@@ -22,7 +22,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { TOOL_EVENTS, type ToolEvent } from "../../domain/components/hook-events.ts";
+import {
+  BUCKET_A_EVENTS,
+  TOOL_EVENTS,
+  type ToolEvent,
+} from "../../domain/components/hook-events.ts";
 import { parseHooksConfig, type HooksConfig } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
@@ -37,6 +41,7 @@ import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
+  ClaudeHookEvent,
   ContentReason,
   HookSummaryEntry,
   MarketplaceNotificationMessage,
@@ -50,6 +55,11 @@ import type { Scope } from "../../shared/types.ts";
 // for O(1) membership tests in the HookSummaryEntry projector. Module-
 // scope so the Set is allocated once across all info.ts call sites.
 const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
+
+// INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
+// membership tests in `readLenientHookSummary`'s per-event supported flag.
+// Module-scope so the Set is allocated once across all info.ts call sites.
+const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS);
 
 export interface GetPluginInfoOptions {
   readonly ctx: ExtensionContext;
@@ -248,7 +258,7 @@ function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEnt
         // `parseHooksConfig.ok = true` is a `ClaudeHookEvent`, and the
         // tool-event guard above excludes the `ToolEvent` subset).
         entries.push({
-          event: eventName as Exclude<HookSummaryEntry["event"], ToolEvent>,
+          event: eventName as Exclude<ClaudeHookEvent, ToolEvent>,
         });
       }
     }
@@ -291,6 +301,67 @@ async function readHookSummaryEntries(
   }
 
   return projectHookSummaryEntries(parsed.value);
+}
+
+/**
+ * INFO-05 / HOOK-01: best-effort hooks reader for the info surface ONLY.
+ * Runs when the resolver bailed (`resolved.hooksConfigPath === undefined`)
+ * so a `(unavailable) {unsupported hooks}` row can still list the
+ * top-level event keys the plugin declared. The strict resolver-side
+ * parser (`domain/components/hooks.ts::parseHooksConfig`, HOOK-01) is
+ * unchanged -- install correctness is non-negotiable; this helper is a
+ * READ-ONLY info-surface augmentation that never feeds the install path.
+ *
+ * Returns one lenient entry per declared event whose `groups` array is
+ * non-empty, with `supported` set to the bucket-A membership of the
+ * event key. ENOENT / ENOTDIR / unreadable / unparseable / wrong-shape
+ * all collapse to `undefined`; the row-level `{unsupported hooks}` brace
+ * already carries the user-visible signal on those paths. NFR-5: reads
+ * `<pluginRoot>/hooks/hooks.json` only, no network.
+ */
+async function readLenientHookSummary(
+  pluginRoot: string,
+): Promise<readonly HookSummaryEntry[] | undefined> {
+  const p = path.join(pluginRoot, "hooks", "hooks.json");
+  let raw: string;
+  try {
+    raw = await readFile(p, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+
+  if (typeof data !== "object" || data === null || !("hooks" in data)) {
+    return undefined;
+  }
+
+  const hooks = data.hooks;
+  if (typeof hooks !== "object" || hooks === null || Array.isArray(hooks)) {
+    return undefined;
+  }
+
+  const entries: HookSummaryEntry[] = [];
+  for (const [eventName, groups] of Object.entries(hooks)) {
+    const groupCount = Array.isArray(groups) ? groups.length : 0;
+    if (groupCount === 0) {
+      continue;
+    }
+
+    entries.push({
+      kind: "lenient",
+      event: eventName,
+      groupCount,
+      supported: BUCKET_A_EVENTS_SET.has(eventName),
+    });
+  }
+
+  return entries.length === 0 ? undefined : entries;
 }
 
 /**
@@ -342,9 +413,16 @@ async function composeResolvedComponents(
   // I/O failures propagate to the row-builder catch where
   // `narrowProbeError` classifies via the existing ladder (Open Question
   // 3 in 63-RESEARCH.md: no new REASON, no new code path).
+  //
+  // INFO-05: when the resolver did NOT record `hooksConfigPath` (the
+  // strict parser bailed; row is a path-resolvable
+  // `(unavailable) {unsupported hooks}` carrier), fall back to the
+  // best-effort `readLenientHookSummary` so the info surface still lists
+  // every top-level event the plugin declared, tagging non-bucket-A
+  // events as `(unsupported)`.
   const hooks =
     resolved.hooksConfigPath === undefined
-      ? undefined
+      ? await readLenientHookSummary(pluginRoot)
       : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
 
   return {

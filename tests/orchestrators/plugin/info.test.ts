@@ -1773,3 +1773,123 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// INFO-05: lenient hooks reader -- when the resolver bails because the
+// hooks file declares non-bucket-A events, the info surface STILL lists
+// the declared events with a `(unsupported)` suffix on each non-bucket-A
+// one. The strict resolver-side parser (HOOK-01) remains unchanged; the
+// lenient reader runs ONLY on the path-resolvable
+// `(unavailable) {unsupported hooks}` carrier row.
+// ---------------------------------------------------------------------------
+
+test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(unavailable) {unsupported hooks}` row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "ralph", source: "./ralph", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["ralph"],
+    });
+
+    // ralph-loop fixture shape: a single top-level `Stop` event, which is
+    // not in v1.13's BUCKET_A_EVENTS. The strict resolver flips
+    // installable: false; the lenient reader still enumerates `Stop`.
+    const pluginDir = path.join(mpRoot, "ralph");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }] },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // The hooks: block lists Stop with the (unsupported) suffix.
+    assert.match(msg, /\n {4}hooks:\n {6}Stop \(unsupported\)/);
+  });
+});
+
+test("INFO-05: lenient reader lists BOTH events in declaration order on a mixed `PostToolUse` + `Stop` row; only the non-bucket-A one carries `(unsupported)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "mixed", source: "./mixed", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["mixed"],
+    });
+
+    // Mixed shape: PostToolUse (bucket-A, with a matcher) + Stop
+    // (non-bucket-A). The strict resolver still flips installable: false
+    // because Stop trips TOOL-02. The lenient reader does NOT extract
+    // matchers (it only enumerates event keys), so PostToolUse renders
+    // bare on this rejected-by-resolver code path.
+    const pluginDir = path.join(mpRoot, "mixed");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo p" }] }],
+          Stop: [{ hooks: [{ type: "command", command: "echo s" }] }],
+        },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // Declaration order: PostToolUse first (no suffix), then Stop with suffix.
+    assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\n {6}Stop \(unsupported\)/);
+  });
+});
+
+test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on the `(unavailable) {unsupported hooks}` row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "broken", source: "./broken", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["broken"],
+    });
+
+    const pluginDir = path.join(mpRoot, "broken");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "broken", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // Unparseable hooks.json -> lenient reader returns undefined ->
+    // appendHooksBlock's length-zero guard suppresses the header.
+    assert.doesNotMatch(msg, /hooks:/);
+  });
+});

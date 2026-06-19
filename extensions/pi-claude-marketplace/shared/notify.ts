@@ -171,11 +171,23 @@ function allBenign(reasons: readonly Reason[] | undefined): boolean {
 // drifts, the typecheck breaks at the source-of-truth assertion site.
 //
 // `HookSummaryEntry` is the discriminated union the info-surface renderer
-// consumes: tool events statically carry `matcher: string`, non-tool events
-// statically cannot carry one. The discriminator is structural
-// (`"matcher" in entry`), so no runtime guard is needed -- both arms render
-// successfully and the renderer reads `entry.event` / `entry.matcher`
-// directly without re-deriving event strings.
+// consumes. Three arms:
+//   - tool event (untagged): statically carries `matcher: string`.
+//   - non-tool event (untagged): statically cannot carry a matcher.
+//   - lenient (tagged `kind: "lenient"`): produced by the info-surface
+//     lenient reader when the resolver bailed (it did NOT record
+//     `hooksConfigPath`). Carries an arbitrary `event: string` (the
+//     resolver rejected this key, so it may be `Stop`, `Notification`,
+//     or any other token the plugin author wrote) plus `groupCount`
+//     and a `supported: boolean` bucket-A membership flag. Rendered with
+//     a ` (unsupported)` suffix iff `supported === false`. The lenient
+//     arm exists ONLY on the info surface; the resolver-side strict
+//     parser (`domain/components/hooks.ts::parseHooksConfig`) remains
+//     strict and never produces lenient entries.
+// Discriminator is structural: the untagged arms have no `kind` field;
+// the lenient arm is the only one carrying `kind: "lenient"`. The
+// renderer branches on `"kind" in entry` first, then on `"matcher" in
+// entry` for the tool/non-tool split.
 //
 // `HookSummary` is the public wrapper interface. The payload boundary uses
 // the raw `readonly HookSummaryEntry[]` shape (see
@@ -197,7 +209,13 @@ type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
 
 export type HookSummaryEntry =
   | { readonly event: _ToolEvent; readonly matcher: string }
-  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> };
+  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> }
+  | {
+      readonly kind: "lenient";
+      readonly event: string;
+      readonly groupCount: number;
+      readonly supported: boolean;
+    };
 
 export interface HookSummary {
   readonly entries: readonly HookSummaryEntry[];
@@ -2680,11 +2698,16 @@ const COMPONENT_KINDS: readonly [
 /**
  * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
  * carries one or more entries. Emits a 4-space-indent header followed by
- * one 6-space-indent line per entry; `<event>(<matcher>)` for tool events
- * (discriminated by the structural `"matcher" in entry` predicate), bare
- * `<event>` for non-tool events. Reads `entry.event` and `entry.matcher`
- * directly -- no re-derivation from a closed-set tuple, no runtime guard
- * (the union has exactly two arms, both render).
+ * one 6-space-indent line per entry. Three arm shapes:
+ *   - lenient arm (`kind === "lenient"`): bare `<event>`, with a
+ *     ` (unsupported)` suffix iff `supported === false`. Produced only
+ *     by the info-surface lenient reader on rows where the resolver did
+ *     NOT record `hooksConfigPath`.
+ *   - tool event (untagged, has `matcher`): `<event>(<matcher>)`.
+ *   - non-tool event (untagged, no `matcher`): bare `<event>`.
+ * Reads `entry.event` / `entry.matcher` directly -- no re-derivation
+ * from a closed-set tuple, no runtime guard (the union is exhaustive,
+ * every arm renders).
  */
 function appendHooksBlock(lines: string[], entries: readonly HookSummaryEntry[] | undefined): void {
   if (entries === undefined || entries.length === 0) {
@@ -2693,7 +2716,9 @@ function appendHooksBlock(lines: string[], entries: readonly HookSummaryEntry[] 
 
   lines.push("    hooks:");
   for (const entry of entries) {
-    if ("matcher" in entry) {
+    if ("kind" in entry) {
+      lines.push(`      ${entry.event}${entry.supported ? "" : " (unsupported)"}`);
+    } else if ("matcher" in entry) {
       lines.push(`      ${entry.event}(${entry.matcher})`);
     } else {
       lines.push(`      ${entry.event}`);
