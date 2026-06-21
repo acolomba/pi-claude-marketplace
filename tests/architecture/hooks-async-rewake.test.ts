@@ -42,6 +42,7 @@ import {
   type PidTableEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
+  _awaitLastPidTablePersistForTest,
   _getRegistryForTest,
   _resetDispatchIdGeneratorForTest,
   _resetOrphanProbesForTest,
@@ -344,6 +345,11 @@ async function makeTempLocations(): Promise<{
   return {
     loc,
     cleanup: async () => {
+      // Drain any in-flight pid-table atomic write before removing the
+      // temp directory.  write-file-atomic holds a temp file open in
+      // _shared/ until the rename+fsync completes; removing the directory
+      // concurrently produces ENOTEMPTY on macOS.
+      await _awaitLastPidTablePersistForTest();
       if (prev === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {

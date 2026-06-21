@@ -138,9 +138,13 @@ async function readEntriesOrSkip(dir: string): Promise<Dirent[] | null> {
  * (D-17).
  */
 async function assertSymlinkEntryContained(pluginRoot: string, linkPath: string): Promise<void> {
-  const resolved = await realpath(linkPath);
+  // Resolve both sides so the string-prefix check in assertPathInside
+  // works on macOS where /var is a symlink to /private/var: realpath of
+  // linkPath yields /private/var/... but pluginRoot is still /var/...
+  // unless we also resolve it, causing a false containment failure.
+  const [resolved, resolvedRoot] = await Promise.all([realpath(linkPath), realpath(pluginRoot)]);
   try {
-    await assertPathInside(pluginRoot, resolved, `hooks subtree symlink ${linkPath}`);
+    await assertPathInside(resolvedRoot, resolved, `hooks subtree symlink ${linkPath}`);
   } catch (err) {
     if (err instanceof SymlinkRefusedError) {
       throw err;
