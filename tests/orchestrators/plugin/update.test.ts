@@ -123,7 +123,14 @@ function makePluginRecord(
  * disabled (artefacts re-materialize on the next `enable`).
  */
 function makeDisabledPluginRecord(version: string): PluginRecord {
-  return makePluginRecord(version, { enabled: false });
+  return makePluginRecord(version, {
+    enabled: false,
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+  });
 }
 
 interface SeededPathMp {
