@@ -71,6 +71,14 @@
      stroke-width="30"
      id="border1"
      style="fill:none;stroke:#d40000;stroke-width:30;shape-rendering:crispEdges" />
+  <rect
+     x="45"
+     y="65"
+     width="550"
+     height="420"
+     fill="#ffffff"
+     id="background"
+     style="fill:#ffffff;shape-rendering:crispEdges" />
   <path
      fill="#d40000"
      d="m 150,140 h 410 v 70 h -70 v 90 h -60 v 130 h -80 v -130 h -60 v 130 h -80 v -130 h -60 v 0 H 80 v -70 h 70 z"
