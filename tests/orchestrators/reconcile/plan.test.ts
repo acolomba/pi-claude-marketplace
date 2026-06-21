@@ -332,7 +332,30 @@ function stateWithDisabledRecord(
   };
 }
 
-test("ENBL-02 (a): recorded + empty resources + enabled!==false -> pluginsToEnable non-empty (isRecordedButDisabled fires)", () => {
+test("ENBL-02 self-heal: migrated legacy-disabled record (state enabled:true + empty resources) + config-disabled -> pluginsToDisable non-empty", () => {
+  // After migration a legacy-disabled plugin is mislabeled state enabled:true
+  // while its resources stay empty (see migrate.test.ts). The config still
+  // carries enabled:false, so reconcile must emit exactly one disable to
+  // re-converge: isRecordedButDisabled is false (enabled:true), so the
+  // declared-disabled branch fires the disable action rather than treating it
+  // as steady state.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
+  state.marketplaces["mp"]!.plugins["cr"]!.enabled = true;
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
+    {},
+  );
+  const plan = planReconcile(merged, state, "project");
+  assert.equal(plan.pluginsToDisable.length, 1);
+  assert.deepEqual(plan.pluginsToDisable[0], {
+    scope: "project",
+    plugin: "cr",
+    marketplace: "mp",
+  });
+  assert.equal(plan.pluginsToEnable.length, 0);
+});
+
+test("ENBL-02 (a): recorded + state enabled:false + config-enabled -> pluginsToEnable non-empty (isRecordedButDisabled fires)", () => {
   const state = stateWithDisabledRecord("mp", "acme/tools", "cr");
   const merged = mergeScopeConfigs(
     configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),

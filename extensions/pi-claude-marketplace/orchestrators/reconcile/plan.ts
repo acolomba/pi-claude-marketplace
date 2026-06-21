@@ -16,11 +16,11 @@
 // `false` excludes).
 //
 // ENBL-02: the recorded-but-disabled hand-off closes here.
-// `isRecordedButDisabled(record)` reads the empty-resources marker (all
-// four `resources.*` arrays empty -- A1; SPLIT-01 preserved) so a
-// recorded-but-disabled plugin paired with config `enabled !== false`
-// lands in `pluginsToEnable` while the install branch stays mutually
-// exclusive (the recorded-and-not-recorded branches are disjoint).
+// `isRecordedButDisabled(record)` reads the explicit `enabled` field:
+// `record.compatibility.installable && !record.enabled`. An explicit
+// `enabled: false` (set by the disable orchestrator) is the sole
+// "currently disabled" marker; absence of the field after migration
+// is treated as enabled.
 //
 // Plugin-key parser (D-01): flat-keyed plugin entries are parsed by
 // `lastIndexOf("@")` so a plugin name containing `@` (e.g.

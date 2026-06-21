@@ -334,6 +334,37 @@ test("ENBL-02: ensurePluginEnabled preserves enabled: false (disabled record)", 
   assert.equal(mp.plugins["p1"]?.enabled, false);
 });
 
+test("ENBL-02: legacy-disabled shape (empty resources + absent enabled) over-fills to enabled: true (mislabel self-heals on reconcile)", () => {
+  // A plugin disabled via `/claude:plugin disable` on a pre-ENBL-02 build
+  // persists as installable: true + all-empty resources + NO `enabled`
+  // field. The migrator cannot tell it apart from an enabled record, so it
+  // over-fills enabled: true. The record emerges "enabled but empty";
+  // reconcile then reads the still-`enabled: false` config entry and emits
+  // one redundant disable to re-converge (that self-heal is pinned by the
+  // reconcile test in tests/orchestrators/reconcile/plan.test.ts).
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    omitEnabled: true,
+  });
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, true);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { enabled: unknown; resources: Record<string, unknown> }>;
+  };
+  const p1 = mp.plugins["p1"];
+  assert.ok(p1);
+  // Over-filled to enabled: true despite being a legacy-disabled record.
+  assert.equal(p1.enabled, true);
+  // Resources are NOT repopulated -- the record stays "enabled but empty",
+  // exactly the shape reconcile self-heals.
+  assert.deepEqual(p1.resources["skills"], []);
+  assert.deepEqual(p1.resources["hooks"], []);
+});
+
 test("IL-3 persistMigratedState swallows write failures and emits ONE console.warn", async (t) => {
   // Force atomicWriteJson to fail by passing a path whose dirname is an
   // existing FILE (not a directory). atomicWriteJson runs `mkdir(parent)`

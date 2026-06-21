@@ -391,6 +391,15 @@ test("HOOK-02 / D-57-01: STATE_VALIDATOR rejects a record missing resources.hook
   assert.equal(STATE_VALIDATOR.Check(fixture), false);
 });
 
+test("ENBL-02: STATE_VALIDATOR rejects a record missing `enabled` (fill-before-validate is the migrator's responsibility)", () => {
+  // Guards the fill-before-validate contract: if `enabled` ever became
+  // optional in the schema, the migrator's default-fill could silently
+  // regress to a no-op and a field-less record would validate. This pins
+  // `enabled` as REQUIRED.
+  const fixture = buildValidatorFixture({ omitEnabled: true });
+  assert.equal(STATE_VALIDATOR.Check(fixture), false);
+});
+
 test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; every plugin record gains resources.hooks default", async (t) => {
   const { root, cleanup } = await tmpExtensionRoot();
   // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
@@ -455,6 +464,67 @@ test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; 
     assert.deepEqual(mp.plugins["needs-default"]?.resources["hooks"], []);
     // The migrator leaves an existing hooks array untouched (D-57-03).
     assert.deepEqual(mp.plugins["has-preexisting"]?.resources["hooks"], ["pre-existing"]);
+    // Flush fire-and-forget persist before cleanup races.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    await cleanup();
+  }
+});
+
+test("ENBL-02: pre-enabled state.json round-trips through loadState; every plugin record gains enabled: true", async (t) => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
+  try {
+    // A pre-ENBL-02 state.json: plugin records carry full resources
+    // (including hooks, so this exercises the `enabled` arm in isolation)
+    // but NO `enabled` field. schemaVersion stays 1. This pins loadState's
+    // integration: the migrator's enabled-fill MUST run before
+    // STATE_VALIDATOR.Check -- a reorder would throw on this file undetected.
+    const preEnabledState = {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: "./mp", logical: "./mp" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/abs/mp",
+          plugins: {
+            one: {
+              version: "1.0.0",
+              resolvedSource: "/abs/mp/one",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+            two: {
+              version: "2.0.0",
+              resolvedSource: "/abs/mp/two",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: ["s"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              installedAt: "2025-01-02T00:00:00.000Z",
+              updatedAt: "2025-01-02T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    await writeFile(path.join(root, "state.json"), JSON.stringify(preEnabledState));
+
+    const got = await loadState(root);
+    const mp = (
+      got.marketplaces as Record<string, { plugins: Record<string, { enabled: boolean }> }>
+    )["mp"];
+    assert.ok(mp);
+    assert.equal(mp.plugins["one"]?.enabled, true);
+    assert.equal(mp.plugins["two"]?.enabled, true);
     // Flush fire-and-forget persist before cleanup races.
     await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));

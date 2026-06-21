@@ -341,6 +341,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
               };
               compatibility: { installable: boolean };
               installedAt: string;
+              enabled: boolean;
             }
           >;
         }
@@ -354,6 +355,10 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
     assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
     assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
+    // ENBL-02: the explicit disabled marker must be written -- without this
+    // assertion, a regression dropping `enabled = false` in runDisableBranch
+    // would pass while isRecordedButDisabled silently breaks.
+    assert.equal(rec.enabled, false, "enabled field must be false after disable");
   });
 });
 

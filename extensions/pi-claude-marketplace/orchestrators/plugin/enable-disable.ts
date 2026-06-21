@@ -275,7 +275,7 @@ async function runDisableBranch(
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
     // the uninstall.ts cache-mutation invariant.
     if (cascade.dropped.hooks.length > 0) {
-      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ");
+      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ", false);
     }
 
     return {
@@ -309,7 +309,7 @@ async function runDisableBranch(
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
-  dropCachedHooks(scope, opts.marketplace, opts.plugin, "");
+  dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
 }
@@ -321,19 +321,31 @@ async function runDisableBranch(
  * the cache is rebuilt from state.json on the next /reload's factory-time
  * hydrate (D-59-02). The `logPrefix` distinguishes the partial-cascade
  * branch from the clean-disable branch in debug logs.
+ *
+ * `unexpected` marks the clean-disable path, where the cascade fully
+ * succeeded and a routing-rebuild failure is NOT anticipated: the failure
+ * message names the consequence (the disabled plugin's hooks stay live in
+ * the running process) and the remedy (the disable's own `/reload` trailer
+ * already instructs the user, and that reload rebuilds the routing table
+ * from state.json). On the partial-cascade path a rebuild failure is an
+ * expected secondary symptom of the cascade throw, so it stays terse.
  */
 function dropCachedHooks(
   scope: Scope,
   marketplace: string,
   plugin: string,
   logPrefix: string,
+  unexpected: boolean,
 ): void {
   try {
     removePluginConfigFromCache(scope, marketplace, plugin);
     rebuildRoutingTables();
   } catch (cacheErr) {
+    const consequence = unexpected
+      ? " -- hooks for this plugin remain active in the running process until the disable's /reload rebuilds the routing table from state.json"
+      : "";
     hookDebugLog(
-      `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
+      `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}${consequence}`,
     );
   }
 }

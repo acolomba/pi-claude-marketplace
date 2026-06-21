@@ -15,8 +15,14 @@
 // (the hooks arm lands per HOOK-02 / D-57-01; the schema requires
 // `resources.hooks: string[]` and the additive default-fill is what
 // lets v1.0..v1.12 state.json files load cleanly). Per ENBL-02:
-// missing `enabled` is filled with `true` (all existing records were
-// actively installed and therefore enabled by definition).
+// missing `enabled` is filled with `true`. This is a deliberate over-fill:
+// a plugin disabled via `/claude:plugin disable` on a pre-ENBL-02 build
+// persists as `installable: true` + all-empty resources + NO `enabled`
+// field, indistinguishable here from an enabled record, so the fill
+// mislabels it `enabled: true` at the state layer. It self-heals on the
+// next reconcile -- the config still carries `enabled: false`, so the diff
+// emits one redundant disable that re-empties resources and writes
+// `enabled: false`.
 //
 // Per ST-4 "persisted asynchronously (best-effort)": the persist call
 // does NOT re-throw on failure; the IL-3 warn surfaces the cause and
@@ -141,10 +147,14 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  * Mirrors `ensurePluginResources` -- same iteration pattern, same
  * mutated-flag discipline.
  *
- * All existing plugin records (v1.0..v1.13) were actively installed and
- * therefore enabled by definition; `enabled: true` is the correct
- * additive default. The fill MUST run before STATE_VALIDATOR.Check so the
- * newly-required ENBL-02 field is present.
+ * `enabled: true` is the additive default for any record predating the
+ * field. This intentionally over-fills the one legacy shape it cannot
+ * distinguish: a plugin disabled on a pre-ENBL-02 build (`installable: true`
+ * + empty resources + no `enabled` field) is indistinguishable here from an
+ * enabled one, so it too gets `enabled: true`. That mislabel self-heals on
+ * the next reconcile, which reads the still-`enabled: false` config entry
+ * and emits one redundant disable. The fill MUST run before
+ * STATE_VALIDATOR.Check so the newly-required ENBL-02 field is present.
  */
 function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
   const plugins = mp.plugins;
@@ -159,6 +169,9 @@ function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
     }
 
     const pl = plRaw as Record<string, unknown>;
+    // Only an ABSENT field is filled. A present-but-non-boolean value
+    // (e.g. null) is intentionally left untouched for STATE_VALIDATOR.Check
+    // to reject with an actionable error rather than being silently coerced.
     if (pl.enabled === undefined) {
       pl.enabled = true;
       mutated = true;
