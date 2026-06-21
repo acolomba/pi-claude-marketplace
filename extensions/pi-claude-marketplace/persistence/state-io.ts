@@ -72,6 +72,53 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   updatedAt: Type.String(),
 });
 
+/** The permissive stored shape -- any `enabled` + `resources` combination. */
+export type PluginInstallRecord = Type.Static<typeof PLUGIN_INSTALL_RECORD_SCHEMA>;
+
+/**
+ * ENBL-02 two-signal invariant, expressed in the type system.
+ *
+ * The stored record permits any `enabled` + `resources` combination, but
+ * only three are legal: enabled + populated (active), disabled + empty (the
+ * disable terminal state), and enabled + empty (the transient
+ * post-migration / pre-self-heal shape). The fourth -- disabled + populated
+ * -- is the contradiction these branded types forbid: `DisabledPluginRecord`
+ * pins every resources array to the empty tuple `[]`, so a literal carrying a
+ * non-empty array is a compile error. `toDisabledRecord` is the sole
+ * sanctioned producer; the disable orchestrator routes through it (replacing
+ * the record in the map) instead of mutating fields in place, so the branded
+ * type survives to the assignment.
+ */
+export type EnabledPluginRecord = PluginInstallRecord & { enabled: true };
+export type DisabledPluginRecord = PluginInstallRecord & {
+  enabled: false;
+  resources: {
+    skills: [];
+    prompts: [];
+    agents: [];
+    mcpServers: [];
+    hooks: [];
+  };
+};
+
+/**
+ * Build the disabled form of a plugin record: preserve version /
+ * resolvedSource / compatibility / installedAt, reset every resources array
+ * to empty, set `enabled: false`, and stamp `updatedAt`. The empty-tuple
+ * return type makes "disabled but populated" unrepresentable at the call site.
+ */
+export function toDisabledRecord(
+  record: PluginInstallRecord,
+  updatedAt: string,
+): DisabledPluginRecord {
+  return {
+    ...record,
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: false,
+    updatedAt,
+  };
+}
+
 /**
  * ST-2: per-marketplace record. `source` is `Type.Unknown()` so the schema
  * accepts whatever shape ST-6 funnel produced (PathSource | GitHubSource);

@@ -55,6 +55,7 @@ import path from "node:path";
 import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
+import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
@@ -72,7 +73,7 @@ import {
 import type { InstallFailureCapture } from "./install.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -258,7 +259,7 @@ async function runDisableBranch(
   scope: Scope,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
-): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean }> {
+): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean; disabled?: DisabledPluginRecord }> {
   const recordedVersion = installed.version;
   const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
   if (!cascade.ok) {
@@ -291,19 +292,16 @@ async function runDisableBranch(
   // PRESERVE version / resolvedSource / compatibility / installedAt;
   // RESET resources.*; SET enabled: false; BUMP updatedAt.
   // D-63-04 / COMPONENT_KINDS 5-tuple: cascadeUnstagePlugin physically
-  // unstages hooks via removeHookConfig, so the in-memory record's hooks
+  // unstages hooks via removeHookConfig, so the disabled record's hooks
   // array must be zeroed alongside the other four axes to stay consistent
   // with what landed on disk.
-  // ENBL-02: set enabled: false as the explicit disabled marker. Resources
-  // arrays are still zeroed for backwards compatibility with the convergence
-  // proof and any reader that has not yet migrated to the boolean check.
-  installed.resources.skills = [];
-  installed.resources.prompts = [];
-  installed.resources.agents = [];
-  installed.resources.mcpServers = [];
-  installed.resources.hooks = [];
-  installed.enabled = false;
-  installed.updatedAt = new Date().toISOString();
+  // ENBL-02: `toDisabledRecord` is the sole sanctioned producer of the
+  // disabled shape -- its empty-tuple return type makes a disabled-but-
+  // populated record a compile error. The resources arrays stay zeroed for
+  // the convergence proof and any reader not yet migrated to the boolean
+  // check. The caller replaces the map slot with the returned record (rather
+  // than mutating in place) so the branded type survives to the assignment.
+  const disabled = toDisabledRecord(installed, new Date().toISOString());
 
   // WR-03: the cascade unstaged the on-disk hooks.json via removeHookConfig;
   // drop the parsed-config cache entry and rebuild the routing table in
@@ -311,7 +309,7 @@ async function runDisableBranch(
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
   dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
 
-  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false };
+  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
 }
 
 /**
@@ -522,6 +520,14 @@ export async function setPluginEnabled(
       } else {
         const disableResult = await runDisableBranch(opts, scope, locations, installed);
         outcome = disableResult.outcome;
+        // ENBL-02: on a clean disable, replace the map slot with the branded
+        // `DisabledPluginRecord` the branch built via `toDisabledRecord`
+        // (rather than mutating `installed` in place). The terminal
+        // `tx.save()` below persists tx.state with the replaced slot.
+        if (disableResult.disabled !== undefined) {
+          mp.plugins[plugin] = disableResult.disabled;
+        }
+
         // I3: a partial disable cascade mutated `installed.resources.*` in
         // place to drop the artefacts already removed before the throw.
         // Persist the shrunken record so state.json never claims artefacts
