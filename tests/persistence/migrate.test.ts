@@ -180,6 +180,8 @@ test("D-13 idempotency: second migrate on already-scrubbed input returns mutated
 function buildLegacyMigrationInput(opts: {
   resources?: Record<string, unknown> | undefined;
   omitResources?: boolean;
+  enabled?: unknown;
+  omitEnabled?: boolean;
 }): { schemaVersion: 1; marketplaces: Record<string, unknown> } {
   const plugin: Record<string, unknown> = {
     version: "1.0.0",
@@ -195,6 +197,10 @@ function buildLegacyMigrationInput(opts: {
       agents: [],
       mcpServers: [],
     };
+  }
+
+  if (!opts.omitEnabled) {
+    plugin["enabled"] = opts.enabled ?? true;
   }
 
   return {
@@ -274,6 +280,58 @@ test("HOOK-02 / D-57-01: ensurePluginResources fills hooks: [] when the entire r
   assert.deepEqual(p1.resources["agents"], []);
   assert.deepEqual(p1.resources["mcpServers"], []);
   assert.deepEqual(p1.resources["hooks"], []);
+});
+
+// ===================================================================
+// ENBL-02: additive `enabled: boolean` field on the plugin install
+// record. The default-fill `ensurePluginEnabled` in migrate.ts adds
+// `enabled: true` for any record that does not carry the field.
+// ===================================================================
+
+test("ENBL-02: ensurePluginEnabled fills enabled: true when absent", () => {
+  // Legacy-shaped record with no `enabled` field.
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    omitEnabled: true,
+  });
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, true);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { enabled: unknown }>;
+  };
+  assert.equal(mp.plugins["p1"]?.enabled, true);
+});
+
+test("ENBL-02: ensurePluginEnabled is idempotent when enabled is already set", () => {
+  // Already-normalized record with enabled: true -- no mutation.
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
+  });
+  const { mutated } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
+  assert.equal(mutated, false);
+});
+
+test("ENBL-02: ensurePluginEnabled preserves enabled: false (disabled record)", () => {
+  // A record explicitly marked disabled must not be overwritten.
+  const fixture = buildLegacyMigrationInput({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: false,
+  });
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, false);
+  const mp = marketplaces["mp"] as {
+    plugins: Record<string, { enabled: unknown }>;
+  };
+  assert.equal(mp.plugins["p1"]?.enabled, false);
 });
 
 test("IL-3 persistMigratedState swallows write failures and emits ONE console.warn", async (t) => {

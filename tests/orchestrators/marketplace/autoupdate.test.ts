@@ -690,12 +690,13 @@ test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched 
           unsupported: [],
         },
         resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        enabled: true,
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
     await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: { mp: seededMp },
     });
 

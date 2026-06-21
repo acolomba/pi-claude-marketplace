@@ -85,7 +85,7 @@ async function withHermeticPiHome<T>(
 
 function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       "test-mp": {
         name: "test-mp",
@@ -111,6 +111,7 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
               mcpServers: [],
               hooks: ["test-plugin"],
             },
+            enabled: true,
             installedAt: "2026-06-17T00:00:00Z",
             updatedAt: "2026-06-17T00:00:00Z",
           },
@@ -259,7 +260,7 @@ echo '{}'
 
     // Seed state.json: resolvedSource points OUTSIDE extensionRoot.
     const externalState: ExtensionState = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "external-mp": {
           name: "external-mp",
@@ -285,6 +286,7 @@ echo '{}'
                 mcpServers: [],
                 hooks: ["ext-plugin"],
               },
+              enabled: true,
               installedAt: "2026-06-17T00:00:00Z",
               updatedAt: "2026-06-17T00:00:00Z",
             },

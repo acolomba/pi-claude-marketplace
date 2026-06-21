@@ -61,7 +61,7 @@ function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[]
 
 function buildUserScopeStateWithHooksPlugin(): ExtensionState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       "claude-plugins-official": {
         name: "claude-plugins-official",
@@ -87,6 +87,7 @@ function buildUserScopeStateWithHooksPlugin(): ExtensionState {
               mcpServers: [],
               hooks: ["learning-output-style"],
             },
+            enabled: true,
             installedAt: "2026-06-17T00:00:00Z",
             updatedAt: "2026-06-17T00:00:00Z",
           },

@@ -30,6 +30,7 @@ function makePluginRecord(
       mcpServers: over.resources?.mcpServers ?? [],
       hooks: over.resources?.hooks ?? [],
     },
+    enabled: over.enabled ?? true,
     installedAt: over.installedAt ?? "2026-01-01T00:00:00.000Z",
     updatedAt: over.updatedAt ?? "2026-01-01T00:00:00.000Z",
   };

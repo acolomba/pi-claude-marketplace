@@ -789,6 +789,10 @@ export async function runInstallLedger(
           // inventory stays empty.
           hooks: c.resolved.hooksConfigPath === undefined ? [] : [c.plugin],
         },
+        // ENBL-02: always set enabled: true on install and re-materialization.
+        // The disable branch sets it to false; the enable branch re-runs
+        // statePhase (via runInstallLedger), which resets it to true here.
+        enabled: true,
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
         // uninstalled, only disabled. Fresh installs stamp now.

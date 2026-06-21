@@ -84,7 +84,7 @@ test("makeLocationsResolver: loadStateForScope projects state.json into marketpl
     await mkdir(projectLoc.extensionRoot, { recursive: true });
 
     const state: ExtensionState = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "test-mp": {
           name: "test-mp",
@@ -99,6 +99,7 @@ test("makeLocationsResolver: loadStateForScope projects state.json into marketpl
               resolvedSource: "/tmp/test-src/plugins/p1",
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              enabled: true,
               installedAt: "2026-06-17T00:00:00Z",
               updatedAt: "2026-06-17T00:00:00Z",
             },
@@ -176,7 +177,7 @@ test("makeLocationsResolver: loadManifestForMarketplace returns installed + avai
     const projectLoc = locationsFor("project", cwd);
     await mkdir(projectLoc.extensionRoot, { recursive: true });
     const state: ExtensionState = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "fixture-mp": {
           name: "fixture-mp",
@@ -191,6 +192,7 @@ test("makeLocationsResolver: loadManifestForMarketplace returns installed + avai
               resolvedSource: path.join(srcRoot, "plugins", "installed-plug"),
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              enabled: true,
               installedAt: "2026-06-17T00:00:00Z",
               updatedAt: "2026-06-17T00:00:00Z",
             },

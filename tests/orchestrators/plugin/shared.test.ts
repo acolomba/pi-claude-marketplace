@@ -32,7 +32,10 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * the surrounding fields so the fixture matches what `saveState` would
  * accept -- prevents accidental schema-drift fixtures.
  */
-function makePluginRecord(over: { resources?: Partial<PluginRecord["resources"]> }): PluginRecord {
+function makePluginRecord(over: {
+  resources?: Partial<PluginRecord["resources"]>;
+  enabled?: boolean;
+}): PluginRecord {
   return {
     version: "0.0.1",
     resolvedSource: "/tmp",
@@ -49,6 +52,7 @@ function makePluginRecord(over: { resources?: Partial<PluginRecord["resources"]>
       mcpServers: over.resources?.mcpServers ?? [],
       hooks: over.resources?.hooks ?? [],
     },
+    enabled: over.enabled ?? true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

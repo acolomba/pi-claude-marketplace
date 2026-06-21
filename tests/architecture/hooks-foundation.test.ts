@@ -32,27 +32,27 @@ import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: D-57-01 -- STATE_SCHEMA.schemaVersion stays Literal(1) (no bump)
+// Block 1: ENBL-02 -- STATE_SCHEMA.schemaVersion is Union(Literal(1), Literal(2))
 // ──────────────────────────────────────────────────────────────────────────
 
-test("D-57-01: STATE_SCHEMA.schemaVersion is Type.Literal(1) (NOT a union of literals)", () => {
+test("ENBL-02: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), Literal(2)])", () => {
   const versionSchema = STATE_SCHEMA.properties.schemaVersion as unknown as Record<string, unknown>;
 
-  // Type.Literal(1) compiles to { type: "number", const: 1 }. A future
-  // `Type.Union([Type.Literal(1), Type.Literal(2)])` would compile to
-  // { anyOf: [...] } -- both `const` and `enum` absent, `anyOf` present.
-  // Asserting `const === 1` AND `anyOf === undefined` AND `enum === undefined`
-  // pins the no-bump amendment.
-  assert.equal(versionSchema.const, 1, "schemaVersion must be Type.Literal(1)");
-  assert.equal(
-    versionSchema.anyOf,
-    undefined,
-    "schemaVersion must NOT be a union -- D-57-01 forbids widening",
+  // Type.Union([Type.Literal(1), Type.Literal(2)]) compiles to
+  // { anyOf: [{ const: 1 }, { const: 2 }] }.
+  // Asserting the anyOf structure pins the ENBL-02 migration contract:
+  // both v1 (pre-enabled) and v2 (enabled) on-disk formats are accepted,
+  // and any future widening to v3 requires this test to be updated.
+  assert.ok(Array.isArray(versionSchema.anyOf), "schemaVersion must be a union (anyOf present)");
+  const anyOf = versionSchema.anyOf as Array<Record<string, unknown>>;
+  assert.equal(anyOf.length, 2, "schemaVersion union must have exactly two members (1 and 2)");
+  assert.ok(
+    anyOf.some((m) => m.const === 1),
+    "schemaVersion union must include Literal(1)",
   );
-  assert.equal(
-    versionSchema.enum,
-    undefined,
-    "schemaVersion must NOT be an enum -- D-57-01 forbids widening",
+  assert.ok(
+    anyOf.some((m) => m.const === 2),
+    "schemaVersion union must include Literal(2)",
   );
 });
 

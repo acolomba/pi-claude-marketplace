@@ -44,7 +44,12 @@ import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate
  * discipline -- state.json never holds absolute paths). The migration is
  * additive: `ensurePluginResources` in persistence/migrate.ts fills
  * `hooks: []` before validation runs, so v1.0..v1.12 state.json files
- * load cleanly without a STATE_SCHEMA.schemaVersion bump (D-57-01).
+ * load cleanly.
+ *
+ * ENBL-02: `enabled: boolean` is REQUIRED (schemaVersion 2+). The migration
+ * fills `enabled: true` for all existing records via `ensurePluginEnabled`
+ * before validation runs, so v1.0..v1.13 state.json files load cleanly.
+ * `enabled: false` is the sole disable marker; `true` means active.
  */
 const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   version: Type.String(),
@@ -62,6 +67,7 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
     mcpServers: Type.Array(Type.String()),
     hooks: Type.Array(Type.String()),
   }),
+  enabled: Type.Boolean(),
   installedAt: Type.String(),
   updatedAt: Type.String(),
 });
@@ -91,9 +97,14 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
   plugins: Type.Record(Type.String(), PLUGIN_INSTALL_RECORD_SCHEMA),
 });
 
-/** ST-1: state.json shape (schemaVersion locked at 1). */
+/**
+ * ST-1: state.json shape. schemaVersion 1 is the pre-ENBL-02 shape (no
+ * `enabled` field on plugin records); schemaVersion 2 is the ENBL-02 shape
+ * (`enabled: boolean` required). The union lets loadState accept both during
+ * the migration cycle; `persistMigratedState` always writes schemaVersion 2.
+ */
 export const STATE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(1),
+  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),
   marketplaces: Type.Record(Type.String(), MARKETPLACE_RECORD_SCHEMA),
 });
 
@@ -104,7 +115,7 @@ export const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
 /** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
-  schemaVersion: 1,
+  schemaVersion: 2,
   marketplaces: {},
 });
 
@@ -175,7 +186,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // Missing file -> default state (NOT throw).
-      return { schemaVersion: 1, marketplaces: {} };
+      return { schemaVersion: 2, marketplaces: {} };
     }
 
     throw new Error(`Failed to read ${stateJsonPath}: ${errorMessage(err)}`, { cause: err });
@@ -229,7 +240,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     normalizeStoredSource(mpName, mp);
   }
 
-  const normalized: unknown = { schemaVersion: 1, marketplaces };
+  const normalized: unknown = { schemaVersion: 2, marketplaces };
 
   if (!STATE_VALIDATOR.Check(normalized)) {
     throw new Error(

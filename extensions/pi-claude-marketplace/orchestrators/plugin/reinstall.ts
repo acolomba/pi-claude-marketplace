@@ -1363,6 +1363,7 @@ function updateStateRecord(
       unsupported: [...installable.unsupported],
     },
     resources: resourcesFromHandles(handles, plugin, installable),
+    enabled: true,
     installedAt: oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
   };
@@ -1679,6 +1680,7 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
       // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
       hooks: [...record.resources.hooks],
     },
+    enabled: record.enabled,
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,
   };

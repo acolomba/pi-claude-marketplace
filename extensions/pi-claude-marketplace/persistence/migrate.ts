@@ -14,8 +14,9 @@
 // resources.mcpServers / resources.hooks are normalized to []
 // (the hooks arm lands per HOOK-02 / D-57-01; the schema requires
 // `resources.hooks: string[]` and the additive default-fill is what
-// lets v1.0..v1.12 state.json files load cleanly without a
-// schemaVersion bump).
+// lets v1.0..v1.12 state.json files load cleanly). Per ENBL-02:
+// missing `enabled` is filled with `true` (all existing records were
+// actively installed and therefore enabled by definition).
 //
 // Per ST-4 "persisted asynchronously (best-effort)": the persist call
 // does NOT re-throw on failure; the IL-3 warn surfaces the cause and
@@ -136,6 +137,38 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
 }
 
 /**
+ * ENBL-02: fill `enabled: true` on every plugin record that lacks the field.
+ * Mirrors `ensurePluginResources` -- same iteration pattern, same
+ * mutated-flag discipline.
+ *
+ * All existing plugin records (v1.0..v1.13) were actively installed and
+ * therefore enabled by definition; `enabled: true` is the correct
+ * additive default. The fill MUST run before STATE_VALIDATOR.Check so the
+ * newly-required ENBL-02 field is present.
+ */
+function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
+  const plugins = mp.plugins;
+  if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
+    return false;
+  }
+
+  let mutated = false;
+  for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
+    if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
+      continue;
+    }
+
+    const pl = plRaw as Record<string, unknown>;
+    if (pl.enabled === undefined) {
+      pl.enabled = true;
+      mutated = true;
+    }
+  }
+
+  return mutated;
+}
+
+/**
  * Normalize a parsed state.json's `marketplaces` map to the current shape.
  *
  * Pure function -- does NOT touch disk. Caller decides whether to persist
@@ -151,6 +184,8 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
  *     D-57-01 -- the schema requires `resources.hooks: string[]` as an
  *     additive REQUIRED field, so the default-fill MUST run before
  *     STATE_VALIDATOR.Check)
+ *   - per-plugin: fill `enabled: true` when the field is absent (ENBL-02
+ *     additive default; same discipline as the hooks arm above)
  *   - `scrubAutoupdate === true` (D-13 gate OPEN): remove the legacy
  *     `autoupdate` field from every marketplace record. The CALLER owns
  *     the gate predicate (loadState probes the scope's
@@ -195,6 +230,7 @@ export function migrateLegacyMarketplaceRecords(
 
     mutated = ensureMarketplacePaths(mpName, mp, extensionRoot) || mutated;
     mutated = ensurePluginResources(mp) || mutated;
+    mutated = ensurePluginEnabled(mp) || mutated;
     if (scrubAutoupdate) {
       mutated = ensureNoLegacyAutoupdate(mp) || mutated;
     }

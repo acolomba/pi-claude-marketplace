@@ -36,19 +36,15 @@ function stateWithOneGithubMarketplace(
       version: "1.0.0",
       resolvedSource: "/abs/whatever",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      // ENBL-02: a non-empty resources array signals "currently installed
-      // and enabled" (the install path's statePhase populates at least one
-      // array for any installable plugin per `requireInstallable`). Tests
-      // that need a "currently disabled" record use `stateWithDisabledRecord`
-      // (all four arrays empty -- A1).
       resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      enabled: true,
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       [mpName]: {
         name: mpName,
@@ -74,19 +70,15 @@ function stateWithOnePathMarketplace(
       version: "1.0.0",
       resolvedSource: "/abs/whatever",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      // ENBL-02: a non-empty resources array signals "currently installed
-      // and enabled" (the install path's statePhase populates at least one
-      // array for any installable plugin per `requireInstallable`). Tests
-      // that need a "currently disabled" record use `stateWithDisabledRecord`
-      // (all four arrays empty -- A1).
       resources: { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      enabled: true,
       installedAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       [mpName]: {
         name: mpName,
@@ -315,7 +307,7 @@ function stateWithDisabledRecord(
   plugin: string,
 ): ExtensionState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       [mpName]: {
         name: mpName,
@@ -329,10 +321,8 @@ function stateWithDisabledRecord(
             version: "1.0.0",
             resolvedSource: "/abs/whatever",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            // All four arrays empty -- the disabled marker per A1.
-            // HOOK-02 / D-57-01: `hooks: []` is the additive required field
-            // (also empty in the disabled-marker shape).
             resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: false,
             installedAt: "2025-01-01T00:00:00.000Z",
             updatedAt: "2025-01-01T00:00:00.000Z",
           },
@@ -649,6 +639,7 @@ interface DisabledMarkerRecord {
     mcpServers: string[];
     hooks: string[];
   };
+  enabled: boolean;
   version: string;
   resolvedSource: string;
   installedAt: string;
@@ -671,6 +662,7 @@ function recordWith(
       mcpServers: [],
       hooks: hooksPopulated ? ["h1"] : [],
     },
+    enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
