@@ -252,42 +252,22 @@ interface DeclaredPluginAccumulator {
  * arrays are ALL empty AND whose `compatibility.installable === true` is
  * treated as currently disabled. The
  * `orchestrators/plugin/install.ts::statePhase` is the only path that
- * POPULATES `resources.*` (it copies from `c.stagedXxxNames`, which the
- * resolver fills from the plugin's components); the disable orchestrator
- * is the only path that empties them while keeping the record. The
- * `requireInstallable` gate rules out the zero-component installable
- * degenerate, so an INSTALLABLE plugin always has at least one populated
- * array after install.
+ * ENBL-02: the "currently disabled" marker is now an explicit
+ * `enabled: false` on the plugin install record. The old empty-resources
+ * heuristic (five-array emptiness + installable: true) is replaced by a
+ * single boolean read, which is unambiguous for both classic-resource and
+ * hooks-only plugins.
  *
- * The `installable === true` guard is load-bearing: a soft-degraded
- * (`installable: false`) plugin -- e.g. one whose companion extension is
- * missing -- legally records all four resource arrays empty. Without the
- * guard, the convergence proof
- * (`tests/orchestrators/reconcile/plan-convergence.test.ts`) would
- * misclassify the `soft-degraded` fixture entry in
- * `state-populated-mixed.json` as `pluginsToEnable`, breaking the
- * deferred-convergence no-op proof. The disable orchestrator empties all
- * five arrays (while keeping the version pin -- D-04 / ENBL-02 -- AND
- * preserving the previously-known `installable: true` flag), so the
- * empty-resources + installable-true intersection is the unambiguous
- * "currently disabled" marker. SPLIT-01 preserved -- no new schema field.
- *
- * D-63-04 / COMPONENT_KINDS 5-tuple: the `resources.hooks` axis joined
- * the conjunction once the hook bridge added hooks to the state schema.
- * Omitting it would over-classify a hooks-only installed plugin as
- * "recorded but disabled".
+ * The `installable === true` guard is preserved: a soft-degraded
+ * (`installable: false`) plugin has `enabled: true` in state (it was
+ * never explicitly disabled; the disable orchestrator is the only writer
+ * of `enabled: false`), so `record.compatibility.installable && !record.enabled`
+ * naturally excludes soft-degraded entries.
  */
 export function isRecordedButDisabled(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
 ): boolean {
-  return (
-    record.compatibility.installable &&
-    record.resources.skills.length === 0 &&
-    record.resources.prompts.length === 0 &&
-    record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0 &&
-    record.resources.hooks.length === 0
-  );
+  return record.compatibility.installable && !record.enabled;
 }
 
 /**

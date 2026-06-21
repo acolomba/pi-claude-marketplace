@@ -1050,16 +1050,16 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
       "utf8",
     );
 
-    // State: recorded plugin in the disabled marker shape (installable: true
-    // + every resources axis empty) so the planner classifies the entry as
-    // `pluginsToEnable` rather than `pluginsToInstall`. The marketplaceRoot
-    // points at the same non-existent path so the enable branch's cached
-    // manifest read fails ENOENT.
+    // State: recorded plugin in the ENBL-02 disabled marker shape
+    // (enabled:false + installable:true) so the planner classifies the
+    // entry as `pluginsToEnable` rather than `pluginsToInstall`. The
+    // marketplaceRoot points at the same non-existent path so the enable
+    // branch's cached manifest read fails ENOENT.
     await writeFile(
       path.join(extensionRoot, "state.json"),
       JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           marketplaces: {
             mp: {
               name: "mp",
@@ -1078,7 +1078,8 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
                     supported: [],
                     unsupported: [],
                   },
-                  resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                  enabled: false,
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -1273,13 +1274,13 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
       "utf8",
     );
 
-    // State: KEPT disabled record (ENBL-02 marker) -- installable: true +
-    // every resources axis empty. Planner classifies as pluginsToEnable.
+    // State: KEPT disabled record (ENBL-02 marker) -- enabled:false +
+    // installable:true. Planner classifies as pluginsToEnable.
     await writeFile(
       path.join(extensionRoot, "state.json"),
       JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           marketplaces: {
             mp: {
               name: "mp",
@@ -1298,7 +1299,8 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
                     supported: [],
                     unsupported: [],
                   },
-                  resources: { skills: [], prompts: [], agents: [], mcpServers: [] },
+                  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                  enabled: false,
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },

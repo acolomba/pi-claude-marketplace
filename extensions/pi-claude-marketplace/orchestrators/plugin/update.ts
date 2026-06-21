@@ -949,7 +949,7 @@ async function markUpdateInProgress(
  * is a truthful "we touched this record" stamp.
  */
 /**
- * D-UPD: same intersection as `reconcile/plan.ts::isRecordedButDisabled`.
+ * ENBL-02: same rule as `reconcile/plan.ts::isRecordedButDisabled`.
  * Duplicated here to avoid pulling the reconcile module into the orchestrator's
  * import graph; the planner is the canonical owner and this predicate is the
  * deliberate same-rule mirror (`enable-disable.ts::isCurrentlyDisabled` does
@@ -958,14 +958,7 @@ async function markUpdateInProgress(
 function isRecordedButDisabled(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
 ): boolean {
-  return (
-    record.compatibility.installable &&
-    record.resources.skills.length === 0 &&
-    record.resources.prompts.length === 0 &&
-    record.resources.agents.length === 0 &&
-    record.resources.mcpServers.length === 0 &&
-    record.resources.hooks.length === 0
-  );
+  return record.compatibility.installable && !record.enabled;
 }
 
 /**

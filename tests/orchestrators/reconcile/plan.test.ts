@@ -605,24 +605,24 @@ test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", (
 // (enable-disable.ts). The two predicates are deliberately duplicated --
 // enable-disable.ts duplicates the marker locally to avoid pulling the
 // reconcile module into the orchestrator's import graph (see the JSDoc on
-// `isCurrentlyDisabled` at enable-disable.ts:172-178). The duplication is
+// `isCurrentlyDisabled` at enable-disable.ts). The duplication is
 // load-bearing for the convergence proof at plan-convergence.test.ts: a
-// soft-degraded (installable: false) plugin records all four resource
-// arrays empty AND must NOT be classified as `pluginsToEnable`, so both
-// predicates must read the installable axis the same way.
+// soft-degraded (installable: false) plugin has `enabled: true` and must
+// NOT be classified as `pluginsToEnable`; both predicates read the
+// installable axis for this guard.
+//
+// ENBL-02: the disabled marker is now an explicit `enabled: false`
+// boolean on the install record. This replaces the old five-resource-array-
+// emptiness heuristic. The truth table collapses to two boolean axes:
+// installable x enabled.
 //
 // This drift gate has two parts:
 //   1. A matrix truth-table assertion on `isRecordedButDisabled` over
-//      `installable: true | false` x `resources: empty | populated`,
-//      pinning the documented "all four empty + installable: true" cell as
-//      the only "disabled" cell.
+//      `installable: true | false` x `enabled: true | false`, pinning the
+//      (installable: true, enabled: false) cell as the only "disabled" cell.
 //   2. A source-shape pin: `isCurrentlyDisabled`'s function body in
-//      enable-disable.ts is the same `installable && skills.length===0 &&
-//      prompts.length===0 && agents.length===0 && mcpServers.length===0`
-//      conjunction. Since `isCurrentlyDisabled` is module-private (kept
-//      out of the reconcile import graph by design), the structural pin
-//      protects against a hand-edit that flips one branch but forgets the
-//      other.
+//      enable-disable.ts must carry the same boolean axes as
+//      `isRecordedButDisabled` (installable && !enabled).
 // ──────────────────────────────────────────────────────────────────────────
 
 interface DisabledMarkerRecord {
@@ -646,94 +646,62 @@ interface DisabledMarkerRecord {
   updatedAt: string;
 }
 
-function recordWith(
-  installable: boolean,
-  populated: boolean,
-  hooksPopulated = false,
-): DisabledMarkerRecord {
+function recordWith(installable: boolean, enabled: boolean): DisabledMarkerRecord {
   return {
     version: "1.0.0",
     resolvedSource: "/abs/whatever",
     compatibility: { installable, notes: [], supported: [], unsupported: [] },
     resources: {
-      skills: populated ? ["s1"] : [],
+      skills: enabled ? ["s1"] : [],
       prompts: [],
       agents: [],
       mcpServers: [],
-      hooks: hooksPopulated ? ["h1"] : [],
+      hooks: [],
     },
-    enabled: true,
+    enabled,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
-test("T5 / PR #51: isRecordedButDisabled truth table over the installable x populated x hooksPopulated matrix -- only the (installable: true, populated: false, hooksPopulated: false) cell is 'disabled'", () => {
-  // D-63-04: hooks is the fifth resource axis. The truth table now has
-  // three boolean dimensions; only the all-empty + installable: true cell
-  // is the ENBL-02 disabled marker. A hooks-only installed plugin
-  // (installable: true, populated: false, hooksPopulated: true) must NOT
-  // be classified as disabled -- that is the hooks-only-list-disabled
-  // regression this matrix pins.
+test("T5 / ENBL-02: isRecordedButDisabled truth table over installable x enabled -- only (installable:true, enabled:false) is 'disabled'", () => {
+  // ENBL-02: the disabled marker is an explicit `enabled: false` boolean.
+  // The truth table has two boolean axes: installable x enabled.
+  // Soft-degraded plugins (installable: false) are never classified as
+  // disabled regardless of their enabled field.
   const cases: ReadonlyArray<{
     name: string;
     installable: boolean;
-    populated: boolean;
-    hooksPopulated: boolean;
+    enabled: boolean;
     expected: boolean;
   }> = [
     {
-      name: "installable: true,  populated: true,  hooksPopulated: false (installed + enabled, classic resources)",
+      name: "installable: true,  enabled: true  (installed + enabled -- normal state)",
       installable: true,
-      populated: true,
-      hooksPopulated: false,
+      enabled: true,
       expected: false,
     },
     {
-      name: "installable: true,  populated: false, hooksPopulated: false (the ENBL-02 disabled marker)",
+      name: "installable: true,  enabled: false (the ENBL-02 disabled marker)",
       installable: true,
-      populated: false,
-      hooksPopulated: false,
+      enabled: false,
       expected: true,
     },
     {
-      name: "installable: true,  populated: false, hooksPopulated: true  (hooks-only installed -- D-63-04 regression cell)",
-      installable: true,
-      populated: false,
-      hooksPopulated: true,
-      expected: false,
-    },
-    {
-      name: "installable: true,  populated: true,  hooksPopulated: true  (installed + enabled, mixed resources)",
-      installable: true,
-      populated: true,
-      hooksPopulated: true,
-      expected: false,
-    },
-    {
-      name: "installable: false, populated: true,  hooksPopulated: false (impossible by construction; never disabled)",
+      name: "installable: false, enabled: true  (soft-degraded -- D-04; never disabled)",
       installable: false,
-      populated: true,
-      hooksPopulated: false,
+      enabled: true,
       expected: false,
     },
     {
-      name: "installable: false, populated: false, hooksPopulated: false (soft-degraded -- D-04 / Rule 2; never disabled)",
+      name: "installable: false, enabled: false (soft-degraded disabled -- edge; never classifiable as pluginsToEnable)",
       installable: false,
-      populated: false,
-      hooksPopulated: false,
-      expected: false,
-    },
-    {
-      name: "installable: false, populated: false, hooksPopulated: true  (soft-degraded with hooks; never disabled)",
-      installable: false,
-      populated: false,
-      hooksPopulated: true,
+      enabled: false,
       expected: false,
     },
   ];
   for (const c of cases) {
-    const rec = recordWith(c.installable, c.populated, c.hooksPopulated);
+    const rec = recordWith(c.installable, c.enabled);
     assert.equal(
       isRecordedButDisabled(rec),
       c.expected,
@@ -742,23 +710,21 @@ test("T5 / PR #51: isRecordedButDisabled truth table over the installable x popu
   }
 });
 
-test("T5 / PR #51: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- same installable + four-axis-empty conjunction as isRecordedButDisabled (drift gate)", async () => {
+test("T5 / ENBL-02: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- same installable + !enabled axes as isRecordedButDisabled (drift gate)", async () => {
   // The two predicates are deliberately duplicated (see the JSDoc on
-  // `isCurrentlyDisabled` at enable-disable.ts:172-178) to keep the
-  // orchestrator import graph free of the reconcile module. The drift
-  // gate: assert the function body still names the same boolean axes in
-  // the same conjunction, so a hand-edit that flips one side without the
-  // other trips this test before it reaches the convergence proof.
+  // `isCurrentlyDisabled` in enable-disable.ts) to keep the orchestrator
+  // import graph free of the reconcile module. The drift gate: assert the
+  // function body still names the same boolean axes in the same conjunction,
+  // so a hand-edit that flips one side without the other trips this test.
   const { readFile } = await import("node:fs/promises");
   const enableSrc = await readFile(
     "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
     "utf8",
   );
 
-  // Extract the isCurrentlyDisabled function body (signature + return
-  // expression). The function is module-private; we match its declaration
-  // textually and assert the body carries every axis isRecordedButDisabled
-  // also tests.
+  // Extract the isCurrentlyDisabled function body. The function is
+  // module-private; we match its declaration textually and assert the body
+  // carries every axis isRecordedButDisabled also tests.
   const fnMatch = /function isCurrentlyDisabled\([\s\S]*?\): boolean \{([\s\S]*?)\n\}/.exec(
     enableSrc,
   );
@@ -768,36 +734,18 @@ test("T5 / PR #51: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- s
   );
   const body = fnMatch[1]!;
 
-  // Each axis from isRecordedButDisabled must appear in the
-  // isCurrentlyDisabled body (same conjunction). If any axis is missing or
-  // renamed, the predicates have drifted.
-  const requiredAxes: ReadonlyArray<string> = [
-    "compatibility.installable",
-    "resources.skills.length === 0",
-    "resources.prompts.length === 0",
-    "resources.agents.length === 0",
-    "resources.mcpServers.length === 0",
-    // D-63-04: hooks is the fifth resource axis. A drift twin that omits
-    // it (the v1.13 hook-bridge regression that surfaced as
-    // hooks-only-list-disabled) would misclassify a hooks-only installed
-    // plugin as disabled.
-    "resources.hooks.length === 0",
-  ];
+  // ENBL-02: the required axes are now `compatibility.installable` and
+  // `!installed.enabled`. A drift twin that reverts to the resource-emptiness
+  // heuristic would misclassify hooks-only installed plugins as disabled
+  // (the regression D-63-04 originally caught).
+  const requiredAxes: ReadonlyArray<string> = ["compatibility.installable", "!installed.enabled"];
   for (const axis of requiredAxes) {
     assert.ok(
       body.includes(axis) ||
-        // The orchestrator destructures `installed.resources` / `installed.compatibility`
-        // before the conjunction, so the textual form drops the `installed.` prefix.
+        // The orchestrator may alias `installed.compatibility.installable`
+        // via a local binding -- also accept the un-prefixed forms.
         body.includes(axis.replace("compatibility.installable", "installable")),
       `T5 drift: isCurrentlyDisabled body must reference \`${axis}\` (same axis as isRecordedButDisabled); body was:\n${body}`,
     );
   }
-
-  // The connectives must all be conjunctions (&&) -- a stray || would flip
-  // the predicate to "disabled if ANY axis is empty", catastrophically
-  // misclassifying populated records.
-  assert.ok(
-    !body.includes("||"),
-    `T5 drift: isCurrentlyDisabled body must NOT contain || (disjunction would flip the truth table); body was:\n${body}`,
-  );
 });

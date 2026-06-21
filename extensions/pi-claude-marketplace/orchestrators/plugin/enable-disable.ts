@@ -168,30 +168,17 @@ type SetEnabledOutcome =
   | { kind: "disable-failed"; cause: Error; recordedVersion?: string };
 
 /**
- * The "currently disabled" marker -- the empty-resources + installable:true
- * intersection that `orchestrators/reconcile/plan.ts::isRecordedButDisabled`
- * uses. Duplicated locally to avoid pulling the reconcile module into the
- * orchestrator's import graph (the planner is the canonical owner; this
- * predicate is the deliberate same-rule mirror).
+ * ENBL-02: the "currently disabled" marker is an explicit `enabled: false`
+ * on the plugin install record. Duplicated locally from
+ * `orchestrators/reconcile/plan.ts::isRecordedButDisabled` to avoid pulling
+ * the reconcile module into the orchestrator's import graph (the planner is
+ * the canonical owner; this predicate is the deliberate same-rule mirror).
  */
 function isCurrentlyDisabled(installed: {
   compatibility: { installable: boolean };
-  resources: {
-    skills: readonly string[];
-    prompts: readonly string[];
-    agents: readonly string[];
-    mcpServers: readonly string[];
-    hooks: readonly string[];
-  };
+  enabled: boolean;
 }): boolean {
-  return (
-    installed.compatibility.installable &&
-    installed.resources.skills.length === 0 &&
-    installed.resources.prompts.length === 0 &&
-    installed.resources.agents.length === 0 &&
-    installed.resources.mcpServers.length === 0 &&
-    installed.resources.hooks.length === 0
-  );
+  return installed.compatibility.installable && !installed.enabled;
 }
 
 /**
@@ -302,16 +289,20 @@ async function runDisableBranch(
   }
 
   // PRESERVE version / resolvedSource / compatibility / installedAt;
-  // RESET resources.*; BUMP updatedAt.
+  // RESET resources.*; SET enabled: false; BUMP updatedAt.
   // D-63-04 / COMPONENT_KINDS 5-tuple: cascadeUnstagePlugin physically
   // unstages hooks via removeHookConfig, so the in-memory record's hooks
   // array must be zeroed alongside the other four axes to stay consistent
   // with what landed on disk.
+  // ENBL-02: set enabled: false as the explicit disabled marker. Resources
+  // arrays are still zeroed for backwards compatibility with the convergence
+  // proof and any reader that has not yet migrated to the boolean check.
   installed.resources.skills = [];
   installed.resources.prompts = [];
   installed.resources.agents = [];
   installed.resources.mcpServers = [];
   installed.resources.hooks = [];
+  installed.enabled = false;
   installed.updatedAt = new Date().toISOString();
 
   // WR-03: the cascade unstaged the on-disk hooks.json via removeHookConfig;
