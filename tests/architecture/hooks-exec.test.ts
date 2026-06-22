@@ -610,6 +610,22 @@ test("Block F / D-60-06: registerHooksBridge twice does not throw (idempotent)",
   await assert.doesNotReject(() => registerHooksBridge(pi, { ctx: makeCtx(cwd), cwd }));
 });
 
+test("registerHooksBridge tolerates a corrupt project-scope state.json (hydrate falls back to default state)", async (t) => {
+  _resetForTest();
+  const { cwd } = await relocateAgent(t);
+
+  // Invalid JSON makes loadState throw (non-ENOENT) during factory-time
+  // hydrate. The per-scope catch must swallow it and fall back to
+  // DEFAULT_STATE so a corrupt state file in one scope does not block the
+  // bridge from booting.
+  const extRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  await mkdir(extRoot, { recursive: true });
+  await writeFile(path.join(extRoot, "state.json"), "{ not valid json");
+
+  const { pi } = makePiMock();
+  await assert.doesNotReject(() => registerHooksBridge(pi, { ctx: makeCtx(cwd), cwd }));
+});
+
 test("Block F / D-60-06: SessionStart CLAUDE_ENV_FILE matches /data/_shared/claude-env-<sid>.env scheme", async (t) => {
   await relocateAgent(t);
   const spy = installSpawnSpy(t, (h) => {

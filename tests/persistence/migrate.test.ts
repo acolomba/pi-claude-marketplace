@@ -334,6 +334,35 @@ test("ENBL-02: ensurePluginEnabled preserves enabled: false (disabled record)", 
   assert.equal(mp.plugins["p1"]?.enabled, false);
 });
 
+test("ENBL-02: ensurePluginEnabled skips a marketplace whose plugins field is not an object", () => {
+  // Defensive guard: a malformed marketplace record whose `plugins` is not an
+  // object must be skipped (the helper returns false), not crash. Paths are
+  // present so ensureMarketplacePaths is a no-op and the whole pass reports
+  // mutated=false.
+  const fixture = {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "user",
+        source: { kind: "path", raw: "./mp", logical: "./mp" },
+        addedFromCwd: "/cwd",
+        manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/abs/mp",
+        plugins: "not-an-object",
+      },
+    },
+  };
+  const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
+    fixture,
+    "/ext-root",
+    GATE_CLOSED,
+  );
+  assert.equal(mutated, false);
+  const mp = marketplaces["mp"] as { plugins: unknown };
+  assert.equal(mp.plugins, "not-an-object");
+});
+
 test("ENBL-02: legacy-disabled shape (empty resources + absent enabled) over-fills to enabled: true (mislabel self-heals on reconcile)", () => {
   // A plugin disabled via `/claude:plugin disable` on a pre-ENBL-02 build
   // persists as installable: true + all-empty resources + NO `enabled`

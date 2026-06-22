@@ -503,6 +503,34 @@ describe("spawn-and-register", () => {
       await tmp.cleanup();
     }
   });
+
+  test("onChildError removes the registered entry and persists the pid table", async () => {
+    const tmp = await makeTempLocations();
+    try {
+      const spy = installSpawnSpy();
+      _setDispatchIdGeneratorForTest(() => "fixed-uuid-onerror");
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      await spawnAndRegister(
+        makeEntry({}),
+        { toolName: "bash", input: {} },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+      );
+      const reg = _getRegistryForTest();
+      assert.equal(reg.has("fixed-uuid-onerror"), true);
+      // A spawn-level failure (e.g. ENOENT) surfaces as a child "error" event,
+      // routed to onChildError out-of-band: it cancels the ladder, drops the
+      // entry, and persists the shrunken pid table.
+      spy.children[0]?.emitError(new Error("spawn failed"));
+      await new Promise((r) => setImmediate(r));
+      assert.equal(reg.has("fixed-uuid-onerror"), false);
+      await _awaitLastPidTablePersistForTest();
+    } finally {
+      await tmp.cleanup();
+    }
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────
