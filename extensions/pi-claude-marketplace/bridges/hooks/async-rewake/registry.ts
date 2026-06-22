@@ -192,6 +192,16 @@ export function _getRegistryForTest(): ReadonlyMap<string, AsyncRewakeEntry> {
   return asyncRewakeRegistry;
 }
 
+// Tracks the most recent fire-and-forget pid-table persist so tests can
+// drain it in cleanup before removing the temp directory, avoiding ENOTEMPTY
+// races with write-file-atomic's in-flight atomic rename on macOS.
+let _lastPidTablePersist: Promise<void> = Promise.resolve();
+
+/** Await the most recent in-flight pid-table persist (for test teardown). */
+export function _awaitLastPidTablePersistForTest(): Promise<void> {
+  return _lastPidTablePersist;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Public surface: spawnAndRegister
 // ──────────────────────────────────────────────────────────────────────────
@@ -351,7 +361,8 @@ function onChildExit(
 
   entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc);
+  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
+  void _lastPidTablePersist;
 
   // D-62-03 / D-59-03 captured-epoch zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
@@ -433,7 +444,8 @@ function onChildError(dispatchId: string, err: unknown): void {
 
   entry.ladder.cancel();
   asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc);
+  _lastPidTablePersist = persistPidTableForLoc(entry.loc);
+  void _lastPidTablePersist;
 }
 
 /**

@@ -190,6 +190,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       resolvedSource: "./placeholder",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
       resources,
+      enabled: info.disabled !== true,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -209,7 +210,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   }
 
   await saveState(locations.extensionRoot, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: { ...existing.marketplaces, [mpName]: record },
     // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
   } as unknown as Parameters<typeof saveState>[1]);
@@ -666,7 +667,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
     const projectLocations = locationsFor("project", cwd);
     await mkdir(projectLocations.extensionRoot, { recursive: true });
     await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         mp1: {
           name: "mp1",
@@ -691,6 +692,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
                 mcpServers: [],
                 hooks: [],
               },
+              enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

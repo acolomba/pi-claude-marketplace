@@ -94,18 +94,15 @@ type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
 function makePluginRecord(
   version: string,
-  resources: Partial<PluginRecord["resources"]> = {},
+  overrides: Partial<PluginRecord["resources"]> & { enabled?: boolean } = {},
 ): PluginRecord {
+  const { enabled = true, ...resources } = overrides;
   return {
     version,
     resolvedSource: "/tmp",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    // D-UPD: a record with empty resources.* + installable=true is the
-    // disabled-but-recorded marker (the same intersection
-    // `isRecordedButDisabled` reads in plan.ts). Default to a populated
-    // skill so the update flow exercises the enabled-update path, not
-    // the disabled-record short-circuit. Tests that need a disabled
-    // record pass `resources.skills: []` explicitly.
+    // Default to a populated skill so the update flow exercises the
+    // enabled-update path, not the disabled-record short-circuit (ENBL-02).
     resources: {
       skills: resources.skills ?? ["seeded-skill"],
       prompts: resources.prompts ?? [],
@@ -113,23 +110,26 @@ function makePluginRecord(
       mcpServers: resources.mcpServers ?? [],
       hooks: resources.hooks ?? [],
     },
+    enabled,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
 /**
- * D-UPD test helper: seeded record with EMPTY resources.* -- the canonical
- * "currently disabled" marker that `isRecordedButDisabled` reads. The
- * `update` orchestrator must refresh the version/source pin but keep
- * resources empty (the artefacts re-materialize on the next `enable`).
+ * D-UPD test helper: seeded record with `enabled: false` -- the ENBL-02
+ * disabled marker that `isRecordedButDisabled` reads. The `update`
+ * orchestrator must refresh the version/source pin but keep the record
+ * disabled (artefacts re-materialize on the next `enable`).
  */
 function makeDisabledPluginRecord(version: string): PluginRecord {
   return makePluginRecord(version, {
+    enabled: false,
     skills: [],
     prompts: [],
     agents: [],
     mcpServers: [],
+    hooks: [],
   });
 }
 

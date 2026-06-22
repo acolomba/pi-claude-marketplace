@@ -137,6 +137,7 @@ async function seedMarketplace(opts: {
         mcpServers: string[];
         hooks: string[];
       };
+      enabled: boolean;
       installedAt: string;
       updatedAt: string;
     }
@@ -146,9 +147,6 @@ async function seedMarketplace(opts: {
       version: p.version,
       resolvedSource: path.join(mpRoot, "plugins", p.name),
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      // ENBL-04: empty resources + installable:true IS the disabled marker;
-      // seed a populated skills array so the record reads as ENABLED (a
-      // production installed record always has >= 1 populated array).
       resources: {
         skills: [`${p.name}-skill`],
         prompts: [],
@@ -156,13 +154,14 @@ async function seedMarketplace(opts: {
         mcpServers: [],
         hooks: [],
       },
+      enabled: true,
       installedAt: nowIso,
       updatedAt: nowIso,
     };
   }
 
   await saveState(locations.extensionRoot, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       [opts.name]: {
         name: opts.name,
@@ -627,7 +626,7 @@ test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailab
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
     await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "filter-mkt": {
           name: "filter-mkt",
@@ -641,8 +640,6 @@ test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailab
               version: "1.0.0",
               resolvedSource: path.join(mpRoot, "plugins", "pinstalled"),
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              // Populated resources: an ENABLED installed record (empty
-              // resources + installable:true reads as disabled per ENBL-04).
               resources: {
                 skills: ["pinstalled-skill"],
                 prompts: [],
@@ -650,6 +647,7 @@ test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailab
                 mcpServers: [],
                 hooks: [],
               },
+              enabled: true,
               installedAt: nowIso,
               updatedAt: nowIso,
             },

@@ -80,7 +80,7 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
         diagnostics: [],
       }),
       loadState: async () => ({
-        schemaVersion: 1,
+        schemaVersion: 2,
         marketplaces: {
           mp: {
             name: "mp",
@@ -95,6 +95,7 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
                 resolvedSource: "/tmp/mp/plugins/plugin",
                 compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
                 resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                enabled: true,
                 installedAt: "2026-01-01T00:00:00.000Z",
                 updatedAt: "2026-01-01T00:00:00.000Z",
               },
@@ -257,7 +258,7 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
         diagnostics: [],
       }),
       loadState: async () => ({
-        schemaVersion: 1,
+        schemaVersion: 2,
         marketplaces: {
           mp: {
             name: "mp",
@@ -278,6 +279,7 @@ test("importClaudeSettings skips when github source matches owner and repo", asy
                 resolvedSource: "/tmp/mp/plugins/plugin",
                 compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
                 resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                enabled: true,
                 installedAt: "2026-01-01T00:00:00.000Z",
                 updatedAt: "2026-01-01T00:00:00.000Z",
               },

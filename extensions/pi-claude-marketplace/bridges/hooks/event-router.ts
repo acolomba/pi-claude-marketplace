@@ -43,7 +43,7 @@ import {
 } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { DEFAULT_STATE, loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
@@ -555,7 +555,7 @@ async function hydrateCacheFromDisk(opts: {
       hookDebugLog(
         `hydrate: loadState failed for scope=${scope} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
       );
-      state = { schemaVersion: 1, marketplaces: {} };
+      state = { ...DEFAULT_STATE };
     }
 
     // MATCH-03 / A1 projectRoot fallback: pass opts.cwd as cwd +

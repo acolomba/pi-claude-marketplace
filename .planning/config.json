@@ -38,5 +38,6 @@
   "agent_skills": {},
   "features": {},
   "mode": "yolo",
-  "granularity": "standard"
+  "granularity": "standard",
+  "context_window": 1000000
 }

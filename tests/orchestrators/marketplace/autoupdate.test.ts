@@ -667,17 +667,17 @@ test("CFG-03 / T-56-02-05: invalid local config aborts the flip; basename-only m
 // D-UPD: autoupdate flag-flip must leave a DISABLED plugin record alone.
 // `setMarketplaceAutoupdate` flips a config flag; it does NOT update plugins.
 // This test pins that the flip never accidentally re-materializes a
-// disabled-but-recorded plugin's resources (the canonical
-// isRecordedButDisabled marker: empty resources.* + installable=true).
+// disabled-but-recorded plugin's resources (ENBL-02 marker: enabled=false +
+// installable=true).
 // ──────────────────────────────────────────────────────────────────────────
 
 test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched (state-side resources stay empty)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
-    // Seed a marketplace with a disabled plugin row: empty resources.* +
-    // installable:true. The autoupdate flag-flip is a config-only mutation;
-    // it must never re-materialize.
+    // Seed a marketplace with a disabled plugin row: enabled:false +
+    // installable:true (ENBL-02). The autoupdate flag-flip is a config-only
+    // mutation; it must never re-materialize.
     const seededMp = makeMarketplaceRecord("mp", "project", cwd, false);
     (seededMp as { plugins: Record<string, unknown> }).plugins = {
       foo: {
@@ -690,12 +690,13 @@ test("D-UPD: setMarketplaceAutoupdate leaves a disabled plugin record untouched 
           unsupported: [],
         },
         resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        enabled: false,
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
     await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: { mp: seededMp },
     });
 

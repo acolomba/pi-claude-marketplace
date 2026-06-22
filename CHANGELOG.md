@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.6.1] - 2026-06-21
+
+- Disabled plugins are now tracked by an explicit `enabled` flag in `state.json` instead of being inferred from every resource array being empty. The old heuristic could misclassify an installed plugin that had no materialized resources -- a hooks-only plugin in particular -- so `enable`/`disable`, `list`, and the reconcile planner now agree on one unambiguous marker. The state schema version bumps to 2 and existing `state.json` files migrate automatically on the next reload; any plugin you had disabled stays disabled, and no reinstall or manual edit is required.
+
 ## [0.6.0] - 2026-06-18
 
 - Claude Code hooks bridge: plugins shipping `hooks/hooks.json` now run their declared handlers under Pi's lifecycle. The 7 bucket-A Claude events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PreCompact`, `PostCompact`, `SessionEnd`) dispatch by matcher + `if`-predicate to the handler set declared by every installed plugin. SessionStart `additionalContext` is captured and drained into the next agent turn's system prompt via Pi's `before_agent_start`, preserving multi-plugin concat order and clearing on `/reload` so stale context cannot leak across sessions. Hook subprocesses receive `CLAUDE_PLUGIN_ROOT` (the plugin's resolved source path) and `CLAUDE_PLUGIN_DATA` (a per-session writable dir) on env; install/uninstall/reinstall/update/enable/disable all keep the routing table in lockstep with state.json so dispatch starts working immediately without `/reload` (NFR-2). Async-rewake re-dispatches surviving child processes after a Pi restart with PID-table reaping; cross-scope cache walks ensure user + project plugins both surface even when only one scope reconciles.

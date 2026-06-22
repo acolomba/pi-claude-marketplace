@@ -148,6 +148,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     resolvedSource: "/tmp",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

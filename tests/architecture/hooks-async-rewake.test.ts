@@ -42,6 +42,7 @@ import {
   type PidTableEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
+  _awaitLastPidTablePersistForTest,
   _getRegistryForTest,
   _resetDispatchIdGeneratorForTest,
   _resetOrphanProbesForTest,
@@ -344,6 +345,11 @@ async function makeTempLocations(): Promise<{
   return {
     loc,
     cleanup: async () => {
+      // Drain any in-flight pid-table atomic write before removing the
+      // temp directory.  write-file-atomic holds a temp file open in
+      // _shared/ until the rename+fsync completes; removing the directory
+      // concurrently produces ENOTEMPTY on macOS.
+      await _awaitLastPidTablePersistForTest();
       if (prev === undefined) {
         delete process.env.PI_CODING_AGENT_DIR;
       } else {
@@ -493,6 +499,34 @@ describe("spawn-and-register", () => {
       spy.children[0]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
       assert.equal(reg.has("fixed-uuid-4"), false);
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
+  test("onChildError removes the registered entry and persists the pid table", async () => {
+    const tmp = await makeTempLocations();
+    try {
+      const spy = installSpawnSpy();
+      _setDispatchIdGeneratorForTest(() => "fixed-uuid-onerror");
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      await spawnAndRegister(
+        makeEntry({}),
+        { toolName: "bash", input: {} },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+      );
+      const reg = _getRegistryForTest();
+      assert.equal(reg.has("fixed-uuid-onerror"), true);
+      // A spawn-level failure (e.g. ENOENT) surfaces as a child "error" event,
+      // routed to onChildError out-of-band: it cancels the ladder, drops the
+      // entry, and persists the shrunken pid table.
+      spy.children[0]?.emitError(new Error("spawn failed"));
+      await new Promise((r) => setImmediate(r));
+      assert.equal(reg.has("fixed-uuid-onerror"), false);
+      await _awaitLastPidTablePersistForTest();
     } finally {
       await tmp.cleanup();
     }

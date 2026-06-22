@@ -257,7 +257,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const state: ExtensionState = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       [marketplaceName]: {
         name: marketplaceName,
@@ -279,6 +279,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
                     unsupported: [],
                   },
                   resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+                  enabled: true,
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -314,6 +315,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
             mcpServers: [],
             hooks: [],
           },
+          enabled: true,
           installedAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },

@@ -155,12 +155,11 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       version: info.version,
       resolvedSource: "./placeholder",
       compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      // ENBL-04: empty resources + installable:true IS the disabled marker;
-      // an enabled installed record always has >= 1 populated array.
       resources:
         info.disabled === true
           ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
           : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      enabled: info.disabled !== true,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -189,7 +188,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   }
 
   await saveState(locations.extensionRoot, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: { ...existing.marketplaces, [mpName]: record },
   } as unknown as Parameters<typeof saveState>[1]);
 
@@ -816,7 +815,7 @@ test("WR-03: marketplace.json missing on disk surfaces `{source missing}` failur
     await mkdir(path.dirname(manifestPath), { recursive: true });
 
     await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         mp: {
           name: "mp",
@@ -1164,7 +1163,7 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
     await mkdir(path.join(mpRoot, "local-plug", "skills", "s1"), { recursive: true });
 
     await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       marketplaces: {
         "gh-mp": {
           name: "gh-mp",
@@ -1188,6 +1187,7 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
                 mcpServers: [],
                 hooks: [],
               },
+              enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

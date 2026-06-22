@@ -9,9 +9,13 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import {
   DEFAULT_STATE,
   STATE_VALIDATOR,
+  type DisabledPluginRecord,
+  type EnabledPluginRecord,
   type ExtensionState,
+  type PluginInstallRecord,
   loadState,
   saveState,
+  toDisabledRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
@@ -55,7 +59,7 @@ test("loadState on missing state.json returns DEFAULT_STATE", async () => {
   const { root, cleanup } = await tmpExtensionRoot();
   try {
     const got = await loadState(root);
-    assert.deepEqual(got, { schemaVersion: 1, marketplaces: {} });
+    assert.deepEqual(got, { schemaVersion: 2, marketplaces: {} });
   } finally {
     await cleanup();
   }
@@ -66,7 +70,7 @@ test("loadState on empty {} state.json returns DEFAULT_STATE shape", async () =>
   try {
     await writeFile(path.join(root, "state.json"), "{}");
     const got = await loadState(root);
-    assert.equal(got.schemaVersion, 1);
+    assert.equal(got.schemaVersion, 2);
     assert.deepEqual(got.marketplaces, {});
   } finally {
     await cleanup();
@@ -119,7 +123,7 @@ test("ST-6 loadState classifies legacy raw-string source via pathSource (v0 fixt
     const fixtureRaw = await readFile(path.join(FIXTURES, "v0-no-schemaversion.json"), "utf8");
     await writeFile(path.join(root, "state.json"), fixtureRaw);
     const got = await loadState(root);
-    assert.equal(got.schemaVersion, 1);
+    assert.equal(got.schemaVersion, 2);
     const mp = (got.marketplaces as Record<string, { source: unknown }>)["alpha"];
     assert.ok(mp);
     // Source revalidated to ParsedSource object form
@@ -213,7 +217,10 @@ test("saveState refuses invalid in-memory state (caller-bug guard)", async () =>
 test("STATE_VALIDATOR exports a JIT-compiled validator (D-07)", () => {
   assert.equal(typeof STATE_VALIDATOR.Check, "function");
   assert.equal(STATE_VALIDATOR.Check(DEFAULT_STATE), true);
-  assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 2, marketplaces: {} }), false);
+  // ENBL-02: schemaVersion 2 is the new normal; both 1 and 2 are valid.
+  assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 2, marketplaces: {} }), true);
+  // schemaVersion 3 is unknown and must be rejected.
+  assert.equal(STATE_VALIDATOR.Check({ schemaVersion: 3, marketplaces: {} }), false);
 });
 
 test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)", async (t) => {
@@ -233,7 +240,7 @@ test("SPLIT-01: legacy state.json with autoupdate still loads (typebox lenient)"
     // means the lenient typebox default ACCEPTS the extra property at the
     // schema gate. Both halves must hold for the load to succeed.
     const got = await loadState(root);
-    assert.equal(got.schemaVersion, 1);
+    assert.equal(got.schemaVersion, 2);
     const mp = (got.marketplaces as Record<string, { name: string }>)["mp-with-autoupdate"];
     assert.ok(mp);
     assert.equal(mp.name, "mp-with-autoupdate");
@@ -308,16 +315,21 @@ test("D-13 drift guard: loadState's configJsonPath derivation matches locationsF
 
 // ===================================================================
 // HOOK-02 / D-57-01: additive `resources.hooks` field on the plugin
-// install record. STATE_SCHEMA.schemaVersion stays Type.Literal(1) -- the
-// migration is purely additive (every v1.0..v1.12 hook-using plugin was
-// rejected as UNSUPPORTED_COMPONENT_KIND, so no existing state.json
-// record carries hook resources to "migrate"). The validator is the
-// schema gate; the default-fill in persistence/migrate.ts is the
-// responsibility for adding `hooks: []` before validation runs.
+// install record. The validator is the schema gate; the default-fill in
+// persistence/migrate.ts is the responsibility for adding `hooks: []`
+// before validation runs.
+//
+// ENBL-02: `enabled: boolean` is REQUIRED from schemaVersion 2.
+// The fixture builder includes it so STATE_VALIDATOR.Check passes.
 // ===================================================================
 
-function buildValidatorFixture(opts: { hooks?: unknown; omitHooks?: boolean }): {
-  schemaVersion: 1;
+function buildValidatorFixture(opts: {
+  hooks?: unknown;
+  omitHooks?: boolean;
+  enabled?: unknown;
+  omitEnabled?: boolean;
+}): {
+  schemaVersion: 2;
   marketplaces: Record<string, unknown>;
 } {
   const resources: Record<string, unknown> = {
@@ -330,8 +342,25 @@ function buildValidatorFixture(opts: { hooks?: unknown; omitHooks?: boolean }): 
     resources["hooks"] = opts.hooks ?? [];
   }
 
+  const plugin: Record<string, unknown> = {
+    version: "1.0.0",
+    resolvedSource: "/abs/mp/p1",
+    compatibility: {
+      installable: true,
+      notes: [],
+      supported: [],
+      unsupported: [],
+    },
+    resources,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+  if (!opts.omitEnabled) {
+    plugin["enabled"] = opts.enabled ?? true;
+  }
+
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       mp: {
         name: "mp",
@@ -340,21 +369,7 @@ function buildValidatorFixture(opts: { hooks?: unknown; omitHooks?: boolean }): 
         addedFromCwd: "/cwd",
         manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
         marketplaceRoot: "/abs/mp",
-        plugins: {
-          p1: {
-            version: "1.0.0",
-            resolvedSource: "/abs/mp/p1",
-            compatibility: {
-              installable: true,
-              notes: [],
-              supported: [],
-              unsupported: [],
-            },
-            resources,
-            installedAt: "2025-01-01T00:00:00.000Z",
-            updatedAt: "2025-01-01T00:00:00.000Z",
-          },
-        },
+        plugins: { p1: plugin },
       },
     },
   };
@@ -377,6 +392,15 @@ test("HOOK-02: STATE_VALIDATOR rejects resources.hooks of a non-array shape", ()
 
 test("HOOK-02 / D-57-01: STATE_VALIDATOR rejects a record missing resources.hooks (default-fill is the migrator's responsibility)", () => {
   const fixture = buildValidatorFixture({ omitHooks: true });
+  assert.equal(STATE_VALIDATOR.Check(fixture), false);
+});
+
+test("ENBL-02: STATE_VALIDATOR rejects a record missing `enabled` (fill-before-validate is the migrator's responsibility)", () => {
+  // Guards the fill-before-validate contract: if `enabled` ever became
+  // optional in the schema, the migrator's default-fill could silently
+  // regress to a no-op and a field-less record would validate. This pins
+  // `enabled` as REQUIRED.
+  const fixture = buildValidatorFixture({ omitEnabled: true });
   assert.equal(STATE_VALIDATOR.Check(fixture), false);
 });
 
@@ -452,18 +476,157 @@ test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; 
   }
 });
 
-test("SPLIT-01 / D-12: STATE_SCHEMA.schemaVersion stays Type.Literal(1) (saveState refuses schemaVersion: 2)", async () => {
+test("ENBL-02: pre-enabled state.json round-trips through loadState; every plugin record gains enabled: true", async (t) => {
   const { root, cleanup } = await tmpExtensionRoot();
+  // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race
+  // the cleanup `rm`, surfacing as a harmless persist failure.
+  t.mock.method(console, "warn", () => {
+    // suppress noise
+  });
   try {
-    // The compile-time `Type.Literal(1)` forces the cast below; the runtime
-    // STATE_VALIDATOR.Check inside saveState must REFUSE because the on-disk
-    // contract is locked at schemaVersion 1 (D-12: no STATE_SCHEMA bump).
-    const bumped = {
-      schemaVersion: 2 as 1,
-      marketplaces: {},
-    } as ExtensionState;
-    await assert.rejects(() => saveState(root, bumped), /failed schema validation/);
+    // A pre-ENBL-02 state.json: plugin records carry full resources
+    // (including hooks, so this exercises the `enabled` arm in isolation)
+    // but NO `enabled` field. schemaVersion stays 1. This pins loadState's
+    // integration: the migrator's enabled-fill MUST run before
+    // STATE_VALIDATOR.Check -- a reorder would throw on this file undetected.
+    const preEnabledState = {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: "./mp", logical: "./mp" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/abs/mp",
+          plugins: {
+            one: {
+              version: "1.0.0",
+              resolvedSource: "/abs/mp/one",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              installedAt: "2025-01-01T00:00:00.000Z",
+              updatedAt: "2025-01-01T00:00:00.000Z",
+            },
+            two: {
+              version: "2.0.0",
+              resolvedSource: "/abs/mp/two",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: ["s"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              installedAt: "2025-01-02T00:00:00.000Z",
+              updatedAt: "2025-01-02T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    };
+    await writeFile(path.join(root, "state.json"), JSON.stringify(preEnabledState));
+
+    const got = await loadState(root);
+    const mp = (
+      got.marketplaces as Record<string, { plugins: Record<string, { enabled: boolean }> }>
+    )["mp"];
+    assert.ok(mp);
+    assert.equal(mp.plugins["one"]?.enabled, true);
+    assert.equal(mp.plugins["two"]?.enabled, true);
+    // Flush fire-and-forget persist before cleanup races.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
   } finally {
     await cleanup();
   }
+});
+
+test("ENBL-02: STATE_SCHEMA.schemaVersion accepts 1 and 2 (saveState accepts both; rejects 3+)", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    // schemaVersion 2 is the ENBL-02 shape and must be accepted.
+    const v2 = { schemaVersion: 2, marketplaces: {} } as ExtensionState;
+    await saveState(root, v2); // must not throw
+    // schemaVersion 1 is the pre-ENBL-02 shape and must still be accepted
+    // (migration is additive; old files with no plugin records are valid v1).
+    const v1 = { schemaVersion: 1, marketplaces: {} } as ExtensionState;
+    await saveState(root, v1); // must not throw
+    // schemaVersion 3 is unknown and must be refused.
+    const v3 = { schemaVersion: 3 as unknown as 1, marketplaces: {} } as ExtensionState;
+    await assert.rejects(() => saveState(root, v3), /failed schema validation/);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ===================================================================
+// ENBL-02 two-signal invariant: EnabledPluginRecord / DisabledPluginRecord
+// branded types + the toDisabledRecord factory.
+// ===================================================================
+
+test("ENBL-02: toDisabledRecord empties all resources, sets enabled:false, preserves identity + restamps updatedAt", () => {
+  const record: PluginInstallRecord = {
+    version: "9.9.9",
+    resolvedSource: "/abs/mp/foo",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: ["s"], prompts: ["p"], agents: ["a"], mcpServers: ["m"], hooks: ["h"] },
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const disabled = toDisabledRecord(record, "2026-02-02T00:00:00.000Z");
+  assert.equal(disabled.enabled, false);
+  assert.deepEqual(disabled.resources, {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+  });
+  // Identity fields preserved.
+  assert.equal(disabled.version, "9.9.9");
+  assert.equal(disabled.resolvedSource, "/abs/mp/foo");
+  assert.deepEqual(disabled.compatibility, record.compatibility);
+  assert.equal(disabled.installedAt, "2026-01-01T00:00:00.000Z");
+  // updatedAt restamped.
+  assert.equal(disabled.updatedAt, "2026-02-02T00:00:00.000Z");
+  // The disabled + empty shape is a legal stored record.
+  assert.equal(
+    STATE_VALIDATOR.Check({
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: "./mp", logical: "./mp" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/m",
+          marketplaceRoot: "/r",
+          plugins: { foo: disabled },
+        },
+      },
+    }),
+    true,
+  );
+});
+
+test("ENBL-02: DisabledPluginRecord forbids non-empty resources at compile time", () => {
+  // Compile-time guard: gated by `npm run typecheck` (tests/**/*.ts is in the
+  // tsconfig include). If the branded type regresses to permissive arrays,
+  // the @ts-expect-error below stops erroring and typecheck fails.
+  type DisabledSkills = DisabledPluginRecord["resources"]["skills"];
+  // @ts-expect-error a disabled record's resources arrays must be empty ([])
+  const badSkills: DisabledSkills = ["x"];
+  void badSkills;
+
+  // The empty form type-checks, and an enabled record may carry populated
+  // resources (the normal active shape) -- proving the asymmetry is intended.
+  const okSkills: DisabledSkills = [];
+  const active: EnabledPluginRecord = {
+    version: "1.0.0",
+    resolvedSource: "/abs",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: ["x"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  assert.deepEqual(okSkills, []);
+  assert.equal(active.enabled, true);
 });

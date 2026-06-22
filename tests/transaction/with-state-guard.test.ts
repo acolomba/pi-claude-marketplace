@@ -68,6 +68,7 @@ function withInstalledPlugin(
         resolvedSource: `/abs/${plName}`,
         compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
         resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        enabled: true,
         installedAt: "2025-01-01T00:00:00.000Z",
         updatedAt: "2025-01-01T00:00:00.000Z",
       },
@@ -228,7 +229,8 @@ test("D-06 save failure releases the lock for the next state guard call", async 
     await assert.rejects(
       () =>
         withStateGuard(loc, (state) => {
-          (state as { schemaVersion: number }).schemaVersion = 2;
+          // schemaVersion 3 is unknown to the schema; saveState must reject.
+          (state as { schemaVersion: number }).schemaVersion = 3;
         }),
       /saveState refused/,
     );
