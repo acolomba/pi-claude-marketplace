@@ -50,7 +50,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 ## Phases
 
-- [ ] **Phase 1: Localized type model & command-context spine** - Each command owns its status set, reasons, label (via `CommandContext.Messaging`), and per-status render map locally (no central registry); rows gain `severity`/`needsReload`/`dependencies` + structural cardinality (tuple-vs-array) shape (output-neutral).
+- [x] **Phase 1: Localized type model & command-context spine** - Each command owns its status set, reasons, label (via `CommandContext.Messaging`), and per-status render map locally (no central registry); rows gain `severity`/`needsReload`/`dependencies` + structural cardinality (tuple-vs-array) shape (output-neutral). (completed 2026-06-24)
 - [ ] **Phase 2: Caller-stamped severity & reload reducer** - `notify()` becomes a dumb reducer; every producer stamps `severity` + `needsReload`; content-derived ladders deleted; relocation gated by an architecture test.
 - [ ] **Phase 3: Desired-state output & atomic catalog supersession** - Leading severity sentence, trailing tally, header invariants; catalog markdown + byte fixtures rewritten in lockstep.
 - [ ] **Phase 4: Concern-module extraction & open-closed proof** - Hooks-summary and soft-dep injection extracted; `notify.ts` slims to envelope + reducer + vocabulary; ≤3-central-files / 0-notify-edits target proven and green.
@@ -83,7 +83,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-05-PLAN.md — Cleanup: delete notify-types.test.ts (D-03), remove legacy notify() + dead central switches; slim notify.ts (Wave 3)
+- [x] 01-05-PLAN.md — Cleanup: delete notify-types.test.ts (D-03), remove legacy notify() + dead central switches; slim notify.ts (Wave 3)
 
 ### Phase 2: Caller-stamped severity & reload reducer
 
@@ -133,7 +133,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Localized type model & command-context spine | 4/5 | In Progress|  |
+| 1. Localized type model & command-context spine | 5/5 | Complete   | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
