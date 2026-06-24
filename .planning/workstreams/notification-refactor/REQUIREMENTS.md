@@ -69,17 +69,46 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | Pending |
+| MOD-01 | Phase 1 | Pending |
+| MOD-02 | Phase 1 | Pending |
+| MOD-03 | Phase 1 | Pending |
+| OUT-07 | Phase 1 | Pending |
+| SEV-01 | Phase 2 | Pending |
+| SEV-02 | Phase 2 | Pending |
+| SEV-03 | Phase 2 | Pending |
+| SEV-04 | Phase 2 | Pending |
+| SEV-05 | Phase 2 | Pending |
+| RLD-01 | Phase 2 | Pending |
+| RLD-02 | Phase 2 | Pending |
+| RLD-03 | Phase 2 | Pending |
+| RLD-04 | Phase 2 | Pending |
+| RLD-05 | Phase 2 | Pending |
+| GATE-01 | Phase 2 | Pending |
+| OUT-01 | Phase 3 | Pending |
+| OUT-02 | Phase 3 | Pending |
+| OUT-03 | Phase 3 | Pending |
+| OUT-04 | Phase 3 | Pending |
+| OUT-05 | Phase 3 | Pending |
+| OUT-06 | Phase 3 | Pending |
+| OUT-08 | Phase 3 | Pending |
+| GATE-02 | Phase 3 | Pending |
+| MOD-04 | Phase 4 | Pending |
+| MOD-05 | Phase 4 | Pending |
+| MOD-06 | Phase 4 | Pending |
+| GATE-03 | Phase 4 | Pending |
 
 **Coverage:**
 - Requirements: 27 total (SEV ×5, RLD ×5, OUT ×8, MOD ×6, GATE ×3)
-- Mapped to phases: 0 (pending)
-- Unmapped: 27 ⚠️
+- Mapped to phases: 27 ✓
+- Unmapped: 0 ✓
+
+Note: GATE-02 (catalog-uat green) and GATE-03 (`npm run check` green) are per-phase
+boundary requirements honored at every phase; they are anchored above to the phase
+that owns their primary deliverable (GATE-02 → the catalog supersession in Phase 3,
+GATE-03 → the milestone-close green gate in Phase 4).
 
 ---
 *Requirements defined: 2026-06-24*
-*Last updated: 2026-06-24 after initial definition*
+*Last updated: 2026-06-24 after roadmap creation (4 phases, 100% coverage)*
