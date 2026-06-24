@@ -127,7 +127,21 @@ Plans:
   4. Mixed-subject cascades (load-time `reconcile`, `import`) drop the subject noun in the leading sentence and use the operation name in the tally, counting all rows uniformly.
   5. `docs/output-catalog.md` and the `catalog-uat` byte fixtures are rewritten in lockstep with the code change (atomic supersession); per-row grammar is preserved except the `present`→`installed` collapse, the `reasons` set stays closed, and `catalog-uat` is green — never left red between phases.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — D-02 leading severity sentence + D-03 render-time mixed-subject detection + D-01 absent-target flips (reinstall/update not-installed → error) + PU-5 standalone uninstall → error row; all summary-bearing catalog blocks/fixtures + wire-coverage fixtures rewritten atomically (Wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — OUT-03/04 trailing tally gated on structural cardinality (D-04) + Messaging.label threading + widened countRowsBySeverity + mixed-subject tally (D-03); every plural catalog block/fixture updated atomically (Wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — catalog `present`→`installed` grammar collapse (D-06, prose/table-only, zero fixture-byte change) (Wave 3)
 
 ### Phase 4: Concern-module extraction & open-closed proof
 
