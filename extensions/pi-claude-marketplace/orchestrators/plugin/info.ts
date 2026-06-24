@@ -35,10 +35,13 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
+import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
+
+import { PLUGIN_INFO_CONTEXT } from "./info.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -994,10 +997,12 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // instead of the standalone `PluginInfoMessage` shape.
   const { disabledBlocks, infoFound } = partitionDisabledScopes(opts, found);
 
-  // Every found scope holds the disabled marker: a single list-arm notify
-  // (one block per scope) preserves IL-2 on this all-disabled path.
+  // Every found scope holds the disabled marker: a single list-arm cascade
+  // (one block per scope) preserves IL-2 on this all-disabled path. OUT-07 /
+  // D-12: a per-scope bulk of disabled inventory rows -> `Plural<Row>`.
   if (infoFound.length === 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
+    const rows: Plural<MarketplaceNotificationMessage> = disabledBlocks;
+    notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
     return;
   }
 
@@ -1059,7 +1064,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // surfaces have incompatible message kinds, and hiding one behind the
   // other would silently drop a scope's state.
   if (disabledBlocks.length > 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
+    const rows: Plural<MarketplaceNotificationMessage> = disabledBlocks;
+    notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
   }
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).

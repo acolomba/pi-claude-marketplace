@@ -49,11 +49,13 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { applyPartialCascadeFold, resolveCrossScopePluginTarget } from "./shared.ts";
+import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -222,15 +224,13 @@ function emitCascadeFailure(args: {
     ...(removedVersion !== undefined && { version: removedVersion }),
     cause,
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failedRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [failedRow],
+    },
+  ]);
   return undefined;
 }
 
@@ -255,22 +255,20 @@ function emitConfigInvalid(args: {
     return { status: "failed", reason: "invalid manifest", error: invalidErr, cause };
   }
 
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: invalidErr,
-          },
-        ],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [
+        {
+          status: "failed",
+          name: plugin,
+          reasons: ["invalid manifest"] as const,
+          cause: invalidErr,
+        },
+      ],
+    },
+  ]);
   return undefined;
 }
 
@@ -623,14 +621,12 @@ export async function uninstallPlugin(
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [uninstalledRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [uninstalledRow],
+    },
+  ]);
   return undefined;
 }

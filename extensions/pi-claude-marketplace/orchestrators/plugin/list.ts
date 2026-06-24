@@ -59,12 +59,14 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { notifyWithContext, type Plural, type Single } from "../../shared/notify-context.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
 } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
+
+import { LIST_CONTEXT } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -840,16 +842,18 @@ function narrowListFailReason(err: unknown): ListReason {
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
   try {
-    const marketplaces = await loadPluginListPayload(opts);
-    // notify() call mirrors the recipe at
+    // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
+    // `Plural<Row>` (a readonly array). Additive typing only.
+    const marketplaces: Plural<MarketplaceNotificationMessage> = await loadPluginListPayload(opts);
+    // notify call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable
     // / installed) per D-19-02. Severity (info; omitted 2nd arg) and
-    // the `/reload to pick up changes` trailer are computed by notify()
-    //  (the trailer fires when at least one
+    // the `/reload to pick up changes` trailer are computed by the cascade
+    // seam (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
-    notify(ctx, pi, { marketplaces });
+    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces);
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
     // catalog state for orchestrator-level failure (D-19-03 Option B):
@@ -887,7 +891,10 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       scope: opts.scope ?? "user",
       plugins: [failedRow],
     };
-    notify(ctx, pi, { marketplaces: [mp] });
+    // OUT-07 / D-12: the synthetic list-failure surface emits exactly one
+    // marketplace row, so its slot is typed `Single<Row>` (a 1-tuple).
+    const failureRows: Single<MarketplaceNotificationMessage> = [mp];
+    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows);
   }
 }
 

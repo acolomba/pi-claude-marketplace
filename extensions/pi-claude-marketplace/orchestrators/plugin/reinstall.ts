@@ -78,6 +78,7 @@ import {
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -87,6 +88,7 @@ import {
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { REINSTALL_CONTEXT } from "./reinstall.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
@@ -285,9 +287,9 @@ export async function reinstallPlugin(
     dependencies: dependenciesFromOutcome(locked.outcome),
     version: locked.outcome.version,
   };
-  notify(ctx, pi, {
-    marketplaces: [{ name: marketplace, scope, plugins: [reinstalledRow] }],
-  });
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+    { name: marketplace, scope, plugins: [reinstalledRow] },
+  ]);
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artefacts were
@@ -297,22 +299,20 @@ export async function reinstallPlugin(
     const targetBasename = path.basename(
       opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
     );
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+          },
+        ],
+      },
+    ]);
   }
 
   return locked.outcome;
@@ -365,9 +365,9 @@ function handleSinglePluginFailure(
           reasons,
           cause: causeErr,
         } satisfies PluginFailedMessage);
-    notify(ctx, pi, {
-      marketplaces: [{ name: marketplace, scope, plugins: [failureRow] }],
-    });
+    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+      { name: marketplace, scope, plugins: [failureRow] },
+    ]);
   }
 
   return {
@@ -498,9 +498,9 @@ function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: unknown): 
     reasons,
     cause: causeErr,
   };
-  notify(ctx, pi, {
-    marketplaces: [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
-  });
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+    { name: targetingMp, scope: targetingScope, plugins: [failedRow] },
+  ]);
 }
 
 async function enumerateReinstallTargets(
@@ -751,14 +751,17 @@ function renderReinstallPartitionAndNotify(
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
 
-  const marketplaces: MarketplaceNotificationMessage[] = sortedBlocks.map((block) => {
+  // OUT-07 / D-12: the reinstall cascade is a bulk op, so its row slot is typed
+  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
+  // variable-length array, identical at runtime.
+  const marketplaces: Plural<MarketplaceNotificationMessage> = sortedBlocks.map((block) => {
     const plugins: PluginNotificationMessage[] = block.outcomes.map(
       (o): PluginNotificationMessage => outcomeToPluginMessage(o, block.scope),
     );
     return { name: block.name, scope: block.scope, plugins };
   });
 
-  notify(ctx, pi, { marketplaces });
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces);
 }
 
 /**

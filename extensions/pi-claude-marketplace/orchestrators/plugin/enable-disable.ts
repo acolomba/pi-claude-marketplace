@@ -58,10 +58,12 @@ import { writeBatchedConfigEntries } from "../../persistence/config-write-back.t
 import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
+import { DISABLE_CONTEXT, ENABLE_CONTEXT } from "./enable-disable.messaging.ts";
 import { runInstallLedger } from "./install.ts";
 import {
   applyPartialCascadeFold,
@@ -410,6 +412,7 @@ export async function setPluginEnabled(
       plugin,
       requestedScope: opts.scope,
       cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      enable,
       orchestrated,
     });
   }
@@ -596,21 +599,15 @@ export async function setPluginEnabled(
       };
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: [] as const,
-              cause,
-            },
-          ],
-        },
-      ],
+    // D-04: the `failed` row's bytes are identical across both verbs; emit it
+    // through the active verb's CommandContext for naming consistency.
+    emitEnableDisableFailedRow({
+      ctx,
+      pi,
+      enable,
+      marketplace,
+      scope,
+      row: { status: "failed", name: plugin, reasons: [] as const, cause },
     });
     return undefined;
   }
@@ -657,9 +654,10 @@ function emitResolutionFailure(args: {
   plugin: string;
   requestedScope: Scope | undefined;
   cause: Error;
+  enable: boolean;
   orchestrated: boolean;
 }): EnableDisablePluginOutcome | undefined {
-  const { ctx, pi, marketplace, plugin, requestedScope, cause, orchestrated } = args;
+  const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
   // classifyTransactionThrow returns a `Reason` (closed set including
   // "lock held"); none of the narrower outputs are the structural
@@ -675,23 +673,41 @@ function emitResolutionFailure(args: {
   }
 
   const scope: Scope = requestedScope ?? "user";
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: [reason],
-            cause: sanitized,
-          },
-        ],
-      },
-    ],
+  // D-04: the `failed` row's bytes are identical across both verbs; emit it
+  // through the active verb's CommandContext for naming consistency.
+  emitEnableDisableFailedRow({
+    ctx,
+    pi,
+    enable,
+    marketplace,
+    scope,
+    row: { status: "failed", name: plugin, reasons: [reason], cause: sanitized },
   });
   return undefined;
+}
+
+/**
+ * D-04: emit a single `(failed)` cascade row through the active verb's
+ * CommandContext. The `failed` arm is byte-identical in `ENABLE_CONTEXT` and
+ * `DISABLE_CONTEXT`, so this helper only selects which context's
+ * `Messaging.label` owns the row; it exists to keep the verb-branch confined to
+ * a single concrete (non-union) `notifyWithContext` call per arm so each context
+ * keeps its own `Status` / `Msg` instantiation.
+ */
+function emitEnableDisableFailedRow(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly enable: boolean;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly row: PluginFailedMessage;
+}): void {
+  const { ctx, pi, enable, marketplace, scope, row } = args;
+  if (enable) {
+    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+  } else {
+    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+  }
 }
 
 /**
@@ -822,16 +838,21 @@ function dispatchOutcome(args: {
   // cascade arm, so carrying the kind on the disable verb's non-fresh arms
   // (idempotent / failed / not-recorded) is a no-op. The enable verb stays
   // kind-less (its `(installed)` row is already a trigger token).
-  notify(ctx, pi, {
-    ...(!enable && { kind: "disable-cascade" as const }),
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [row],
-      },
-    ],
-  });
+  //
+  // D-04 / D-10: the verb selects its OWN CommandContext -- ENABLE_CONTEXT
+  // renders the fresh `(installed)` row, DISABLE_CONTEXT the fresh
+  // `(disabled)` row; both share byte-identical `skipped` / `failed` arms.
+  if (enable) {
+    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+  } else {
+    notifyWithContext(
+      ctx,
+      pi,
+      DISABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [row] }],
+      "disable-cascade",
+    );
+  }
 }
 
 /** Internal: build the plugin row for the outcome (bare mp header -- UAT-04). */

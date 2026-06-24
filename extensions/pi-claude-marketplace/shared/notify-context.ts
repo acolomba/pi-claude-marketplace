@@ -93,14 +93,25 @@ export type Plural<Row> = readonly Row[];
  * NOT read here (reduction lands later). `Messaging.label` is threaded for the
  * migration's sake but the summary surface that renders it lands later, so it
  * does not change any rendered byte yet.
+ *
+ * UAT-03: `kind` defaults to the plain `"cascade"` arm. The `/claude:plugin
+ * disable` command threads `"disable-cascade"` so its fresh `(disabled)` row
+ * counts as a realized transition in `shouldEmitReloadHint` (the artefacts were
+ * unstaged) and fires the `/reload to pick up changes` trailer. Rendering is
+ * otherwise byte-identical to the plain cascade arm; only the reload-hint
+ * trigger differs. The kind flows verbatim into the `CascadeNotificationMessage`
+ * the central `emitContextCascade` seam reads -- it is NOT a per-row field and
+ * is NOT one of the inert D-07 reduction fields.
  */
 export function notifyWithContext<Status extends string, Msg>(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceNotificationMessage[],
+  kind?: "cascade" | "disable-cascade",
 ): void {
-  const message: CascadeNotificationMessage = { marketplaces: rows };
+  const message: CascadeNotificationMessage =
+    kind === undefined ? { marketplaces: rows } : { kind, marketplaces: rows };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
