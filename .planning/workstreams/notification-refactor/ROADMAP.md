@@ -73,7 +73,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 **Plans**: 5 plansPlans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Shared spine: CommandContext contract + naming convention, vocabulary exports, reasons split (topic-grouped), inert severity/needsReload base fields, cardinality aliases, notifyWithContext adapter (Wave 1)
+- [x] 01-01-PLAN.md — Shared spine: CommandContext contract + naming convention, vocabulary exports, reasons split (topic-grouped), inert severity/needsReload base fields, cardinality aliases, notifyWithContext adapter (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -133,7 +133,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Localized type model & command-context spine | 0/5 | Planned | - |
+| 1. Localized type model & command-context spine | 1/5 | In Progress|  |
 | 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
