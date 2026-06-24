@@ -458,7 +458,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
 
 // PU-5 silent converge -- record absent -----------------------------
 
-test("PU-5: record already absent -> NO notification (literal silence)", async () => {
+test("PU-5 / D-01: standalone uninstall of an already-gone plugin -> error row (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-pu5-"));
     try {
@@ -488,8 +488,16 @@ test("PU-5: record already absent -> NO notification (literal silence)", async (
         plugin: "absent-plugin",
       });
 
-      // Literal silence -- no notification at all.
-      assert.equal(notifications.length, 0, "no notification per PRD §5.2.2 PU-5");
+      // D-01: the standalone command names an absent target it cannot operate
+      // on -> error row (was literal silence). The orchestrated reconcile
+      // converge stays silent (covered separately).
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith("A plugin operation has failed.\n\n"),
+        `PU-5 error summary mismatch: got "${notifications[0]?.message ?? ""}"`,
+      );
+      assert.match(notifications[0]?.message ?? "", /⊘ absent-plugin \(failed\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

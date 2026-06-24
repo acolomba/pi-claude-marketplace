@@ -972,13 +972,14 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       });
 
       const body = notifications[0]?.message ?? "";
-      // V2 byte form. Plugin-row `[<scope>]`
-      // bracket suppressed by orphan-fold. Skipped severity per D-16-11.
+      // V2 byte form. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
+      // D-01: an absent-target update (not installed) is error, severity-only
+      // flip; the `(skipped) {not installed}` per-row grammar is preserved.
       assert.equal(
         body,
-        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
       );
-      assert.equal(notifications[0]?.severity, "warning");
+      assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1223,14 +1224,14 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const body = notifications[0]?.message ?? "";
-      // V2 byte form mirrors the pl@mp
-      // not-installed shape (PUP-1 above). Plugin-row `[<scope>]` bracket
-      // suppressed by orphan-fold.
+      // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
+      // absent-target update (not installed) is error, severity-only flip.
       assert.equal(
         body,
-        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
       );
-      assert.equal(notifications[0]?.severity, "warning");
+      assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1629,11 +1630,12 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
 
 // ─── swapStateRecord: plugin concurrently uninstalled (lines 511-514) ─────────
 
-test("swapState-plugin-gone: plugin removed from state between enumerateTargets and preflight -> skipped", async () => {
+test("swapState-plugin-gone: plugin removed from state between enumerateTargets and preflight -> error (not installed)", async () => {
   // gitOps.fetch removes the plugin record from state.json after
   // enumerateTargets has already collected "hello" as a target. When
   // preflightUpdate runs, loadState finds no "hello" in the marketplace
-  // plugins -> returns partition='skipped' (notes: "not installed").
+  // plugins -> returns partition='skipped' (notes: "not installed"). D-01:
+  // the absent target flips that skip to an error row (severity-only).
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-plugin-gone-"));
     try {
@@ -1701,12 +1703,13 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
       });
 
       // preflightUpdate reads modified state -> "hello" not in plugins ->
-      // returns skipped (not installed). Graceful path, no error.
+      // returns skipped (not installed). D-01: absent target -> error row
+      // (severity-only flip; the `(skipped) {not installed}` token is kept).
       assert.ok(notifications.length >= 1, "expected at least one notification");
       const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, "no error notification expected");
+      assert.equal(errs.length, 1, "absent-target update is now an error (D-01)");
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /skipped/);
+      assert.match(body, /\(skipped\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

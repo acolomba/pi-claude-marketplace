@@ -1559,9 +1559,15 @@ function outcomeToCascadePluginMessage(
         ...(outcome.fromVersion !== undefined &&
           outcome.fromVersion !== "" && { version: outcome.fromVersion }),
         reasons,
-        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
-        // never reloads.
-        severity: skipSeverity(reasons),
+        // D-01: an absent-target update (the named plugin is not installed /
+        // not found) cannot be carried out -> error (severity-only flip; the
+        // `(skipped) {not installed}` per-row grammar is preserved). Otherwise
+        // benign idempotent skip -> info, actionable skip -> warning; never
+        // reloads.
+        severity:
+          reasons.includes("not installed") || reasons.includes("not found")
+            ? "error"
+            : skipSeverity(reasons),
         needsReload: false,
       };
     }

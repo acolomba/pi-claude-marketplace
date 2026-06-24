@@ -478,7 +478,7 @@ Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed
 
 ### Failure -- marketplace not added (ATTR-04 / SCOPE-01)
 
-Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in the requested scope, OR is present only in the OTHER scope. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the silent PU-5 converge for an already-gone plugin record (a marketplace that IS present but no longer holds the plugin row stays silent -- nothing to report). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
+Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in the requested scope, OR is present only in the OTHER scope. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the PU-5 already-gone path for a plugin record whose marketplace IS present (covered by the `already-gone-not-installed` state below). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added -->
 
@@ -486,6 +486,19 @@ Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was N
 A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
+```
+
+### Failure -- already gone, plugin not installed (D-01 / PU-5)
+
+Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope, but the plugin row is already absent from `state.json` (never installed, or concurrently uninstalled by another process). D-01: the STANDALONE user command names an absent target it cannot operate on, so it now reports an `error` row (`(failed) {not installed}`) instead of the former literal silence -- a `failed` row because uninstall's render map renders `uninstalled` / `failed` only. The ORCHESTRATED reconcile-apply converge stays SILENT (WR-06 / NFR-2: a reconcile racing another process never reports an uninstall it did not perform). No `cause`, so no cause-chain trailer; severity `error`, no reload-hint (nothing changed).
+
+<!-- catalog-state: already-gone-not-installed -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {not installed}
 ```
 
 ______________________________________________________________________

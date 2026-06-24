@@ -531,12 +531,17 @@ export async function uninstallPlugin(
     });
   }
 
-  // PU-5 silent converge: literal silence, no notification (PRD §5.2.2
-  // verbatim). WR-06: in orchestrated mode the converge surfaces as the
-  // explicit `converged` outcome so apply can DROP it -- both the
-  // standalone-silence path and the orchestrated converge render no row,
-  // and a reconcile racing another process never reports an uninstall it
-  // did not perform.
+  // PU-5 already-gone (the recorded plugin row is absent from state.json).
+  // WR-06: in ORCHESTRATED mode (reconcile apply) the converge stays SILENT --
+  // it surfaces as the explicit `converged` outcome so apply can DROP it, and a
+  // reconcile racing another process never reports an uninstall it did not
+  // perform.
+  //
+  // D-01: the STANDALONE user command names an absent target it cannot operate
+  // on -> error row (was literal silence). A `failed` row carrying the
+  // `not installed` reason (uninstall's render map renders `uninstalled` /
+  // `failed` only -- it has no `skipped` arm); no `cause`, so no path-redaction
+  // is required.
   //
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
@@ -544,6 +549,20 @@ export async function uninstallPlugin(
       return { status: "converged", name: plugin };
     }
 
+    const failedRow: PluginFailedMessage = {
+      status: "failed",
+      name: plugin,
+      reasons: ["not installed"],
+      severity: "error",
+      needsReload: false,
+    };
+    notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failedRow],
+      },
+    ]);
     return undefined;
   }
 

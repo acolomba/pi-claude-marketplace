@@ -858,9 +858,11 @@ function outcomeToPluginMessage(
         name: outcome.name,
         reasons,
         ...(rowScope !== undefined && { scope: rowScope }),
-        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
-        // never reloads.
-        severity: skipSeverity(reasons),
+        // D-01: an absent-target reinstall (the named plugin is not installed)
+        // cannot be carried out -> error (severity-only flip; the `(skipped)
+        // {not installed}` per-row grammar is preserved). Otherwise benign
+        // idempotent skip -> info, actionable skip -> warning; never reloads.
+        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
         needsReload: false,
       };
       return skipped;

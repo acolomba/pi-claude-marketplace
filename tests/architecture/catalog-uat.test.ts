@@ -894,6 +894,32 @@ const FIXTURES: FixtureMap = {
         scope: "user",
       } satisfies NotificationMessage,
     },
+
+    // D-01 / PU-5: standalone uninstall of an already-gone (not-installed)
+    // plugin -- the marketplace IS present, so the header renders; the absent
+    // target reports an `error` row (was literal silence). The orchestrated
+    // reconcile converge stays silent (no row) per WR-06 / NFR-2.
+    "already-gone-not-installed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["not installed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

@@ -214,6 +214,55 @@ const FIXTURES: readonly WireFixture[] = [
     expectedSeverity: "error",
     expectTrailer: false,
   },
+  // D-01 absent-target: reinstall of a not-installed plugin stamps error
+  // directly (was `skipSeverity` -> warning) on a `skipped` row carrying
+  // `not installed`; no reload (nothing changed).
+  {
+    label: "absent-target skip (reinstall not-installed)",
+    context: REINSTALL_CONTEXT,
+    row: {
+      status: "skipped",
+      name: "missing-plugin",
+      reasons: ["not installed"],
+      severity: "error",
+      needsReload: false,
+    },
+    expectedSeverity: "error",
+    expectTrailer: false,
+  },
+  // D-01 absent-target: update of a not-installed plugin stamps error directly
+  // (was `skipSeverity` -> warning); no reload.
+  {
+    label: "absent-target skip (update not-installed)",
+    context: UPDATE_CONTEXT,
+    row: {
+      status: "skipped",
+      name: "missing-plugin",
+      reasons: ["not installed"],
+      severity: "error",
+      needsReload: false,
+    },
+    expectedSeverity: "error",
+    expectTrailer: false,
+  },
+  // D-01 / PU-5: standalone uninstall of an already-gone (not-installed) plugin
+  // emits an error `failed` row (was literal silence); no reload. uninstall's
+  // render map renders `uninstalled` / `failed` only, so the absent target is a
+  // `failed` row. The orchestrated reconcile converge stays silent and is not
+  // exercised here.
+  {
+    label: "absent-target failure (uninstall PU-5 already-gone)",
+    context: UNINSTALL_CONTEXT,
+    row: {
+      status: "failed",
+      name: "helper",
+      reasons: ["not installed"],
+      severity: "error",
+      needsReload: false,
+    },
+    expectedSeverity: "error",
+    expectTrailer: false,
+  },
 ];
 
 test("WR-01/D-05: every standalone render-map arm reduces its producer-stamped row to the correct wire severity + reload trailer", () => {
