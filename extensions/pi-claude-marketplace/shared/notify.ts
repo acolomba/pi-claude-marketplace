@@ -3147,6 +3147,49 @@ export function emitContextCascade(
 }
 
 /**
+ * RECON-04 / D-02 adapter seam: emit the `reconcile-applied-cascade` standalone
+ * envelope exactly like the `dispatchInfoMessage` applied-cascade arm
+ * (`composeReconcileAppliedBody` -> `emitWithSummary`), but dispatch each
+ * per-plugin row body through a caller-supplied `renderPluginRowBody` instead of
+ * the central `renderPluginRow` switch. The reconcile context's render map
+ * supplies the per-row bytes (the verbatim lifted arms), while the marketplace
+ * header, cause-chain trailers, rollback-partial lines, the empty
+ * `(no marketplaces)` sentinel, and the content-derived severity/summary
+ * (`reconcileAppliedSeverity` via `emitWithSummary`) all stay central and
+ * byte-identical.
+ *
+ * Like `dispatchInfoMessage`'s standalone arm, NO reload-hint trailer is
+ * appended (a load-time applied cascade is a standalone info kind, not a
+ * state-change cascade) -- this matches the legacy applied-cascade byte form
+ * exactly. IL-2: the single soft-dep probe and the single `ctx.ui.notify` call
+ * (via `emitWithSummary`) are preserved.
+ */
+export function emitReconcileAppliedContextCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: ReconcileAppliedCascadeMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  const probe = softDepStatus(pi);
+
+  const blocks = message.marketplaces.map((mp) => {
+    const lines: string[] = [renderMpHeader(mp, probe)];
+    for (const p of mp.plugins) {
+      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
+    }
+
+    return lines.join("\n");
+  });
+  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+
+  emitWithSummary(ctx, message, body);
+}
+
+/**
  * `composePluginLines` parameterized over the per-row body renderer (D-02).
  * Byte-identical to `composePluginLines` except the column-0-indented row body
  * comes from `renderRow` rather than the central `renderPluginRow`. The

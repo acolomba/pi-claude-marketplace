@@ -1,8 +1,10 @@
 import {
   emitContextCascade,
+  emitReconcileAppliedContextCascade,
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
+  type ReconcileAppliedCascadeMessage,
 } from "./notify.ts";
 
 import type { Scope } from "./types.ts";
@@ -103,6 +105,27 @@ export function notifyWithContext<Status extends string, Msg>(
   const message: CascadeNotificationMessage = { marketplaces: rows };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
+    dispatchRow(context, p, probe, mpScope),
+  );
+}
+
+/**
+ * RECON-04 / D-02 entry point for the load-time `reconcile-applied-cascade`
+ * standalone envelope. Mirrors `notifyWithContext` but preserves the
+ * `kind: "reconcile-applied-cascade"` discriminator (its severity is
+ * content-derived through a distinct standalone arm, so it must NOT be flattened
+ * to a plain `CascadeNotificationMessage`). Dispatches each per-plugin row body
+ * through `context.render[row.status]` while the standalone envelope's header /
+ * cause-chain / severity / summary stay central and byte-identical
+ * (`emitReconcileAppliedContextCascade` -> `emitWithSummary`).
+ */
+export function notifyReconcileAppliedWithContext<Status extends string, Msg>(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  context: CommandContext<Status, Msg>,
+  message: ReconcileAppliedCascadeMessage,
+): void {
+  emitReconcileAppliedContextCascade(ctx, pi, message, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
   );
 }
