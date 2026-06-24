@@ -38,11 +38,14 @@ status-token→reload mapping. The `present` plugin status collapses into
 - **D-01:** Phase 2 stamps `severity`/`needsReload` to **reproduce today's exact
   emitted output** — `catalog-uat` stays **byte-identical** through this phase, no
   fixture rewrites. The relocation is mechanism-only.
-- **D-02:** The divergent desired-state judgments that *change* output (e.g.
+- **D-02 [deferred]:** The
+  divergent desired-state judgments that *change* output (e.g.
   `install` of an already-installed plugin → `error`; `update` of an up-to-date
   plugin → `info`) are **deferred to Phase 3**, landing atomically with the catalog
   supersession (the phase that owns all output changes + fixture rewrites). SEV-05's
-  *capability* is established structurally here; its *exercise* is Phase 3.
+  *capability* is established structurally here; its *exercise* is Phase 3. This
+  decision is intentionally NOT covered by any Phase 2 plan — Phase 2 is
+  output-preserving (D-01); exercising the divergence is Phase 3 work.
 - **D-03 (severity reproduction map):** Each producer stamps the severity the
   current content ladder would have computed, so output is unchanged:
   - `failed` (plugin or mp) → `error`

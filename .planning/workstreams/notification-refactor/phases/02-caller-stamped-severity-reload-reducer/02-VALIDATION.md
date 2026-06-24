@@ -1,9 +1,9 @@
 ---
 phase: 2
 slug: caller-stamped-severity-reload-reducer
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-24
 ---
 
@@ -62,13 +62,20 @@ The single source of correctness for output-neutrality is
 
 ## Wave 0 Requirements
 
-- [ ] New architecture-test file for the D-05 backstop (asserts every
+> Both Wave 0 gaps are addressed inline by the plans rather than via a separate
+> Wave 0 plan (see plan-checker note): the D-05 backstop test is created in
+> 02-03 Task 1; the notify-inert-fields supersession lands in 02-01 Task 3
+> alongside the ladder deletion that invalidates its premise.
+
+- [x] New architecture-test file for the D-05 backstop (asserts every
       cascade-producing orchestrator — notably `reconcile/notify.ts` — stamps
       both `severity` and `needsReload` on its state-change rows). Drive
       `buildReconcileAppliedCascade` / `buildReconcilePendingNotification` via
       runtime introspection (matches the catalog-uat / notify-grammar idiom).
-- [ ] Update/supersede `tests/shared/notify-inert-fields.test.ts` — the Phase-1
+      → 02-03 Task 1.
+- [x] Update/supersede `tests/shared/notify-inert-fields.test.ts` — the Phase-1
       "inert fields" guard whose premise is invalidated once the fields go LIVE.
+      → 02-01 Task 3.
 
 *Existing infrastructure (node:test, catalog-uat, notify-v2 grammar spec)
 covers all rendered-output requirements; no test framework install needed.*
@@ -89,11 +96,11 @@ all machine-checkable.*
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (D-05 backstop test, inert-fields supersession)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (D-05 backstop test, inert-fields supersession — addressed inline by 02-03/02-01)
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-06-24

@@ -331,14 +331,23 @@ A typed-registry alternative (`const TRANSITION_STATUSES = new Set(["installed",
 | A2 | Every skip emit site's benign-vs-actionable reason is locally determinable (the producer knows its own reason literal). | Pitfall 3 | If a skip site's reason is data-dependent in a way the producer can't classify locally, stamping requires threading the classification — but the verified sites all emit a known reason literal. |
 | A3 | `needsReload` defaults to `false` (not `undefined`) semantically for absent values; the OR-reduce treats absent as false. | Pattern 2 | Low — `r.needsReload === true` already handles `undefined` as falsy. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Standalone info-kind severity (Q1):** Should `marketplace-not-added`/failed-`plugin-info` standalone severity become stamped (`severity` on the inline literal), or keep the tiny `computeSeverity` info-kind switch (notify.ts:2274-2290)?
+> Both questions were resolved during planning and are honored in the plans.
+> Q1 — RESOLVED via `02-CONTEXT.md` "Claude's Discretion": KEEP the small
+> kind→severity info-kind switch (it is a kind→severity map, not reason
+> inference); only the cascade branch becomes the dumb reducer (locked in
+> 02-01 Task 3). Q2 — RESOLVED via `02-CONTEXT.md` D-08: catalog-uat *input*
+> literal edits (`status:"present"`→`"installed"`, drop `disable-cascade`,
+> add `needsReload`) are in-scope and required; the byte-compared `expected`
+> blocks stay byte-identical (honored in 02-02). Neither blocks execution.
+
+1. **Standalone info-kind severity (Q1) — RESOLVED (keep the info-kind switch):** Should `marketplace-not-added`/failed-`plugin-info` standalone severity become stamped (`severity` on the inline literal), or keep the tiny `computeSeverity` info-kind switch (notify.ts:2274-2290)?
    - What we know: these are non-cascade kinds emitted via raw `notify()`; they have no `MarketplaceRows<Msg>` to reduce over.
    - What's unclear: whether SEV-02's "no content inference" intends to cover them.
    - Recommendation: keep the info-kind switch (it is a kind→severity map, not reason inference); document the cascade branch as the dumb-reducer. Confirm in discuss/planning. Byte-neutral either way.
 
-2. **catalog-uat fixture status-literal edits (Q2):** D-08/RLD-05 require changing `status:"present"`→`status:"installed"` and dropping `kind:"disable-cascade"` in ~16 catalog-uat fixtures, while expected output bytes stay identical.
+2. **catalog-uat fixture status-literal edits (Q2) — RESOLVED (input-literal edits in-scope, expected bytes identical):** D-08/RLD-05 require changing `status:"present"`→`status:"installed"` and dropping `kind:"disable-cascade"` in ~16 catalog-uat fixtures, while expected output bytes stay identical.
    - What we know: D-01 says "no fixture rewrites" for *expected output*; the status literal is fixture *input*, not the byte-compared output.
    - Recommendation: treat input-literal edits (status field, add `needsReload`) as in-scope and required; only the `expected` fenced blocks must stay byte-identical. The planner should call this out explicitly so it isn't mistaken for a D-01 violation.
 
