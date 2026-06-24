@@ -4193,16 +4193,15 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   assert.equal(args[0], `● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
-test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
+test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
-  // The /claude:plugin disable command's fresh cascade: the orchestrator
-  // dispatches with the `disable-cascade` kind so the `(disabled)` row
-  // counts as a state-change transition in shouldEmitReloadHint (artefacts
-  // were unstaged -- SNM-33). The row itself renders byte-identically to
-  // the kind-less inventory form asserted above; ONLY the trailer differs.
+  // The /claude:plugin disable command's fresh cascade: the fresh
+  // `(disabled)` row stamps `needsReload: true` (its artefacts were unstaged
+  // -- SNM-33), so the RLD-02 OR-reduce fires the trailer with no
+  // distinguishing cascade kind. The row renders byte-identically to the
+  // inventory form asserted above; ONLY the trailer differs.
   const msg: NotificationMessage = {
-    kind: "disable-cascade",
     marketplaces: [
       {
         name: "claude-plugins-official",
@@ -4235,24 +4234,25 @@ test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /
   );
 });
 
-test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free for non-trigger rows (kind alone is not a trigger)", () => {
+test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false stays trailer-free (stamp drives the hint, not the row status)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
-  // The disable verb's idempotent arm also carries the kind (a no-op for
-  // the hint ladder): a (skipped) {already disabled} row must NOT emit the
-  // trailer -- the kind only promotes `(disabled)` rows, it is not a
-  // blanket trigger.
+  // A list/info inventory `(disabled)` row -- byte-identical to the fresh
+  // transition row above -- stamps `needsReload: false`, so the RLD-02
+  // OR-reduce stays false and NO trailer fires. This is the per-row stamp
+  // replacing the former `disable-cascade` kind straddle: the same status
+  // token can be a realized transition (stamp true) or steady-state
+  // inventory (stamp false).
   const msg: NotificationMessage = {
-    kind: "disable-cascade",
     marketplaces: [
       {
         name: "claude-plugins-official",
         scope: "user",
         plugins: [
           {
-            status: "skipped",
+            status: "disabled",
             name: "foo-plugin",
-            reasons: ["already disabled"],
+            version: "1.2.3",
             severity: "info",
             needsReload: false,
           },
@@ -4263,10 +4263,7 @@ test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(
-    args[0],
-    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
-  );
+  assert.equal(args[0], `● claude-plugins-official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {

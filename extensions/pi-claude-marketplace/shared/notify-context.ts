@@ -128,21 +128,18 @@ export interface MarketplaceRows<Msg> {
  * migration's sake but the summary surface that renders it lands later, so it
  * does not change any rendered byte yet.
  *
- * UAT-03: `kind` defaults to the plain `"cascade"` arm. The `/claude:plugin
- * disable` command threads `"disable-cascade"` so its fresh `(disabled)` row
- * counts as a realized transition in `shouldEmitReloadHint` (the artefacts were
- * unstaged) and fires the `/reload to pick up changes` trailer. Rendering is
- * otherwise byte-identical to the plain cascade arm; only the reload-hint
- * trigger differs. The kind flows verbatim into the `CascadeNotificationMessage`
- * the central `emitContextCascade` seam reads -- it is NOT a per-row field and
- * is NOT one of the inert D-07 reduction fields.
+ * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
+ * `/claude:plugin disable` command no longer threads a distinguishing kind --
+ * its fresh `(disabled)` row stamps `needsReload: true` directly, so the
+ * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
+ * per-row stamps, not via a cascade-kind straddle.
  */
 export function notifyWithContext<Status extends string, Msg extends { status: Status }>(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
-  kind?: "cascade" | "disable-cascade",
+  kind?: "cascade",
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes

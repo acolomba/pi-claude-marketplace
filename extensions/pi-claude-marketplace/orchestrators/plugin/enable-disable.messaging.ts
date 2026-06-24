@@ -26,10 +26,11 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * vocabulary stays central in `shared/notify.ts` (D-11) and is CALLED here,
  * never duplicated.
  *
- * UAT-03: the fresh-disable `(disabled)` row's `/reload to pick up changes`
- * trailer is NOT a render concern -- it is gated by the `"disable-cascade"`
- * cascade kind threaded by the disable verb through `notifyWithContext`. The
- * row bytes are byte-identical to the inventory `disabled` row.
+ * UAT-03 / RLD-05 / D-07: the fresh-disable `(disabled)` row's
+ * `/reload to pick up changes` trailer is NOT a render concern -- it is driven
+ * by the row's caller-stamped `needsReload: true` (the RLD-02 OR-reduce),
+ * while the inventory `(disabled)` row stamps `needsReload: false`. The row
+ * bytes are byte-identical across both.
  */
 
 /**

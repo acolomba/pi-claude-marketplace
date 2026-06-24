@@ -670,9 +670,11 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  * empty-resources + `installable: true` marker (the load-bearing predicate is
  * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
  * UAT-03 decision -- as the `/claude:plugin
- * disable` command's fresh cascade row (byte-identical to the inventory row;
- * the reload-hint fires there via the cascade's `"disable-cascade"` kind,
- * never via this variant alone). Structurally
+ * disable` command's fresh cascade row (byte-identical to the inventory row).
+ * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
+ * -- the fresh-disable transition stamps `true`, the list / info inventory row
+ * stamps `false` -- so the row's reload behavior no longer depends on a cascade
+ * kind. Structurally
  * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
  * plugin is in the user-requested state, not a failure state), and the byte
  * form differs (`(disabled)` vs `(unavailable)`).
@@ -1004,19 +1006,15 @@ export type MarketplaceNotificationMessage =
  * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
  * payload at construction time.
  *
- * UAT-03: the `"disable-cascade"`
- * kind marks the `/claude:plugin disable` command's realized-transition
- * cascade. Rendering is byte-identical to the plain cascade arm; the ONLY
- * behavioral difference is in `shouldEmitReloadHint`, where a `(disabled)`
- * plugin row counts as a state-change transition (artefacts were unstaged
- * -- SNM-33) and fires the `/reload to pick up changes` trailer. Kind-less
- * / `"cascade"` payloads (the list / info inventory surfaces, which emit
- * structurally identical `disabled` rows) stay hint-free. The split is
- * structural at the KIND level, mirroring `reconcile-applied-cascade`'s
- * structural trailer exclusion.
+ * RLD-05 / D-07: the `/claude:plugin disable` command's realized-transition
+ * cascade no longer needs a distinguishing kind. The fresh `(disabled)` row
+ * stamps `needsReload: true` directly, while the list / info inventory
+ * `(disabled)` rows stamp `needsReload: false`; the RLD-02 OR-reduce reads
+ * those per-row facts, so the disable reload-hint is driven by the stamp, not
+ * by a kind-level straddle.
  */
 export interface CascadeNotificationMessage {
-  readonly kind?: "cascade" | "disable-cascade";
+  readonly kind?: "cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
 }
 
@@ -2378,20 +2376,16 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * resources are plugin rows (skill / agent / command / MCP entry); marketplace
  * records are bookkeeping, not resources, so they never warrant a `/reload`.
  *
- * The rule is therefore plugin-row-driven only: emit iff some marketplace
- * carries a plugin row whose status is one of the four state-change tokens
- * `installed | updated | reinstalled | uninstalled` -- or, ONLY on a cascade
- * dispatched with the `"disable-cascade"` kind (the `/claude:plugin disable`
- * command's realized-transition cascade, UAT-03), a `disabled` row. No
- * marketplace status
- * (added / removed / updated / autoupdate enabled / autoupdate disabled /
- * skipped / failed) triggers on its own. This refines the G-21-01 invariant:
- * within a given cascade KIND every status discriminator either always
- * triggers the reload-hint or never does; `disabled` is inventory (hint-free)
- * on kind-less / `"cascade"` payloads (list / info surfaces) and a realized
- * transition (hint fires) on `"disable-cascade"` payloads -- the straddle is
- * resolved structurally at the kind level, mirroring
- * `reconcile-applied-cascade`'s structural exclusion below.
+ * RLD-02 / RLD-05 / D-07: the rule is the OR-reduce of the caller-stamped
+ * `needsReload` over the cascade rows -- no status-token or cascade-kind
+ * inference. The D-06 stamps reproduce the former trigger set exactly: the
+ * realized install / update / reinstall / uninstall transitions AND the
+ * realized fresh-disable transition stamp `needsReload: true`, while
+ * list / info inventory `disabled` / `installed` rows and every marketplace
+ * status (added / removed / updated / autoupdate enabled / autoupdate disabled
+ * / skipped / failed) stamp `needsReload: false`. The former `"disable-cascade"`
+ * kind straddle (where a `disabled` row's hint depended on the cascade kind) is
+ * thus replaced by a per-row stamped fact.
  *
  * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
  * flip changes a marketplace record, not a Pi-visible resource). The
@@ -3042,11 +3036,10 @@ export function notify(
   switch (message.kind) {
     case undefined:
     case "cascade":
-    case "disable-cascade":
-      // Cascade body falls through below. The `disable-cascade` kind
-      // (UAT-03) renders byte-identically; it differs only inside
-      // `shouldEmitReloadHint`, where `(disabled)` rows count as realized
-      // transitions.
+      // Cascade body falls through below. RLD-05 / D-07: the disable
+      // command's realized (disabled) rows stamp `needsReload: true`, so the
+      // reload-hint is driven by the per-row stamp, not by a distinguishing
+      // kind.
       break;
     default:
       assertNever(message);

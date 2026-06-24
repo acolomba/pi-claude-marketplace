@@ -2659,11 +2659,11 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       // UAT-03: the fresh-disable
       // row carries the closed-set `(disabled)` token -- same glyph + token
-      // as the disabled-inventory row, version slot kept. The reload-hint
-      // fires via the `disable-cascade` kind (SNM-33 carve-out); kind-less
-      // list/info inventory `disabled` rows stay hint-free.
+      // as the disabled-inventory row, version slot kept. RLD-05 / D-07: the
+      // reload-hint fires via the row's `needsReload: true` stamp (RLD-02
+      // OR-reduce), not a cascade kind; list/info inventory `disabled` rows
+      // stamp `needsReload: false` and stay hint-free.
       message: {
-        kind: "disable-cascade",
         marketplaces: [
           {
             name: "claude-plugins-official",

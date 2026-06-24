@@ -848,13 +848,13 @@ function dispatchOutcome(args: {
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
   const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
-  // UAT-03: the disable verb
-  // dispatches with the `"disable-cascade"` kind so the fresh `(disabled)`
-  // row counts as a realized transition in `shouldEmitReloadHint` (artefacts
-  // were unstaged -- SNM-33). Rendering is byte-identical to the plain
-  // cascade arm, so carrying the kind on the disable verb's non-fresh arms
-  // (idempotent / failed / not-recorded) is a no-op. The enable verb stays
-  // kind-less (its `(installed)` row is already a trigger token).
+  // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
+  // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
+  // artefacts were unstaged -- SNM-33), so the `/reload to pick up changes`
+  // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable
+  // verb's non-fresh arms (idempotent / failed / not-recorded) stamp
+  // `needsReload: false`; the enable verb's `(installed)` fresh row stamps
+  // `true`.
   //
   // D-04 / D-10: the verb selects its OWN CommandContext -- ENABLE_CONTEXT
   // renders the fresh `(installed)` row, DISABLE_CONTEXT the fresh
@@ -872,13 +872,9 @@ function dispatchOutcome(args: {
     // arm emits `disabled`, never `installed`), so narrowing to the
     // DISABLE_CONTEXT row type is sound.
     const disableRow = row as DisableMsg;
-    notifyWithContext(
-      ctx,
-      pi,
-      DISABLE_CONTEXT,
-      [{ name: marketplace, scope, plugins: [disableRow] }],
-      "disable-cascade",
-    );
+    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [
+      { name: marketplace, scope, plugins: [disableRow] },
+    ]);
   }
 }
 
@@ -990,8 +986,9 @@ function composeOutcomeRow(args: {
       // shape with mp.status "added"). UAT-03: the fresh-disable row carries
       // the closed-set `(disabled)` token -- same glyph + token as the
       // disabled-inventory row, version slot kept -- instead of
-      // `(uninstalled)`; the reload-hint fires via the `"disable-cascade"`
-      // kind set in `dispatchOutcome`.
+      // `(uninstalled)`. RLD-05 / D-07: the reload-hint fires via the
+      // per-row `needsReload: true` stamp (RLD-02 OR-reduce), not a cascade
+      // kind.
       return enable
         ? {
             status: "installed",
