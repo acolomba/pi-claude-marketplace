@@ -16,17 +16,17 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 
 ### Severity — caller-stamped (SEV)
 
-- [ ] **SEV-01**: Every outcome row (plugin-level and marketplace-level) carries a caller-stamped `severity` field with values `info | warning | error`; an absent severity defaults to `info`.
-- [ ] **SEV-02**: `notify()` derives the emission severity as the numeric max over all rows (`info=0 < warning=1 < error=2`); it performs no content/reason inference.
-- [ ] **SEV-03**: Severity semantics are desired-state: `info` = end state equals desired (genuine success or idempotent no-op); `warning` = operation carried out but end state falls short and needs attention; `error` = operation could not be carried out. This tri-state is the documented contract.
-- [ ] **SEV-04**: `BENIGN_REASONS`, `allBenign`, and the content-derived `cascadeSeverity` ladder are removed; severity no longer reads the `reasons` field.
-- [ ] **SEV-05**: Each command stamps severity from its own desired-vs-actual judgment, free to disagree with another command on an identical `(status, reasons)` pair (e.g. `install` of an already-installed plugin → `error`; `update` of an up-to-date plugin → `info`).
+- [x] **SEV-01**: Every outcome row (plugin-level and marketplace-level) carries a caller-stamped `severity` field with values `info | warning | error`; an absent severity defaults to `info`.
+- [x] **SEV-02**: `notify()` derives the emission severity as the numeric max over all rows (`info=0 < warning=1 < error=2`); it performs no content/reason inference.
+- [x] **SEV-03**: Severity semantics are desired-state: `info` = end state equals desired (genuine success or idempotent no-op); `warning` = operation carried out but end state falls short and needs attention; `error` = operation could not be carried out. This tri-state is the documented contract.
+- [x] **SEV-04**: `BENIGN_REASONS`, `allBenign`, and the content-derived `cascadeSeverity` ladder are removed; severity no longer reads the `reasons` field.
+- [x] **SEV-05**: Each command stamps severity from its own desired-vs-actual judgment, free to disagree with another command on an identical `(status, reasons)` pair (e.g. `install` of an already-installed plugin → `error`; `update` of an up-to-date plugin → `info`).
 
 ### Reload — caller-stamped (RLD)
 
-- [ ] **RLD-01**: Every outcome row carries a caller-stamped `needsReload` boolean (does this outcome change a Pi-visible resource such that `/reload` is required).
-- [ ] **RLD-02**: `notify()` emits the `/reload to pick up changes` trailer iff the OR-reduce of `needsReload` over all rows is true.
-- [ ] **RLD-03**: The status-token→reload mapping in `shouldEmitReloadHint` is removed; reload is no longer inferred from status tokens.
+- [x] **RLD-01**: Every outcome row carries a caller-stamped `needsReload` boolean (does this outcome change a Pi-visible resource such that `/reload` is required).
+- [x] **RLD-02**: `notify()` emits the `/reload to pick up changes` trailer iff the OR-reduce of `needsReload` over all rows is true.
+- [x] **RLD-03**: The status-token→reload mapping in `shouldEmitReloadHint` is removed; reload is no longer inferred from status tokens.
 - [ ] **RLD-04**: The `present` plugin status collapses into `installed` — its only role was reload suppression on the list surface, now handled by `needsReload: false`.
 - [ ] **RLD-05**: The `disable-cascade` cascade kind is removed — the disable command stamps `needsReload: true` on its rows directly; list/info surfaces stamp `false`.
 
@@ -52,7 +52,7 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 
 ### Correctness preservation (GATE)
 
-- [ ] **GATE-01**: An architecture test asserts every cascade-producing orchestrator stamps both `severity` and `needsReload` on its state-change rows (no silent reliance on the `info` / `false` defaults for transitions), since correctness relocates from one audited reducer to ~18 producers.
+- [x] **GATE-01**: An architecture test asserts every cascade-producing orchestrator stamps both `severity` and `needsReload` on its state-change rows (no silent reliance on the `info` / `false` defaults for transitions), since correctness relocates from one audited reducer to ~18 producers.
 - [ ] **GATE-02**: The `catalog-uat` byte-equality runner remains the end-to-end gate that stamped values render correctly, green at every phase boundary.
 - [ ] **GATE-03**: `npm run check` (typecheck + ESLint + Prettier + tests) stays green at every phase boundary (NFR-6).
 
@@ -75,17 +75,17 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 | MOD-02 | Phase 1 | Complete |
 | MOD-03 | Phase 1 | Complete |
 | OUT-07 | Phase 1 | Complete |
-| SEV-01 | Phase 2 | Pending |
-| SEV-02 | Phase 2 | Pending |
-| SEV-03 | Phase 2 | Pending |
-| SEV-04 | Phase 2 | Pending |
-| SEV-05 | Phase 2 | Pending |
-| RLD-01 | Phase 2 | Pending |
-| RLD-02 | Phase 2 | Pending |
-| RLD-03 | Phase 2 | Pending |
+| SEV-01 | Phase 2 | Complete |
+| SEV-02 | Phase 2 | Complete |
+| SEV-03 | Phase 2 | Complete |
+| SEV-04 | Phase 2 | Complete |
+| SEV-05 | Phase 2 | Complete |
+| RLD-01 | Phase 2 | Complete |
+| RLD-02 | Phase 2 | Complete |
+| RLD-03 | Phase 2 | Complete |
 | RLD-04 | Phase 2 | Pending |
 | RLD-05 | Phase 2 | Pending |
-| GATE-01 | Phase 2 | Pending |
+| GATE-01 | Phase 2 | Complete |
 | OUT-01 | Phase 3 | Pending |
 | OUT-02 | Phase 3 | Pending |
 | OUT-03 | Phase 3 | Pending |

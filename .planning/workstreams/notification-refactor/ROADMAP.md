@@ -104,7 +104,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Stamp transitions + narrow transition interfaces to required (GATE-01 type-level) + flip notify() to the dumb MAX/OR/tally reducer + delete content ladders; repair notify-v2/inert-fields tests (Wave 1)
+- [x] 02-01-PLAN.md — Stamp transitions + narrow transition interfaces to required (GATE-01 type-level) + flip notify() to the dumb MAX/OR/tally reducer + delete content ladders; repair notify-v2/inert-fields tests (Wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -148,6 +148,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
-| 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
+| 2. Caller-stamped severity & reload reducer | 1/3 | In progress | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
