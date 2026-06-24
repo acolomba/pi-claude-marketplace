@@ -472,22 +472,25 @@ The `satisfies` here pins the const to the shared shape **without** centralizing
 | A4 | `dependencies` can be an optional base field while soft-dep marker injection stays gated to the 3 dep-bearing render arms, keeping bytes identical. | Pattern 3 / Pitfall 4 | If promoting it changes marker emission, `catalog-uat` catches it immediately. |
 | A5 | D-12 tuple-vs-array is additive typing this phase; the render-time `.length` counting in severity/summary ladders is not rewritten until Phase 2. | Cardinality | If planner tries to remove counting now, risks output change (Phase-2 work leaking into Phase 1). |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **New `notify()` entry-point name & exact signature.**
    - Known: target is `notify(context, rows)` (D-02); current is `notify(ctx, pi, message)`; `ctx`+`pi` are still needed (probe + the sanctioned `ctx.ui.notify`).
    - Unclear: whether `ctx`/`pi` fold into a single object, and whether the old name is reused or a new name introduced with the old as adapter.
    - Recommendation: introduce reshaped entry alongside old; migrate command-by-command; remove old last (A1).
+   - **RESOLVED (planner):** new entry point is `notifyWithContext` in `shared/notify-context.ts`, 4-arg signature `(ctx, pi, context, rows)`. The legacy `notify(ctx, pi, message)` stays as an adapter during the cutover and is removed last (Plan 01-05). `notifyWithContext` wires `context.render` from the start so each command's render map is byte-proven against `catalog-uat` in its own Wave-2 migration plan.
 
 2. **Does the row-type union survive centrally, or assemble from command-local shapes?**
    - Known: D-01 forbids a central *registry of contributions*; it does not forbid the envelope referencing a union of row types.
    - Unclear: whether `notify()`'s `rows` param is typed as a broad union or generically over the command's own `Msg`.
    - Recommendation: type `notify` generically over the `CommandContext<Status, Msg>` so each call site is checked against its OWN command's shapes (strongest D-01/D-08 alignment).
+   - **RESOLVED (planner):** `notifyWithContext` is typed generically over the command's own `CommandContext<Status, Msg>`, so each call site is checked against ITS command's shapes — no central row-type registry.
 
 3. **`CommandContext` for delegating/load-time producers (bootstrap, reconcile, import).**
    - Known: bootstrap delegates to add+autoupdate; reconcile/import are mixed-subject cascades.
    - Unclear: whether a mixed-subject cascade gets one `CommandContext` with a render map spanning multiple subjects' statuses, or composes per-subject maps.
    - Recommendation: give import/reconcile their own `CommandContext` whose render map is total over the union of statuses they actually emit (enumerated in the inventory table).
+   - **RESOLVED (planner):** import and reconcile each get their OWN `CommandContext` whose render map is total over the union of statuses they actually emit (Plan 01-04). Bootstrap delegates via the delegated commands' contexts (add + autoupdate); it does not declare its own (Plan 01-03).
 
 ## Environment Availability
 
