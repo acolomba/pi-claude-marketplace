@@ -1612,7 +1612,23 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // ---------------------------------------------------------------------------
 // File-private renderPluginRow + supporting helpers.
 //
-// SNM-17 / SNM-18: the per-plugin row grammar lives HERE as the sole site.
+// MOD-03 / D-02 / D-10: this central switch is NO LONGER the per-row dispatch
+// path for any command's cascade rows. Every state-change producer routes its
+// rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
+// dispatch each per-plugin body via the command's OWN `context.render[status]`
+// map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
+// or extra arm is now a per-command compile error, not a central concern.
+// This switch survives only as a STATICALLY-REFERENCED seam on the central
+// envelope: the legacy `notify(ctx, pi, message)` cascade arm (reached today
+// only by the `{ marketplaces: [] }` empty sentinel, which short-circuits to
+// `(no marketplaces)` before the plugin loop runs) and the
+// `composeReconcileAppliedBody` arm of `dispatchInfoMessage` (kept for the
+// `reconcile-applied-cascade` StandaloneKind exhaustiveness; its live emitter
+// goes through `emitReconcileAppliedContextCascade`, not this body). Removing
+// it would either break that exhaustiveness switch or require rewriting the
+// legacy envelope the deferred-central standalone surfaces still depend on, so
+// it stays until those surfaces relocate.
+//
 // SNM-16: soft-dep markers are injected at render time from the per-row
 // `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
 // switch ends with the hardened shape `default: { assertNever(p);
