@@ -3085,6 +3085,100 @@ export function notify(
   emitWithSummary(ctx, message, withHint);
 }
 
+/**
+ * D-02 adapter seam: compose and emit a cascade exactly like the cascade arm
+ * of `notify()` above, but dispatch each per-plugin row body through a
+ * caller-supplied `renderPluginRowBody` instead of the central
+ * `renderPluginRow` switch. The `notifyWithContext` entry point in
+ * `shared/notify-context.ts` passes `(row, probe, mpScope) =>
+ * context.render[row.status](row, probe, mpScope)` so the per-row bytes come
+ * from the command's own render map, while the marketplace header, description
+ * lines, cause-chain trailers, rollback-partial lines, the empty
+ * `(no marketplaces)` sentinel, the reload-hint trailer, and the
+ * severity/summary `emitWithSummary` seam all stay byte-identical to the legacy
+ * path. Each Wave-2 render map reproduces the EXACT bytes of the central switch
+ * arm it lifts, so this dispatch yields output byte-identical to `notify()` for
+ * every migrated command (proven by that command's catalog-uat run).
+ *
+ * D-07: `severity?` / `needsReload?` on the rows stay INERT here -- this seam
+ * derives severity and the reload-hint from message CONTENTS exactly as the
+ * legacy cascade arm does; it never reads the inert caller-intent fields. Only
+ * the per-row body dispatch is parameterized.
+ *
+ * The single soft-dep probe (`softDepStatus(pi)`) and the single
+ * `ctx.ui.notify` call (IL-2, via `emitWithSummary`) discipline is preserved.
+ */
+export function emitContextCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: CascadeNotificationMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  const probe = softDepStatus(pi);
+
+  const blocks = message.marketplaces.map((mp) => {
+    const lines: string[] = [renderMpHeader(mp, probe)];
+    for (const p of mp.plugins) {
+      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
+    }
+
+    return lines.join("\n");
+  });
+  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+
+  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
+  const withHint = hint === "" ? body : `${body}\n\n${hint}`;
+
+  emitWithSummary(ctx, message, withHint);
+}
+
+/**
+ * `composePluginLines` parameterized over the per-row body renderer (D-02).
+ * Byte-identical to `composePluginLines` except the column-0-indented row body
+ * comes from `renderRow` rather than the central `renderPluginRow`. The
+ * description / cause-chain / rollback-partial trailing lines stay composed by
+ * the shared helpers so a migrated command's render map only owns the single
+ * row line, never the multi-line trailers (those route through the central
+ * path-redaction seam, NFR-9).
+ */
+function composePluginLinesWith(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+  renderRow: (p: PluginNotificationMessage, probe: SoftDepStatus, mpScope: Scope) => string,
+): string[] {
+  const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
+
+  if (
+    (p.status === "present" ||
+      p.status === "upgradable" ||
+      p.status === "available" ||
+      p.status === "unavailable") &&
+    p.description !== undefined &&
+    p.description.length > 0
+  ) {
+    lines.push(`    ${truncateDescription(p.description)}`);
+  }
+
+  if (p.status === "failed" || p.status === "manual recovery") {
+    const trailer = renderIndentedCauseChain(p.cause, "    ");
+    if (trailer !== "") {
+      lines.push(trailer);
+    }
+
+    for (const leak of collectManualRecoveryLeaks(p.cause)) {
+      lines.push(`    leaked: ${leak}`);
+    }
+  }
+
+  lines.push(...composeRollbackPartialLines(p));
+  return lines;
+}
+
 // ---------------------------------------------------------------------------
 // MSG-GR-3 single per-scope sort comparator.
 //
