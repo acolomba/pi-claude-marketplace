@@ -451,7 +451,7 @@ test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces stand
     // summary prefix.
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
     );
     // D-18-05 severity ladder: not-added -> error.
     assert.equal(notifications[0]!.severity, "error");
@@ -478,7 +478,7 @@ test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone 
     // bracket -- the former synthetic-child `{not found}` reason is gone.
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
     );
     assert.doesNotMatch(notifications[0]!.message, /\{not found\}/);
     assert.equal(notifications[0]!.severity, "error");

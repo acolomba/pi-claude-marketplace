@@ -493,7 +493,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   // routes severity to "error" per D-16-11. UXG-07 (D-29-02/03):
   // 1 failed plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
     "error",
   ]);
 });
@@ -566,7 +566,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   // (D-29-03): 0 failed plugins, 1 failed marketplace -> marketplace-only
   // singular summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ demo [user] (failed)`,
     "error",
   ]);
 });
@@ -608,7 +608,7 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ unreachable-mp [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ unreachable-mp [user] (failed)`,
     "error",
   ]);
   // The header carries NO reason brace -- the D-48-A `reasons?` addition did not
@@ -636,7 +636,7 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ official [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ official [user] (failed)`,
     "error",
   ]);
   assert.match(rendered, /⊘ official \[user\] \(failed\)$/m);
@@ -663,7 +663,7 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed)`,
     "error",
   ]);
   assert.match(rendered, /⊘ missing-mp \[project\] \(failed\)$/m);
@@ -1850,7 +1850,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   // UXG-07 (D-29-03): 1 failed plugin, 0 failed marketplace
   // (mp.status is "added", not "failed") -> plugin-only singular summary.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
+    `A plugin operation has failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
     "error",
   ]);
 
@@ -1908,7 +1908,7 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   // no reload-hint (D-16-12). UXG-07 (D-29-02/03): 1 failed
   // plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
     "error",
   ]);
 });
@@ -1958,7 +1958,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
     "error",
   ]);
 });
@@ -2012,7 +2012,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   // UXG-07 (D-29-03): 2 failed plugins, 0 failed marketplace (mp "added")
   // -> plugin-only plural summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `2 plugin operations failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
+    `Some plugin operations have failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
     "error",
   ]);
 });
@@ -2160,7 +2160,7 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
   // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
     "error",
   ]);
 });
@@ -2219,9 +2219,9 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   // status slot is the literal "(manual recovery)" WITH a space. Severity
   // is "warning" per D-16-11. Cause-chain at 4-space indent below the row
   // per D-16-08. UXG-07 (D-29-04): a manual-recovery row counts
-  // as 1 actionable skip -> "1 plugin operation skipped." summary prefix.
+  // as 1 actionable skip -> "A plugin operation needs attention." summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    `A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
 });
@@ -2553,7 +2553,7 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
 // file-private).
 // ===========================================================================
 
-test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 plugin operation and 1 marketplace operation failed.' summary prepended", () => {
+test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Some operations have failed.' summary prepended", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2580,12 +2580,12 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 p
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // 1 failed plugin + 1 failed marketplace -> mixed-type sentence.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
     "error",
   ]);
 });
 
-test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugin operation failed.' (single-type singular)", () => {
+test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugin operation has failed.' (single-type singular)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2611,12 +2611,12 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugi
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // 1 failed plugin, 0 failed marketplace -> single-type singular.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
+    `A plugin operation has failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
     "error",
   ]);
 });
 
-test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin operations failed.' (single-type plural)", () => {
+test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plugin operations have failed.' (single-type plural)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2650,13 +2650,13 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin 
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("2 plugin operations failed.\n\n"),
-    "two-failed-plugin cascade summary must read '2 plugin operations failed.'",
+    body.startsWith("Some plugin operations have failed.\n\n"),
+    "two-failed-plugin cascade summary must read 'Some plugin operations have failed.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
 });
 
-test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplace operation failed.' (single-type marketplace)", () => {
+test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplace operation has failed.' (single-type marketplace)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2675,12 +2675,12 @@ test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplac
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // 0 failed plugins, 1 failed marketplace -> single-type marketplace.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ demo [user] (failed)`,
     "error",
   ]);
 });
 
-test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin operation skipped.'", () => {
+test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin operation needs attention.'", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2705,13 +2705,13 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("1 plugin operation skipped.\n\n"),
-    "single actionable-skip cascade summary must read '1 plugin operation skipped.'",
+    body.startsWith("A plugin operation needs attention.\n\n"),
+    "single actionable-skip cascade summary must read 'A plugin operation needs attention.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
 
-test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> '1 plugin operation skipped.'", () => {
+test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> 'A plugin operation needs attention.'", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2737,7 +2737,7 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // manual-recovery row counts toward the skipped/actionable count (D-29-04).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    `A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
 });
@@ -2783,8 +2783,8 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("2 plugin operations and 1 marketplace operation skipped.\n\n"),
-    "mixed actionable-skip cascade summary must read '2 plugin operations and 1 marketplace operation skipped.'",
+    body.startsWith("Some operations need attention.\n\n"),
+    "mixed actionable-skip cascade summary must read 'Some operations need attention.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
@@ -2854,7 +2854,7 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("1 plugin operation failed.\n\n"),
+    body.startsWith("A plugin operation has failed.\n\n"),
     "summary line must be the first line of the composed string",
   );
   assert.ok(
@@ -2894,7 +2894,8 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1, "benign-only skip is info severity -- single-arg call, no summary");
   assert.ok(
-    !(args[0] as string).includes("operation skipped."),
+    !(args[0] as string).includes("needs attention.") &&
+      !(args[0] as string).includes("need attention."),
     "info-severity cascade must NOT carry a summary line",
   );
 });
@@ -3043,7 +3044,7 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   // first line, with the detail row as its own block below (separated by
   // `\n\n`) -- never the glued single line. GRAM-02: the summary subject
   // follows the failed row -- a `marketplace-not-added` failure reads
-  // "1 marketplace operation failed." The variant routes to "error" through
+  // "A marketplace operation has failed." The variant routes to "error" through
   // the single `isInfoKind` guard.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
@@ -3055,12 +3056,12 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
     "error",
   ]);
 });
 
-test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.` + separate multi-line detail block", () => {
+test("GRAM-02: standalone failed plugin-info renders `A plugin operation has failed.` + separate multi-line detail block", () => {
   // GRAM-02: a failed `plugin-info` emission (e.g. plugin info on a
   // schema-invalid manifest) takes the PLUGIN subject. The summary is its own
   // block above the existing multi-line plugin-info body (header + indented
@@ -3085,7 +3086,7 @@ test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     [
-      "1 plugin operation failed.",
+      "A plugin operation has failed.",
       "",
       "● bad-mp [user] <no autoupdate>",
       "  ⊘ bad-mp (failed) {invalid manifest}",
@@ -4513,7 +4514,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `1 marketplace operation failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
+    `A marketplace operation has failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
   );
 });
 
@@ -4540,7 +4541,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
+    `A marketplace operation has failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
   );
 });
 

@@ -380,7 +380,7 @@ test("PUP-4: source overridden to github-flavored URL -> outcome.partition='skip
       // Severity routes via warning per D-16-11.
       assert.equal(
         body,
-        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
@@ -422,7 +422,7 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
       // record. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
       assert.equal(
         body,
-        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
@@ -976,7 +976,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
       // bracket suppressed by orphan-fold. Skipped severity per D-16-11.
       assert.equal(
         body,
-        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
@@ -1019,7 +1019,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
       const body = notifications[0]?.message ?? "";
       assert.equal(
         body,
-        "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -1055,7 +1055,7 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {not 
       // (SCOPE-01); no summary line, no cause-chain trailer.
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1083,7 +1083,7 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ ghost-mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1111,7 +1111,7 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1149,7 +1149,7 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> standalone {not
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1189,7 +1189,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> standal
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1228,7 +1228,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       // suppressed by orphan-fold.
       assert.equal(
         body,
-        "1 plugin operation skipped.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {

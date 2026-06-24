@@ -74,7 +74,7 @@ test('SEV-02: a stamped severity:"error" plugin row drives the emission to error
   assert.equal(args.length, 2);
   assert.equal(args[1], "error");
   // ... and prepends the error summary line ahead of the cascade body.
-  assert.match(String(args[0]), /^1 plugin operation failed\.\n\n/);
+  assert.match(String(args[0]), /^A plugin operation has failed\.\n\n/);
 });
 
 test("RLD-02: a stamped needsReload:true row adds the /reload trailer via the OR-reduce", () => {

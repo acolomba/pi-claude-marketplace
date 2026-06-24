@@ -366,7 +366,7 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `{not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ p-only [user] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -399,7 +399,7 @@ test("INFO-04: --scope project mismatch (mp only in user) emits bare `{not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ u-only [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ u-only [project] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -412,7 +412,7 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(

@@ -359,12 +359,12 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
       // (`failure-runtime-with-cause`) with the entity-shape `{not in
       // manifest}` reason. Severity `"error"` per D-16-11. UXG-07
       // (D-29-02/03): 1 failed plugin, 0 failed marketplace -> the
-      // "1 plugin operation failed." summary line is prepended.
+      // "A plugin operation has failed." summary line is prepended.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 plugin operation failed.\n\n" +
+        "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
           "  ⊘ ghost-plugin (failed) {not in manifest}\n" +
           '    cause: Plugin "ghost-plugin" not found in marketplace "mp".',
@@ -407,7 +407,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {not added} on the m
       // not-added state.
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
       );
       assert.equal(outcome.status, "failed");
 
@@ -536,10 +536,10 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
       assert.equal(notifications[0]?.severity, "error");
       // UXG-07 (D-29-02/03): the already-installed case stays
       // classified as `(failed)` (D-29-05, UXG-09 out of scope); the summary
-      // line "1 plugin operation failed." is prepended.
+      // line "A plugin operation has failed." is prepended.
       assert.equal(
         notifications[0]?.message,
-        "1 plugin operation failed.\n\n" +
+        "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
           "  ⊘ hello (failed) {already installed}\n" +
           '    cause: Plugin "hello" is already installed in marketplace "mp".',
@@ -1348,7 +1348,7 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ mp [user] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {not added}",
       );
 
       const userAfter = await loadState(userLocations.extensionRoot);

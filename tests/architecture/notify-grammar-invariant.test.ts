@@ -17,7 +17,7 @@
  * standalone error/warning kind that forgets the summary -- as the v1.10
  * `marketplace-not-added` / failed `plugin-info` standalone arm did -- trips
  * here. Info-severity emissions (no 2nd `ctx.ui.notify` arg) are exempt: the
- * summary semantics ("N operations failed") do not apply to read-only results.
+ * summary semantics ("operations have failed") do not apply to read-only results.
  *
  * Driven over the SAME error/warning fixtures the catalog-uat forward walk
  * exercises -- standalone `marketplace-not-added`, failed `plugin-info`, and a
@@ -61,13 +61,14 @@ function piWithBothLoaded(): MockPi {
 }
 
 // ---------------------------------------------------------------------------
-// The summary grammar (mirrors 50-PATTERNS.md). A valid summary first line
-// is exactly `N (plugin|marketplace) operation(s) [and M ...] (failed|skipped).`
-// -- no leading row icon, no `(failed)`/`(skipped)` status token.
+// The summary grammar (OUT-02 / D-02). A valid summary first line is exactly
+// `[A|Some] [<subject> ]operation[s] has/have failed | needs/need attention.`
+// -- `subject` is `plugin`/`marketplace`, dropped for a mixed-subject cascade
+// (D-03); no leading row icon, no `(failed)`/`(skipped)` status token.
 // ---------------------------------------------------------------------------
 
 const SUMMARY_GRAMMAR =
-  /^\d+ (plugin|marketplace) operations?( and \d+ (plugin|marketplace) operations?)? (failed|skipped)\.$/;
+  /^(A|Some) (plugin |marketplace )?operations? (has failed|have failed|needs attention|need attention)\.$/;
 
 const ROW_ICONS = ["●", "○", "⊘"];
 

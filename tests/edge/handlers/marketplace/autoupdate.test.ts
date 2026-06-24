@@ -111,7 +111,7 @@ test("shim :: named form propagates name", async () => {
     // carries first.scope == "project" (SC-6 project-first iteration).
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {not added}",
     );
   });
 });

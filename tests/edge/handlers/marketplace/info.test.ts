@@ -85,7 +85,7 @@ test("shim :: `info my-mp` delegates with scope: undefined; absent-from-both -> 
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ my-mp (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -99,7 +99,7 @@ test("shim :: `info my-mp --scope user` delegates with scope: 'user'; absent -> 
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -113,7 +113,7 @@ test("shim :: `info my-mp --scope project` delegates with scope: 'project'; abse
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ my-mp [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ my-mp [project] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });

@@ -92,7 +92,7 @@ test("shim :: <plugin>@<marketplace> form calls updatePlugins with single-plugin
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });
@@ -108,7 +108,7 @@ test("shim :: bare @<marketplace> form calls updatePlugins with all-plugins-one-
     assert.equal(notifications[0]!.severity, "error");
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });
@@ -165,7 +165,7 @@ test("shim :: @<mp> form + --map-model is accepted; control reaches updatePlugin
     // `{not added}` for the missing marketplace (not the raw `{not found}`).
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });
@@ -182,7 +182,7 @@ test("shim :: pl@<mp> form + --map-model is accepted; control reaches updatePlug
     // `{not added}` for the missing marketplace (not the raw `{not found}`).
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });

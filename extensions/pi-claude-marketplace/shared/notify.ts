@@ -2261,38 +2261,58 @@ function countRowsBySeverity(
 }
 
 /**
+ * OUT-02 / D-02: build the leading severity sentence from a row count, the max
+ * severity, and the row subject. `subject` is `"plugin"` / `"marketplace"` for a
+ * homogeneous cascade, or `null` for a mixed-subject cascade (D-03) where the
+ * subject noun is dropped.
+ *
+ * Form: `[A|Some] <subject> operation[s] has/have failed | needs/need attention.`
+ * -- `A` for a single row, `Some` for more than one; `operation` / `operations`
+ * pluralized by count; `has failed` / `have failed` for error and
+ * `needs attention` / `need attention` for warning; terminal period kept. The
+ * verb-number agrees with the count (singular for 1, plural otherwise).
+ */
+function summaryPhrase(
+  count: number,
+  severity: "error" | "warning",
+  subject: "plugin" | "marketplace" | null,
+): string {
+  const singular = count === 1;
+  const article = singular ? "A" : "Some";
+  const operationWord = singular ? "operation" : "operations";
+  const errorVerb = singular ? "has failed" : "have failed";
+  const warningVerb = singular ? "needs attention" : "need attention";
+  const verbPhrase = severity === "error" ? errorVerb : warningVerb;
+  const subjectWord = subject === null ? "" : `${subject} `;
+  return `${article} ${subjectWord}${operationWord} ${verbPhrase}.`;
+}
+
+/**
  * RECON-04: shared summary-line wording over a marketplaces array. Mirrors
  * the cascade-arm tail of `buildSummaryLine` so the reconcile-applied
  * variant emits identical phrasing.
+ *
+ * D-03: mixed-subject detection is render-time -- a cascade whose rows span
+ * BOTH plugin and marketplace subjects (`counts.plugins > 0 &&
+ * counts.marketplaces > 0`) drops the subject noun and counts all rows
+ * uniformly off the combined total.
  */
 function buildSummaryLineForCascade(
   marketplaces: readonly MarketplaceNotificationMessage[],
   severity: "error" | "warning",
 ): string {
-  const verb = severity === "error" ? "failed" : "skipped";
   const counts =
     severity === "error" ? countFailedRows(marketplaces) : countSkippedRows(marketplaces);
 
-  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
-  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
-
   if (counts.plugins > 0 && counts.marketplaces > 0) {
-    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.plugins + counts.marketplaces, severity, null);
   }
 
   if (counts.marketplaces > 0) {
-    return `${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.marketplaces, severity, "marketplace");
   }
 
-  return `${pluginPhrase} ${verb}.`;
-}
-
-/**
- * D-29-03 pluralization: singular `"operation"` for a count of 1, plural
- * `"operations"` otherwise.
- */
-function operationPhrase(count: number, kind: "plugin" | "marketplace"): string {
-  return `${count} ${kind} ${count === 1 ? "operation" : "operations"}`;
+  return summaryPhrase(counts.plugins, severity, "plugin");
 }
 
 /**
@@ -2307,16 +2327,14 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * `plugin-info`) take a hard-count-1 summary on the FAILED ROW's subject
  * (GRAM-02); the cascade arm counts the failed/skipped rows.
  *
- * Verb is `"failed"` for error severity, `"skipped"` for warning severity.
- *
- * Wording (D-29-03): when only one type is non-zero the sentence is
- * `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`;
- * when both are non-zero it is
- * `"N plugin operation(s) and M marketplace operation(s) <verb>."`. When BOTH
- * counts are zero (an unreachable shape -- `computeSeverity` only returns
- * error/warning when a matching row exists) the function degrades gracefully to
- * the plugin-only plural form (`"0 plugin operations <verb>."`) rather than
- * crashing.
+ * Wording (OUT-02 / D-02): `[A|Some] <subject> operation[s] has/have failed |
+ * needs/need attention.` -- `A` for a single row, `Some` otherwise; `has failed`
+ * / `have failed` for error and `needs attention` / `need attention` for
+ * warning. D-03: a mixed-subject cascade (plugin AND marketplace rows present)
+ * drops the subject noun and counts all rows uniformly. When BOTH counts are
+ * zero (an unreachable shape -- `computeSeverity` only returns error/warning
+ * when a matching row exists) the function degrades gracefully to the
+ * plugin-only plural form rather than crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
   // GRAM-02: the standalone-dispatched kinds derive their summary from the
@@ -2330,9 +2348,9 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
   if (isInfoKind(message)) {
     switch (message.kind) {
       case "marketplace-not-added":
-        return `${operationPhrase(1, "marketplace")} failed.`;
+        return summaryPhrase(1, "error", "marketplace");
       case "plugin-info":
-        return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+        return message.plugin.status === "failed" ? summaryPhrase(1, "error", "plugin") : "";
       case "reconcile-applied-cascade":
         // RECON-04: at error/warning severity reuse the cascade-arm counting
         // helpers over the same per-status `marketplaces` shape; at info
@@ -2351,23 +2369,20 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
     }
   }
 
-  const verb = severity === "error" ? "failed" : "skipped";
   const counts =
     severity === "error" ? countFailedOperations(message) : countSkippedOperations(message);
 
-  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
-  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
-
+  // D-03: mixed-subject cascade drops the noun and counts all rows uniformly.
   if (counts.plugins > 0 && counts.marketplaces > 0) {
-    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.plugins + counts.marketplaces, severity, null);
   }
 
   if (counts.marketplaces > 0) {
-    return `${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.marketplaces, severity, "marketplace");
   }
 
   // counts.plugins > 0, or the unreachable 0/0 degrade-to-plugin-plural case.
-  return `${pluginPhrase} ${verb}.`;
+  return summaryPhrase(counts.plugins, severity, "plugin");
 }
 
 /**

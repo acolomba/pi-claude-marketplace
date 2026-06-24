@@ -1045,7 +1045,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // the single-scope `plugin-info` arm but would be SILENT here. Mirror
   // `getMarketplaceInfo`'s failure separation -- each failed scope is surfaced
   // as its own standalone `plugin-info` notify (which routes to `error` + the
-  // `1 plugin operation failed.` summary via the single arm), and only the info
+  // `A plugin operation has failed.` summary via the single arm), and only the info
   // blocks form the cascade. This intentionally breaks IL-2's single-notify
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass

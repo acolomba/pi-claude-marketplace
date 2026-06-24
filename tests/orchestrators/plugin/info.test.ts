@@ -494,7 +494,7 @@ test("INFO-04: --scope user mismatch (mp only in project) emits bare `⊘ <mp> [
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ p-only [user] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ p-only [user] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -511,7 +511,7 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
     assert.ok(
@@ -545,7 +545,7 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
     assert.equal(
       notifications[0]!.message,
       [
-        "1 plugin operation failed.",
+        "A plugin operation has failed.",
         "",
         "● mp [user] <no autoupdate>",
         "  ⊘ ghost (failed) {not in manifest}",
@@ -596,7 +596,7 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
     assert.equal(
       notifications[0]!.message,
       [
-        "1 plugin operation failed.",
+        "A plugin operation has failed.",
         "",
         "● mp [project] <no autoupdate>",
         "  ⊘ ghost (failed) {not in manifest}",
@@ -605,7 +605,7 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
     assert.equal(
       notifications[1]!.message,
       [
-        "1 plugin operation failed.",
+        "A plugin operation has failed.",
         "",
         "● mp [user] <no autoupdate>",
         "  ⊘ ghost (failed) {not in manifest}",

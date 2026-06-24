@@ -229,7 +229,7 @@ test("SNM-38 :: full ladder snapshot matches the catalog 0/2(/4) ladder (D-25-09
   //
   // UXG-07 (D-29-02): the LIST_MESSAGE fixture carries a `failed`
   // plugin row (`zeta`), so notify() computes "error" severity and PREPENDS the
-  // "1 plugin operation failed." summary line + blank line. Those two leading
+  // "A plugin operation has failed." summary line + blank line. Those two leading
   // column-0 lines are the first two `0` entries below; the catalog-conformant
   // 0/2(/4) cascade ladder follows unchanged.
   assert.deepEqual(
