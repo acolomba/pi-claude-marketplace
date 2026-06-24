@@ -113,11 +113,13 @@ import {
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { INSTALL_CONTEXT } from "./install.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
@@ -1125,15 +1127,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return classifyInstallFailure(err, formatOrchestratedCause(err));
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [failureMessage],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failureMessage],
+      },
+    ]);
     // Collapsed failure: `error` is the dispatch surface; `cause` is the
     // formatted text for callers that render it directly.
     const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
@@ -1165,22 +1165,20 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: invalidErr, cause };
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: invalidErr,
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: invalidErr,
+          },
+        ],
+      },
+    ]);
     return { status: "failed", error: invalidErr, cause };
   }
 
@@ -1219,22 +1217,20 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // the per-row bracket in that case. Matches the IN-04 omit convention
     // used by this file's primary catch path's
     // `composeInstallFailureMessage` recipe.
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: [] as const,
-              cause: internalErr,
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: [] as const,
+            cause: internalErr,
+          },
+        ],
+      },
+    ]);
     return { status: "failed", error: internalErr, cause };
   }
 
@@ -1372,15 +1368,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
     // "installed" + dependencies[] + per-D-19-03 failure branches
     // (D-19-02 + D-19-03).
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [installedRow],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [installedRow],
+      },
+    ]);
   }
 
   return {

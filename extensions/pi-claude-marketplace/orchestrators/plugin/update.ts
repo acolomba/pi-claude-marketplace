@@ -100,6 +100,7 @@ import {
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
+import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
@@ -113,6 +114,7 @@ import {
   resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
+import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -1433,22 +1435,20 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     const targetBasename = path.basename(
       args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
     );
-    notify(args.ctx, args.pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(args.ctx, args.pi, UPDATE_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+          },
+        ],
+      },
+    ]);
   }
 
   return {
@@ -1664,7 +1664,10 @@ function renderUpdateCascadeAndNotify(
   // Sort marketplace blocks via compareByNameThenScope (orchestrator
   // controls iteration order; notify does not sort). The comparator's
   // `Sortable` shape requires only `name` + `scope`.
-  const marketplaces: MarketplaceNotificationMessage[] = [...byMp.values()]
+  // OUT-07 / D-12: the update cascade is a bulk op, so its row slot is typed
+  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
+  // variable-length array, identical at runtime.
+  const marketplaces: Plural<MarketplaceNotificationMessage> = [...byMp.values()]
     .sort((a, b) =>
       compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
     )
@@ -1693,7 +1696,7 @@ function renderUpdateCascadeAndNotify(
   //  docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
   //  rollback-partial, all-up-to-date-noop, bare-multi-mp,
   //  same-mp-both-scopes).
-  notify(ctx, pi, { marketplaces });
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1755,15 +1758,13 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
         })),
       }),
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failedRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [failedRow],
+    },
+  ]);
 }
 
 /**
@@ -1892,15 +1893,13 @@ function notifyBareFormEnumerateFailure(args: {
     reasons,
     cause,
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
-        scope: scope ?? "user",
-        plugins: [failedRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
+    {
+      name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
+      scope: scope ?? "user",
+      plugins: [failedRow],
+    },
+  ]);
 }
 
 /**
