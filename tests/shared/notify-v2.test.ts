@@ -945,18 +945,19 @@ test("notify renders header-only block on empty plugins under added marketplace 
 });
 
 // ===========================================================================
-// 16a / 16b: UAT G-21-01 inventory-vs-transition discriminator (SNM-15
-// surface tightening). The list-only `present` token does NOT trigger
-// the reload-hint; the cascade-context `installed` token DOES.
+// 16a / 16b: RLD-04 / RLD-02 inventory-vs-transition discriminator. The
+// steady-state `installed` inventory row stamps `needsReload: false` and does
+// NOT trigger the reload-hint; the `installed` cascade transition stamps
+// `needsReload: true` and DOES.
 // ===========================================================================
 
-test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits NO /reload trailer (SNM-15 inventory-vs-transition discriminator)", () => {
+test("RLD-04: list-shaped message with an installed inventory row (needsReload:false) emits NO /reload trailer (RLD-02 OR-reduce)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // List-shaped payload: mp.status === undefined (list surface) +
-  // single steady-state inventory row using the new list-only token
-  // `status: "present"`. shouldEmitReloadHint must NOT fire because
-  // "present" is deliberately ABSENT from the trigger set (gap fix).
+  // single steady-state inventory row stamped `needsReload: false`. The
+  // OR-reduce reload-hint (RLD-02) must NOT fire because no row stamps
+  // `needsReload: true`.
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -964,7 +965,9 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
         scope: "user",
         plugins: [
           {
-            status: "present",
+            status: "installed",
+            severity: "info",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -976,13 +979,12 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-  // The list-only `present` token renders byte-identical to `installed`
-  // on the human-visible row text (the renderer arm preserves the
-  // `(installed)` parenthetical so the list-surface byte assertions are
-  // preserved); only the trailing reload-hint is removed.
+  // The inventory `installed` row (needsReload:false) renders the
+  // `(installed)` parenthetical row text; only the trailing reload-hint is
+  // suppressed by the OR-reduce.
   assert.ok(
     body.includes("● alpha v1.0.0 (installed)"),
-    `expected body to include byte-identical-to-installed row, got: ${body}`,
+    `expected body to include the installed inventory row, got: ${body}`,
   );
   assert.ok(
     !body.includes("/reload to pick up changes"),
@@ -990,7 +992,7 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
   );
 });
 
-test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row continues to emit the /reload trailer (transition token preserved)", () => {
+test("RLD-02: cascade-shaped message with an installed transition row (needsReload:true) emits the /reload trailer", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // Cascade-shaped payload: bare marketplace header (mp.status ===
@@ -1027,11 +1029,11 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
 
 // ===========================================================================
 // PL-4: description second line (4-space indent, truncated at column 66).
-// Tests cover all four list-surface variants (present / upgradable /
+// Tests cover all four list-surface variants (installed / upgradable /
 // available / unavailable) and the truncation boundary.
 // ===========================================================================
 
-test("PL-4: present row with description emits a 4-space-indented second line", () => {
+test("PL-4: installed inventory row with description emits a 4-space-indented second line", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -1041,7 +1043,9 @@ test("PL-4: present row with description emits a 4-space-indented second line", 
         scope: "user",
         plugins: [
           {
-            status: "present",
+            status: "installed",
+            severity: "info",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],

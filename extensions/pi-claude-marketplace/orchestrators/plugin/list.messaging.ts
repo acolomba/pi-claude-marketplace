@@ -12,7 +12,7 @@ import {
   type PluginAvailableMessage,
   type PluginDisabledMessage,
   type PluginFailedMessage,
-  type PluginPresentMessage,
+  type PluginInstalledMessage,
   type PluginUnavailableMessage,
   type PluginUpgradableMessage,
 } from "../../shared/notify.ts";
@@ -27,20 +27,21 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
  * and is CALLED here, never duplicated.
  *
- * The `present` status is PRESERVED -- it is the list-only inventory token that
- * renders byte-identically to `installed` but stays distinct so
- * `shouldEmitReloadHint` never misfires the `/reload` trailer on a steady-state
- * list. There is no `present` -> `installed` collapse this phase.
+ * RLD-04 / D-08: the list surface's steady-state inventory row uses the
+ * `installed` status with `needsReload: false` -- the stamped flag carries the
+ * reload-suppression (the OR-reduce reload-hint, RLD-02, never fires on a
+ * steady-state list). The former `present` token has been collapsed into
+ * `installed`.
  */
 
 /**
- * the list surface's private status set: the inventory `present` token,
+ * the list surface's private status set: the inventory `installed` token,
  * `available` / `unavailable` not-installed rows, `upgradable` rows, the
  * `disabled` inventory row, and a synthetic `failed` row for list-orchestration
  * failures.
  */
 export const LIST_STATUSES = [
-  "present",
+  "installed",
   "available",
   "unavailable",
   "upgradable",
@@ -51,7 +52,7 @@ export type ListStatus = (typeof LIST_STATUSES)[number];
 
 /** the list surface's row message union. */
 export type ListMsg =
-  | PluginPresentMessage
+  | PluginInstalledMessage
   | PluginAvailableMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
@@ -63,14 +64,14 @@ export type ListMsg =
  * is a TS2741 compile error at the `satisfies` site. Arm bodies are
  * byte-identical to the central `renderPluginRow` switch.
  *
- * The `present` arm renders byte-identically to `installed` (ICON_INSTALLED +
- * `(installed)` token) but carries NO `reasons` -- the orphan-rewake brace is an
- * install-cascade surface, not a steady-state inventory surface. The
- * `available` / `unavailable` arms omit the `[<scope>]` bracket entirely
- * (MSG-PL-6 / SNM-11 carve-out) by passing `undefined` to `renderScopeBracket`.
+ * RLD-04 / D-08: the `installed` inventory arm passes `undefined` for `reasons`
+ * so the orphan-rewake brace (an install-cascade surface) never leaks onto a
+ * steady-state inventory row. The `available` / `unavailable` arms omit the
+ * `[<scope>]` bracket entirely (MSG-PL-6 / SNM-11 carve-out) by passing
+ * `undefined` to `renderScopeBracket`.
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
-  present: (p, probe, mpScope) =>
+  installed: (p, probe, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
       p,

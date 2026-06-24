@@ -10,9 +10,9 @@
 // `pi --version` reports Pi's own version and is moot for proving the
 // extension's code revision (D-25-04). The byte forms below only render if the
 // code paths actually execute:
-//   - SNM-33: read-only `list` (present/available statuses) emits NO
-//     `/reload to pick up changes` trailer (`shouldEmitReloadHint` excludes
-//     present/list surfaces).
+//   - SNM-33: read-only `list` (installed/available inventory rows, each
+//     stamping `needsReload: false`) emits NO `/reload to pick up changes`
+//     trailer (the RLD-02 OR-reduce stays false on steady-state list rows).
 //   - SNM-35: a persisted PI-7 `hash-<12hex>` version renders as the
 //     git-style short SHA `v#<7hex>` (`formatHashVersionForDisplay`).
 //   - SNM-36: the emitted Reason brace reads `{lsp}`, never `{lspServers}`
@@ -90,9 +90,9 @@ function piWithBothLoaded(): MockPi {
 // is undefined; every plugin status is a list-surface inventory discriminator,
 // so NO `/reload` trailer fires). Locked minimums:
 //   - >=1 installed plugin per marketplace (both `official` and `community`
-//     carry a `present` row);
+//     carry an `installed` inventory row);
 //   - a `{...}` reason-brace row (`epsilon (unavailable) {unsupported hooks, lsp}`);
-//   - an installed/available mix (`present` + `available` rows);
+//   - an installed/available mix (`installed` + `available` rows);
 //   - >=1 hash-versioned plugin (`hashed-plugin` at `hash-2ea95f85703d`).
 // ---------------------------------------------------------------------------
 
@@ -104,10 +104,19 @@ const LIST_MESSAGE: NotificationMessage = {
       details: { autoupdate: true },
       plugins: [
         // Installed, SemVer -> `v1.0.0`.
-        { status: "present", name: "alpha", version: "1.0.0", dependencies: [] },
+        {
+          status: "installed",
+          severity: "info",
+          needsReload: false,
+          name: "alpha",
+          version: "1.0.0",
+          dependencies: [],
+        },
         // Installed, PI-7 hash -> renders `v#2ea95f8` (SNM-35).
         {
-          status: "present",
+          status: "installed",
+          severity: "info",
+          needsReload: false,
           name: "hashed-plugin",
           version: "hash-2ea95f85703d",
           dependencies: [],
@@ -124,7 +133,14 @@ const LIST_MESSAGE: NotificationMessage = {
       scope: "project",
       plugins: [
         // >=1 installed plugin in the second marketplace too.
-        { status: "present", name: "tool", version: "0.5.0", dependencies: [] },
+        {
+          status: "installed",
+          severity: "info",
+          needsReload: false,
+          name: "tool",
+          version: "0.5.0",
+          dependencies: [],
+        },
       ],
     },
   ],
@@ -141,8 +157,8 @@ test("SNM-37 behavioral smoke :: list renders v1.4 byte forms at the pre-tui not
   const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
   const body = callArgs[0];
 
-  // SNM-33: a read-only `list` (present/available statuses) carries NO
-  // `/reload to pick up changes` trailer.
+  // SNM-33: a read-only `list` (installed/available inventory rows stamping
+  // `needsReload: false`) carries NO `/reload to pick up changes` trailer.
   assert.doesNotMatch(
     body,
     /\/reload to pick up changes/,

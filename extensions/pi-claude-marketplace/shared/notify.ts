@@ -413,17 +413,16 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * The `"present"` entry is the list-only inventory token (SNM-15); the four
+ * RLD-04 / D-08: the list-only inventory row uses `"installed"` with
+ * `needsReload: false` (the list surface's reload-suppression is carried by the
+ * stamped `needsReload` flag, not by a separate status token). The four
  * `"will *"` entries are the DIFF-02 pending-tense tokens; the
- * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
- * state-change tokens at the head of the tuple (`installed`, `updated`,
- * `reinstalled`, `uninstalled`) are the structurally-distinguished
- * transition tokens that drive `shouldEmitReloadHint`; `"present"` and
- * `"disabled"` are deliberately ABSENT from that default trigger set so
- * steady-state `/claude:plugin list` rows never emit the
- * `/reload to pick up changes` trailer. `"disabled"` joins the hint set
- * only under the `disable-cascade` kind (UAT-03 -- the disable command's
- * realized-transition cascade).
+ * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. Per RLD-02 the
+ * `/reload to pick up changes` trailer is driven by the OR-reduce of the
+ * caller-stamped `needsReload` over the rows -- a steady-state
+ * `/claude:plugin list` inventory row stamps `needsReload: false`, while a
+ * realized transition (install / update / reinstall / uninstall / disable)
+ * stamps `needsReload: true`.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -438,7 +437,6 @@ export const PLUGIN_STATUSES = [
   "failed",
   "skipped",
   "manual recovery",
-  "present",
   "will install",
   "will uninstall",
   "will enable",
@@ -586,7 +584,7 @@ export interface MessageBase {
  * `Msg` union BEFORE the post-check widening cast in `notifyWithContext`, so
  * the gate reaches every producer that builds a transition row. Non-transition
  * arms (`available`/`unavailable`/`upgradable`/`failed`/`skipped`/`manual
- * recovery`/`will *`/`present`) stay on `extends MessageBase` -- their fields
+ * recovery`/`will *`) stay on `extends MessageBase` -- their fields
  * remain optional and default to info/false (SEV-01/RLD-01).
  */
 export interface TransitionMessageBase extends MessageBase {
@@ -607,9 +605,16 @@ export interface TransitionMessageBase extends MessageBase {
  * successful install row (`(installed) {orphan rewake}`). The reasons
  * brace renders through the existing `composeReasons` helper so the
  * soft-dep markers and reasons share one brace block per MSG-GR-4
- * (`(installed) {orphan rewake, requires pi-subagents}`). Plan 63-04
- * pushes the resolver-side `resolved.orphanRewake === true` plugins
- * into `reasons[]`; this plan only extends the type seam + renderer.
+ * (`(installed) {orphan rewake, requires pi-subagents}`). The resolver-side
+ * `resolved.orphanRewake === true` plugins are pushed into `reasons[]`.
+ *
+ * RLD-04 / D-08: this arm ALSO carries the list-surface steady-state inventory
+ * row (the former `present` status, now collapsed into `installed`). The list
+ * orchestrator emits it with `needsReload: false` so the OR-reduce reload-hint
+ * (RLD-02) stays suppressed for inventory, and OMITS `reasons` so the
+ * orphan-rewake brace never leaks onto a steady-state row. `description?` is the
+ * PL-4 optional second line, populated only on the list surface from the
+ * manifest entry; cascade install rows never carry it.
  */
 export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly status: "installed";
@@ -618,6 +623,7 @@ export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  readonly description?: string;
 }
 
 /**
@@ -722,35 +728,6 @@ export interface PluginUpgradableMessage extends MessageBase {
   readonly status: "upgradable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
-  readonly version?: string;
-  readonly scope?: Scope;
-  readonly description?: string;
-}
-
-/**
- * `(present)` -- list-only inventory row emitted by
- * `list.ts::installedRowMessage`; never emitted by cascade-row code paths.
- * STRUCTURALLY constrained to the list surface so `shouldEmitReloadHint`
- * can distinguish steady-state inventory (no `/reload` trailer) from
- * actual state-changing transitions (with `/reload` trailer). Introduced
- * to close UAT gap G-21-01 (SNM-15 surface tightening): the four
- * state-change tokens (installed / updated / reinstalled / uninstalled)
- * unambiguously trigger the reload-hint, while `"present"` is deliberately
- * ABSENT from the trigger set.
- *
- * The structural shape mirrors `PluginInstalledMessage` exactly (dependencies
- * REQUIRED so the soft-dep marker injection still applies; version optional;
- * scope optional). The renderer arm for this discriminator is BYTE-IDENTICAL
- * to the `installed` arm -- the human-visible row text
- * `● <name> [<scope>] v<ver> (installed)` is preserved; only the trailing
- * `/reload to pick up changes` line that the inventory case was misfiring
- * is removed by virtue of the new discriminator. PL-4: optional `description`
- * rendered as a second 4-space-indented line, truncated at column 66.
- */
-export interface PluginPresentMessage extends MessageBase {
-  readonly status: "present";
-  readonly name: string;
-  readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -873,7 +850,6 @@ export type PluginNotificationMessage =
   | PluginAvailableMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
-  | PluginPresentMessage
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginManualRecoveryMessage
@@ -1848,7 +1824,7 @@ export function pluginRow(
 
 /**
  * WR-03: SOLE composition site for the soft-dep-bearing
- * `installed` / `present` / `updated` / `reinstalled` plugin rows. Folds the
+ * `installed` / `updated` / `reinstalled` plugin rows. Folds the
  * 7 command-arm copies that each repeated the same
  * `joinTokens([icon, name, scope, versionToken, label,
  * composeReasons(reasons, dependencies.includes("agents"),
@@ -1901,11 +1877,15 @@ function renderPluginRow(
   mpScope: Scope,
 ): string {
   switch (p.status) {
-    // `installed` (cascade transition) -- SURF-05 / D-63-08 threads
-    // the optional `reasons` brace through composeReasons; soft-dep
-    // markers append into the SAME brace block per MSG-GR-4 (a plugin
-    // with orphan-rewake AND a missing companion extension renders as
-    // `(installed) {orphan rewake, requires pi-subagents}`).
+    // `installed` (cascade transition AND the RLD-04 / D-08 list-surface
+    // inventory row) -- SURF-05 / D-63-08 threads the optional `reasons`
+    // brace through composeReasons; soft-dep markers append into the SAME
+    // brace block per MSG-GR-4 (a plugin with orphan-rewake AND a missing
+    // companion extension renders as
+    // `(installed) {orphan rewake, requires pi-subagents}`). The list
+    // inventory row OMITS `reasons` (the orphan-rewake warning is an
+    // install-cascade surface, not a steady-state inventory surface), so it
+    // renders byte-identically to a bare `(installed)` row.
     case "installed":
       return joinTokens([
         ICON_INSTALLED,
@@ -1915,26 +1895,6 @@ function renderPluginRow(
         "(installed)",
         composeReasons(
           p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          probe,
-        ),
-      ]);
-    // `present` (UAT G-21-01) is a list-only inventory row that renders
-    // byte-identically to `installed`; it stays a distinct status so
-    // shouldEmitReloadHint suppresses the /reload trailer for inventory
-    // rows. SURF-05 / D-63-08: `present` is list-only and carries NO
-    // `reasons` field by design -- the orphan-rewake warning is an
-    // install-cascade surface, not a steady-state inventory surface.
-    case "present":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(installed)",
-        composeReasons(
-          undefined,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
           probe,
@@ -2582,11 +2542,12 @@ function composePluginLines(
   const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
 
   // PL-4: emit description as a 4-space-indented second line when present and
-  // non-empty. Only the four list-surface variants carry the field; the type
-  // narrowing is intentionally structural (switch on status) so the compiler
-  // rejects any future attempt to add description to a cascade-only variant.
+  // non-empty. Only the four list-surface variants carry the field (RLD-04 /
+  // D-08: the list inventory row is `installed`, populated from the manifest
+  // entry; cascade `installed` rows never set `description`, so the
+  // `p.description !== undefined` guard keeps them single-line).
   if (
-    (p.status === "present" ||
+    (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
       p.status === "unavailable") &&
@@ -3222,8 +3183,11 @@ function composePluginLinesWith(
 ): string[] {
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
+  // PL-4 (RLD-04 / D-08): the list inventory row is `installed`; cascade
+  // `installed` rows never set `description`, so the guard keeps them
+  // single-line.
   if (
-    (p.status === "present" ||
+    (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
       p.status === "unavailable") &&
