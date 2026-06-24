@@ -76,6 +76,8 @@ function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceNot
     scope,
     status: "failed",
     reasons: ["invalid manifest"],
+    // D-03: an invalid-config pending block -> error.
+    severity: "error",
     plugins: [],
   };
 }
@@ -165,6 +167,8 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
         scope,
         status: "failed",
         reasons: [narrowStateLoadFailReason(err)],
+        // D-03: an invalid state.json pending block -> error.
+        severity: "error",
         plugins: [],
       });
       continue;

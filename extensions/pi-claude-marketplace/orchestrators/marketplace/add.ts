@@ -481,6 +481,8 @@ function handleAddFailure(
       scope: opts.scope,
       status: "failed",
       reasons: [reason],
+      // D-03: a failed marketplace add -> error.
+      severity: "error",
       plugins: [],
     },
   ];

@@ -542,6 +542,8 @@ async function buildMarketplaceMessage(args: {
         name: mpName,
         scope: mpScope,
         status: "failed",
+        // D-03: a failed marketplace header on the list surface -> error.
+        severity: "error",
         plugins: [],
       },
       emitScope: mpScope,
@@ -893,6 +895,9 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       name: SYNTHETIC_LIST_FAILURE_PLUGIN_NAME,
       reasons: [narrowListFailReason(err)],
       cause,
+      // D-03/D-06: a synthetic list-failure row -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     const mp: MarketplaceRows<ListMsg> = {
       // WR-03: the `MarketplaceNotificationMessage` shape does not support

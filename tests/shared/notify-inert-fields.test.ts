@@ -1,19 +1,16 @@
 /**
- * tests/shared/notify-inert-fields.test.ts -- D-07 inert-field guard.
+ * tests/shared/notify-inert-fields.test.ts -- SEV-02 / RLD-02 live-field guard.
  *
- * `MessageBase.severity?` and `MessageBase.needsReload?` are universal optional
- * fields present on every plugin/marketplace row, but they are INERT: the
- * reducer (`computeSeverity` / `shouldEmitReloadHint` in shared/notify.ts)
- * derives severity and the reload-hint STRUCTURALLY from `status` / cascade
- * `kind`, and must NOT read these two fields. Wiring them in is deferred to a
- * later phase; until then, a row that carries `severity: "error"` or
- * `needsReload: true` must NOT change the emitted text OR severity.
+ * `MessageBase.severity` and `MessageBase.needsReload` are the caller-stamped
+ * facts the `notify()` reducer reads: emission severity is the numeric MAX over
+ * `row.severity` (SEV-02) and the `/reload to pick up changes` trailer fires iff
+ * the OR-reduce of `row.needsReload` is true (RLD-02). The reducer performs NO
+ * content/status inference -- it reduces the stamped fields directly.
  *
- * These tests pin that contract: an otherwise-info cascade rendered with the
- * inert fields injected produces a `ctx.ui.notify` call byte-identical (same
- * text, same severity argument) to the baseline rendered without them. If a
- * future edit makes the reducer read either field, the deep-equal assertion
- * fails -- surfacing the silent severity/trailer change the phase forbids.
+ * These tests pin that the fields are LIVE: a stamped `severity:"error"` row
+ * DOES drive the emission severity (and prepend the summary line), and a stamped
+ * `needsReload:true` row DOES add the `/reload` trailer. If a future edit makes
+ * the reducer stop reading either field, these assertions fail.
  */
 
 import assert from "node:assert/strict";
@@ -49,10 +46,11 @@ function renderArgs(msg: NotificationMessage): readonly unknown[] {
   return ctx.ui.notify.mock.calls[0]!.arguments;
 }
 
-test('D-07 INERT: row-level severity:"error" does not change emitted text or severity on an info cascade', () => {
-  // Baseline: an `installed` row under an `added` marketplace -> info severity
-  // (no 2nd `severity` argument), `/reload` trailer fires structurally.
-  const baseline: NotificationMessage = {
+test('SEV-02: a stamped severity:"error" plugin row drives the emission to error severity (MAX reduce)', () => {
+  // A `failed` plugin row stamps `severity:"error"`. The reducer's MAX over the
+  // row severities yields error: the 2nd `ctx.ui.notify` arg is "error" and the
+  // summary line is prepended.
+  const errorStamped: NotificationMessage = {
     marketplaces: [
       {
         name: "demo",
@@ -60,10 +58,59 @@ test('D-07 INERT: row-level severity:"error" does not change emitted text or sev
         status: "added",
         plugins: [
           {
-            status: "installed",
+            status: "failed",
+            name: "commit-commands",
+            reasons: ["network unreachable"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  const args = renderArgs(errorStamped);
+  // The reducer READS the stamped severity: emission carries the error 2nd arg.
+  assert.equal(args.length, 2);
+  assert.equal(args[1], "error");
+  // ... and prepends the error summary line ahead of the cascade body.
+  assert.match(String(args[0]), /^1 plugin operation failed\.\n\n/);
+});
+
+test("RLD-02: a stamped needsReload:true row adds the /reload trailer via the OR-reduce", () => {
+  // Baseline: a `disabled` INVENTORY row stamps `needsReload:false`, so the
+  // OR-reduce is false and NO `/reload` trailer is emitted.
+  const noReload: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "disabled",
             name: "commit-commands",
             version: "1.0.0",
-            dependencies: [],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  };
+  assert.equal(String(renderArgs(noReload)[0]).includes("/reload to pick up changes"), false);
+
+  // Same row stamped `needsReload:true` (a realized disable transition): the
+  // OR-reduce flips true and the `/reload to pick up changes` trailer appears.
+  const withReload: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "disabled",
+            name: "commit-commands",
+            version: "1.0.0",
             severity: "info",
             needsReload: true,
           },
@@ -71,68 +118,5 @@ test('D-07 INERT: row-level severity:"error" does not change emitted text or sev
       },
     ],
   };
-
-  // Same cascade with the inert `severity: "error"` injected on the plugin row.
-  // If the reducer read it, the cascade would flip to error severity and prepend
-  // a summary line -- the deep-equal below would fail.
-  const withInertSeverity: NotificationMessage = {
-    marketplaces: [
-      {
-        name: "demo",
-        scope: "user",
-        status: "added",
-        plugins: [
-          {
-            status: "installed",
-            name: "commit-commands",
-            version: "1.0.0",
-            dependencies: [],
-            severity: "error",
-            needsReload: true,
-          },
-        ],
-      },
-    ],
-  };
-
-  assert.deepEqual(renderArgs(withInertSeverity), renderArgs(baseline));
-});
-
-test("D-07 INERT: row-level needsReload:true does not add a reload trailer to a steady-state list", () => {
-  // Baseline: a `present` inventory row on the list surface emits NO `/reload`
-  // trailer (steady state, not a transition) and info severity.
-  const baseline: NotificationMessage = {
-    marketplaces: [
-      {
-        name: "demo",
-        scope: "user",
-        plugins: [
-          { status: "present", name: "commit-commands", version: "1.0.0", dependencies: [] },
-        ],
-      },
-    ],
-  };
-
-  // Same cascade with the inert `needsReload: true` injected. If the reducer
-  // read it, a `/reload to pick up changes` trailer would appear -- failing the
-  // deep-equal below.
-  const withInertNeedsReload: NotificationMessage = {
-    marketplaces: [
-      {
-        name: "demo",
-        scope: "user",
-        plugins: [
-          {
-            status: "present",
-            name: "commit-commands",
-            version: "1.0.0",
-            dependencies: [],
-            needsReload: true,
-          },
-        ],
-      },
-    ],
-  };
-
-  assert.deepEqual(renderArgs(withInertNeedsReload), renderArgs(baseline));
+  assert.equal(String(renderArgs(withReload)[0]).endsWith("\n\n/reload to pick up changes"), true);
 });

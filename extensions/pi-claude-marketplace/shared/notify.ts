@@ -136,37 +136,6 @@ export type Reason = (typeof REASONS)[number];
  */
 export type ContentReason = Exclude<Reason, "not added">;
 
-/**
- * UXG-02 (D-28-02): the closed set of `Reason` members that mark a
- * `skipped` row as a BENIGN idempotent no-op -- the resource already matches
- * the exact state the command requested (D-28-01 classification principle).
- * A `skipped` cascade whose reasons are ALL drawn from this set routes the
- * notification to `info` (no 2nd `ctx.ui.notify` arg) via `computeSeverity`;
- * any non-benign reason (or a missing/empty reason set on an mp-level skip)
- * routes to `warning`. These four are the idempotent "already in requested
- * state" reasons; `already autoupdate` / `already no autoupdate` are the
- * UXG-04 autoupdate-flip forms.
- */
-const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
-  "up-to-date",
-  "already installed",
-  "already autoupdate",
-  "already no autoupdate",
-  "already enabled",
-  "already disabled",
-]);
-
-/**
- * UXG-02 (D-28-06): a skip's reasons are "all benign" iff the set
- * is NON-EMPTY and every member is in `BENIGN_REASONS`. An empty array returns
- * `false` -- a no-reason skip cannot be PROVEN benign, so it routes to
- * `warning` (the D-28-08 safe default for an mp-level `skipped` whose optional
- * `reasons?` is missing/empty). Shared by the plugin-skip and mp-skip arms.
- */
-function allBenign(reasons: readonly Reason[] | undefined): boolean {
-  return reasons !== undefined && reasons.length > 0 && reasons.every((r) => BENIGN_REASONS.has(r));
-}
-
 // ---------------------------------------------------------------------------
 // SURF-02 / D-63-06 / D-63-07: hook summary type seam.
 //
@@ -978,10 +947,10 @@ interface MpAutoupdateDisabled extends MpCommon {
  * `(skipped)` marketplace block. `reasons?` is reachable ONLY on this arm
  * (TYPE-04): the `"skipped"` mp-status renderer arm composes the
  * `{<reason>, <reason>}` brace (e.g. `{already autoupdate}` for idempotent
- * autoupdate flips, `{up-to-date}` for the `marketplace update` no-op). Kept
- * OPTIONAL -- `allBenign(undefined)` returns false and `computeSeverity`
- * arm 4 reads `mp.reasons` on the skipped arm, so a missing reason set routes
- * to `warning` (the D-28-08 safe default).
+ * autoupdate flips, `{up-to-date}` for the `marketplace update` no-op). The
+ * skip's severity is caller-stamped (SEV-01): a benign idempotent skip stamps
+ * `info`, an actionable skip `warning`; a missing reason set routes to the
+ * `warning` safe default at the producer.
  */
 interface MpSkipped extends MpCommon {
   readonly status: "skipped";
@@ -2124,7 +2093,7 @@ function renderPluginRow(
 //   <mp-header-2>
 //   ...
 //
-//   /reload to pick up changes  <-- iff any state-changing status set
+//   /reload to pick up changes  <-- iff any row stamps needsReload:true
 //
 // Joins / separators:
 //   - Plugin row prefix:                "  " (2 spaces)
@@ -2134,17 +2103,17 @@ function renderPluginRow(
 //   - Between marketplace blocks:       "\n\n" (one blank line)
 //   - Between body and reload-hint:     "\n\n" (one blank line)
 //
-// Severity ladder (first match wins):
-//   1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
-//   2. Any plugin.status in {"skipped", "manual recovery"} -> "warning"
-//   3. Otherwise -> undefined (info)
+// Severity (SEV-02): the numeric MAX over the caller-stamped `row.severity`
+// (info=0 < warning=1 < error=2) across the marketplace rows AND their plugin
+// rows; rank 0 -> undefined (info, no 2nd arg). No status/reasons inference.
 //
-// Reload-hint trigger (SNM-33):
-//   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}.
-//   - Any plugin.status === "disabled" iff message.kind === "disable-cascade"
-//     (UAT-03: the disable command's realized-transition cascade; kind-less
-//     list/info inventory `disabled` rows stay hint-free).
-//   - No marketplace-status arm: marketplace records are bookkeeping, not Pi-visible.
+// Reload-hint (RLD-02): the OR-reduce of the caller-stamped `row.needsReload`
+// over the same flattened rows. Realized transitions (install/update/reinstall/
+// uninstall + the fresh-disable) stamp needsReload:true; inventory rows stamp
+// false. No marketplace-status / cascade-kind inference -- the former
+// `disable-cascade` straddle is now a per-row stamped fact. Info-surface kinds
+// short-circuit to no-trailer (including reconcile-applied-cascade, which
+// suppresses the trailer at the kind level even though its rows stamp true).
 //
 // Empty-marketplaces sentinel: "(no marketplaces)".
 //
@@ -2161,117 +2130,68 @@ function renderPluginRow(
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
- * Severity ladder per SNM-14 / UXG-02 (D-28-06/07/08/09). A first-match
- * ladder with FIVE arms, in this order:
- *
- *   1. any `plugin.status === "failed"` OR `mp.status === "failed"` -> "error"
- *   2. any `plugin.status === "manual recovery"`                    -> "warning"
- *      (always actionable -- a manual-recovery anchor is never benign)
- *   3. any `plugin.status === "skipped"` whose REQUIRED `reasons` are NOT all
- *      benign                                                       -> "warning"
- *   4. any `mp.status === "skipped"` whose OPTIONAL `reasons?` are NOT all
- *      benign (missing/empty `reasons?` is NOT all-benign per D-28-08, so a
- *      no-reason mp-skip routes to warning -- the safe default)      -> "warning"
- *   5. otherwise                                                    -> undefined (info)
- *
- * A cascade whose ONLY non-success rows are BENIGN idempotent no-op skips
- * (every reason in `BENIGN_REASONS`, per SNM-14 / D-16-11) computes `info`
- * and omits the 2nd `ctx.ui.notify` arg. mp-level skips soften SYMMETRICALLY
- * with plugin-level skips (D-28-07): the UXG-04 idempotent autoupdate flip
- * and the UXG-05 `marketplace update` no-op are benign -> info. First-match
- * poisoning is intentional (D-28-09): a MIXED cascade (one benign skip + one
- * actionable skip, or any manual-recovery row) routes the whole notification
- * to `warning`. This ladder is independent of `shouldEmitReloadHint`
- * (SNM-33) -- severity and reload-hint are separate ladders. Severity is the
- * second arg, never part of the body.
+ * SEV-03: the desired-state tri-state contract every producer stamps on a row:
+ *   - `info`    = the resource reached the desired state (success / steady
+ *                 inventory / benign idempotent no-op);
+ *   - `warning` = the command fell short of the desired state but did not
+ *                 crash (an actionable skip, a manual-recovery anchor);
+ *   - `error`   = the command could not carry out the desired state (a failure).
+ * `notify()` does NOT re-derive these from content -- it reduces the stamped
+ * facts (SEV-02).
  */
-/**
- * Cascade severity ladder body shared by the cascade arm of `computeSeverity`
- * and the RECON-04 `reconcile-applied-cascade` standalone arm
- * (`reconcileAppliedSeverity`). Structural-subset typed so any message whose
- * marketplaces[] carries the (status, reasons?, plugins[].status,
- * plugins[].reasons) shape can be evaluated.
- *
- * 4-arm first-match (D-28-08 / D-28-09):
- *   1. any failed plugin / mp row                           -> "error"
- *   2. any manual-recovery plugin row                       -> "warning"
- *   3. any plugin-level "skipped" with not-all-benign reasons
- *      (first-match poisoning per D-28-09)                  -> "warning"
- *   4. any mp-level "skipped" with not-all-benign reasons?
- *      (missing/empty reasons? -> warning, the D-28-08 safe default
- *      since allBenign(undefined|[]) === false)             -> "warning"
- *   5. otherwise                                            -> undefined (info)
- */
+
+/** Numeric rank for the SEV-02 max-severity reduce: info < warning < error. */
+const SEVERITY_RANK = { info: 0, warning: 1, error: 2 } as const;
+
 type ComputedSeverity = "warning" | "error" | undefined;
 
-// S9 (PR #51): the structural-subset shape `cascadeSeverity` evaluates is
-// pinned to the closed `PluginStatus` / `MarketplaceStatus` literal unions
-// (instead of bare `string`). Every caller passes a `NotificationMessage`
-// cascade arm or a `ReconcileAppliedCascadeMessage`, both of which carry the
-// closed-set status discriminants -- a future caller that supplied a `string`
-// would lose first-match-ladder correctness (e.g. typoed `"failed "` would
-// silently route to info), and the tighter parameter type catches that at the
-// call site instead of at first-match runtime.
+/**
+ * SEV-02: the cascade severity is the numeric MAX over the caller-stamped
+ * `severity` of every row -- both the marketplace-level rows AND their nested
+ * plugin rows (the same flattened traversal the deleted content ladder walked).
+ * An absent `severity` defaults to `info` (rank 0) per SEV-01. The reducer reads
+ * ONLY the stamped field -- no `status`/`reasons` content inference. Rank 0
+ * returns `undefined` (info -> no 2nd `ctx.ui.notify` arg); rank 1 -> "warning";
+ * rank 2 -> "error", preserving the `ComputedSeverity` host-arg contract. The
+ * D-03 producer stamps reproduce the former first-match ladder's output exactly,
+ * so this is byte-identical (gated by catalog-uat).
+ *
+ * Structural-subset typed so any message whose `marketplaces[]` carries the
+ * `(severity?, plugins[].severity?)` shape can be evaluated (the cascade arm and
+ * the RECON-04 `reconcile-applied-cascade` standalone arm share it).
+ */
 function cascadeSeverity(message: {
   readonly marketplaces: readonly {
-    readonly status?: MarketplaceStatus | undefined;
-    readonly reasons?: readonly Reason[] | undefined;
+    readonly severity?: "info" | "warning" | "error";
     readonly plugins: readonly {
-      readonly status: PluginStatus;
-      readonly reasons?: readonly Reason[] | undefined;
+      readonly severity?: "info" | "warning" | "error";
     }[];
   }[];
 }): ComputedSeverity {
-  const hasError = message.marketplaces.some(
-    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
-  );
-  if (hasError) {
-    return "error";
+  let rank = 0; // info
+  for (const mp of message.marketplaces) {
+    rank = Math.max(rank, SEVERITY_RANK[mp.severity ?? "info"]);
+    for (const p of mp.plugins) {
+      rank = Math.max(rank, SEVERITY_RANK[p.severity ?? "info"]);
+    }
   }
 
-  const hasManualRecovery = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "manual recovery"),
-  );
-  if (hasManualRecovery) {
-    return "warning";
+  if (rank === 0) {
+    return undefined;
   }
 
-  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
-  );
-  if (hasActionablePluginSkip) {
-    return "warning";
-  }
-
-  const hasActionableMpSkip = message.marketplaces.some(
-    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
-  );
-  if (hasActionableMpSkip) {
-    return "warning";
-  }
-
-  return undefined;
-}
-
-/**
- * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
- * Empty-and-clean cascades MUST be short-circuited by the caller (NFR-2 / A4)
- * and never reach this arm.
- */
-function reconcileAppliedSeverity(message: ReconcileAppliedCascadeMessage): ComputedSeverity {
-  return cascadeSeverity(message);
+  return rank === 1 ? "warning" : "error";
 }
 
 function computeSeverity(message: NotificationMessage): ComputedSeverity {
-  // D-07 INERT: severity is derived STRUCTURALLY here (from `status` and the
-  // reasons/skip ladders below), never from the `MessageBase.severity?` field.
-  // That field is inert universal scaffolding until a later phase wires the
-  // reducer; reading it here would let a row override the structural ladder and
-  // silently change the emitted severity. Do NOT read `message...severity` in
-  // this function until that phase lands (guarded by the inert-field test in
-  // tests/shared/notify-inert-fields.test.ts).
+  // SEV-02: the cascade severity is the MAX over the rows' caller-stamped
+  // `severity` (see `cascadeSeverity`), NOT content inference.
+  //
+  // The standalone info-kind switch below STAYS (Q1 LOCKED): these kinds carry
+  // no per-row `severity` array to reduce, so they keep a tiny kind->severity
+  // map (a kind lookup, NOT reason inference, so SEV-02 holds).
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
-  // over the cascade severity ladder.
+  // over the cascade reduce.
   // `marketplace-info` payloads carry no failure state and route to info
   // (undefined 2nd arg); `plugin-info` payloads route to `"error"` ONLY when
   // the embedded plugin row is `(failed)` (e.g. an unreadable manifest), else
@@ -2279,22 +2199,21 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
   // to info unconditionally -- no failure can be expressed on a fan-out
   // wrapper. The `{not added}` --scope mismatch condition is carried by the
   // dedicated `marketplace-not-added` arm, which always routes to `"error"`.
-  // The cascade arm executes the existing first-match ladder below.
   if (isInfoKind(message)) {
     // The `marketplace-not-added` variant routes to "error" (the marketplace
     // is absent -- a failure surface); `plugin-info` routes to "error" only
     // when its embedded row is `(failed)`; the read-only info/cascade kinds
     // carry no failure state and route to info (undefined).
-    // `reconcile-applied-cascade` (RECON-04) is content-derived: any failed
-    // row -> error, any actionable skip -> warning, otherwise info (mirrors
-    // the cascade-arm ladder below).
+    // `reconcile-applied-cascade` (RECON-04) carries the same stamped
+    // `MarketplaceNotificationMessage[]` rows as the plain cascade, so it
+    // reduces through the SEV-02 max-severity reducer too.
     switch (message.kind) {
       case "marketplace-not-added":
         return "error";
       case "plugin-info":
         return message.plugin.status === "failed" ? "error" : undefined;
       case "reconcile-applied-cascade":
-        return reconcileAppliedSeverity(message);
+        return cascadeSeverity(message);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
@@ -2307,7 +2226,7 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
     }
   }
 
-  // Cascade arm: delegate to the shared 4-arm ladder (D-28-08 / D-28-09).
+  // Cascade arm: reduce the stamped row severities (SEV-02).
   return cascadeSeverity(message);
 }
 
@@ -2332,50 +2251,52 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
 }
 
 /**
- * Shared per-marketplaces-array failure counter consumed by both the cascade
- * arm and the RECON-04 `reconcile-applied-cascade` standalone arm. Both
- * carry a structurally identical `readonly MarketplaceNotificationMessage[]`
- * shape so the counting logic is single-sourced.
+ * SEV-02: error-severity tally by stamped fact -- the marketplace rows AND
+ * plugin rows whose caller-stamped `severity === "error"`. The D-03 stamps map
+ * `failed` rows to `error`, exactly the rows the former status-based counter
+ * matched, so the count is byte-identical. Consumed by both the cascade arm and
+ * the RECON-04 `reconcile-applied-cascade` standalone arm.
  */
 function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
-  let plugins = 0;
-  let mpCount = 0;
-
-  for (const mp of marketplaces) {
-    if (mp.status === "failed") {
-      mpCount++;
-    }
-
-    plugins += mp.plugins.filter((p) => p.status === "failed").length;
-  }
-
-  return { plugins, marketplaces: mpCount };
+  return countRowsBySeverity(marketplaces, "error");
 }
 
 /**
- * `warning`-severity counting (D-29-04): actionable-skip plugin rows
- * (`skipped` with NON-benign reasons) plus `manual recovery` plugin rows, and
- * actionable-skip marketplace rows (`skipped` with non-benign `reasons`).
- * Mirrors `computeSeverity` arms 2-4 / `allBenign`. Cascade-only (SC#1; see
- * `countFailedOperations`).
+ * `warning`-severity counting consumed by the summary line. Cascade-only (SC#1;
+ * see `countFailedOperations`).
  */
 function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
   return countSkippedRows(message.marketplaces);
 }
 
-/** Shared per-marketplaces-array skip counter (mirrors countFailedRows). */
+/**
+ * SEV-02: warning-severity tally by stamped fact -- the rows whose caller-
+ * stamped `severity === "warning"`. The D-03 stamps map actionable skips and
+ * manual-recovery anchors to `warning` (benign idempotent skips stamp `info`),
+ * so this is byte-identical to the former content-derived counter.
+ */
 function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  return countRowsBySeverity(marketplaces, "warning");
+}
+
+/**
+ * Shared tally of marketplace rows AND their nested plugin rows whose stamped
+ * `severity` equals `target`. An absent `severity` defaults to `info` (SEV-01),
+ * so it is never counted as error/warning.
+ */
+function countRowsBySeverity(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+  target: "warning" | "error",
+): SummaryCounts {
   let plugins = 0;
   let mpCount = 0;
 
   for (const mp of marketplaces) {
-    if (mp.status === "skipped" && !allBenign(mp.reasons)) {
+    if ((mp.severity ?? "info") === target) {
       mpCount++;
     }
 
-    plugins += mp.plugins.filter(
-      (p) => p.status === "manual recovery" || (p.status === "skipped" && !allBenign(p.reasons)),
-    ).length;
+    plugins += mp.plugins.filter((p) => (p.severity ?? "info") === target).length;
   }
 
   return { plugins, marketplaces: mpCount };
@@ -2522,12 +2443,9 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
-  // D-07 INERT: the reload hint is derived STRUCTURALLY (from `status` /
-  // cascade `kind`), never from the `MessageBase.needsReload?` field. That
-  // field is inert universal scaffolding until a later phase wires the reducer;
-  // reading it here would let a row force or suppress the trailer and change the
-  // emitted bytes. Do NOT read `needsReload` until that phase lands (guarded by
-  // tests/shared/notify-inert-fields.test.ts).
+  // RLD-02: the reload hint is the OR-reduce of the caller-stamped
+  // `needsReload` over the cascade rows (see the flattened loop below) -- NOT
+  // status-token / cascade-kind inference.
   // INFO-03 / INFO-02: info-surface kinds NEVER trigger the reload-hint
   // trailer. The info commands (`marketplace info`,
   // `plugin info`) are read-only surfaces that do not change a Pi-visible
@@ -2550,7 +2468,9 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
         // RECON-04: the reconcile already ran ON /reload (the
         // resources_discover handler IS the trailer's nominal trigger), so
         // emitting `Run /reload to pick up changes` after applying changes
-        // would be a lie. Structurally false closes the trailer-leak gap.
+        // would be a lie. Structurally false closes the trailer-leak gap --
+        // this kind-level exclusion stands EVEN THOUGH its rows stamp
+        // needsReload:true (they are realized transitions).
         return false;
       default:
         assertNever(message);
@@ -2558,20 +2478,20 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
     }
   }
 
-  // UAT-03: the `"disable-cascade"` kind is the structural marker under
-  // which a `(disabled)` row counts as a realized transition (the disable
-  // command unstaged Pi-visible artefacts -- SNM-33). Kind-less / "cascade"
-  // payloads keep `disabled` hint-free (list / info inventory surfaces).
-  const disabledIsTransition = message.kind === "disable-cascade";
+  // RLD-02: the trailer fires iff the OR-reduce of the stamped `needsReload`
+  // over the flattened marketplace + plugin rows is true. The D-06 stamps
+  // reproduce the former trigger set exactly: realized install/update/
+  // reinstall/uninstall and the realized fresh-disable transition stamp
+  // needsReload:true (so the former `disable-cascade` kind straddle is now a
+  // per-row fact), while list/info inventory `disabled`/`installed` rows stamp
+  // needsReload:false.
   for (const mp of message.marketplaces) {
+    if (mp.needsReload === true) {
+      return true;
+    }
+
     for (const p of mp.plugins) {
-      if (
-        p.status === "installed" ||
-        p.status === "updated" ||
-        p.status === "reinstalled" ||
-        p.status === "uninstalled" ||
-        (disabledIsTransition && p.status === "disabled")
-      ) {
+      if (p.needsReload === true) {
         return true;
       }
     }
@@ -3250,8 +3170,8 @@ export function emitContextCascade(
  * the central `renderPluginRow` switch. The reconcile context's render map
  * supplies the per-row bytes (the verbatim lifted arms), while the marketplace
  * header, cause-chain trailers, rollback-partial lines, the empty
- * `(no marketplaces)` sentinel, and the content-derived severity/summary
- * (`reconcileAppliedSeverity` via `emitWithSummary`) all stay central and
+ * `(no marketplaces)` sentinel, and the stamped-severity/summary reduce
+ * (`computeSeverity` via `emitWithSummary`) all stay central and
  * byte-identical.
  *
  * Like `dispatchInfoMessage`'s standalone arm, NO reload-hint trailer is

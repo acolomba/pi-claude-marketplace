@@ -1142,31 +1142,25 @@ test("S8 / PR #51: MarketplaceBlock.status is narrowed to the closed 5-status un
   );
 });
 
-test("S9 / PR #51: cascadeSeverity's structural-subset param tightens status from `string` to the closed PluginStatus / MarketplaceStatus unions", async () => {
-  // Source-shape pin: the param was previously `readonly status: string` /
-  // `readonly status?: string`, which let a typoed literal silently route to
-  // info severity (no match). Tightening to the closed unions makes a typo a
-  // compile error at the call site.
+test("SEV-02: cascadeSeverity's structural-subset param reduces the caller-stamped severity, not status/reasons content", async () => {
+  // Source-shape pin: the dumb reducer reads ONLY the caller-stamped `severity`
+  // on the marketplace rows AND their plugin rows -- no `status` / `reasons`
+  // content inference. A regression that re-introduced a status/reasons read
+  // would reverse the SEV-02 relocation; this pins the param shape.
   const { readFile } = await import("node:fs/promises");
   const src = await readFile("extensions/pi-claude-marketplace/shared/notify.ts", "utf8");
-  // The function declaration (capture the parameter object) must reference
-  // PluginStatus / MarketplaceStatus and must NOT carry a bare `status: string`
-  // / `status?: string | undefined` form on the same param.
   const fnMatch = /function cascadeSeverity\(message:[\s\S]*?\}\): ComputedSeverity/.exec(src);
-  assert.ok(fnMatch, "S9: cascadeSeverity declaration not found");
+  assert.ok(fnMatch, "SEV-02: cascadeSeverity declaration not found");
   const fnDecl = fnMatch[0];
+  // The structural-subset param reads `severity` on both row levels.
   assert.ok(
-    fnDecl.includes("status?: MarketplaceStatus") ||
-      fnDecl.includes("status?: MarketplaceStatus |"),
-    `S9: cascadeSeverity's mp-level status must be the closed MarketplaceStatus union; decl was:\n${fnDecl}`,
+    fnDecl.includes('severity?: "info" | "warning" | "error"'),
+    `SEV-02: cascadeSeverity's structural-subset param must read the stamped severity; decl was:\n${fnDecl}`,
   );
+  // It must NOT read `status` or `reasons` -- that is the deleted content ladder.
   assert.ok(
-    fnDecl.includes("status: PluginStatus"),
-    `S9: cascadeSeverity's plugin-level status must be the closed PluginStatus union; decl was:\n${fnDecl}`,
-  );
-  assert.ok(
-    !/status\??:\s*string/.test(fnDecl),
-    `S9: cascadeSeverity's structural-subset param must NOT widen status back to string; decl was:\n${fnDecl}`,
+    !fnDecl.includes("status") && !fnDecl.includes("reasons"),
+    `SEV-02: cascadeSeverity must NOT read status/reasons content; decl was:\n${fnDecl}`,
   );
 });
 

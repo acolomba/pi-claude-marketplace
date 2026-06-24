@@ -439,6 +439,8 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["up-to-date"],
@@ -468,9 +470,12 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["network unreachable"],
@@ -539,7 +544,16 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -577,7 +591,16 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "unreachable-mp", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "unreachable-mp",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -596,7 +619,16 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -614,7 +646,16 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
   const pi = piWithBothLoaded();
   // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "missing-mp", scope: "project", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "missing-mp",
+        scope: "project",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -675,6 +716,8 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already autoupdate"],
         plugins: [],
       },
@@ -700,6 +743,8 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already no autoupdate"],
         plugins: [],
       },
@@ -729,6 +774,8 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
         name: "local-mp",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["up-to-date"],
         plugins: [],
       },
@@ -769,6 +816,8 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
         name: "official",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["up-to-date"],
         plugins: [],
       },
@@ -812,6 +861,8 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already autoupdate"],
         plugins: [
           // "available" is a non-state-changing plugin row (no version,
@@ -1214,7 +1265,15 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
         name: "local-mp",
         scope: "user",
         status: "updated",
-        plugins: [{ status: "skipped", name: "alpha", reasons: ["up-to-date"] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -1764,6 +1823,8 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             reasons: ["unsupported source"],
@@ -1818,9 +1879,12 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1860,9 +1924,12 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1909,6 +1976,8 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1916,6 +1985,8 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
           },
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "beta",
             version: "2.0.0",
             reasons: ["network unreachable"],
@@ -1984,6 +2055,8 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -2010,8 +2083,22 @@ test('notify severity tier error first-match: failed + skipped in same payload -
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2039,9 +2126,12 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -2107,6 +2197,8 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2143,6 +2235,8 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2177,6 +2271,8 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2323,6 +2419,8 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -2351,8 +2449,22 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
-          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+          {
+            status: "skipped",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2378,7 +2490,16 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
       {
         name: "demo",
         scope: "user",
-        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: [] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: [],
+            severity: "warning",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -2396,7 +2517,16 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   // proven benign (allBenign returns false on undefined), so arm 4 of the
   // D-28-06 ladder routes it to "warning" -- the D-28-08 safe default.
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "skipped", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "skipped",
+        plugins: [],
+        severity: "warning",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2426,9 +2556,12 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 p
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["network unreachable"],
@@ -2458,6 +2591,8 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugi
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             reasons: ["unsupported source"],
@@ -2485,8 +2620,22 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin 
         scope: "user",
         status: "added",
         plugins: [
-          { status: "failed", name: "alpha", version: "1.0.0", reasons: ["permission denied"] },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["network unreachable"] },
+          {
+            status: "failed",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["network unreachable"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2505,7 +2654,16 @@ test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplac
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2527,6 +2685,8 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -2556,6 +2716,8 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2583,11 +2745,32 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["not installed"] },
-          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
+          {
+            status: "skipped",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
         ],
       },
-      { name: "other", scope: "user", status: "skipped", plugins: [] },
+      {
+        name: "other",
+        scope: "user",
+        status: "skipped",
+        plugins: [],
+        severity: "warning",
+        needsReload: false,
+      },
     ],
   };
   notify(ctx as never, pi as never, msg);
@@ -2649,7 +2832,14 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
             severity: "info",
             needsReload: true,
           },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2680,7 +2870,16 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
       {
         name: "demo",
         scope: "user",
-        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -4045,7 +4244,15 @@ test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free
       {
         name: "claude-plugins-official",
         scope: "user",
-        plugins: [{ status: "skipped", name: "foo-plugin", reasons: ["already disabled"] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "foo-plugin",
+            reasons: ["already disabled"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -4069,6 +4276,8 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "foo-plugin",
             reasons: ["already enabled"],
           },
@@ -4097,6 +4306,8 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "foo-plugin",
             reasons: ["already disabled"],
           },
@@ -4272,6 +4483,8 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
         name: "flaky-mp",
         scope: "user",
         status: "failed",
+        severity: "error",
+        needsReload: false,
         reasons: ["network unreachable"],
         plugins: [],
       },
@@ -4311,6 +4524,8 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
         name: "claude-plugins.json",
         scope: "project",
         status: "failed",
+        severity: "error",
+        needsReload: false,
         reasons: ["invalid manifest"],
         plugins: [],
       },

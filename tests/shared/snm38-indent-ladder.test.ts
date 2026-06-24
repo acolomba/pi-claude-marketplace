@@ -117,6 +117,8 @@ const LIST_MESSAGE: NotificationMessage = {
           name: "zeta",
           reasons: ["permission denied"],
           cause: new Error("disk write blocked"),
+          severity: "error",
+          needsReload: false,
         },
       ],
     },

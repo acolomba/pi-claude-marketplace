@@ -117,9 +117,12 @@ const FIXTURES: readonly GrammarFixture[] = [
           name: "official",
           scope: "user",
           status: "failed",
+          severity: "error",
           plugins: [
             {
               status: "failed",
+              severity: "error",
+              needsReload: false,
               name: "helper",
               version: "1.0.0",
               reasons: ["network unreachable"],
@@ -141,6 +144,8 @@ const FIXTURES: readonly GrammarFixture[] = [
           plugins: [
             {
               status: "skipped",
+              severity: "warning",
+              needsReload: false,
               name: "helper",
               version: "1.0.0",
               reasons: ["not in manifest"],
@@ -425,6 +430,8 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
           name: "flaky-mp",
           scope: "user",
           status: "failed",
+          severity: "error",
+          needsReload: false,
           reasons: ["network unreachable"],
           plugins: [],
         },
