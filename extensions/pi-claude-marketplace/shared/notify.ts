@@ -571,6 +571,33 @@ export interface UsageErrorMessage {
 // ---------------------------------------------------------------------------
 
 /**
+ * D-05 / D-06: the universal caller-intent fields carried on the base message
+ * shape common to every plugin and marketplace notification row. The member
+ * names are the fixed shared convention (`severity`, `needsReload`,
+ * `dependencies`) so every command's message shapes look identical.
+ *
+ * D-07: `severity?` and `needsReload?` are INERT here -- the renderer NEVER
+ * reads them, so output stays byte-identical. They exist only so a later phase
+ * can flip caller-stamped reduction on (max-severity / OR-needsReload) without
+ * a second type-model change. Typed as the closed `"info" | "warning" |
+ * "error"` severity union and a plain `boolean` respectively.
+ *
+ * D-06 / TYPE-04: `dependencies` is the universal soft-dep field. It is NOT
+ * promoted to this base as optional, because three plugin variants
+ * (`installed` / `updated` / `reinstalled`) declare it as a REQUIRED
+ * `readonly Dependency[]` and the soft-dep marker injection in `composeReasons`
+ * is gated to exactly those three render arms. Promoting it to an optional base
+ * field here would let any row carry it and risk a `requires pi-subagents`
+ * marker leaking onto a row that structurally never declares a soft dep; so the
+ * field stays declared on those three arms (notify.ts) and this anchor records
+ * that it is the universal soft-dep member of the shared convention.
+ */
+export interface MessageBase {
+  readonly severity?: "info" | "warning" | "error";
+  readonly needsReload?: boolean;
+}
+
+/**
  * `(installed)` -- single-shot install or cascade install row. Carries
  * `dependencies` (SNM-06) so the renderer can emit the
  * `requires pi-subagents` / `requires pi-mcp` probe reasons; no `reasons`
@@ -587,7 +614,7 @@ export interface UsageErrorMessage {
  * pushes the resolver-side `resolved.orphanRewake === true` plugins
  * into `reasons[]`; this plan only extends the type seam + renderer.
  */
-export interface PluginInstalledMessage {
+export interface PluginInstalledMessage extends MessageBase {
   readonly status: "installed";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -601,7 +628,7 @@ export interface PluginInstalledMessage {
  * so the renderer can compose the `v1.0 → v1.2` arrow form;
  * `dependencies` REQUIRED; no `reasons`.
  */
-export interface PluginUpdatedMessage {
+export interface PluginUpdatedMessage extends MessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
@@ -614,7 +641,7 @@ export interface PluginUpdatedMessage {
  * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06);
  * no `reasons`.
  */
-export interface PluginReinstalledMessage {
+export interface PluginReinstalledMessage extends MessageBase {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -627,7 +654,7 @@ export interface PluginReinstalledMessage {
  * `dependencies` (MSG-SD-3 forbids the soft-dep marker on uninstalled
  * rows); no `reasons`.
  */
-export interface PluginUninstalledMessage {
+export interface PluginUninstalledMessage extends MessageBase {
   readonly status: "uninstalled";
   readonly name: string;
   readonly version?: string;
@@ -651,7 +678,7 @@ export interface PluginUninstalledMessage {
  * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
  * (`◌`) -- the same glyph the `will disable` row uses.
  */
-export interface PluginDisabledMessage {
+export interface PluginDisabledMessage extends MessageBase {
   readonly status: "disabled";
   readonly name: string;
   readonly version?: string;
@@ -665,7 +692,7 @@ export interface PluginDisabledMessage {
  * optional `description` rendered as a second 4-space-indented line,
  * truncated at column 66.
  */
-export interface PluginAvailableMessage {
+export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
   readonly name: string;
   readonly version?: string;
@@ -679,7 +706,7 @@ export interface PluginAvailableMessage {
  * no `dependencies`. PL-4: optional `description` rendered as a second
  * 4-space-indented line, truncated at column 66.
  */
-export interface PluginUnavailableMessage {
+export interface PluginUnavailableMessage extends MessageBase {
   readonly status: "unavailable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -694,7 +721,7 @@ export interface PluginUnavailableMessage {
  * `reasons`; no `dependencies`. PL-4: optional `description` rendered as
  * a second 4-space-indented line, truncated at column 66.
  */
-export interface PluginUpgradableMessage {
+export interface PluginUpgradableMessage extends MessageBase {
   readonly status: "upgradable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -723,7 +750,7 @@ export interface PluginUpgradableMessage {
  * is removed by virtue of the new discriminator. PL-4: optional `description`
  * rendered as a second 4-space-indented line, truncated at column 66.
  */
-export interface PluginPresentMessage {
+export interface PluginPresentMessage extends MessageBase {
   readonly status: "present";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -739,7 +766,7 @@ export interface PluginPresentMessage {
  * `rollbackPartial?: readonly { phase; cause? }[]` (SNM-09) drives the
  * MSG-RP-1 indented child rows when a rollback was partial.
  */
-export interface PluginFailedMessage {
+export interface PluginFailedMessage extends MessageBase {
   readonly status: "failed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -762,7 +789,7 @@ export interface PluginFailedMessage {
  * no `dependencies`; no `cause` (skipped is not a failure -- SNM-10
  * confines `cause` to failed / manual recovery).
  */
-export interface PluginSkippedMessage {
+export interface PluginSkippedMessage extends MessageBase {
   readonly status: "skipped";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -776,7 +803,7 @@ export interface PluginSkippedMessage {
  * SPACE. Carries REQUIRED `reasons` and optional `cause?: Error` (SNM-10); no
  * `dependencies`; no `rollbackPartial` (only `failed` carries it per SNM-09).
  */
-export interface PluginManualRecoveryMessage {
+export interface PluginManualRecoveryMessage extends MessageBase {
   readonly status: "manual recovery";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -791,7 +818,7 @@ export interface PluginManualRecoveryMessage {
  * meaningless before installation); NO `reasons`; NO `version` (the recorded
  * version does not exist yet for an install).
  */
-export interface PluginWillInstallMessage {
+export interface PluginWillInstallMessage extends MessageBase {
   readonly status: "will install";
   readonly name: string;
   readonly scope?: Scope;
@@ -802,7 +829,7 @@ export interface PluginWillInstallMessage {
  * but no longer declared. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
-export interface PluginWillUninstallMessage {
+export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
   readonly scope?: Scope;
@@ -816,7 +843,7 @@ export interface PluginWillUninstallMessage {
  * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`) is paired
  * with a config entry whose `enabled !== false`.
  */
-export interface PluginWillEnableMessage {
+export interface PluginWillEnableMessage extends MessageBase {
   readonly status: "will enable";
   readonly name: string;
   readonly scope?: Scope;
@@ -827,7 +854,7 @@ export interface PluginWillEnableMessage {
  * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
-export interface PluginWillDisableMessage {
+export interface PluginWillDisableMessage extends MessageBase {
   readonly status: "will disable";
   readonly name: string;
   readonly scope?: Scope;
@@ -870,7 +897,7 @@ export type PluginNotificationMessage =
  * normal case (renderer emits the marketplace header alone). No separate
  * `noPlugins` discriminator field.
  */
-interface MpCommon {
+interface MpCommon extends MessageBase {
   readonly name: string;
   readonly scope: Scope;
   readonly plugins: readonly PluginNotificationMessage[];
@@ -1319,10 +1346,16 @@ function isInfoKind(
 // entry point.
 // ---------------------------------------------------------------------------
 
-/** Grammar icon literals. */
-const ICON_INSTALLED = "●";
-const ICON_AVAILABLE = "○";
-const ICON_UNINSTALLABLE = "⊘";
+/**
+ * Grammar icon literals.
+ *
+ * D-11: the shared presentation vocabulary stays central in this file;
+ * `export` only widens visibility so sibling command modules can CALL these
+ * glyphs from their own render maps without redeclaring them.
+ */
+export const ICON_INSTALLED = "●";
+export const ICON_AVAILABLE = "○";
+export const ICON_UNINSTALLABLE = "⊘";
 /**
  * D-54-01 / ENBL-04: dedicated glyph for the deliberate, user-requested
  * disabled-class rows -- `(disabled)` (realized inventory) and
@@ -1333,7 +1366,7 @@ const ICON_UNINSTALLABLE = "⊘";
  * already in the grammar (`●` for `(installed)` / `(will add)`,
  * `○` for `(available)` / `(will remove)`).
  */
-const ICON_DISABLED = "◌";
+export const ICON_DISABLED = "◌";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1587,7 +1620,12 @@ const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
  * never produce a double-space. Single canonical implementation.
  */
-function joinTokens(parts: readonly string[]): string {
+// D-11: the row-composition primitives below (joinTokens, renderScopeBracket,
+// renderVersion, composeVersionArrow, composeReasons, pluginRow) stay declared
+// HERE as the single source of the byte-stable presentation vocabulary; the
+// `export` keyword only widens their visibility so sibling command render maps
+// can CALL them without duplicating the brace/space/join logic.
+export function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
 }
 
@@ -1629,7 +1667,7 @@ function formatHashVersionForDisplay(v: string): string {
  * PI-7 `hash-<12hex>` renders as `v#<7hex>` while a SemVer passes through to
  * `v<version>` (SNM-35). Single canonical implementation.
  */
-function renderVersion(version: string | undefined): string {
+export function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
     return "";
   }
@@ -1660,7 +1698,7 @@ function renderVersion(version: string | undefined): string {
  * and orphan-fold short-circuits in the body cover both that carve-out
  * and the same-scope case uniformly.
  */
-function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
+export function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
   if (pluginScope === undefined || pluginScope === mpScope) {
     return "";
   }
@@ -1680,7 +1718,7 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
  * hash pairs render `v#<7hex> → v#<7hex>` (e.g. `v#2ea95f8 → v#1c3d9a0`,
  * SNM-35).
  */
-function composeVersionArrow(from: string, to: string): string {
+export function composeVersionArrow(from: string, to: string): string {
   return `${renderVersion(from)} → ${renderVersion(to)}`;
 }
 
@@ -1703,7 +1741,7 @@ function composeVersionArrow(from: string, to: string): string {
  * parameter and accumulator as `Reason` rejects out-of-set strings at the
  * call sites at compile time (CMC-11 closed-set discipline).
  */
-function composeReasons(
+export function composeReasons(
   reasons: readonly Reason[] | undefined,
   declaresAgents: boolean,
   declaresMcp: boolean,
@@ -1773,7 +1811,7 @@ function composeReasons(
  * `readonly ContentReason[]` reasons. Both declares-flags are `false` (these
  * arms never carry `dependencies`).
  */
-function pluginRow(
+export function pluginRow(
   icon: string,
   p: {
     readonly name: string;
