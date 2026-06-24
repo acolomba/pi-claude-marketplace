@@ -1,0 +1,85 @@
+# Requirements: Notification Refactor
+
+**Defined:** 2026-06-24
+**Workstream:** notification-refactor (unnumbered milestone — concurrency-friendly)
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## Milestone Goal
+
+Restructure the notification subsystem so that **commands own outcome intent and `notify()` becomes a dumb reducer.** Severity and reload-need become caller-decided (not inferred from status/reasons), user-visible output becomes desired-state / outcome-oriented, and the whole surface becomes open-closed: adding a command should touch its own vertical slice plus a minimum of central registration, with zero edits to a notification monolith.
+
+The through-line: **caller owns intent (severity, reload-need, status, reasons, cause); renderer owns presentation + environment (soft-dep probe, formatting, reduction).**
+
+Baseline established by `research/MESSAGING-COUPLING.md`: today a new command touches **5 central files** (no new grammar) or **9–11** (new status/reason, 6 of them inside the 3119-line `shared/notify.ts`). Target: **≤3 central files, 0 `notify.ts` edits.**
+
+## Requirements
+
+### Severity — caller-stamped (SEV)
+
+- [ ] **SEV-01**: Every outcome row (plugin-level and marketplace-level) carries a caller-stamped `severity` field with values `info | warning | error`; an absent severity defaults to `info`.
+- [ ] **SEV-02**: `notify()` derives the emission severity as the numeric max over all rows (`info=0 < warning=1 < error=2`); it performs no content/reason inference.
+- [ ] **SEV-03**: Severity semantics are desired-state: `info` = end state equals desired (genuine success or idempotent no-op); `warning` = operation carried out but end state falls short and needs attention; `error` = operation could not be carried out. This tri-state is the documented contract.
+- [ ] **SEV-04**: `BENIGN_REASONS`, `allBenign`, and the content-derived `cascadeSeverity` ladder are removed; severity no longer reads the `reasons` field.
+- [ ] **SEV-05**: Each command stamps severity from its own desired-vs-actual judgment, free to disagree with another command on an identical `(status, reasons)` pair (e.g. `install` of an already-installed plugin → `error`; `update` of an up-to-date plugin → `info`).
+
+### Reload — caller-stamped (RLD)
+
+- [ ] **RLD-01**: Every outcome row carries a caller-stamped `needsReload` boolean (does this outcome change a Pi-visible resource such that `/reload` is required).
+- [ ] **RLD-02**: `notify()` emits the `/reload to pick up changes` trailer iff the OR-reduce of `needsReload` over all rows is true.
+- [ ] **RLD-03**: The status-token→reload mapping in `shouldEmitReloadHint` is removed; reload is no longer inferred from status tokens.
+- [ ] **RLD-04**: The `present` plugin status collapses into `installed` — its only role was reload suppression on the list surface, now handled by `needsReload: false`.
+- [ ] **RLD-05**: The `disable-cascade` cascade kind is removed — the disable command stamps `needsReload: true` on its rows directly; list/info surfaces stamp `false`.
+
+### Output / summary model (OUT)
+
+- [ ] **OUT-01**: Severity reaches the user via the host `ctx.ui.notify(msg, "warning"|"error")` channel, retaining the host `Error:` / `Warning:` label and default color (fork A — the host couples label+color to the severity arg in `@earendil-works/pi-coding-agent` 0.79.x; confirmed from `showExtensionNotify`/`showError`/`showWarning`). Info omits the second arg.
+- [ ] **OUT-02**: Error/warning emissions carry a leading severity sentence keyed to the max severity: `[A|Some] <subject> operation[s] has/have failed | needs/need attention.` (`subject` = plugin|marketplace; `A`=1, `Some`>1; verb = `has/have failed` for error, `needs/need attention` for warning; sentence keeps its terminal period). The leading sentence prevents the host label from gluing onto a detail row.
+- [ ] **OUT-03**: Bulk operations carry a trailing tally line: `<Operation>: <n> failure(s), <n> warning(s), <n> success(es)` — counts pluralized by count, zero-count categories omitted, no terminal period.
+- [ ] **OUT-04**: The operation label in the tally is the command's human notification name (e.g. `Plugin install`, `Marketplace add`), supplied by the command (see MOD-01). Single-target operations omit the trailing tally (the row already embeds the outcome); the leading severity sentence still appears for single-target error/warning.
+- [ ] **OUT-05**: The marketplace header is always rendered; a plugin row never appears without its marketplace header.
+- [ ] **OUT-06**: Mixed-subject cascades (load-time `reconcile`, `import`) drop the subject noun in the leading sentence (`[A|Some] operation[s] …`) and use the operation name in the tally, counting all rows uniformly.
+- [ ] **OUT-07**: Cascade cardinality is structural in the type model (single marketplace/plugin vs. plural), not inferred by counting rows at render time.
+- [ ] **OUT-08**: `docs/output-catalog.md` and the `catalog-uat` byte fixtures are rewritten in lockstep for the new summary surfaces (atomic supersession); per-row grammar (icons, status tokens, reasons) is preserved except the `present`→`installed` collapse; the `reasons` set stays closed for output-grammar/catalog stability.
+
+### Open-closed modularity (MOD)
+
+- [ ] **MOD-01**: Each command declares its grammar contribution — status token(s), owned reasons, operation label, and render arm — co-located with its vertical slice (handler/orchestrator), not appended by hand to central tuples in `notify.ts`.
+- [ ] **MOD-02**: A central registry unions the per-command contributions into the type model; compile-time exhaustiveness is preserved — message shapes stay nominal `interface`/`type` declarations, pinned to the value registry via `satisfies` so value/type drift is a compile error (replacing today's bidirectional `notify-types.test.ts` proofs).
+- [ ] **MOD-03**: Per-status render dispatch is a total `Record<Status, RenderFn>` mapped type — the exhaustiveness anchor that makes a missing render arm a compile error (`TS2741`), replacing the hand-maintained `switch` + `assertNever`.
+- [ ] **MOD-04**: Cross-cutting concerns are extracted into concern-modules that contribute to the central composer: the hooks summary (`appendHooksBlock`) and soft-dep marker injection (`composeReasons` soft-dep branch + `DEPENDENCIES` + the host probe). `shared/notify.ts` slims to the envelope, the reducer spine, and the shared presentation vocabulary (`ICON_*`, scope/version/reason composers).
+- [ ] **MOD-05**: Adding a command touches **≤3 central files** — router registration (interface field + tuple + switch + usage), `register.ts` wiring, and one catalog section — and **zero `notify.ts` edits**, measured against the `research/MESSAGING-COUPLING.md` baseline.
+- [ ] **MOD-06**: The catalog floor is accepted for this milestone — one central catalog section per new rendered state, no generation/aggregation seam. Documented as the deliberate floor (generation deferred).
+
+### Correctness preservation (GATE)
+
+- [ ] **GATE-01**: An architecture test asserts every cascade-producing orchestrator stamps both `severity` and `needsReload` on its state-change rows (no silent reliance on the `info` / `false` defaults for transitions), since correctness relocates from one audited reducer to ~18 producers.
+- [ ] **GATE-02**: The `catalog-uat` byte-equality runner remains the end-to-end gate that stamped values render correctly, green at every phase boundary.
+- [ ] **GATE-03**: `npm run check` (typecheck + ESLint + Prettier + tests) stays green at every phase boundary (NFR-6).
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| New commands or user-facing features | This is a structural refactor of the existing surface |
+| Catalog generation/aggregation seam | Floor accepted (MOD-06); generation deferred to a future milestone |
+| Host-side label/color decoupling | Fork A accepts the host's coupling; a `pi-coding-agent` change is a separate upstream effort |
+| Per-row grammar changes beyond `present`→`installed` | Icons, status tokens, and `reasons` membership are preserved except where the summary redesign requires |
+| Telemetry / metrics | IL-4 unchanged |
+| i18n / message catalog | IL-1 unchanged — English-only |
+
+## Traceability
+
+Populated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| (pending roadmap) | — | Pending |
+
+**Coverage:**
+- Requirements: 27 total (SEV ×5, RLD ×5, OUT ×8, MOD ×6, GATE ×3)
+- Mapped to phases: 0 (pending)
+- Unmapped: 27 ⚠️
+
+---
+*Requirements defined: 2026-06-24*
+*Last updated: 2026-06-24 after initial definition*
