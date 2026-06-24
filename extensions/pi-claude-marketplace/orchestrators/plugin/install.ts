@@ -119,7 +119,7 @@ import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
-import { INSTALL_CONTEXT } from "./install.messaging.ts";
+import { INSTALL_CONTEXT, type InstallMsg } from "./install.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
@@ -145,7 +145,6 @@ import type {
   Dependency,
   PluginFailedMessage,
   PluginInstalledMessage,
-  PluginNotificationMessage,
   PluginUnavailableMessage,
   StatusToken,
 } from "../../shared/notify.ts";
@@ -1431,7 +1430,7 @@ function composeInstallFailureMessage(args: {
   rolledBackPartial: boolean;
   rollbackPartials: readonly RollbackPartial[];
   entityErrorRow: EntityErrorRow | undefined;
-}): PluginNotificationMessage {
+}): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
   const cause = err instanceof Error ? err : undefined;
   const isPathContainment = err instanceof PathContainmentError;

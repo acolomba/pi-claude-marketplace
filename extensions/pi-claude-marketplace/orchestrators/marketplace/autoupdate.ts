@@ -66,7 +66,12 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
-import { notifyWithContext, type Plural, type Single } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
@@ -221,7 +226,7 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
   // row -> Single. The flip command is selected by the boolean `opts.enable`
   // flag (mirrors enable/disable); the `(failed)` header renders via the
   // central seam, the failed child row dispatches through the command context.
-  const failedRows: Single<MarketplaceNotificationMessage> = [
+  const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
     {
       name: failureName,
       scope,
@@ -525,7 +530,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // via the central seam. No orchestrator-side composition.
   // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
-    const emptyRows: Plural<MarketplaceNotificationMessage> = [];
+    const emptyRows: Plural<MarketplaceRows<PluginFailedMessage>> = [];
     notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows);
     return;
   }
@@ -580,6 +585,9 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
-  const rowsOut: Plural<MarketplaceNotificationMessage> = marketplaces;
+  // WR-01: these flip rows carry no plugin child rows (plugins: []), so the broad builder array widens to the failed-Msg row shape the flip context requires.
+  const rowsOut: Plural<MarketplaceRows<PluginFailedMessage>> = marketplaces as Plural<
+    MarketplaceRows<PluginFailedMessage>
+  >;
   notifyWithContext(opts.ctx, opts.pi, flipContext, rowsOut);
 }

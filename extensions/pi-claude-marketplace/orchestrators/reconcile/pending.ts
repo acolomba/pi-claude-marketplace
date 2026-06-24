@@ -36,13 +36,17 @@ import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { buildReconcilePendingNotification, isReconcilePlanListEmpty } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
-import { PENDING_CONTEXT } from "./reconcile.messaging.ts";
+import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
 
 import type { ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -196,10 +200,13 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
   // pending-tense rows render through reconcile's own render map (MOD-03), never
   // the central renderPluginRow switch.
-  const marketplaces: Plural<MarketplaceNotificationMessage> = [
+  // WR-01: the pending rows are assembled from the broad projection and
+  // invalid-block builders, so the narrowed annotation widens via cast; every
+  // emitted plugin row is a PendingMsg member.
+  const marketplaces: Plural<MarketplaceRows<PendingMsg>> = [
     ...projection.marketplaces,
     ...invalidBlocks,
-  ].sort((a, b) => compareByNameThenScope(a, b));
+  ].sort((a, b) => compareByNameThenScope(a, b)) as Plural<MarketplaceRows<PendingMsg>>;
 
   notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces);
 }

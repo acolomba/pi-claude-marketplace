@@ -63,7 +63,12 @@ import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
-import { DISABLE_CONTEXT, ENABLE_CONTEXT } from "./enable-disable.messaging.ts";
+import {
+  DISABLE_CONTEXT,
+  ENABLE_CONTEXT,
+  type DisableMsg,
+  type EnableMsg,
+} from "./enable-disable.messaging.ts";
 import { runInstallLedger } from "./install.ts";
 import {
   applyPartialCascadeFold,
@@ -77,12 +82,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-  Reason,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
@@ -843,13 +843,23 @@ function dispatchOutcome(args: {
   // renders the fresh `(installed)` row, DISABLE_CONTEXT the fresh
   // `(disabled)` row; both share byte-identical `skipped` / `failed` arms.
   if (enable) {
-    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+    // WR-01: `composeOutcomeRow` returns `EnableMsg | DisableMsg`; the `enable`
+    // branch only ever yields an `EnableMsg` (its `fresh` arm emits `installed`,
+    // never `disabled`), so narrowing to the ENABLE_CONTEXT row type is sound.
+    const enableRow = row as EnableMsg;
+    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [
+      { name: marketplace, scope, plugins: [enableRow] },
+    ]);
   } else {
+    // WR-01: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
+    // arm emits `disabled`, never `installed`), so narrowing to the
+    // DISABLE_CONTEXT row type is sound.
+    const disableRow = row as DisableMsg;
     notifyWithContext(
       ctx,
       pi,
       DISABLE_CONTEXT,
-      [{ name: marketplace, scope, plugins: [row] }],
+      [{ name: marketplace, scope, plugins: [disableRow] }],
       "disable-cascade",
     );
   }
@@ -861,7 +871,7 @@ function composeOutcomeRow(args: {
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome | undefined;
-}): PluginNotificationMessage {
+}): EnableMsg | DisableMsg {
   const { plugin, enable, configBasename, outcome } = args;
   if (outcome === undefined) {
     return {

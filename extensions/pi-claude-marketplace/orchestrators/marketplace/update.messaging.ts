@@ -46,7 +46,7 @@ export type UpdateMpStatus = (typeof UPDATE_MP_STATUSES)[number];
  * below is total over (D-10: a missing arm is a TS2741 compile error).
  */
 type UpdateRowStatus = "updated" | "skipped" | "failed";
-type UpdateRowMsg = PluginUpdatedMessage | PluginSkippedMessage | PluginFailedMessage;
+export type UpdateRowMsg = PluginUpdatedMessage | PluginSkippedMessage | PluginFailedMessage;
 
 /**
  * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace update` command

@@ -3,6 +3,7 @@ import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
+  installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -59,19 +60,15 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
  */
 const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
   installed: (p, probe, mpScope) =>
-    joinTokens([
+    installedLikeRow(
       ICON_INSTALLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
+      p,
+      mpScope,
       renderVersion(p.version),
       "(installed)",
-      composeReasons(
-        p.reasons,
-        p.dependencies.includes("agents"),
-        p.dependencies.includes("mcp"),
-        probe,
-      ),
-    ]),
+      p.reasons,
+      probe,
+    ),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

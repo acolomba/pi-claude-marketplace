@@ -109,7 +109,12 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
 } from "../../shared/errors.ts";
-import { notifyWithContext, type Plural, type Single } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
 import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
@@ -120,7 +125,7 @@ import {
   type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
-import { UPDATE_CONTEXT } from "./update.messaging.ts";
+import { UPDATE_CONTEXT, type UpdateRowMsg } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { ParsedSource } from "../../domain/source.ts";
@@ -131,7 +136,6 @@ import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts"
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
-  MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
 } from "../../shared/notify.ts";
@@ -255,7 +259,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   if (targets.length === 0) {
     // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
     // `(no marketplaces)` sentinel via the central seam the spine reuses.
-    const emptyRows: Plural<MarketplaceNotificationMessage> = [];
+    const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
     notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows);
     return;
   }
@@ -801,7 +805,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // OUT-07 / D-12: one marketplace block -> Single. The `(failed)` header
     // renders via the central seam; the failed child row dispatches through
     // UPDATE_CONTEXT.
-    const failedRows: Single<MarketplaceNotificationMessage> = [
+    const failedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "failed", plugins: [failedRow] },
     ];
     notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows);
@@ -860,7 +864,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
     if (!snapshot.changed) {
       // OUT-07 / D-12: one marketplace block, no child rows -> Single.
-      const skippedRows: Single<MarketplaceNotificationMessage> = [
+      const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
         { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
       ];
       notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows);
@@ -868,7 +872,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     }
 
     // OUT-07 / D-12: manifest-only refresh, no child rows -> Single.
-    const updatedRows: Single<MarketplaceNotificationMessage> = [
+    const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "updated", plugins: [] },
     ];
     notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows);
@@ -888,7 +892,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   if (!snapshot.changed && cascadeIsNoOp) {
     // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
     // (plugins:[]) -> Single, one marketplace block.
-    const noopRows: Single<MarketplaceNotificationMessage> = [
+    const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
     ];
     notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows);
@@ -906,12 +910,17 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // OUT-07 / D-12: one marketplace block carrying the per-plugin cascade child
   // rows -> Single. The `(updated)` header renders via the central seam; the
   // updated/skipped/failed child rows dispatch through UPDATE_CONTEXT.
-  const cascadeRows: Single<MarketplaceNotificationMessage> = [
+  const cascadeRows: Single<MarketplaceRows<UpdateRowMsg>> = [
     {
       name,
       scope,
       status: "updated",
-      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+      // WR-01: the cascade child rows are built through the broad
+      // `outcomeToCascadePluginMessage` helper, so widen to the narrowed Msg the
+      // UPDATE_CONTEXT requires; every emitted row is an UpdateRowMsg member.
+      plugins: outcomes.map((o) =>
+        outcomeToCascadePluginMessage(o, scope),
+      ) as readonly UpdateRowMsg[],
     },
   ];
   notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows);

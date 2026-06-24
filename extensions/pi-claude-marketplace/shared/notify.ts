@@ -1860,6 +1860,55 @@ export function pluginRow(
   ]);
 }
 
+/**
+ * WR-03: SOLE composition site for the soft-dep-bearing
+ * `installed` / `present` / `updated` / `reinstalled` plugin rows. Folds the
+ * 7 command-arm copies that each repeated the same
+ * `joinTokens([icon, name, scope, versionToken, label,
+ * composeReasons(reasons, dependencies.includes("agents"),
+ * dependencies.includes("mcp"), probe)])` block, differing ONLY in their
+ * version token (`renderVersion(p.version)` vs `composeVersionArrow(p.from,
+ * p.to)`), their parenthesized `label`, and whether they thread `p.reasons` or
+ * `undefined`. Those three remain caller-supplied so the byte form is verbatim;
+ * the `dependencies.includes(...)` soft-dep gate + `composeReasons`
+ * composition is owned here (D-11 "call, never duplicate"), keeping every
+ * soft-dep arm byte-identical to one another and to the central
+ * `renderPluginRow` `installed` arm.
+ *
+ * `versionToken` is the already-rendered version slot (the caller passes
+ * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
+ * reason set (the `installed` arm threads `p.reasons`, the reasons-less variants
+ * pass `undefined`); `dependencies` drives the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` markers via `composeReasons`.
+ */
+export function installedLikeRow(
+  icon: string,
+  p: {
+    readonly name: string;
+    readonly scope?: Scope;
+    readonly dependencies: readonly Dependency[];
+  },
+  mpScope: Scope,
+  versionToken: string,
+  label: string,
+  reasons: readonly ContentReason[] | undefined,
+  probe: SoftDepStatus,
+): string {
+  return joinTokens([
+    icon,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    versionToken,
+    label,
+    composeReasons(
+      reasons,
+      p.dependencies.includes("agents"),
+      p.dependencies.includes("mcp"),
+      probe,
+    ),
+  ]);
+}
+
 function renderPluginRow(
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
@@ -2197,6 +2246,13 @@ function reconcileAppliedSeverity(message: ReconcileAppliedCascadeMessage): Comp
 }
 
 function computeSeverity(message: NotificationMessage): ComputedSeverity {
+  // D-07 INERT: severity is derived STRUCTURALLY here (from `status` and the
+  // reasons/skip ladders below), never from the `MessageBase.severity?` field.
+  // That field is inert universal scaffolding until a later phase wires the
+  // reducer; reading it here would let a row override the structural ladder and
+  // silently change the emitted severity. Do NOT read `message...severity` in
+  // this function until that phase lands (guarded by the inert-field test in
+  // tests/shared/notify-inert-fields.test.ts).
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
   // over the cascade severity ladder.
   // `marketplace-info` payloads carry no failure state and route to info
@@ -2449,6 +2505,12 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
+  // D-07 INERT: the reload hint is derived STRUCTURALLY (from `status` /
+  // cascade `kind`), never from the `MessageBase.needsReload?` field. That
+  // field is inert universal scaffolding until a later phase wires the reducer;
+  // reading it here would let a row force or suppress the trailer and change the
+  // emitted bytes. Do NOT read `needsReload` until that phase lands (guarded by
+  // tests/shared/notify-inert-fields.test.ts).
   // INFO-03 / INFO-02: info-surface kinds NEVER trigger the reload-hint
   // trailer. The info commands (`marketplace info`,
   // `plugin info`) are read-only surfaces that do not change a Pi-visible

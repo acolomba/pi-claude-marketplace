@@ -59,14 +59,19 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notifyWithContext, type Plural, type Single } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
 } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
-import { LIST_CONTEXT } from "./list.messaging.ts";
+import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -844,7 +849,12 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   try {
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
-    const marketplaces: Plural<MarketplaceNotificationMessage> = await loadPluginListPayload(opts);
+    // WR-01: loadPluginListPayload builds blocks through shared helpers typed to
+    // the broad union, so the narrowed call-site annotation widens via cast; every
+    // plugin row it emits is a ListMsg member.
+    const marketplaces: Plural<MarketplaceRows<ListMsg>> = (await loadPluginListPayload(
+      opts,
+    )) as Plural<MarketplaceRows<ListMsg>>;
     // notify call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable
@@ -880,7 +890,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       reasons: [narrowListFailReason(err)],
       cause,
     };
-    const mp: MarketplaceNotificationMessage = {
+    const mp: MarketplaceRows<ListMsg> = {
       // WR-03: the `MarketplaceNotificationMessage` shape does not support
       // a failure-trailer channel separate from the marketplace-row form,
       // so use a conspicuously-synthetic placeholder name (mirrors the
@@ -893,7 +903,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     };
     // OUT-07 / D-12: the synthetic list-failure surface emits exactly one
     // marketplace row, so its slot is typed `Single<Row>` (a 1-tuple).
-    const failureRows: Single<MarketplaceNotificationMessage> = [mp];
+    const failureRows: Single<MarketplaceRows<ListMsg>> = [mp];
     notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows);
   }
 }

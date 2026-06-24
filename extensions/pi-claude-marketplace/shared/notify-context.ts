@@ -2,7 +2,10 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   type CascadeNotificationMessage,
+  type ContentReason,
+  type MarketplaceDetails,
   type MarketplaceNotificationMessage,
+  type MarketplaceStatus,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
 } from "./notify.ts";
@@ -75,6 +78,27 @@ export type Single<Row> = readonly [Row];
 export type Plural<Row> = readonly Row[];
 
 /**
+ * WR-01 / D-10: the marketplace-row shape `notifyWithContext` accepts, with its
+ * `plugins` slot narrowed to the command's OWN `Msg`. The mirror to the broad
+ * `MarketplaceNotificationMessage` keeps the marketplace-level fields (`status?`
+ * / `reasons?` / `details?` are reachable per the broad union's per-arm rules),
+ * but the child `plugins` carry only `Msg` rows. Combined with the
+ * `Msg extends { status: Status }` bound on `notifyWithContext`, a call site
+ * that pushes a plugin row whose `status` the context's render map does not
+ * declare is a TS2741 compile error at the call site -- the design's stated
+ * exhaustiveness guarantee in BOTH directions (render map total over `Status`,
+ * AND rows carry only `Status`), not a runtime `TypeError` inside `dispatchRow`.
+ */
+export interface MarketplaceRows<Msg> {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly status?: MarketplaceStatus;
+  readonly reasons?: readonly ContentReason[];
+  readonly details?: MarketplaceDetails;
+  readonly plugins: readonly Msg[];
+}
+
+/**
  * D-02 entry point. Dispatches each per-plugin row body through
  * `context.render[row.status]` (NOT the central renderPluginRow switch), then
  * routes the composed cascade through the shared severity/summary/reload +
@@ -105,15 +129,22 @@ export type Plural<Row> = readonly Row[];
  * the central `emitContextCascade` seam reads -- it is NOT a per-row field and
  * is NOT one of the inert D-07 reduction fields.
  */
-export function notifyWithContext<Status extends string, Msg>(
+export function notifyWithContext<Status extends string, Msg extends { status: Status }>(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
-  rows: readonly MarketplaceNotificationMessage[],
+  rows: readonly MarketplaceRows<Msg>[],
   kind?: "cascade" | "disable-cascade",
 ): void {
+  // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
+  // render map omits is a compile error there); the cascade envelope consumes
+  // the broad `MarketplaceNotificationMessage` union, so the narrowed rows widen
+  // back to it here at the single emission seam. The marketplace-level shape is
+  // unchanged -- only the child `plugins` were narrowed -- so the widening is a
+  // safe upcast, not a reinterpretation.
+  const marketplaces = rows as unknown as readonly MarketplaceNotificationMessage[];
   const message: CascadeNotificationMessage =
-    kind === undefined ? { marketplaces: rows } : { kind, marketplaces: rows };
+    kind === undefined ? { marketplaces } : { kind, marketplaces };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
@@ -130,7 +161,10 @@ export function notifyWithContext<Status extends string, Msg>(
  * cause-chain / severity / summary stay central and byte-identical
  * (`emitReconcileAppliedContextCascade` -> `emitWithSummary`).
  */
-export function notifyReconcileAppliedWithContext<Status extends string, Msg>(
+export function notifyReconcileAppliedWithContext<
+  Status extends string,
+  Msg extends { status: Status },
+>(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
@@ -144,11 +178,18 @@ export function notifyReconcileAppliedWithContext<Status extends string, Msg>(
 /**
  * Dispatch a single plugin row through the command's render map. The row's
  * `status` selects the arm; the arm reproduces the verbatim bytes of the
- * central switch arm it lifted, so the output is byte-identical. The casts
- * bridge the broad `PluginNotificationMessage` the cascade seam threads to the
- * command's own narrower `Status` / `Msg`; a command only ever supplies rows
- * whose statuses its render map covers, so the lookup is total at the call
- * site.
+ * central switch arm it lifted, so the output is byte-identical. The cast
+ * bridges the broad `PluginNotificationMessage` the cascade seam threads to the
+ * command's own narrower `Status` / `Msg`; `notifyWithContext` constrains its
+ * rows to `Msg` (WR-01), so a command only ever supplies rows whose statuses
+ * its render map covers and the lookup is total at the call site.
+ *
+ * WR-02: the lookup is read as possibly-`undefined` and a missing arm throws a
+ * diagnostic naming the offending status and the command label instead of a
+ * bare `arm is not a function` `TypeError`. The compile-time `Msg`-constraint
+ * means this branch is unreachable for type-checked call sites; the guard hardens
+ * the single point where the otherwise-discriminated union loses its static
+ * guarantee against projection drift in out-of-band callers (IN-03 / IN-05).
  */
 function dispatchRow<Status extends string, Msg>(
   context: CommandContext<Status, Msg>,
@@ -156,6 +197,14 @@ function dispatchRow<Status extends string, Msg>(
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
-  const arm = context.render[p.status as Status] as unknown as RenderFn<PluginNotificationMessage>;
-  return arm(p, probe, mpScope);
+  const arm = context.render[p.status as Status] as
+    | RenderFn<Extract<Msg, { status: Status }>>
+    | undefined;
+  if (arm === undefined) {
+    throw new Error(
+      `notify dispatch: command "${context.Messaging.label}" has no render arm for status "${p.status}"`,
+    );
+  }
+
+  return (arm as unknown as RenderFn<PluginNotificationMessage>)(p, probe, mpScope);
 }

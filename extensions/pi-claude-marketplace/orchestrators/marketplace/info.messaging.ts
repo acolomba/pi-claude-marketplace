@@ -13,7 +13,6 @@
 // plugin-status set; `marketplace info` emits no per-plugin cascade child rows.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { PluginNotificationMessage } from "../../shared/notify.ts";
 
 /**
  * D-04 / D-05 / MOD-01: the `marketplace info` command context. The standalone
@@ -24,4 +23,4 @@ import type { PluginNotificationMessage } from "../../shared/notify.ts";
 export const INFO_CONTEXT = {
   Messaging: { label: "Marketplace info" },
   render: {},
-} as const satisfies CommandContext<never, PluginNotificationMessage>;
+} as const satisfies CommandContext<never, never>;

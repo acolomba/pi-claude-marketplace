@@ -17,7 +17,7 @@
 // central header seam.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { PluginNotificationMessage, Reason } from "../../shared/notify.ts";
+import type { Reason } from "../../shared/notify.ts";
 
 /**
  * D-01 / MOD-01: the marketplace-statuses `marketplace add` owns. The success
@@ -58,4 +58,4 @@ void _addPrivateReasonsClosed;
 export const ADD_CONTEXT = {
   Messaging: { label: "Marketplace add" },
   render: {},
-} as const satisfies CommandContext<never, PluginNotificationMessage>;
+} as const satisfies CommandContext<never, never>;

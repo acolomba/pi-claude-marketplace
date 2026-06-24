@@ -13,11 +13,15 @@ import {
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
-import { IMPORT_CONTEXT } from "./execute.messaging.ts";
+import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
@@ -35,11 +39,9 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
   Dependency,
-  MarketplaceNotificationMessage,
   MarketplaceStatus,
   PluginFailedMessage,
   PluginInstalledMessage,
-  PluginNotificationMessage,
   PluginSkippedMessage,
   PluginUnavailableMessage,
 } from "../../shared/notify.ts";
@@ -279,7 +281,7 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status?: MarketplaceStatus;
-  plugins: PluginNotificationMessage[];
+  plugins: ImportMsg[];
 }
 
 function ensureMarketplaceBlock(
@@ -348,7 +350,7 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
  */
 function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
-): readonly MarketplaceNotificationMessage[] {
+): Plural<MarketplaceRows<ImportMsg>> {
   const byMp = new Map<string, MarketplaceBlock>();
 
   // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
@@ -460,7 +462,7 @@ function buildImportNotificationMarketplaces(
  * `assertNever`. (The full B-6 reducer cleanup, TYPE-F3, is deferred
  * post-v1.10.)
  */
-function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotificationMessage {
+function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceRows<ImportMsg> {
   const name = block.name;
   const scope = block.scope;
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
@@ -1044,7 +1046,7 @@ export async function importClaudeSettings(
   // rows through notifyWithContext, so import's per-row rendering dispatches
   // through its own render map (MOD-03), never the central renderPluginRow
   // switch.
-  const marketplaces: Plural<MarketplaceNotificationMessage> =
+  const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
     buildImportNotificationMarketplaces(result);
   notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces);
 

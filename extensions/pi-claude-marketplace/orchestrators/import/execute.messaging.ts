@@ -2,6 +2,7 @@ import {
   composeReasons,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
+  installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -63,19 +64,15 @@ export type ImportMsg =
  * rewake). Lifted verbatim from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
-  joinTokens([
+  installedLikeRow(
     ICON_INSTALLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
+    p,
+    mpScope,
     renderVersion(p.version),
     "(installed)",
-    composeReasons(
-      p.reasons,
-      p.dependencies.includes("agents"),
-      p.dependencies.includes("mcp"),
-      probe,
-    ),
-  ]);
+    p.reasons,
+    probe,
+  );
 
 /**
  * `(skipped)` -- already-installed plugin row. No soft-dep gating (passes

@@ -1,10 +1,8 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  composeReasons,
-  joinTokens,
+  installedLikeRow,
   pluginRow,
-  renderScopeBracket,
   renderVersion,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
@@ -57,19 +55,15 @@ const REINSTALL_RENDER: {
   [K in ReinstallStatus]: RenderFn<Extract<ReinstallMsg, { status: K }>>;
 } = {
   reinstalled: (p, probe, mpScope) =>
-    joinTokens([
+    installedLikeRow(
       ICON_INSTALLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
+      p,
+      mpScope,
       renderVersion(p.version),
       "(reinstalled)",
-      composeReasons(
-        undefined,
-        p.dependencies.includes("agents"),
-        p.dependencies.includes("mcp"),
-        probe,
-      ),
-    ]),
+      undefined,
+      probe,
+    ),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   "manual recovery": (p, probe, mpScope) =>

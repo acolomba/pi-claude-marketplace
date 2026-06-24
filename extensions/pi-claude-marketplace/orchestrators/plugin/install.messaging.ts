@@ -2,6 +2,7 @@ import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
+  installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -61,19 +62,15 @@ export type InstallPrivateReason = "orphan rewake";
  */
 const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { status: K }>> } = {
   installed: (p, probe, mpScope) =>
-    joinTokens([
+    installedLikeRow(
       ICON_INSTALLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
+      p,
+      mpScope,
       renderVersion(p.version),
       "(installed)",
-      composeReasons(
-        p.reasons,
-        p.dependencies.includes("agents"),
-        p.dependencies.includes("mcp"),
-        probe,
-      ),
-    ]),
+      p.reasons,
+      probe,
+    ),
   unavailable: (p, probe, mpScope) =>
     joinTokens([
       ICON_UNINSTALLABLE,

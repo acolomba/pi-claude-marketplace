@@ -24,7 +24,11 @@
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 
 import { LIST_CONTEXT } from "./list.messaging.ts";
 
@@ -98,6 +102,9 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   // OUT-07 / D-12: the inventory is a bulk surface -> Plural cardinality. The
   // list-arm headers render via the central renderMpHeader seam the spine
   // reuses; LIST_CONTEXT carries the localized list vocabulary.
-  const rows: Plural<MarketplaceNotificationMessage> = marketplaces;
+  // WR-01: list rows carry no plugin child rows (plugins: []), so the broad builder array widens to the empty-Msg row shape the empty-render LIST_CONTEXT requires.
+  const rows: Plural<MarketplaceRows<never>> = marketplaces as unknown as Plural<
+    MarketplaceRows<never>
+  >;
   notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, rows);
 }

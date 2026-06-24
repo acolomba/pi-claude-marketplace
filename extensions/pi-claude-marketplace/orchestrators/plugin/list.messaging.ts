@@ -4,6 +4,7 @@ import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
+  installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -70,19 +71,15 @@ export type ListMsg =
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
   present: (p, probe, mpScope) =>
-    joinTokens([
+    installedLikeRow(
       ICON_INSTALLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
+      p,
+      mpScope,
       renderVersion(p.version),
       "(installed)",
-      composeReasons(
-        undefined,
-        p.dependencies.includes("agents"),
-        p.dependencies.includes("mcp"),
-        probe,
-      ),
-    ]),
+      undefined,
+      probe,
+    ),
   available: (p, probe, mpScope) =>
     joinTokens([
       ICON_AVAILABLE,

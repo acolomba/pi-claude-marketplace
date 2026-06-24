@@ -100,7 +100,11 @@ import {
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
-import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
@@ -114,7 +118,7 @@ import {
   resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
-import { UPDATE_CONTEXT } from "./update.messaging.ts";
+import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -128,7 +132,6 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
   Dependency,
-  MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
 } from "../../shared/notify.ts";
@@ -1667,7 +1670,10 @@ function renderUpdateCascadeAndNotify(
   // OUT-07 / D-12: the update cascade is a bulk op, so its row slot is typed
   // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
   // variable-length array, identical at runtime.
-  const marketplaces: Plural<MarketplaceNotificationMessage> = [...byMp.values()]
+  // WR-01: the grouped plugin rows are accumulated through the broad
+  // `outcomeToCascadePluginMessage` helper, so the narrowed annotation widens via
+  // cast; every emitted row is an UpdateMsg member.
+  const marketplaces: Plural<MarketplaceRows<UpdateMsg>> = [...byMp.values()]
     .sort((a, b) =>
       compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
     )
@@ -1675,7 +1681,7 @@ function renderUpdateCascadeAndNotify(
       name: g.name,
       scope: g.scope,
       plugins: g.plugins,
-    }));
+    })) as Plural<MarketplaceRows<UpdateMsg>>;
 
   // cascade construction recipe (mirrors the recipe at
   // orchestrators/plugin/uninstall.ts; substitutes the

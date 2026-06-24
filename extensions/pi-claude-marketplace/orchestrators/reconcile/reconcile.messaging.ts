@@ -4,6 +4,7 @@ import {
   ICON_DISABLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
+  installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -147,19 +148,15 @@ export type ReconcileAppliedMsg =
  * from the central `renderPluginRow` `installed` arm.
  */
 const renderInstalled: RenderFn<PluginInstalledMessage> = (p, probe, mpScope) =>
-  joinTokens([
+  installedLikeRow(
     ICON_INSTALLED,
-    p.name,
-    renderScopeBracket(p.scope, mpScope),
+    p,
+    mpScope,
     renderVersion(p.version),
     "(installed)",
-    composeReasons(
-      p.reasons,
-      p.dependencies.includes("agents"),
-      p.dependencies.includes("mcp"),
-      probe,
-    ),
-  ]);
+    p.reasons,
+    probe,
+  );
 
 /**
  * `(uninstalled)` -- realized uninstall row. NO soft-dep marker (uninstalled

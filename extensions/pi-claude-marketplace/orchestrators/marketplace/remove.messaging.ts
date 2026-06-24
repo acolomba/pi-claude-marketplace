@@ -55,7 +55,7 @@ void _removePrivateReasonsClosed;
  * over (D-10: a missing arm is a TS2741 compile error).
  */
 type RemoveRowStatus = "uninstalled" | "failed";
-type RemoveRowMsg = PluginUninstalledMessage | PluginFailedMessage;
+export type RemoveRowMsg = PluginUninstalledMessage | PluginFailedMessage;
 
 /**
  * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace remove` command

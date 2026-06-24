@@ -1,11 +1,9 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  composeReasons,
   composeVersionArrow,
-  joinTokens,
+  installedLikeRow,
   pluginRow,
-  renderScopeBracket,
   type PluginFailedMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
@@ -47,19 +45,15 @@ export type UpdateMsg = PluginUpdatedMessage | PluginSkippedMessage | PluginFail
  */
 const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status: K }>> } = {
   updated: (p, probe, mpScope) =>
-    joinTokens([
+    installedLikeRow(
       ICON_INSTALLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
+      p,
+      mpScope,
       composeVersionArrow(p.from, p.to),
       "(updated)",
-      composeReasons(
-        undefined,
-        p.dependencies.includes("agents"),
-        p.dependencies.includes("mcp"),
-        probe,
-      ),
-    ]),
+      undefined,
+      probe,
+    ),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

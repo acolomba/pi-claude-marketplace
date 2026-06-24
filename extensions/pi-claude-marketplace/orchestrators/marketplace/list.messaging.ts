@@ -12,7 +12,6 @@
 // (zero-or-more records) -> Plural cardinality at the call site (OUT-07 / D-12).
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { PluginNotificationMessage } from "../../shared/notify.ts";
 
 /**
  * D-04 / D-05 / MOD-01: the `marketplace list` command context. The status-
@@ -23,4 +22,4 @@ import type { PluginNotificationMessage } from "../../shared/notify.ts";
 export const LIST_CONTEXT = {
   Messaging: { label: "Marketplace list" },
   render: {},
-} as const satisfies CommandContext<never, PluginNotificationMessage>;
+} as const satisfies CommandContext<never, never>;

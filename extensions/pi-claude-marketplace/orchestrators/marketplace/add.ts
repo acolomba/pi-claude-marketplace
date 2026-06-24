@@ -67,7 +67,11 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { notifyWithContext, type Single } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Single,
+} from "../../shared/notify-context.ts";
 import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
@@ -82,7 +86,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, MarketplaceNotificationMessage, Reason } from "../../shared/notify.ts";
+import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -471,7 +475,7 @@ function handleAddFailure(
   // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
   // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
   // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
-  const failedRows: Single<MarketplaceNotificationMessage> = [
+  const failedRows: Single<MarketplaceRows<never>> = [
     {
       name: addSubjectName(err, opts.rawSource),
       scope: opts.scope,
@@ -560,7 +564,7 @@ export async function addMarketplace(
   // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
   // OUT-07 / D-12: single-target op -> Single 1-tuple. The `(added)` header
   // renders via the central renderMpHeader seam the spine reuses.
-  const addedRows: Single<MarketplaceNotificationMessage> = [
+  const addedRows: Single<MarketplaceRows<never>> = [
     {
       name: recordedName,
       scope: opts.scope,

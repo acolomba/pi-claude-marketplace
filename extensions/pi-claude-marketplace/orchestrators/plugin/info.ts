@@ -35,20 +35,23 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
-import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
-import { PLUGIN_INFO_CONTEXT } from "./info.messaging.ts";
+import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ClaudeHookEvent,
   ContentReason,
   HookSummaryEntry,
-  MarketplaceNotificationMessage,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
@@ -898,7 +901,7 @@ function buildDisabledInventoryBlock(
   scope: Scope,
   installed: MarketplaceRecord["plugins"][string],
   autoupdate: boolean,
-): MarketplaceNotificationMessage {
+): MarketplaceRows<PluginInfoCascadeMsg> {
   // Mirror the list surface's `<autoupdate>` marker composition (details is
   // emitted ONLY when the flag is true; `lastUpdatedAt` never on this
   // surface).
@@ -923,10 +926,10 @@ function partitionDisabledScopes(
   opts: GetPluginInfoOptions,
   found: readonly { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[],
 ): {
-  disabledBlocks: MarketplaceNotificationMessage[];
+  disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[];
   infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[];
 } {
-  const disabledBlocks: MarketplaceNotificationMessage[] = [];
+  const disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[] = [];
   const infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const f of found) {
     const installed = f.record.plugins[opts.plugin];
@@ -1001,7 +1004,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // (one block per scope) preserves IL-2 on this all-disabled path. OUT-07 /
   // D-12: a per-scope bulk of disabled inventory rows -> `Plural<Row>`.
   if (infoFound.length === 0) {
-    const rows: Plural<MarketplaceNotificationMessage> = disabledBlocks;
+    const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
     notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
     return;
   }
@@ -1064,7 +1067,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // surfaces have incompatible message kinds, and hiding one behind the
   // other would silently drop a scope's state.
   if (disabledBlocks.length > 0) {
-    const rows: Plural<MarketplaceNotificationMessage> = disabledBlocks;
+    const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
     notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
   }
 
