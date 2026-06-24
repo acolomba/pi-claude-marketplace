@@ -68,6 +68,16 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  * hard-codes the `{not added}` brace). A request for a scope where the target
  * marketplace is not present renders `⊘ <name> [<scope>] (failed) {not added}`
  * at column 0 with severity `"error"`.
+ *
+ * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
+ * 32-entry membership AND order are catalog-stable and MUST NOT change. The
+ * topic-grouped organization of these literals (idempotent / unsupported-
+ * components / failure-class shared groups, plus the command-private reasons)
+ * lives in `shared/notify-reasons.ts` as typed VIEWS over this set; that module
+ * carries a compile-time completeness proof that its partition exactly covers
+ * this tuple. Command-private reasons (`duplicate name` / `stale clone` /
+ * `not found` / `not installed` / `plugins remain` / `orphan rewake`) and the
+ * structural `"not added"` marker are owned outside the shared topic groups.
  */
 export const REASONS = [
   "up-to-date",

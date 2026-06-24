@@ -1,0 +1,117 @@
+import type { Reason } from "./notify.ts";
+
+/**
+ * shared/notify-reasons.ts -- the topic-grouped organization of the closed
+ * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 32-entry
+ * membership AND order must stay byte-identical for catalog stability); this
+ * module reorganizes that closed set into shared topic-grouped enums + a
+ * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
+ * would risk reordering). The topic groups below are typed views over the same
+ * closed `Reason` literals, so a command module can reference an
+ * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
+ * 32-entry set.
+ *
+ * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
+ * idiom. Membership of every literal is checked at compile time against the
+ * closed `Reason` set (each group's element type extends `Reason`), and the
+ * `_ReasonsCoverage` proof at the bottom asserts the union of all groups + the
+ * command-private reasons + the structural `"not added"` marker is EXACTLY the
+ * closed set -- a literal added to `REASONS` without a home here, or a typo,
+ * becomes a compile error.
+ */
+
+/**
+ * D-09: idempotent / already-in-requested-state reasons. The resource already
+ * matches the exact state the command requested. (These are also today's
+ * benign-skip reasons; the benign-skip SET itself is a later-phase concern --
+ * only the reason literals are grouped here.)
+ */
+export const IDEMPOTENT_REASONS = [
+  "up-to-date",
+  "already installed",
+  "already autoupdate",
+  "already no autoupdate",
+  "already enabled",
+  "already disabled",
+] as const;
+export type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
+
+/**
+ * D-09: unsupported-components / soft-dep reasons -- the topic group the user
+ * named explicitly (hooks / LSP / companion-extension soft deps / unsupported
+ * source / no-longer-installable).
+ */
+export const UNSUPPORTED_REASONS = [
+  "unsupported hooks",
+  "lsp",
+  "requires pi-subagents",
+  "requires pi-mcp",
+  "unsupported source",
+  "no longer installable",
+] as const;
+export type UnsupportedReason = (typeof UNSUPPORTED_REASONS)[number];
+
+/**
+ * D-09: failure-class reasons -- an operation could not complete (permission /
+ * source / network / manifest / lock / concurrency / rollback failures).
+ */
+export const FAILURE_REASONS = [
+  "permission denied",
+  "source missing",
+  "network unreachable",
+  "unreadable",
+  "unparseable",
+  "unreadable manifest",
+  "invalid manifest",
+  "not in manifest",
+  "rollback partial",
+  "lock held",
+  "source mismatch",
+  "concurrently uninstalled",
+  "concurrently updated",
+] as const;
+export type FailureReason = (typeof FAILURE_REASONS)[number];
+
+/**
+ * D-09: the shared topic-grouped reasons -- the union of the three groups
+ * above. Command-private reasons (`duplicate name` / `stale clone` for
+ * `marketplace add`, `not found` / `not installed` for `uninstall`,
+ * `plugins remain` for `marketplace remove`, `orphan rewake` for `install`)
+ * are NOT declared here -- they belong to the owning command's module. The
+ * structural `"not added"` marketplace-absent marker is likewise not a shared
+ * topic reason (it is excluded from `ContentReason` in `notify.ts`).
+ */
+export type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason;
+
+/**
+ * D-09: the command-private reasons, named here ONLY for the completeness
+ * proof below -- they are owned by their command modules, not exported as a
+ * shared group. `"not added"` is the structural marketplace-absent marker
+ * (excluded from `ContentReason` in `notify.ts`); it is included here solely so
+ * the coverage proof sees the full closed set.
+ */
+type CommandPrivateReason =
+  | "not found"
+  | "not installed"
+  | "plugins remain"
+  | "stale clone"
+  | "duplicate name"
+  | "not added"
+  | "orphan rewake";
+
+/**
+ * OUT-08 completeness proof: the union of the three shared topic groups + the
+ * command-private reasons + the structural marker must be EXACTLY the closed
+ * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
+ * partition is total (no shared literal missing a home, no stray literal that
+ * is not in `REASONS`). `_ReasonsCoverage` is a compile-time-only type alias;
+ * it has no runtime footprint.
+ */
+type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
+type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
+export type _ReasonsCoverage = [_UncoveredReason, _ExtraReason] extends [never, never]
+  ? true
+  : never;
+const _reasonsCoverageProof: _ReasonsCoverage = true;
+void _reasonsCoverageProof;
