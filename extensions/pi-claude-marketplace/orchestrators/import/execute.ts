@@ -13,9 +13,11 @@ import {
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { notifyWithContext, type Plural } from "../../shared/notify-context.ts";
+import { compareByNameThenScope } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { IMPORT_CONTEXT } from "./execute.messaging.ts";
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
@@ -1037,8 +1039,14 @@ export async function importClaudeSettings(
   // Truly catastrophic throws bubble to Pi runtime -- better for debugging
   // than a polished error message that masks the bug. The inner
   // executeScopedPlan try/catch covers expected loadState failures.
-  const marketplaces = buildImportNotificationMarketplaces(result);
-  notify(opts.ctx, opts.pi, { marketplaces });
+  // D-12 / OUT-07: the import cascade is bulk (one import touches many
+  // marketplaces) -> Plural row cardinality. D-02: thread IMPORT_CONTEXT + the
+  // rows through notifyWithContext, so import's per-row rendering dispatches
+  // through its own render map (MOD-03), never the central renderPluginRow
+  // switch.
+  const marketplaces: Plural<MarketplaceNotificationMessage> =
+    buildImportNotificationMarketplaces(result);
+  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces);
 
   return result;
 }
