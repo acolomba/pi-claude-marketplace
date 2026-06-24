@@ -98,7 +98,21 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
   4. The `present` plugin status collapses into `installed` (reload suppression now via `needsReload: false`) and the `disable-cascade` cascade kind is removed (disable stamps `needsReload: true`, list/info stamp `false`).
   5. An architecture test asserts every cascade-producing orchestrator stamps both `severity` and `needsReload` on its state-change rows (no silent reliance on defaults for transitions); `npm run check` and `catalog-uat` stay green.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Stamp transitions + narrow transition interfaces to required (GATE-01 type-level) + flip notify() to the dumb MAX/OR/tally reducer + delete content ladders; repair notify-v2/inert-fields tests (Wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — Collapse `present`→`installed` (RLD-04) + remove the `disable-cascade` kind (RLD-05); migrate test input fixtures; EXPECTED bytes byte-identical (Wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-03-PLAN.md — D-05 runtime architecture-test backstop over the reconcile projection (GATE-01 dynamic-case) (Wave 3)
 
 ### Phase 3: Desired-state output & atomic catalog supersession
 
