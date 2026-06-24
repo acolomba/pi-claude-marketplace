@@ -261,10 +261,14 @@ function installedRowMessage(
   // surface a misleading `(upgradable)` on a plugin with no artefacts.
   if (isRecordedButDisabled(record)) {
     return {
+      // D-03/D-06: a disabled INVENTORY row (list surface) is steady state,
+      // not a realized transition -> info, never reloads.
       status: "disabled",
       name: pluginName,
       version: record.version,
       ...scopeField,
+      severity: "info",
+      needsReload: false,
     };
   }
 

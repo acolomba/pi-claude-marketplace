@@ -609,6 +609,23 @@ export interface MessageBase {
 }
 
 /**
+ * GATE-01 / D-04: the narrowing base for state-change (transition) message
+ * arms. It redeclares the two optional `MessageBase` fields as REQUIRED, so a
+ * producer literal that omits either `severity` or `needsReload` on a
+ * transition row is a TS2741 compile error at the construction site. The
+ * `MarketplaceRows<Msg>` call-site type narrows `plugins` to the command's
+ * `Msg` union BEFORE the post-check widening cast in `notifyWithContext`, so
+ * the gate reaches every producer that builds a transition row. Non-transition
+ * arms (`available`/`unavailable`/`upgradable`/`failed`/`skipped`/`manual
+ * recovery`/`will *`/`present`) stay on `extends MessageBase` -- their fields
+ * remain optional and default to info/false (SEV-01/RLD-01).
+ */
+export interface TransitionMessageBase extends MessageBase {
+  readonly severity: "info" | "warning" | "error"; // narrowed: required
+  readonly needsReload: boolean; // narrowed: required
+}
+
+/**
  * `(installed)` -- single-shot install or cascade install row. Carries
  * `dependencies` (SNM-06) so the renderer can emit the
  * `requires pi-subagents` / `requires pi-mcp` probe reasons; no `reasons`
@@ -625,7 +642,7 @@ export interface MessageBase {
  * pushes the resolver-side `resolved.orphanRewake === true` plugins
  * into `reasons[]`; this plan only extends the type seam + renderer.
  */
-export interface PluginInstalledMessage extends MessageBase {
+export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly status: "installed";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -639,7 +656,7 @@ export interface PluginInstalledMessage extends MessageBase {
  * so the renderer can compose the `v1.0 → v1.2` arrow form;
  * `dependencies` REQUIRED; no `reasons`.
  */
-export interface PluginUpdatedMessage extends MessageBase {
+export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
@@ -652,7 +669,7 @@ export interface PluginUpdatedMessage extends MessageBase {
  * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06);
  * no `reasons`.
  */
-export interface PluginReinstalledMessage extends MessageBase {
+export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -665,7 +682,7 @@ export interface PluginReinstalledMessage extends MessageBase {
  * `dependencies` (MSG-SD-3 forbids the soft-dep marker on uninstalled
  * rows); no `reasons`.
  */
-export interface PluginUninstalledMessage extends MessageBase {
+export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly status: "uninstalled";
   readonly name: string;
   readonly version?: string;
@@ -689,7 +706,7 @@ export interface PluginUninstalledMessage extends MessageBase {
  * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
  * (`◌`) -- the same glyph the `will disable` row uses.
  */
-export interface PluginDisabledMessage extends MessageBase {
+export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly status: "disabled";
   readonly name: string;
   readonly version?: string;

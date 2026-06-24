@@ -59,7 +59,14 @@ test('D-07 INERT: row-level severity:"error" does not change emitted text or sev
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "commit-commands", version: "1.0.0", dependencies: [] },
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
     ],
@@ -81,6 +88,7 @@ test('D-07 INERT: row-level severity:"error" does not change emitted text or sev
             version: "1.0.0",
             dependencies: [],
             severity: "error",
+            needsReload: true,
           },
         ],
       },

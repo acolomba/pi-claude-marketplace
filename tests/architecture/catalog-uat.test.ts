@@ -524,7 +524,15 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "user",
             details: { autoupdate: true },
-            plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+              },
+            ],
           },
         ],
       },
@@ -542,7 +550,16 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "installed", name: "helper", version: "1.0.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -558,6 +575,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
@@ -583,6 +602,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: [],
@@ -609,6 +630,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents"],
@@ -718,7 +741,15 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -731,7 +762,15 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -788,12 +827,16 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
               },
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 version: "0.5.0",
                 dependencies: [],
@@ -814,6 +857,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
@@ -835,6 +880,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -874,6 +921,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -896,12 +945,16 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "0.5.0",
                 dependencies: [],
               },
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "tool",
                 version: "1.0.0",
                 dependencies: [],
@@ -914,6 +967,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -936,6 +991,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -948,6 +1005,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 version: "1.0.0",
                 dependencies: [],
@@ -1001,6 +1060,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1076,6 +1137,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1089,6 +1152,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1116,6 +1181,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.9.0",
                 to: "1.0.0",
@@ -1129,6 +1196,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1153,6 +1222,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "hashed-plugin",
                 from: "hash-2ea95f85703d",
                 to: "hash-1c3d9a0bbef1",
@@ -1204,26 +1275,56 @@ const FIXTURES: FixtureMap = {
             name: "claude-plugins-official",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "claude-plugins-official",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "directory-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "directory-marketplace",
             scope: "user",
             status: "added",
             plugins: [
-              { status: "installed", name: "local-plugin", dependencies: [] },
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
               { status: "unavailable", name: "unavailable-plugin", reasons: ["unsupported hooks"] },
             ],
           },
@@ -1231,13 +1332,29 @@ const FIXTURES: FixtureMap = {
             name: "github-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "github-marketplace",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -1251,19 +1368,43 @@ const FIXTURES: FixtureMap = {
             name: "claude-plugins-official",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "directory-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "github-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -1280,11 +1421,15 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "agent-only-plugin",
                 dependencies: ["agents"],
               },
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "dual-plugin",
                 dependencies: ["agents", "mcp"],
               },
@@ -1302,13 +1447,29 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "alpha", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "official",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "beta", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "beta",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -1876,7 +2037,9 @@ const FIXTURES: FixtureMap = {
             name: "local-mp",
             scope: "user",
             status: "removed",
-            plugins: [{ status: "uninstalled", name: "helper" }],
+            plugins: [
+              { status: "uninstalled", name: "helper", severity: "info", needsReload: true },
+            ],
           },
         ],
       },
@@ -1892,7 +2055,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             status: "failed",
             plugins: [
-              { status: "uninstalled", name: "helper" },
+              { status: "uninstalled", name: "helper", severity: "info", needsReload: true },
               {
                 status: "failed",
                 name: "tool",
@@ -1995,6 +2158,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -2168,6 +2333,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",
                 dependencies: [],
@@ -2297,6 +2464,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "disabled",
+                severity: "info",
+                needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",
               },
@@ -2489,13 +2658,29 @@ const FIXTURES: FixtureMap = {
             name: "new-mp",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "new-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "other-mp",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "other-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -2517,7 +2702,15 @@ const FIXTURES: FixtureMap = {
             name: "ok-mp",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "ok-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -2586,7 +2779,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             status: "failed",
             plugins: [
-              { status: "uninstalled", name: "plugin-ok" },
+              { status: "uninstalled", name: "plugin-ok", severity: "info", needsReload: true },
               { status: "failed", name: "plugin-fail-a", reasons: ["permission denied"] },
               { status: "failed", name: "plugin-fail-b", reasons: ["source missing"] },
             ],

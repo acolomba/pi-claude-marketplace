@@ -211,6 +211,8 @@ test("notify renders single installed plugin with empty deps under added marketp
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -238,6 +240,8 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: ["agents"],
@@ -265,6 +269,8 @@ test("notify renders updated plugin with version arrow + mcp dep marker", () => 
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             from: "1.0.0",
             to: "1.1.0",
@@ -293,6 +299,8 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
         plugins: [
           {
             status: "reinstalled",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: ["agents", "mcp"],
@@ -320,6 +328,8 @@ test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)"
         plugins: [
           {
             status: "uninstalled",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
           },
@@ -945,6 +955,8 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1226,7 +1238,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
         name: "local-mp",
         scope: "user",
         status: "removed",
-        plugins: [{ status: "uninstalled", name: "alpha" }],
+        plugins: [{ status: "uninstalled", name: "alpha", severity: "info", needsReload: true }],
       },
     ],
   };
@@ -1249,7 +1261,15 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
         scope: "user",
         status: "updated",
         plugins: [
-          { status: "updated", name: "alpha", from: "1.0.0", to: "2.0.0", dependencies: [] },
+          {
+            status: "updated",
+            name: "alpha",
+            from: "1.0.0",
+            to: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
     ],
@@ -1339,6 +1359,8 @@ test("notify renders single-plugin payload as 2-line body (header + 2-space inde
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1371,9 +1393,30 @@ test("notify preserves caller-supplied plugin order across multi-plugin payload 
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "gamma", version: "1.0.0", dependencies: [] },
-          { status: "installed", name: "alpha", version: "2.0.0", dependencies: [] },
-          { status: "installed", name: "beta", version: "3.0.0", dependencies: [] },
+          {
+            status: "installed",
+            name: "gamma",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+          {
+            status: "installed",
+            name: "alpha",
+            version: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+          {
+            status: "installed",
+            name: "beta",
+            version: "3.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
     ],
@@ -1404,14 +1447,30 @@ test("notify joins multi-marketplace blocks with single blank line and appends r
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "alpha-plugin", version: "1.0.0", dependencies: [] },
+          {
+            status: "installed",
+            name: "alpha-plugin",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
       {
         name: "beta-mp",
         scope: "project",
         status: "added",
-        plugins: [{ status: "installed", name: "beta-plugin", version: "2.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "beta-plugin",
+            version: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -1443,6 +1502,8 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -1487,6 +1548,8 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -1554,6 +1617,8 @@ test("notify omits scope bracket on installed plugin row when p.scope === mp.sco
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1602,6 +1667,8 @@ test("notify emits [project] bracket on installed plugin row when p.scope !== mp
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1645,6 +1712,8 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             from: "0.9.0",
             to: "1.0.0",
@@ -1885,7 +1954,16 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
         name: "demo",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -2137,6 +2215,8 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "hash-2ea95f85703d",
             dependencies: [],
@@ -2166,6 +2246,8 @@ test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7he
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             from: "hash-2ea95f85703d",
             to: "hash-1c3d9a0bbef1",
@@ -2195,6 +2277,8 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -2525,7 +2609,16 @@ test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identic
         name: "demo",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -2549,7 +2642,13 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "uninstalled", name: "alpha", version: "1.0.0" },
+          {
+            status: "uninstalled",
+            name: "alpha",
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
           { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
         ],
       },
@@ -3589,7 +3688,16 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3599,7 +3707,16 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3782,7 +3899,15 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
         name: "official",
         scope: "user",
         details: { autoupdate: true },
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3801,7 +3926,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin" }],
+        plugins: [{ status: "disabled", name: "foo-plugin", severity: "info", needsReload: false }],
       },
     ],
   };
@@ -3819,7 +3944,16 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
       {
         name: "shared",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            scope: "project",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3837,7 +3971,16 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "user" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            scope: "user",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3861,7 +4004,15 @@ test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /
       {
         name: "claude-plugins-official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3974,6 +4125,8 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "foo-plugin",
             version: "1.2.3",
             dependencies: [],
@@ -4002,6 +4155,8 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
         plugins: [
           {
             status: "uninstalled",
+            severity: "info",
+            needsReload: true,
             name: "foo-plugin",
             version: "1.2.3",
           },
@@ -4045,13 +4200,29 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
         name: "new-mp",
         scope: "project",
         status: "added",
-        plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "new-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
       {
         name: "other-mp",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "other-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -4077,8 +4248,8 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "a", dependencies: [] },
-          { status: "uninstalled", name: "b" },
+          { status: "installed", name: "a", dependencies: [], severity: "info", needsReload: true },
+          { status: "uninstalled", name: "b", severity: "info", needsReload: true },
         ],
       },
     ],
@@ -4108,7 +4279,15 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
         name: "ok-mp",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "ok-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -4177,6 +4356,8 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "helper",
             version: "1.0.0",
             dependencies: [],

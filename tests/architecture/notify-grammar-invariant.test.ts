@@ -242,7 +242,15 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
         {
           name: "mp",
           scope: "user",
-          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+          plugins: [
+            {
+              status: "disabled",
+              name: "foo-plugin",
+              version: "1.2.3",
+              severity: "info",
+              needsReload: false,
+            },
+          ],
         },
       ],
     },
@@ -255,7 +263,9 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
         {
           name: "mp",
           scope: "user",
-          plugins: [{ status: "disabled", name: "foo-plugin" }],
+          plugins: [
+            { status: "disabled", name: "foo-plugin", severity: "info", needsReload: false },
+          ],
         },
       ],
     },
@@ -268,7 +278,16 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
         {
           name: "mp",
           scope: "user",
-          plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+          plugins: [
+            {
+              status: "disabled",
+              name: "foo-plugin",
+              version: "1.2.3",
+              scope: "project",
+              severity: "info",
+              needsReload: false,
+            },
+          ],
         },
       ],
     },
@@ -383,7 +402,15 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
           name: "new-mp",
           scope: "user",
           status: "added",
-          plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+          plugins: [
+            {
+              status: "installed",
+              name: "new-plugin",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
         },
       ],
     },
@@ -405,7 +432,15 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
           name: "ok-mp",
           scope: "user",
           status: "added",
-          plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+          plugins: [
+            {
+              status: "installed",
+              name: "ok-plugin",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
         },
       ],
     },
