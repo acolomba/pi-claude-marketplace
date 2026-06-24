@@ -108,7 +108,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 02-02-PLAN.md — Collapse `present`→`installed` (RLD-04) + remove the `disable-cascade` kind (RLD-05); migrate test input fixtures; EXPECTED bytes byte-identical (Wave 2)
+- [x] 02-02-PLAN.md — Collapse `present`→`installed` (RLD-04) + remove the `disable-cascade` kind (RLD-05); migrate test input fixtures; EXPECTED bytes byte-identical (Wave 2)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -148,6 +148,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
-| 2. Caller-stamped severity & reload reducer | 1/3 | In progress | - |
+| 2. Caller-stamped severity & reload reducer | 2/3 | In Progress|  |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |

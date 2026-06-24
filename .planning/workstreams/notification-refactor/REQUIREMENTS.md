@@ -27,8 +27,8 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 - [x] **RLD-01**: Every outcome row carries a caller-stamped `needsReload` boolean (does this outcome change a Pi-visible resource such that `/reload` is required).
 - [x] **RLD-02**: `notify()` emits the `/reload to pick up changes` trailer iff the OR-reduce of `needsReload` over all rows is true.
 - [x] **RLD-03**: The status-token→reload mapping in `shouldEmitReloadHint` is removed; reload is no longer inferred from status tokens.
-- [ ] **RLD-04**: The `present` plugin status collapses into `installed` — its only role was reload suppression on the list surface, now handled by `needsReload: false`.
-- [ ] **RLD-05**: The `disable-cascade` cascade kind is removed — the disable command stamps `needsReload: true` on its rows directly; list/info surfaces stamp `false`.
+- [x] **RLD-04**: The `present` plugin status collapses into `installed` — its only role was reload suppression on the list surface, now handled by `needsReload: false`.
+- [x] **RLD-05**: The `disable-cascade` cascade kind is removed — the disable command stamps `needsReload: true` on its rows directly; list/info surfaces stamp `false`.
 
 ### Output / summary model (OUT)
 
@@ -83,8 +83,8 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 | RLD-01 | Phase 2 | Complete |
 | RLD-02 | Phase 2 | Complete |
 | RLD-03 | Phase 2 | Complete |
-| RLD-04 | Phase 2 | Pending |
-| RLD-05 | Phase 2 | Pending |
+| RLD-04 | Phase 2 | Complete |
+| RLD-05 | Phase 2 | Complete |
 | GATE-01 | Phase 2 | Complete |
 | OUT-01 | Phase 3 | Pending |
 | OUT-02 | Phase 3 | Pending |
