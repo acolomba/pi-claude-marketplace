@@ -133,7 +133,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — D-02 leading severity sentence + D-03 render-time mixed-subject detection + D-01 absent-target flips (reinstall/update not-installed → error) + PU-5 standalone uninstall → error row; all summary-bearing catalog blocks/fixtures + wire-coverage fixtures rewritten atomically (Wave 1)
+- [x] 03-01-PLAN.md — D-02 leading severity sentence + D-03 render-time mixed-subject detection + D-01 absent-target flips (reinstall/update not-installed → error) + PU-5 standalone uninstall → error row; all summary-bearing catalog blocks/fixtures + wire-coverage fixtures rewritten atomically (Wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -163,5 +163,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
-| 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
+| 3. Desired-state output & atomic catalog supersession | 1/3 | In Progress|  |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |

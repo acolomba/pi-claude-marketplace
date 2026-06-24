@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: Notification Refactor
 milestone_name: milestone
-current_phase: 3
-current_plan: Not started
+current_phase: 03
+current_plan: 2
 status: executing
-last_updated: "2026-06-24T23:31:08.062Z"
+last_updated: "2026-06-24T23:34:43.932Z"
 last_activity: 2026-06-24
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 50
+  completed_plans: 9
+  percent: 55
 ---
 
 # Project State
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (shared project context)
 
 ## Current Position
 
-Phase: 02 (caller-stamped-severity-reload-reducer) — COMPLETE
-Plan: 3 of 3 (final)
-**Status:** Ready to execute
-**Current Phase:** 3
+Phase: 03 (desired-state-output-atomic-catalog-supersession) — EXECUTING
+Plan: 2 of 3 (Plan 01 complete)
+**Status:** Executing Phase 03
+**Current Phase:** 03
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
 **Last Activity:** 2026-06-24
-**Last Activity Description:** Phase 03 planning complete — 3 plans ready
+**Last Activity Description:** Completed 03-01 (D-02 leading sentence + D-03 mixed-subject + D-01 absent-target error flips)
 
 ## Phases
 
@@ -44,7 +44,7 @@ Plan: 3 of 3 (final)
 ## Progress
 
 **Phases Complete:** 2 / 4
-**Current Plan:** Not started
+**Current Plan:** 2
 
 ## Decisions
 
@@ -55,9 +55,12 @@ Plan: 3 of 3 (final)
 - 02-02: Collapsed present→installed (RLD-04/D-08); PluginInstalledMessage gained an optional description and both PL-4 description predicates were widened to installed so the list row's description second line stays byte-identical (the former present row carried it).
 - 02-02: Removed the disable-cascade kind (RLD-05/D-07); the disable reload trailer is driven by the per-row needsReload:true stamp via the RLD-02 OR-reduce. Kept the notifyWithContext kind? param (narrowed to "cascade") + the notify() exhaustiveness switch as the structural seam.
 - 02-03: Closed GATE-01's dynamic-case gap (D-05) with a runtime arch test (notify-stamp-coverage.test.ts) driving both reconcile projections; TRANSITION_STATUSES pinned via `satisfies readonly PluginStatus[]` for drift-proofing. Negative proof confirmed the test fails on a stripped stamp. Test-only addition; catalog byte-identical.
+- 03-01: D-02 leading sentence via a single `summaryPhrase(count, severity, subject|null)` helper (replaces `operationPhrase`); D-03 mixed-subject branch drops the noun keyed off the combined row total. Single `emitWithSummary` notify seam preserved (IL-2).
+- 03-01: uninstall PU-5 already-gone row is `(failed) {not installed}`, NOT `(skipped)` — uninstall's render map renders `uninstalled`/`failed` only (no skipped arm). reinstall/update keep `(skipped) {not installed}` (severity-only flip). Absent-target severity stamped at the producer (`reasons.includes("not installed") ? "error" : skipSeverity`); skipSeverity + the reasons set untouched.
+- 03-01: ORCHESTRATED uninstall converge stays silent (apply.ts untouched, WR-06/NFR-2); only the STANDALONE path flips to error. enable/disable not-installed stays warning (not in the D-01 absent-target enumeration).
 
 ## Session Continuity
 
-**Stopped At:** Phase 3 context gathered (desired-state output, full severity revisit)
-**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-CONTEXT.md
-**Next:** Plan/execute Phase 3 (Desired-state output & atomic catalog supersession)
+**Stopped At:** 03-01 complete (leading sentence + absent-target error severity landed; catalog-uat green at every boundary)
+**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-01-SUMMARY.md
+**Next:** Plan/execute 03-02 (remaining Phase 3 scope, e.g. the OUT-03/04/D-04 trailing tally + Messaging.label threading)
