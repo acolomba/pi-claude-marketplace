@@ -12,10 +12,10 @@
 //  -> `● <mp> [<scope>] <no autoupdate>`
 //  - enable idempotent -> status: "skipped", reasons: ["already autoupdate"]
 //  -> `● <mp> [<scope>] <autoupdate> {already autoupdate}`
-//  severity: "warning"
+//  severity: "info"
 //  - disable idempotent -> status: "skipped", reasons: ["already no autoupdate"]
 //  -> `● <mp> [<scope>] <no autoupdate> {already no autoupdate}`
-//  severity: "warning"
+//  severity: "info"
 //  - failure (not-found) -> status: "failed"
 //  -> `⊘ <mp> [<scope>] (failed)`
 //  severity: "error"
@@ -560,6 +560,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         status: "skipped",
         reasons: [opts.enable ? "already autoupdate" : "already no autoupdate"],
         plugins: [],
+        // D-03/D-06: a benign idempotent autoupdate skip -> info, no reload.
+        // Stamped explicitly (defaults coincide) so every producer row carries
+        // an auditable severity/needsReload fact rather than relying on the
+        // implicit SEV-01/RLD-01 default.
+        severity: "info",
+        needsReload: false,
       };
     }
 

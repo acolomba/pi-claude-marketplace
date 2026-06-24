@@ -2436,9 +2436,9 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
   // over the flattened marketplace + plugin rows is true. The D-06 stamps
   // reproduce the former trigger set exactly: realized install/update/
   // reinstall/uninstall and the realized fresh-disable transition stamp
-  // needsReload:true (so the former `disable-cascade` kind straddle is now a
-  // per-row fact), while list/info inventory `disabled`/`installed` rows stamp
-  // needsReload:false.
+  // needsReload:true, while list/info inventory `disabled`/`installed` rows
+  // stamp needsReload:false. (See this function's JSDoc for the migration
+  // rationale that retired the former cascade-kind straddle.)
   for (const mp of message.marketplaces) {
     if (mp.needsReload === true) {
       return true;
@@ -2459,8 +2459,8 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
  * prefix when `cause` is defined and the walker returns a non-empty string.
  * Returns `""` otherwise so callers can `if (trailer !== "") lines.push(...)`.
  * Centralizes the "guard + walker + indent" composition reused for both the
- * per-plugin cause (`indent = " "`, 4 spaces) and the per-rollback-phase
- * cause (`indent = " "`, 6 spaces).
+ * per-plugin cause (4-space indent) and the per-rollback-phase
+ * cause (6-space indent).
  */
 function renderIndentedCauseChain(cause: unknown, indent: string): string {
   if (cause === undefined) {

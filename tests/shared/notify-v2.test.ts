@@ -89,21 +89,23 @@
  *     - Empty `plugins: []` on a per-marketplace block: bare header alone
  *       (no `(no plugins)` sentinel inside the body; D-15-08).
  *
- *   RELOAD-HINT TRIGGER LADDER (D-16-12 -- refines SNM-15):
- *     - Any plugin.status in {"installed", "updated", "reinstalled",
- *       "uninstalled"}, OR
- *     - Any mp.status in {"added", "removed", "updated"} (state-changing;
- *       NOT "failed").
+ *   RELOAD-HINT TRIGGER (RLD-02 / D-07):
+ *     - The `/reload to pick up changes` trailer fires iff the OR-reduce of
+ *       the caller-stamped `row.needsReload` over the flattened marketplace +
+ *       plugin rows is true. The reducer performs NO status-token or
+ *       cascade-kind inference -- it reads the stamped flag directly.
  *     - Otherwise: suppressed.
  *
  *   RELOAD-HINT APPEND:
  *     `${body}\n\n/reload to pick up changes` -- one blank line between
  *     body and trailer (D-16-13; mirrors V1's appendReloadHint shape).
  *
- *   SEVERITY LADDER (D-16-11, first match wins):
- *     1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
- *     2. Any plugin.status in {"skipped", "manual recovery"}      -> "warning"
- *     3. Otherwise                                                -> undefined (info)
+ *   SEVERITY REDUCE (SEV-02 / D-16-11):
+ *     Emission severity is the numeric MAX over the caller-stamped
+ *     `row.severity` across every marketplace + plugin row (info < warning <
+ *     error), with an `info` default when no row stamps a higher rank. The
+ *     reducer performs NO content/status inference -- it reduces the stamped
+ *     fields directly.
  *
  *     Pi-API surface: omit-2nd-arg = info severity; pass "warning" / "error"
  *     otherwise.
