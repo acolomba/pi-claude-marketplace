@@ -38,14 +38,14 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 - [ ] **OUT-04**: The operation label in the tally is the command's human notification name (e.g. `Plugin install`, `Marketplace add`), supplied by the command (see MOD-01). Single-target operations omit the trailing tally (the row already embeds the outcome); the leading severity sentence still appears for single-target error/warning.
 - [ ] **OUT-05**: The marketplace header is always rendered; a plugin row never appears without its marketplace header.
 - [ ] **OUT-06**: Mixed-subject cascades (load-time `reconcile`, `import`) drop the subject noun in the leading sentence (`[A|Some] operation[s] …`) and use the operation name in the tally, counting all rows uniformly.
-- [ ] **OUT-07**: Cascade cardinality is structural in the type model (single marketplace/plugin vs. plural), not inferred by counting rows at render time.
+- [x] **OUT-07**: Cascade cardinality is structural in the type model (single marketplace/plugin vs. plural), not inferred by counting rows at render time.
 - [ ] **OUT-08**: `docs/output-catalog.md` and the `catalog-uat` byte fixtures are rewritten in lockstep for the new summary surfaces (atomic supersession); per-row grammar (icons, status tokens, reasons) is preserved except the `present`→`installed` collapse; the `reasons` set stays closed for output-grammar/catalog stability.
 
 ### Open-closed modularity (MOD)
 
-- [ ] **MOD-01**: Each command co-locates its own notification vocabulary with its vertical slice (handler/orchestrator): its private status set, its owned reasons, its operation label (exposed via a `Messaging` member on the command's `CommandContext`), and its per-status render map — none of it hand-appended to central tuples in `notify.ts`. (Revised 2026-06-24: command-local ownership, no central "grammar" registry.)
-- [ ] **MOD-02**: There is no central status/reason registry. Each command owns its status set and message shapes locally, so value/type drift is caught at the command module — a command cannot construct a message whose status it did not declare. `notify()` receives the command's `CommandContext` and rows at the call site rather than unioning contributions centrally. The bidirectional `notify-types.test.ts` set-equality proofs are deleted (the central tuples they guarded are gone). (Revised 2026-06-24: intent preserved — no drift, proofs deleted — via command-local ownership instead of a central registry.)
-- [ ] **MOD-03**: Each command renders its own rows via a render map total over its OWN status set — omitting an arm for one of the command's statuses is a compile error — calling the shared presentation vocabulary (`ICON_*`, scope/version/reason composers) that stays central in `notify.ts`. The exhaustiveness guarantee is local per command; there is no central per-status `switch` + `assertNever` to keep in sync. (Revised 2026-06-24: missing-arm-is-a-compile-error preserved, relocated from a central `Record<Status,RenderFn>` to per-command render maps.)
+- [x] **MOD-01**: Each command co-locates its own notification vocabulary with its vertical slice (handler/orchestrator): its private status set, its owned reasons, its operation label (exposed via a `Messaging` member on the command's `CommandContext`), and its per-status render map — none of it hand-appended to central tuples in `notify.ts`. (Revised 2026-06-24: command-local ownership, no central "grammar" registry.)
+- [x] **MOD-02**: There is no central status/reason registry. Each command owns its status set and message shapes locally, so value/type drift is caught at the command module — a command cannot construct a message whose status it did not declare. `notify()` receives the command's `CommandContext` and rows at the call site rather than unioning contributions centrally. The bidirectional `notify-types.test.ts` set-equality proofs are deleted (the central tuples they guarded are gone). (Revised 2026-06-24: intent preserved — no drift, proofs deleted — via command-local ownership instead of a central registry.)
+- [x] **MOD-03**: Each command renders its own rows via a render map total over its OWN status set — omitting an arm for one of the command's statuses is a compile error — calling the shared presentation vocabulary (`ICON_*`, scope/version/reason composers) that stays central in `notify.ts`. The exhaustiveness guarantee is local per command; there is no central per-status `switch` + `assertNever` to keep in sync. (Revised 2026-06-24: missing-arm-is-a-compile-error preserved, relocated from a central `Record<Status,RenderFn>` to per-command render maps.)
 - [ ] **MOD-04**: Cross-cutting concerns are extracted into concern-modules that contribute to the central composer: the hooks summary (`appendHooksBlock`) and soft-dep marker injection (`composeReasons` soft-dep branch + `DEPENDENCIES` + the host probe). `shared/notify.ts` slims to the envelope, the reducer spine, and the shared presentation vocabulary (`ICON_*`, scope/version/reason composers).
 - [ ] **MOD-05**: Adding a command touches **≤3 central files** — router registration (interface field + tuple + switch + usage), `register.ts` wiring, and one catalog section — and **zero `notify.ts` edits**, measured against the `research/MESSAGING-COUPLING.md` baseline.
 - [ ] **MOD-06**: The catalog floor is accepted for this milestone — one central catalog section per new rendered state, no generation/aggregation seam. Documented as the deliberate floor (generation deferred).
@@ -71,10 +71,10 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MOD-01 | Phase 1 | Pending |
-| MOD-02 | Phase 1 | Pending |
-| MOD-03 | Phase 1 | Pending |
-| OUT-07 | Phase 1 | Pending |
+| MOD-01 | Phase 1 | Complete |
+| MOD-02 | Phase 1 | Complete |
+| MOD-03 | Phase 1 | Complete |
+| OUT-07 | Phase 1 | Complete |
 | SEV-01 | Phase 2 | Pending |
 | SEV-02 | Phase 2 | Pending |
 | SEV-03 | Phase 2 | Pending |
