@@ -4,15 +4,15 @@ milestone: Notification Refactor
 milestone_name: milestone
 current_phase: 02
 current_plan: 3
-status: executing
-last_updated: "2026-06-24T21:50:39Z"
+status: phase-complete
+last_updated: "2026-06-24T22:30:00Z"
 last_activity: 2026-06-24
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 38
+  completed_plans: 8
+  percent: 50
 ---
 
 # Project State
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (shared project context)
 
 ## Current Position
 
-Phase: 02 (caller-stamped-severity-reload-reducer) — EXECUTING
-Plan: 3 of 3
-**Status:** Executing Phase 02
+Phase: 02 (caller-stamped-severity-reload-reducer) — COMPLETE
+Plan: 3 of 3 (final)
+**Status:** Phase 02 complete
 **Current Phase:** 02
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
 **Last Activity:** 2026-06-24
-**Last Activity Description:** Completed 02-02-PLAN.md — present->installed collapse (RLD-04) + disable-cascade kind removal (RLD-05), output byte-identical
+**Last Activity Description:** Completed 02-03-PLAN.md — D-05 runtime arch-test backstop (notify-stamp-coverage.test.ts) over the reconcile projection; GATE-01 dynamic-case closed, output byte-identical
 
 ## Phases
 
@@ -43,8 +43,8 @@ Plan: 3 of 3
 
 ## Progress
 
-**Phases Complete:** 1 / 4
-**Current Plan:** 3
+**Phases Complete:** 2 / 4
+**Current Plan:** 3 (final, complete)
 
 ## Decisions
 
@@ -54,9 +54,10 @@ Plan: 3 of 3
 - 02-01: Stamped non-success rows in producers outside the plan's file list (marketplace/add, reconcile/pending, plugin/list) — the dumb reducer reads every non-success row (Rule 2). edge-deps/plugin-info installed rows correctly excluded (PluginIndexRow / PluginInfoRow, not cascade rows).
 - 02-02: Collapsed present→installed (RLD-04/D-08); PluginInstalledMessage gained an optional description and both PL-4 description predicates were widened to installed so the list row's description second line stays byte-identical (the former present row carried it).
 - 02-02: Removed the disable-cascade kind (RLD-05/D-07); the disable reload trailer is driven by the per-row needsReload:true stamp via the RLD-02 OR-reduce. Kept the notifyWithContext kind? param (narrowed to "cascade") + the notify() exhaustiveness switch as the structural seam.
+- 02-03: Closed GATE-01's dynamic-case gap (D-05) with a runtime arch test (notify-stamp-coverage.test.ts) driving both reconcile projections; TRANSITION_STATUSES pinned via `satisfies readonly PluginStatus[]` for drift-proofing. Negative proof confirmed the test fails on a stripped stamp. Test-only addition; catalog byte-identical.
 
 ## Session Continuity
 
-**Stopped At:** 02-02-PLAN.md complete — present→installed collapse + disable-cascade kind removal, output byte-identical (catalog blob OID 8f9724c3... unchanged), GATE-01 still live
-**Resume File:** .planning/workstreams/notification-refactor/phases/02-caller-stamped-severity-reload-reducer/02-03-PLAN.md
-**Next:** Execute 02-03-PLAN.md (final Phase 2 plan)
+**Stopped At:** 02-03-PLAN.md complete — Phase 2 DONE. D-05 runtime backstop added (catalog blob OID 8f9724c3... unchanged); GATE-01 now type-level-primary + runtime-backstop. npm run check green.
+**Resume File:** (Phase 2 complete — next is Phase 3 planning)
+**Next:** Plan/execute Phase 3 (Desired-state output & atomic catalog supersession)
