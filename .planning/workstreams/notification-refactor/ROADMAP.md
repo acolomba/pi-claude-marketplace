@@ -21,11 +21,13 @@ renderer owns presentation + environment (soft-dep probe, formatting, reduction)
 
 The coupling audit (`research/MESSAGING-COUPLING.md`) fixes the order:
 
-1. **The exhaustiveness anchors must exist before correctness relocates.** Part C.2:
-   message shapes must stay nominal types pinned via `satisfies`, and per-status
-   render dispatch must be a total `Record<Status, RenderFn>` mapped type — otherwise
-   a missing render arm becomes a runtime `undefined` instead of a `TS2741` compile
-   error. So the registry/type-model scaffold lands first (Phase 1), output-neutral.
+1. **The exhaustiveness anchors must exist before correctness relocates.** Each
+   command must own its status set and a render map total over its OWN statuses, so
+   a missing render arm is a compile error at the command module rather than a runtime
+   `undefined`. (Revised 2026-06-24: the original central-registry + `Record<Status,
+   RenderFn>` mechanism is replaced by command-local ownership + a `CommandContext`
+   passed to `notify()` at the call site — same intent, no central registry.) So the
+   type-model + command-context scaffold lands first (Phase 1), output-neutral.
 2. **The spine then relocates correctness to producers** (Phase 2): rows gain
    caller-stamped `severity` + `needsReload`, `notify()` becomes max-severity /
    OR-needsReload / tally; the content-derived ladders (`BENIGN_REASONS`/`allBenign`/
@@ -45,22 +47,22 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 ## Phases
 
-- [ ] **Phase 1: Localized type model & registry spine** - Per-command grammar contributions union into the type model with compile-time exhaustiveness anchors; rows gain `severity`/`needsReload`/structural-cardinality shape (output-neutral).
+- [ ] **Phase 1: Localized type model & command-context spine** - Each command owns its status set, reasons, label (via `CommandContext.Messaging`), and per-status render map locally (no central registry); rows gain `severity`/`needsReload`/`dependencies` + structural cardinality (tuple-vs-array) shape (output-neutral).
 - [ ] **Phase 2: Caller-stamped severity & reload reducer** - `notify()` becomes a dumb reducer; every producer stamps `severity` + `needsReload`; content-derived ladders deleted; relocation gated by an architecture test.
 - [ ] **Phase 3: Desired-state output & atomic catalog supersession** - Leading severity sentence, trailing tally, header invariants; catalog markdown + byte fixtures rewritten in lockstep.
 - [ ] **Phase 4: Concern-module extraction & open-closed proof** - Hooks-summary and soft-dep injection extracted; `notify.ts` slims to envelope + reducer + vocabulary; ≤3-central-files / 0-notify-edits target proven and green.
 
 ## Phase Details
 
-### Phase 1: Localized type model & registry spine
-**Goal**: Each command declares its grammar contribution co-located with its vertical slice, a central registry unions them into the type model, and the row type model gains caller-intent fields and structural cardinality — all with zero rendered-output change.
+### Phase 1: Localized type model & command-context spine
+**Goal**: Each command co-locates its own notification vocabulary (private status set, owned reasons, operation label via a `Messaging` member on its `CommandContext`, and a per-status render map) with its vertical slice; `notify()` takes that context + rows at the call site (no central registry); and the row type model gains caller-intent fields (`severity`/`needsReload`/`dependencies`, optional this phase) and structural cardinality (tuple-vs-array) — all with zero rendered-output change.
 **Depends on**: Nothing (first phase)
 **Requirements**: MOD-01, MOD-02, MOD-03, OUT-07
 **Success Criteria** (what must be TRUE):
-  1. Each command's status token(s), owned reasons, operation label, and render arm are declared in its own module, not hand-appended to central tuples in `notify.ts`.
-  2. A central registry unions the per-command contributions; dropping a contribution out of lockstep (value tuple vs. nominal message type) is a compile error via `satisfies`, replacing the bidirectional `notify-types.test.ts` proofs.
-  3. Omitting a per-status render arm is a `TS2741` compile error via a total `Record<Status, RenderFn>` mapped type (the exhaustiveness anchor replacing the hand-maintained `switch` + `assertNever`).
-  4. The row type model expresses cascade cardinality (single marketplace/plugin vs. plural) structurally — render-time row counting no longer determines cardinality.
+  1. Each command co-locates its own status set, owned reasons, operation label (via a `Messaging` member on its `CommandContext`), and per-status render map in its own module — none hand-appended to central tuples in `notify.ts`.
+  2. No central registry: each command owns its statuses and message shapes locally, so value/type drift is a compile error at the command module (a command cannot construct a message whose status it did not declare); `notify()` takes the command's `CommandContext` + rows at the call site. The bidirectional `notify-types.test.ts` proofs are deleted.
+  3. Each command's render map is total over its OWN status set (omitting an arm is a compile error); shared presentation vocabulary (`ICON_*`, scope/version/reason composers) stays central in `notify.ts`. Exhaustiveness is local per command — no central `switch` + `assertNever`.
+  4. The row type model expresses cascade cardinality (single marketplace/plugin vs. plural) structurally via tuple-vs-array typing (single = 1-tuple, plural = array) — render-time row counting no longer determines cardinality.
   5. `npm run check` and `catalog-uat` are green with byte-identical rendered output (this phase is output-neutral; the reducer spine arrives in Phase 2).
 **Plans**: TBD
 
@@ -103,7 +105,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Localized type model & registry spine | 0/? | Not started | - |
+| 1. Localized type model & command-context spine | 0/? | Not started | - |
 | 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
