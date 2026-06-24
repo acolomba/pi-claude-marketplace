@@ -64,7 +64,13 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
   3. Each command's render map is total over its OWN status set (omitting an arm is a compile error); shared presentation vocabulary (`ICON_*`, scope/version/reason composers) stays central in `notify.ts`. Exhaustiveness is local per command — no central `switch` + `assertNever`.
   4. The row type model expresses cascade cardinality (single marketplace/plugin vs. plural) structurally via tuple-vs-array typing (single = 1-tuple, plural = array) — render-time row counting no longer determines cardinality.
   5. `npm run check` and `catalog-uat` are green with byte-identical rendered output (this phase is output-neutral; the reducer spine arrives in Phase 2).
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 01-01-PLAN.md — Shared spine: CommandContext contract + naming convention, vocabulary exports, reasons split (topic-grouped), inert severity/needsReload base fields, cardinality aliases, notifyWithContext adapter (Wave 1)
+- [ ] 01-02-PLAN.md — Migrate plugin family (install, uninstall, update, reinstall, enable, disable, list, info) to co-located CommandContext + total render maps (Wave 2)
+- [ ] 01-03-PLAN.md — Migrate marketplace family (add, remove, list, info, update, autoupdate, noautoupdate) + bootstrap delegation (Wave 2)
+- [ ] 01-04-PLAN.md — Migrate mixed-subject cascades (import + load-time reconcile pending/applied-cascade) (Wave 2)
+- [ ] 01-05-PLAN.md — Cleanup: delete notify-types.test.ts (D-03), remove legacy notify() + dead central switches; slim notify.ts (Wave 3)
 
 ### Phase 2: Caller-stamped severity & reload reducer
 **Goal**: Correctness relocates from one audited reducer to the producers — every outcome row carries caller-stamped `severity` and `needsReload`, `notify()` reduces them with no content inference, and an architecture test gates the relocation.
@@ -105,7 +111,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Localized type model & command-context spine | 0/? | Not started | - |
+| 1. Localized type model & command-context spine | 0/5 | Planned | - |
 | 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
