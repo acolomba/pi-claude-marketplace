@@ -77,9 +77,9 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Migrate plugin family (install, uninstall, update, reinstall, enable, disable, list, info) to co-located CommandContext + total render maps (Wave 2)
-- [ ] 01-03-PLAN.md — Migrate marketplace family (add, remove, list, info, update, autoupdate, noautoupdate) + bootstrap delegation (Wave 2)
-- [ ] 01-04-PLAN.md — Migrate mixed-subject cascades (import + load-time reconcile pending/applied-cascade) (Wave 2)
+- [x] 01-02-PLAN.md — Migrate plugin family (install, uninstall, update, reinstall, enable, disable, list, info) to co-located CommandContext + total render maps (Wave 2)
+- [x] 01-03-PLAN.md — Migrate marketplace family (add, remove, list, info, update, autoupdate, noautoupdate) + bootstrap delegation (Wave 2)
+- [x] 01-04-PLAN.md — Migrate mixed-subject cascades (import + load-time reconcile pending/applied-cascade) (Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -133,7 +133,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Localized type model & command-context spine | 1/5 | In Progress|  |
+| 1. Localized type model & command-context spine | 4/5 | In Progress|  |
 | 2. Caller-stamped severity & reload reducer | 0/? | Not started | - |
 | 3. Desired-state output & atomic catalog supersession | 0/? | Not started | - |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
