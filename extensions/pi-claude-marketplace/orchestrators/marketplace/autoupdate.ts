@@ -66,9 +66,11 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { notifyWithContext, type Plural, type Single } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
 import { classifyAutoupdateFlip } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
@@ -194,6 +196,15 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
+/**
+ * Selects the command context for the shared autoupdate orchestrator: the
+ * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
+ * context when disabling. Mirrors the enable/disable boolean-flag split.
+ */
+function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
+  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
+}
+
 function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
   const failureName = opts.name ?? "(unknown)";
 
@@ -206,16 +217,19 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
     return;
   }
 
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: failureName,
-        scope,
-        status: "failed",
-        plugins: [autoupdateFailedRow(failureName, err)],
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
+  // row -> Single. The flip command is selected by the boolean `opts.enable`
+  // flag (mirrors enable/disable); the `(failed)` header renders via the
+  // central seam, the failed child row dispatches through the command context.
+  const failedRows: Single<MarketplaceNotificationMessage> = [
+    {
+      name: failureName,
+      scope,
+      status: "failed",
+      plugins: [autoupdateFailedRow(failureName, err)],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
 }
 
 /**
@@ -445,6 +459,11 @@ async function flipOneScope(
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
+  // The autoupdate / noautoupdate commands share this orchestrator, selected by
+  // the boolean `opts.enable` flag (mirrors enable/disable). Resolve the command
+  // context once so every emission below routes through the same selection.
+  const flipContext = flipContextFor(opts.enable);
+
   const rows: AutoupdateFlipRow[] = [];
   const errors: { scope: Scope; cause: unknown }[] = [];
 
@@ -502,10 +521,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     return;
   }
 
-  // Empty marketplaces[] -> notify emits the `(no marketplaces)` sentinel
-  // verbatim. No orchestrator-side composition.
+  // Empty marketplaces[] -> the `(no marketplaces)` sentinel renders verbatim
+  // via the central seam. No orchestrator-side composition.
+  // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: [] });
+    const emptyRows: Plural<MarketplaceNotificationMessage> = [];
+    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows);
     return;
   }
 
@@ -556,5 +577,9 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     };
   });
 
-  notify(opts.ctx, opts.pi, { marketplaces });
+  // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
+  // autoupdate enabled/disabled/skipped/failed headers render via the central
+  // seam; the command is selected by the boolean `opts.enable` flag.
+  const rowsOut: Plural<MarketplaceNotificationMessage> = marketplaces;
+  notifyWithContext(opts.ctx, opts.pi, flipContext, rowsOut);
 }

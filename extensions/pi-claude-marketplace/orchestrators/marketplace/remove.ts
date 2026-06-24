@@ -57,9 +57,10 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import { notifyWithContext, type Single } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { REMOVE_CONTEXT } from "./remove.messaging.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
@@ -71,6 +72,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
+  MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginUninstalledMessage,
   Reason,
@@ -311,31 +313,33 @@ function emitPartialFailure(args: {
   // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
   // failed (with per-plugin cause). Caller-order honored end-to-end:
   // successfullyUnstaged first, failed second.
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: opts.name,
-        scope: resolvedScope,
-        status: "failed",
-        plugins: [
-          ...successfullyUnstaged.map(
-            (name): PluginUninstalledMessage => ({
-              status: "uninstalled",
-              name,
-            }),
-          ),
-          ...failedPlugins.map(
-            ({ name, cause }): PluginFailedMessage => ({
-              status: "failed",
-              name,
-              reasons: [narrowCascadeFailure(cause)],
-              cause,
-            }),
-          ),
-        ],
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block -> Single 1-tuple. The `(failed)`
+  // header renders via the central renderMpHeader seam the spine reuses; the
+  // mixed `uninstalled` / `failed` child rows dispatch through REMOVE_CONTEXT.
+  const partialRows: Single<MarketplaceNotificationMessage> = [
+    {
+      name: opts.name,
+      scope: resolvedScope,
+      status: "failed",
+      plugins: [
+        ...successfullyUnstaged.map(
+          (name): PluginUninstalledMessage => ({
+            status: "uninstalled",
+            name,
+          }),
+        ),
+        ...failedPlugins.map(
+          ({ name, cause }): PluginFailedMessage => ({
+            status: "failed",
+            name,
+            reasons: [narrowCascadeFailure(cause)],
+            cause,
+          }),
+        ),
+      ],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, partialRows);
   return undefined;
 }
 
@@ -580,17 +584,19 @@ function surfaceCfgInvalid(args: {
     };
   }
 
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: opts.name,
-        scope,
-        status: "failed",
-        reasons: ["invalid manifest"],
-        plugins: [],
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block -> Single 1-tuple. No child rows; the
+  // `(failed) {invalid manifest}` header renders via the central renderMpHeader
+  // seam the spine reuses.
+  const invalidManifestRows: Single<MarketplaceNotificationMessage> = [
+    {
+      name: opts.name,
+      scope,
+      status: "failed",
+      reasons: ["invalid manifest"],
+      plugins: [],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, invalidManifestRows);
   return undefined;
 }
 
@@ -735,21 +741,23 @@ export async function removeMarketplace(
   // D-22-01 and fires iff >=1 plugin was unstaged (an `uninstalled` row is
   // a Pi-visible state change). An empty remove leaves successfullyUnstaged
   // == [] -> plugins: [] -> header-only with no trailer (G-MIL-02).
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: opts.name,
-        scope: resolved.scope,
-        status: "removed",
-        plugins: successfullyUnstaged.map(
-          (name): PluginUninstalledMessage => ({
-            status: "uninstalled",
-            name,
-          }),
-        ),
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block -> Single 1-tuple. The `(removed)`
+  // header renders via the central renderMpHeader seam the spine reuses; the
+  // `uninstalled` child rows dispatch through REMOVE_CONTEXT.
+  const removedRows: Single<MarketplaceNotificationMessage> = [
+    {
+      name: opts.name,
+      scope: resolved.scope,
+      status: "removed",
+      plugins: successfullyUnstaged.map(
+        (name): PluginUninstalledMessage => ({
+          status: "uninstalled",
+          name,
+        }),
+      ),
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows);
   return undefined;
 }
 
