@@ -417,8 +417,9 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
 //
 // Satisfies SNM-01 (NotificationMessage), SNM-02
 // (MarketplaceNotificationMessage), SNM-03 (PluginNotificationMessage
-// discriminated union; variant count is type-length-locked in
-// tests/architecture/notify-types.test.ts), SNM-04 (PluginStatus derived via indexed
+// discriminated union; each command's render map is total over its OWN
+// statuses, so a missing or extra variant is a local compile error -- D-10),
+// SNM-04 (PluginStatus derived via indexed
 // access), SNM-05 (MarketplaceStatus closed set), SNM-06 (Dependency +
 // required `dependencies` on installed/updated/reinstalled), SNM-07
 // (MarketplaceDetails shape), SNM-08 (UsageErrorMessage shape), SNM-09
@@ -436,8 +437,8 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
 // ---------------------------------------------------------------------------
 
 /**
- * Runtime tuple of every plugin status literal (entry count is
- * type-length-locked in tests/architecture/notify-types.test.ts).
+ * Runtime tuple of every plugin status literal; the derived `PluginStatus`
+ * union is the SNM-04 closed set each command's render map narrows over.
  * `"manual recovery"` is a literal string WITH A SPACE; do not transform to
  * kebab-case ("manual-recovery") or camelCase ("manualRecovery") -- the
  * renderer emits the discriminator literal directly into the `(<status>)`
@@ -477,8 +478,8 @@ export const PLUGIN_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every marketplace status literal (entry count is
- * type-length-locked in tests/architecture/notify-types.test.ts).
+ * Runtime tuple of every marketplace status literal; the derived
+ * `MarketplaceStatus` union is the SNM-05 closed set.
  * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
  * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
  * pending-tense tokens. Order is normative -- the 4 leading entries
