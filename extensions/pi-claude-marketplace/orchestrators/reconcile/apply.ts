@@ -48,7 +48,8 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
-import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
@@ -59,6 +60,7 @@ import { uninstallPlugin } from "../plugin/uninstall.ts";
 
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
+import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
@@ -852,8 +854,14 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   // Single CASCADE notify() per applyReconcile (IL-2 / RECON-04). The
   // projection T-55-02-02 contract: consumes only outcome.reason; raw
   // error.message never reaches the notify body.
+  //
+  // D-02 / MOD-03: thread RECONCILE_APPLIED_CONTEXT so the realized transition
+  // rows render through reconcile's own render map, never the central
+  // renderPluginRow switch. The `reconcile-applied-cascade` standalone envelope
+  // (its content-derived severity + the load-time silence contract) stays
+  // central and byte-identical via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
-  notify(opts.ctx, opts.pi, message);
+  notifyReconcileAppliedWithContext(opts.ctx, opts.pi, RECONCILE_APPLIED_CONTEXT, message);
 
   // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
   // transition rows (installed/uninstalled/failed) under IL-2's single-
