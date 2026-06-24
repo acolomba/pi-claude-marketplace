@@ -223,6 +223,9 @@ function emitCascadeFailure(args: {
     reasons: [narrowCascadeFailure(cause)],
     ...(removedVersion !== undefined && { version: removedVersion }),
     cause,
+    // D-03/D-06: a failed uninstall -> error, no reload (nothing changed).
+    severity: "error",
+    needsReload: false,
   };
   notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
     {
@@ -265,6 +268,9 @@ function emitConfigInvalid(args: {
           name: plugin,
           reasons: ["invalid manifest"] as const,
           cause: invalidErr,
+          // D-03/D-06: invalid-config abort -> error, no reload.
+          severity: "error" as const,
+          needsReload: false,
         },
       ],
     },
@@ -620,6 +626,9 @@ export async function uninstallPlugin(
     status: "uninstalled",
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
+    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
+    severity: "info",
+    needsReload: true,
   };
   notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
     {

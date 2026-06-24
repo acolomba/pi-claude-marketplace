@@ -132,6 +132,8 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
         name,
         scope,
         status: "failed",
+        // D-03: a failed reconcile block -> error.
+        severity: "error",
         plugins,
         ...(block.reasons !== undefined && { reasons: block.reasons }),
       };
@@ -167,6 +169,9 @@ function applySourceMismatch(
       status: "failed",
       name: mismatch.plugin,
       reasons: ["source mismatch"],
+      // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+      severity: "error",
+      needsReload: false,
     });
   }
 }
@@ -334,6 +339,11 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
         dependencies: outcome.dependencies,
+        // D-03/D-06: realized install transition -> info, reloads. (The
+        // reconcile-applied cascade still suppresses the /reload trailer at the
+        // kind level -- RECON-04 -- so this needsReload never surfaces a hint.)
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-uninstalled":
@@ -341,6 +351,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "uninstalled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
+        // D-03/D-06: realized uninstall transition -> info, reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-enabled":
@@ -357,6 +370,10 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
         dependencies: [],
+        // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+        // reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-disabled":
@@ -364,6 +381,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "disabled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
+        // D-03/D-06: a realized disable transition -> info, reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-install-failed":
@@ -374,6 +394,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "failed",
         name: outcome.plugin,
         reasons: reasonAsContent(outcome.reason),
+        // D-03/D-06: a failed reconcile apply row -> error, no reload.
+        severity: "error",
+        needsReload: false,
       });
       return;
     case "source-mismatch":
@@ -384,6 +407,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
           status: "failed",
           name: outcome.plugin,
           reasons: ["source mismatch"],
+          // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+          severity: "error",
+          needsReload: false,
         });
       }
 
@@ -409,6 +435,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
           name: outcome.basename,
           reasons: [outcome.reason],
           cause: outcome.cause,
+          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+          severity: "error",
+          needsReload: false,
         });
       }
 

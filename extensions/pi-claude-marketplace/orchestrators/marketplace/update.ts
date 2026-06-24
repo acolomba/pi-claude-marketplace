@@ -115,6 +115,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
@@ -654,23 +655,34 @@ function outcomeToCascadePluginMessage(
           ...(outcome.declaresAgents ? (["agents"] as const) : []),
           ...(outcome.declaresMcp ? (["mcp"] as const) : []),
         ],
+        // D-03/D-06: realized update transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     case "unchanged":
       return {
         status: "skipped",
         name: outcome.name,
         scope,
-        // The renderer routes `skipped` through warning severity ->
-        // ICON_UNINSTALLABLE (⊘).
         reasons: ["up-to-date"],
+        // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
+        severity: "info",
+        needsReload: false,
       };
-    case "skipped":
+    case "skipped": {
+      const reasons = [narrowSkipReason(outcome)];
       return {
         status: "skipped",
         name: outcome.name,
         scope,
-        reasons: [narrowSkipReason(outcome)],
+        reasons,
+        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
+        // never reloads.
+        severity: skipSeverity(reasons),
+        needsReload: false,
       };
+    }
+
     case "failed":
       return {
         status: "failed",
@@ -682,6 +694,9 @@ function outcomeToCascadePluginMessage(
         // failed outcomes produced by plugin/update.ts (no err in scope) leave
         // this undefined and the renderer simply omits the trailer.
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-03/D-06: a failed update -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     default:
       // Exhaustiveness guard. A new partition added to PluginUpdateOutcome
@@ -801,12 +816,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       name,
       reasons: typedReasons ?? (["network unreachable"] as const),
       cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      // D-03/D-06: a marketplace-refresh failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     // OUT-07 / D-12: one marketplace block -> Single. The `(failed)` header
     // renders via the central seam; the failed child row dispatches through
     // UPDATE_CONTEXT.
     const failedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-      { name, scope, status: "failed", plugins: [failedRow] },
+      // D-03: a failed marketplace update -> error.
+      { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
     ];
     notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows);
     return;

@@ -324,11 +324,17 @@ function emitPartialFailure(args: {
       name: opts.name,
       scope: resolvedScope,
       status: "failed",
+      // D-03: a failed marketplace remove -> error (the per-plugin children
+      // carry the granular reasons).
+      severity: "error",
       plugins: [
         ...successfullyUnstaged.map(
           (name): PluginUninstalledMessage => ({
             status: "uninstalled",
             name,
+            // D-03/D-06: realized uninstall transition -> info, reloads.
+            severity: "info",
+            needsReload: true,
           }),
         ),
         ...failedPlugins.map(
@@ -337,6 +343,9 @@ function emitPartialFailure(args: {
             name,
             reasons: [narrowCascadeFailure(cause)],
             cause,
+            // D-03/D-06: a per-plugin unstage failure -> error, no reload.
+            severity: "error",
+            needsReload: false,
           }),
         ),
       ],
@@ -596,6 +605,8 @@ function surfaceCfgInvalid(args: {
       scope,
       status: "failed",
       reasons: ["invalid manifest"],
+      // D-03: a failed marketplace remove -> error.
+      severity: "error",
       plugins: [],
     },
   ];
@@ -756,6 +767,9 @@ export async function removeMarketplace(
         (name): PluginUninstalledMessage => ({
           status: "uninstalled",
           name,
+          // D-03/D-06: realized uninstall transition -> info, reloads.
+          severity: "info",
+          needsReload: true,
         }),
       ),
     },

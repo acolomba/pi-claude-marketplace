@@ -912,7 +912,17 @@ function buildDisabledInventoryBlock(
     name: marketplace,
     scope,
     ...detailsField,
-    plugins: [{ status: "disabled", name: pluginName, version: installed.version }],
+    plugins: [
+      {
+        // D-03/D-06: a disabled INVENTORY row (info surface) is steady state,
+        // not a realized transition -> info, never reloads.
+        status: "disabled",
+        name: pluginName,
+        version: installed.version,
+        severity: "info",
+        needsReload: false,
+      },
+    ],
   };
 }
 

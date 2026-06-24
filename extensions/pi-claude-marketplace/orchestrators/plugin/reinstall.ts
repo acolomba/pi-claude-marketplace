@@ -83,6 +83,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -289,6 +290,9 @@ export async function reinstallPlugin(
     name: plugin,
     dependencies: dependenciesFromOutcome(locked.outcome),
     version: locked.outcome.version,
+    // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
+    severity: "info",
+    needsReload: true,
   };
   notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
     { name: marketplace, scope, plugins: [reinstalledRow] },
@@ -312,6 +316,9 @@ export async function reinstallPlugin(
             name: plugin,
             reasons: ["invalid manifest"] as const,
             cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid config write-back -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
           },
         ],
       },
@@ -361,12 +368,19 @@ function handleSinglePluginFailure(
           name: plugin,
           reasons,
           cause: causeErr,
+          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
+          // no reload.
+          severity: "warning",
+          needsReload: false,
         } satisfies PluginManualRecoveryMessage)
       : ({
           status: "failed",
           name: plugin,
           reasons,
           cause: causeErr,
+          // D-03/D-06: a failed reinstall -> error, no reload.
+          severity: "error",
+          needsReload: false,
         } satisfies PluginFailedMessage);
     notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
       { name: marketplace, scope, plugins: [failureRow] },
@@ -500,6 +514,9 @@ function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: unknown): 
     name: "(reinstall)",
     reasons,
     cause: causeErr,
+    // D-03/D-06: bare-form reinstall enumerate failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
   notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
     { name: targetingMp, scope: targetingScope, plugins: [failedRow] },
@@ -828,6 +845,9 @@ function outcomeToPluginMessage(
         dependencies,
         ...(outcome.version !== "" && { version: outcome.version }),
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     }
 
@@ -838,6 +858,10 @@ function outcomeToPluginMessage(
         name: outcome.name,
         reasons,
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
+        // never reloads.
+        severity: skipSeverity(reasons),
+        needsReload: false,
       };
       return skipped;
     }
@@ -865,6 +889,10 @@ function outcomeToPluginMessage(
           name: outcome.name,
           reasons,
           ...(rowScope !== undefined && { scope: rowScope }),
+          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
+          // no reload.
+          severity: "warning",
+          needsReload: false,
         };
         return manualRecovery;
       }
@@ -874,6 +902,9 @@ function outcomeToPluginMessage(
         name: outcome.name,
         reasons,
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-03/D-06: a failed reinstall -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
       return failed;
     }

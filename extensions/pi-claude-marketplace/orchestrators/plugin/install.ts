@@ -1362,6 +1362,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       dependencies,
       version: installCtx.version,
       ...(reasons.length > 0 && { reasons }),
+      // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      severity: "info",
+      needsReload: true,
     };
     // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
@@ -1445,6 +1448,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
     };
     return failed;
   }
@@ -1459,6 +1465,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
       rollbackPartial: rollbackPartials.map((p) => ({
         phase: p.phase,
         ...(p.cause !== undefined && { cause: p.cause }),
@@ -1490,6 +1499,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
     };
     return failed;
   }
@@ -1504,6 +1516,9 @@ function composeInstallFailureMessage(args: {
     ...(version !== undefined && version !== "" && { version }),
     scope,
     ...(cause !== undefined && { cause }),
+    // D-03/D-06: a failed install -> error, no reload (nothing landed).
+    severity: "error",
+    needsReload: false,
   };
   return failed;
 }

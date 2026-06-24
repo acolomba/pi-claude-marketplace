@@ -389,6 +389,9 @@ function buildImportNotificationMarketplaces(
       status: "installed",
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
+      // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      severity: "info",
+      needsReload: true,
     };
     block.plugins.push(row);
   }
@@ -399,6 +402,10 @@ function buildImportNotificationMarketplaces(
       status: "skipped",
       name: o.plugin,
       reasons: ["already installed"] as const,
+      // D-03/D-06: `already installed` is a benign idempotent skip -> info,
+      // no reload.
+      severity: "info",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -409,6 +416,9 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: ["source mismatch"] as const,
+      // D-03/D-06: a source-mismatch import row -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -419,6 +429,9 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: ["not in manifest"] as const,
+      // D-03/D-06: an unexpected import failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -473,7 +486,8 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceRows<Imp
     case "updated":
       return { name, scope, status: "updated", plugins };
     case "failed":
-      return { name, scope, status: "failed", plugins };
+      // D-03: a failed import marketplace block -> error.
+      return { name, scope, status: "failed", severity: "error", plugins };
     case undefined:
       return { name, scope, plugins };
     default:

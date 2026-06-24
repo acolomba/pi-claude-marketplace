@@ -37,6 +37,25 @@ export const IDEMPOTENT_REASONS = [
 ] as const;
 export type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
 
+const IDEMPOTENT_REASON_SET: ReadonlySet<Reason> = new Set(IDEMPOTENT_REASONS);
+
+/**
+ * SEV-01 / D-03: per-producer severity for a `skipped` row, classified from
+ * the reasons the producer is about to stamp. A skip whose reasons are ALL
+ * idempotent no-ops (the resource already matches the requested state) is
+ * benign -> `info`; any non-idempotent reason -- or a missing/empty reason set
+ * that cannot be PROVEN benign -- is actionable -> `warning`. This is the
+ * producer-local replacement for the former centralized benign-reason lookup:
+ * the command stamps its own desired-vs-actual judgment at the emit site.
+ */
+export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "warning" {
+  return reasons !== undefined &&
+    reasons.length > 0 &&
+    reasons.every((r) => IDEMPOTENT_REASON_SET.has(r))
+    ? "info"
+    : "warning";
+}
+
 /**
  * D-09: unsupported-components / soft-dep reasons -- the topic group the user
  * named explicitly (hooks / LSP / companion-extension soft deps / unsupported

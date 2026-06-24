@@ -105,6 +105,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
@@ -1448,6 +1449,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
             name: plugin,
             reasons: ["invalid manifest"] as const,
             cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid-config abort -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
           },
         ],
       },
@@ -1526,17 +1530,21 @@ function outcomeToCascadePluginMessage(
         // marker (MSG-SD-3). The renderer narrows on `dependencies`
         // membership + the notify-time probe.
         dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
+        // D-03/D-06: realized update transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     case "unchanged":
       // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
-      // unchanged renders as `(skipped) {up-to-date}`. severity for
-      // skipped is `warning` (consistent with the existing
-      // CMC-26 dispatch ternary's `aggregatedSeverity` behavior).
+      // unchanged renders as `(skipped) {up-to-date}`.
       return {
         status: "skipped",
         name: outcome.name,
         scope: target.scope,
         reasons: ["up-to-date"],
+        // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
+        severity: "info",
+        needsReload: false,
       };
     case "skipped": {
       // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over
@@ -1551,6 +1559,10 @@ function outcomeToCascadePluginMessage(
         ...(outcome.fromVersion !== undefined &&
           outcome.fromVersion !== "" && { version: outcome.fromVersion }),
         reasons,
+        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
+        // never reloads.
+        severity: skipSeverity(reasons),
+        needsReload: false,
       };
     }
 
@@ -1575,6 +1587,10 @@ function outcomeToCascadePluginMessage(
         reasons,
         ...(version !== undefined && version !== "" && { version }),
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-03/D-06: a failed update -> error, no reload (the rollbackPartial
+        // spread below inherits these).
+        severity: "error",
+        needsReload: false,
       };
       if (!hasPhaseFailures) {
         return base;
@@ -1756,6 +1772,9 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
     name: pluginName,
     reasons,
     cause,
+    // D-03/D-06: a direct update failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
     ...(args.rollbackPartial !== undefined &&
       args.rollbackPartial.length > 0 && {
         rollbackPartial: args.rollbackPartial.map((p) => ({
@@ -1898,6 +1917,9 @@ function notifyBareFormEnumerateFailure(args: {
     name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
     reasons,
     cause,
+    // D-03/D-06: bare-form enumerate failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
   notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
     {

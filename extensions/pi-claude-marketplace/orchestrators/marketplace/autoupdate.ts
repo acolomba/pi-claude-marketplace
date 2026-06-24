@@ -185,6 +185,9 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
     name,
     reasons,
     cause: err instanceof Error ? err : new Error(errorMessage(err)),
+    // D-03/D-06: a synthetic autoupdate-failure child -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
 }
 
@@ -231,6 +234,8 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
       name: failureName,
       scope,
       status: "failed",
+      // D-03: a failed autoupdate flip -> error.
+      severity: "error",
       plugins: [autoupdateFailedRow(failureName, err)],
     },
   ];
@@ -570,6 +575,8 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         scope: row.scope,
         status: "failed",
         reasons: ["not found"],
+        // D-03: a failed autoupdate flip -> error.
+        severity: "error",
         plugins: [],
       };
     }

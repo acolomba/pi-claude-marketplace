@@ -607,7 +607,16 @@ export async function setPluginEnabled(
       enable,
       marketplace,
       scope,
-      row: { status: "failed", name: plugin, reasons: [] as const, cause },
+      row: {
+        status: "failed",
+        name: plugin,
+        reasons: [] as const,
+        cause,
+        // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+        // reload.
+        severity: "error",
+        needsReload: false,
+      },
     });
     return undefined;
   }
@@ -681,7 +690,15 @@ function emitResolutionFailure(args: {
     enable,
     marketplace,
     scope,
-    row: { status: "failed", name: plugin, reasons: [reason], cause: sanitized },
+    row: {
+      status: "failed",
+      name: plugin,
+      reasons: [reason],
+      cause: sanitized,
+      // D-03/D-06: a pre-lock resolution failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
+    },
   });
   return undefined;
 }
@@ -881,6 +898,9 @@ function composeOutcomeRow(args: {
       cause: new Error(
         `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
       ),
+      // D-03/D-06: enable/disable failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
   }
 
@@ -891,6 +911,9 @@ function composeOutcomeRow(args: {
         name: plugin,
         reasons: ["invalid manifest"] as const,
         cause: new Error(`Config file "${configBasename}" failed schema validation.`),
+        // D-03/D-06: invalid-config abort -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     case "not-recorded":
       // WR-03: the marketplace container is PRESENT but the plugin row is
@@ -904,6 +927,9 @@ function composeOutcomeRow(args: {
         status: "skipped",
         name: plugin,
         reasons: ["not installed"] as const,
+        // D-03/D-06: `not installed` is actionable -> warning, no reload.
+        severity: "warning",
+        needsReload: false,
       };
     case "idempotent": {
       const reason: ContentReason = enable ? "already enabled" : "already disabled";
@@ -911,6 +937,10 @@ function composeOutcomeRow(args: {
         status: "skipped",
         name: plugin,
         reasons: [reason],
+        // D-03/D-06: `already enabled`/`already disabled` is benign -> info,
+        // no reload.
+        severity: "info",
+        needsReload: false,
       };
     }
 
@@ -929,6 +959,9 @@ function composeOutcomeRow(args: {
         reasons: baseReasons,
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
+        // D-03/D-06: a failed enable -> error, no reload.
+        severity: "error",
+        needsReload: false,
         ...(partials.length > 0 && {
           rollbackPartial: partials.map((p) => ({
             phase: p.phase,
@@ -946,6 +979,9 @@ function composeOutcomeRow(args: {
         reasons: narrowDisableFailure(outcome.cause),
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
+        // D-03/D-06: a failed disable -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     case "fresh":
       // UAT-04: the fresh-enable header is the BARE always-marketplace-header
@@ -962,11 +998,23 @@ function composeOutcomeRow(args: {
             name: plugin,
             dependencies: [],
             ...(outcome.version !== undefined && { version: outcome.version }),
+            // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+            // reloads Pi resources.
+            severity: "info",
+            needsReload: true,
           }
         : {
+            // D-06/RLD-02: a realized fresh disable unstages Pi-visible
+            // artefacts, so it stamps needsReload directly -- this is what lets
+            // the reload trailer fire via the OR-reduce instead of the
+            // kind-based `disable-cascade` straddle. List/info `disabled`
+            // inventory rows stamp needsReload:false, so the trailer stays
+            // scoped to the realized transition.
             status: "disabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
+            severity: "info",
+            needsReload: true,
           };
   }
 }

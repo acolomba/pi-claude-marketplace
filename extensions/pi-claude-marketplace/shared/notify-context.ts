@@ -95,6 +95,14 @@ export interface MarketplaceRows<Msg> {
   readonly status?: MarketplaceStatus;
   readonly reasons?: readonly ContentReason[];
   readonly details?: MarketplaceDetails;
+  // SEV-01/RLD-01: the marketplace-level row carries the same caller-stamped
+  // severity/needsReload as `MpCommon` (its broad-union target) so a producer
+  // can stamp a header-only `(failed)` block whose error severity has no plugin
+  // child to carry it (e.g. an invalid-manifest `marketplace remove`). The
+  // widening cast in `notifyWithContext` preserves these into the
+  // `MarketplaceNotificationMessage` the reducer maxes over.
+  readonly severity?: "info" | "warning" | "error";
+  readonly needsReload?: boolean;
   readonly plugins: readonly Msg[];
 }
 
