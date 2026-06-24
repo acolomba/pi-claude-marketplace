@@ -1,7 +1,18 @@
 ---
-workstream: notification-refactor
+gsd_state_version: 1.0
 milestone: Notification Refactor
-created: 2026-06-24
+milestone_name: milestone
+current_phase: None (planning not yet started)
+current_plan: N/A
+status: Roadmap created — awaiting approval
+last_updated: "2026-06-24T16:26:32.812Z"
+last_activity: 2026-06-24
+progress:
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -14,6 +25,7 @@ See: .planning/PROJECT.md (shared project context)
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
 ## Current Position
+
 **Status:** Roadmap created — awaiting approval
 **Current Phase:** None (planning not yet started)
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
@@ -28,10 +40,12 @@ See: .planning/PROJECT.md (shared project context)
 4. Concern-module extraction & open-closed proof — MOD-04/05/06, GATE-03
 
 ## Progress
+
 **Phases Complete:** 0 / 4
 **Current Plan:** N/A
 
 ## Session Continuity
-**Stopped At:** Roadmap created; awaiting approval before phase planning
-**Resume File:** .planning/workstreams/notification-refactor/ROADMAP.md
+
+**Stopped At:** Phase 1 context gathered (architecture pivot: command-local, no registry)
+**Resume File:** .planning/workstreams/notification-refactor/phases/01-localized-type-model-command-context-spine/01-CONTEXT.md
 **Next:** Approve roadmap, then `/gsd-plan-phase 1`
