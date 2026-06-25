@@ -15,7 +15,7 @@
 // before_agent_start handler then drains it onto a synthesized
 // `event.systemPrompt`.
 //
-// Pins the cross-event plumbing the v1.13 phase-63 bridge was missing:
+// Pins the cross-event plumbing the hooks bridge was missing:
 // without the fix, the bridge silently dropped the additionalContext at
 // `adaptObservationResult`'s mutate arm and Pi's first agent turn never
 // saw the injected text.

@@ -2620,8 +2620,8 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin enable <plugin>@<marketplace>": {
     "enable-fresh": {
       pi: piWithBothLoaded(),
-      // Re-materialization through the install ledger -- UAT-04 (v1.12
-      // milestone UAT decision 2026-06-11): BARE always-marketplace-header
+      // Re-materialization through the install ledger -- UAT-04 (decision
+      // 2026-06-11): BARE always-marketplace-header
       // form (no `(added)` token; that header belongs to `marketplace add`)
       // + `(installed)` plugin row (existing state-change token);
       // reload-hint fires per SNM-33.

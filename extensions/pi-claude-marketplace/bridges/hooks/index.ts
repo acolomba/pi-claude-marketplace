@@ -24,7 +24,7 @@ export type { RoutingEntry } from "./event-router.ts";
 
 // LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
 // (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
-// re-exported -- callers in plan 63-04 use only the two verbs below.
+// re-exported -- callers use only the two verbs below.
 export { writeHookConfig, removeHookConfig } from "./stage.ts";
 export type {
   WriteHookConfigInput,

@@ -223,8 +223,8 @@ interface PartialResolution {
   hooksConfigPath?: string;
   // SURF-05 / D-63-08: set ONLY on the parseHooksConfig success branch by
   // `detectOrphanRewake`. Absent when no hooks.json exists, parse failed,
-  // or no handler is orphaned. Plan 63-04 reads this on the installable
-  // variant.
+  // or no handler is orphaned. The cascade-wiring path reads this on the
+  // installable variant.
   orphanRewake?: boolean;
 }
 
@@ -980,8 +980,8 @@ export async function resolveLoose(
   dirty = (await applyLooseMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
 
   // Step 8b (HOOK-01 / D-57-04): the hooks-config probe is mode-agnostic.
-  // Entry-vs-manifest hooks-FIELD conflict semantics are deferred to the
-  // dispatch milestone; here the convention file is the sole gate.
+  // Entry-vs-manifest hooks-FIELD conflict semantics are deferred to future
+  // hooks-dispatch work; here the convention file is the sole gate.
   dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
 
   // Step 9 (PR-3 / PR-4): unsupported components -- same as strict.

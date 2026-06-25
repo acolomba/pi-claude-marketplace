@@ -1,6 +1,6 @@
 // install handler shim tests.
 //
-// The shim is a thin Pattern 1 wrapper (parseCommandArgs -> early-return ->
+// The shim is a thin wrapper (parseCommandArgs -> early-return ->
 // delegate). We verify:
 //   - Bad args paths surface USAGE via notifyError (no orchestrator state change).
 //   - Valid args reach the orchestrator -- asserted indirectly by observing

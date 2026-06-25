@@ -1524,7 +1524,7 @@ test("CR-01 TOCTOU: marketplace removed between pre-guard read and snapshotAfter
   // MarketplaceNotFoundError there, which refreshOneMarketplace's generic catch
   // misattributed (reasonsFromCascadeError -> undefined -> `?? network
   // unreachable`) as the LYING `(failed) {network unreachable}` row -- exactly
-  // the NFR-5/ATTR-10 misattribution class this milestone closes.
+  // the NFR-5/ATTR-10 misattribution class this change closes.
   //
   // The fix mirrors remove.ts:235-244: snapshotAfterRefresh returns `undefined`
   // (sentinel) instead of throwing, and refreshOneMarketplace returns silently.

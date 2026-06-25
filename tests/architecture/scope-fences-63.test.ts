@@ -7,14 +7,14 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 /**
- * Scope-fence architecture lints pinning three v1.13 milestone invariants:
+ * Scope-fence architecture lints pinning three invariants:
  *
- * SURF-03 (deferred to v1.14+): no synthesis-caveat warning surface ships in
- * v1.13. `shared/notify.ts` must NOT introduce a lossy-synthesis token in
+ * SURF-03 (deferred): no synthesis-caveat warning surface ships yet.
+ * `shared/notify.ts` must NOT introduce a lossy-synthesis token in
  * `REASONS`; no `<lossy synthesis>` marker family may appear in any source
  * file; no install-arm warning emission outside the orphan-rewake row.
  *
- * SURF-04 (perma-forbidden in v1.13): no `/claude:plugin hooks` edge handler
+ * SURF-04 (perma-forbidden): no `/claude:plugin hooks` edge handler
  * may exist, and the `list` command must not grow a hook-count column. The
  * existing byte-form for `list` is preserved by the catalog-uat byte gate;
  * this test pins the source-level non-additions that would produce such a
@@ -93,7 +93,7 @@ async function dirEntries(relPath: string): Promise<readonly string[] | null> {
   }
 }
 
-test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat warning surface deferred to v1.14+)", async () => {
+test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat warning surface deferred)", async () => {
   const source = await readFile(path.join(REPO_ROOT, NOTIFY_REL), "utf8");
   const hits: string[] = [];
   for (const token of LOSSY_SYNTHESIS_TOKENS) {
@@ -106,12 +106,12 @@ test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat w
     hits,
     [],
     `SURF-03 violation: synthesis-caveat token(s) ${hits.join(", ")} appeared in ${NOTIFY_REL}. ` +
-      `SURF-03 is deferred to v1.14+; v1.13 ships ZERO lossy-synthesis surface. ` +
-      `If you genuinely intend to ship a synthesis warning, do it in a v1.14+ phase with REASONS catalog + byte-UAT in lockstep.`,
+      `SURF-03 is deferred; ZERO lossy-synthesis surface ships. ` +
+      `If you genuinely intend to ship a synthesis warning, do it as a deliberate change with REASONS catalog + byte-UAT in lockstep.`,
   );
 });
 
-test("SURF-04: no /claude:plugin hooks edge handler (perma-forbidden in v1.13)", async () => {
+test("SURF-04: no /claude:plugin hooks edge handler (perma-forbidden)", async () => {
   const offenders: string[] = [];
 
   for (const dirRel of [PLUGIN_EDGE_DIR_REL, PLUGIN_COMMANDS_DIR_REL]) {
@@ -131,12 +131,12 @@ test("SURF-04: no /claude:plugin hooks edge handler (perma-forbidden in v1.13)",
     offenders,
     [],
     `SURF-04 violation: edge-handler file(s) ${offenders.join(", ")} present. ` +
-      `v1.13 forbids a /claude:plugin hooks command surface. The hooks bridge runs as a load-time ` +
+      `A /claude:plugin hooks command surface is forbidden. The hooks bridge runs as a load-time ` +
       `wiring concern, not as a user-facing command.`,
   );
 });
 
-test("SURF-04: no hook-count column on list (perma-forbidden in v1.13)", async () => {
+test("SURF-04: no hook-count column on list (perma-forbidden)", async () => {
   const offenders: string[] = [];
   for (const rel of [LIST_ORCH_REL, LIST_EDGE_REL]) {
     const source = await readIfExists(rel);
@@ -155,7 +155,7 @@ test("SURF-04: no hook-count column on list (perma-forbidden in v1.13)", async (
     offenders,
     [],
     `SURF-04 violation: hook-count column token(s) ${offenders.join("; ")} appeared. ` +
-      `The existing list-row byte-form is locked by catalog-uat; do not grow a hook-count column in v1.13.`,
+      `The existing list-row byte-form is locked by catalog-uat; do not grow a hook-count column.`,
   );
 });
 

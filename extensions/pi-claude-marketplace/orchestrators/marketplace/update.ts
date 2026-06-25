@@ -457,7 +457,7 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
       // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
       // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
       // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-      // milestone closes). Mirrors remove.ts:235-244's silent-return at the same
+      // change closes). Mirrors remove.ts:235-244's silent-return at the same
       // withStateGuard boundary. withStateGuard still saves the unmodified state
       // (a harmless re-write of the same content).
       return undefined;

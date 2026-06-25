@@ -1509,7 +1509,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
 });
 
 test("T4 / PR #51: applySourceMismatches + applied-cascade source-mismatch arm fire through applyReconcile -- dangling-reference variant attributes a (failed) {source mismatch} plugin child row to the offending plugin", async () => {
-  // Sub-plan 04 added byte-equality tables for the four PlannedSourceMismatch
+  // Byte-equality tables were added for the four PlannedSourceMismatch
   // / SourceMismatchOutcome causes in notify.test.ts (the projection seam).
   // T4 closes the missing piece: an end-to-end applyReconcile pass that
   // routes a dangling-reference through `applySourceMismatches`

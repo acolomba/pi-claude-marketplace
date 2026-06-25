@@ -224,7 +224,7 @@ function unwrapAddError(err: unknown): unknown {
 }
 
 /**
- * ATTR-07 (Pattern 3): map an `addMarketplace` precondition error to its
+ * ATTR-07: map an `addMarketplace` precondition error to its
  * closed-set `ContentReason`. Fully `instanceof`-driven (D-48-C A3) so the
  * catch-all returns `undefined` -- a non-enumerated error (e.g.
  * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the

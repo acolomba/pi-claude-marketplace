@@ -13,7 +13,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 
 // LIFE-03 / D-63-02: hooks bridge writes <hooksDir>/<plugin>/hooks.json via a
 // single atomic tmp+rename and removes the same dir on uninstall. The 5 cases
-// below pin the surface for plan 63-04 cascade wiring.
+// below pin the surface for cascade wiring.
 
 interface Ctx {
   readonly cwd: string;

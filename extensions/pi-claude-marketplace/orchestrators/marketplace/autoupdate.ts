@@ -193,7 +193,7 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
  * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
  * missing-marketplace precondition, NOT a flip failure -- it routes to the
  * standalone MarketplaceNotAddedMessage `⊘ <name> [<scope>] (failed) {not added}`
- * variant (Pattern 1) carrying the explicit scope bracket (the former
+ * variant carrying the explicit scope bracket (the former
  * synthetic-child `{not found}` reason lied about the blocker). Every OTHER
  * error -- notably `StateLockHeldError`, whose message carries an actionable
  * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
@@ -512,7 +512,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
       // iterated scope is a missing-marketplace precondition. Route it to the
       // standalone MarketplaceNotAddedMessage `(failed) {not added}` variant
-      // (Pattern 1) instead of the former reason-LESS bare `(failed)` row.
+      // instead of the former reason-LESS bare `(failed)` row.
       // Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.

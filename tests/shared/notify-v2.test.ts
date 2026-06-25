@@ -577,7 +577,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
 // returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
 // bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
-// pin the THREE pre-existing bare-`(failed)` byte forms that this milestone's
+// pin the THREE pre-existing bare-`(failed)` byte forms that the current
 // catalog states reference:
 //   - `failure-unreachable` (marketplace add)  -> `⊘ <mp> [<scope>] (failed)`
 //   - `mp-failure-network`  (marketplace update) -> same header (cause rides a
@@ -2789,7 +2789,7 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
 
-test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to pre-Phase-29)", () => {
+test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to prior info-severity behavior)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -3289,7 +3289,7 @@ test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for too
 });
 
 test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", () => {
-  // Task 1 Test 4 fixture: 3 tool events with matchers + 1 non-tool event
+  // Fixture: 3 tool events with matchers + 1 non-tool event
   // without one. Lock the exact 5-line block (header + 4 entries) in the
   // exact order supplied by the caller (the renderer does NOT sort).
   const ctx = makeCtx();
@@ -4552,7 +4552,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
 test("SURF-05 / D-63-08: REASONS tuple includes the literal 'orphan rewake' member", () => {
   // Closed-set membership proof. The tuple addition is the only seam the
   // resolver-side `partial.orphanRewake` and the install row composition
-  // (Plan 63-04) depend on; if the tuple ever drops the member the
+  // depend on; if the tuple ever drops the member the
   // composition site stops typechecking.
   assert.ok(
     (REASONS as readonly string[]).includes("orphan rewake"),

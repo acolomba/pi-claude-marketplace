@@ -327,7 +327,7 @@ test("WR-07: a typed orchestrated add failure is NOT recorded as (added) -- depe
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      // Pre-Phase-55-review defect: a classified precondition failure
+      // Earlier defect: a classified precondition failure
       // (duplicate name / stale clone / invalid manifest / ...) did NOT
       // throw in standalone mode, so the import recorded the marketplace as
       // (added) and never blocked its plugins. The orchestrated typed

@@ -2487,7 +2487,7 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
 // table reflects the post-reinstall entry set. Reinstall does NOT delegate
-// to install/uninstall (per Phase 59 Plan 03 SUMMARY), so the cache lifecycle
+// to install/uninstall, so the cache lifecycle
 // is wired explicitly inside the per-plugin lock and verified end-to-end.
 // ─────────────────────────────────────────────────────────────────────────────
 

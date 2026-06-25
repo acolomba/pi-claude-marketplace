@@ -863,7 +863,7 @@ const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] a
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**
- * TR-04 Pattern 1: pre-commit intent-mark.
+ * TR-04: pre-commit intent-mark.
  *
  * Runs INSIDE a `withStateGuard` BEFORE phase-3a commits begin. Re-reads
  * the per-marketplace per-plugin state record, performs the ST-9
@@ -927,7 +927,7 @@ async function markUpdateInProgress(
 }
 
 /**
- * TR-04 Pattern 2: post-commit finalize.
+ * TR-04: post-commit finalize.
  *
  * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
  * has TWO distinct failure semantics:

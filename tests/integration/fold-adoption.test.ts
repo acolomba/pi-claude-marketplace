@@ -165,10 +165,10 @@ function captureLastSuccess(notifications: readonly NotifyRecord[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// CMC-21 / D-13-17 phase 1: orphan project plugin folds under user-scope header
+// CMC-21 / D-13-17 step 1: orphan project plugin folds under user-scope header
 // ---------------------------------------------------------------------------
 
-test("CMC-21 / D-13-17 phase 1: project-scope plugin installed from user-scope marketplace folds under the user-scope marketplace header on list", async () => {
+test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope marketplace folds under the user-scope marketplace header on list", async () => {
   const env = await setupHermeticEnv("pi-cm-fold-adopt-p1-");
   try {
     // Seed a path-source marketplace fixture inside the temp root.
@@ -239,10 +239,10 @@ test("CMC-21 / D-13-17 phase 1: project-scope plugin installed from user-scope m
 });
 
 // ---------------------------------------------------------------------------
-// CMC-21 / D-13-17 phase 2: adoption -- independent project-scope marketplace
+// CMC-21 / D-13-17 step 2: adoption -- independent project-scope marketplace
 // ---------------------------------------------------------------------------
 
-test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is added (different source), the renderer surfaces both blocks; no state mutation in marketplace-add required for adoption", async () => {
+test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is added (different source), the renderer surfaces both blocks; no state mutation in marketplace-add required for adoption", async () => {
   const env = await setupHermeticEnv("pi-cm-fold-adopt-p2-");
   try {
     // Seed two distinct marketplace fixtures with DIFFERENT names so
@@ -270,7 +270,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       "0.9.0",
     );
 
-    // Phase 2a: user-scope addMarketplace + project-scope cross-scope install.
+    // Step 2a: user-scope addMarketplace + project-scope cross-scope install.
     {
       const userAdd = makeCtx(env.cwd);
       await addMarketplace({
@@ -298,7 +298,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
     }
 
-    // Phase 2a sanity: alpha folds under official-user [user]; no
+    // Step 2a sanity: alpha folds under official-user [user]; no
     // independent project-scope official-user header is emitted (the
     // project state carries the cloned record).
     {
@@ -310,7 +310,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       assert.equal(out.includes("● official-user [project]"), false, out);
     }
 
-    // Phase 2b: add an INDEPENDENT project-scope marketplace with a
+    // Step 2b: add an INDEPENDENT project-scope marketplace with a
     // different name + different source. ZERO state mutation in
     // marketplace-add is required for adoption (D-13-17): the next list
     // render picks up the new record.
@@ -334,7 +334,7 @@ test("CMC-21 / D-13-17 phase 2: when an INDEPENDENT project-scope marketplace is
       );
     }
 
-    // Phase 2c: re-render list. The new project-scope `official-project`
+    // Step 2c: re-render list. The new project-scope `official-project`
     // marketplace shows as its own block; because its manifest declares
     // `alpha` AND alpha is not installed in project scope under THIS
     // marketplace (it is installed under the cloned `official-user`

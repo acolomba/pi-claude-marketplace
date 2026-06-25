@@ -21,8 +21,8 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  *     `state.json`.
  *
  * This test locks ownership at the architecture level so the seams cannot
- * be bypassed as v1.12's downstream phases (52-56) and any future milestone
- * add new code paths. A new orchestrator or reconcile-path file CANNOT grow
+ * be bypassed as new code paths are added. A new orchestrator or
+ * reconcile-path file CANNOT grow
  * a call to `atomicWriteJson(<configJsonPath>, ...)` without either being
  * added to `ALLOWED_CONFIG_JSON_WRITERS` (which forces an explicit edit to
  * the sibling 'exactly N' assertion below in the same commit) or being

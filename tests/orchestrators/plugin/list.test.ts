@@ -490,7 +490,7 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
 
 // D-63-04: hooks-only installed plugin must render `(installed)`, NOT
 // `(disabled)`. Regression pin for the hooks-only-list-disabled bug --
-// the phase-63 hook bridge added resources.hooks to the state schema
+// the hook bridge added resources.hooks to the state schema
 // but did not extend the 4-axis empty-resources predicate, so a
 // hooks-only installed plugin satisfied isRecordedButDisabled and the
 // list renderer routed the row to the (disabled) arm.
@@ -629,7 +629,7 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   // per D-13-18 / D-16-17.
   //
   // The integration counterpart for this regression is
-  // tests/integration/fold-adoption.test.ts phase 2 (CMC-21 phase 2).
+  // tests/integration/fold-adoption.test.ts step 2 (CMC-21 step 2).
   // The same-mp-both-scopes test above does NOT cover this case
   // because both seedMarketplace calls allocate independent
   // `marketplaceRoot` paths -- the fold rule does not trigger.
@@ -1131,7 +1131,7 @@ test("TR-08 / D-19-01: list.ts has no module-level PROBE_FAILURES-style accumula
 // set. A plugin declaring `hooks` at entry level with NO hooks/hooks.json
 // on disk is no longer rejected -- the resolver owns convention-file
 // discovery only; entry/manifest-level hooks-field semantics are deferred
-// to a future dispatch milestone. The plugin now lands as `available`
+// to future dispatch work. The plugin now lands as `available`
 // (not installed, no admission blocker).
 test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buckets as ○ (available)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {

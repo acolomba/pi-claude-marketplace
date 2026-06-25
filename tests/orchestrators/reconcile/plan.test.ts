@@ -295,7 +295,7 @@ test("Plugin cell (declared+enabled-true, recorded, non-empty resources): plugin
 
 /**
  * Build a state with a recorded plugin whose four resources arrays are all
- * empty -- the implicit "currently disabled" marker (Pattern 4 / A1). The
+ * empty -- the implicit "currently disabled" marker (A1). The
  * statePhase in `orchestrators/plugin/install.ts:617-664` only writes empty
  * arrays through the disable path; an installable plugin always populates
  * at least one component (the resolver's `requireInstallable` gate rules

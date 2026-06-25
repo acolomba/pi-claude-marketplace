@@ -537,7 +537,7 @@ test("HOOK_HANDLER_SCHEMA still requires `command` on type:'command' when asyncR
 
 test("HOOK_HANDLER_SCHEMA explicitly lists asyncRewake / rewakeMessage / rewakeSummary in its properties block", async () => {
   // Distinguishes "lenient additionalProperties:true admits the field"
-  // from "the schema explicitly names the field". Plan 01 requires the
+  // from "the schema explicitly names the field". The contract requires the
   // three names to land in the properties block alongside the existing
   // HOOK-03 admissions (statusMessage / once / async / shell / args) so
   // a downstream `additionalProperties:false` audit, plus the

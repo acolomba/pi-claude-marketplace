@@ -30,9 +30,8 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
  * under any other event key trips TOOL-02(c) and flips
  * `(unavailable) {unsupported hooks}`.
  *
- * Order matches the v1.13 milestone scope description in
- * `.planning/PROJECT.md` and is preserved as a deterministic registration
- * order for downstream consumers.
+ * Order is preserved as a deterministic registration order for downstream
+ * consumers.
  */
 export const BUCKET_A_EVENTS = [
   "SessionStart",

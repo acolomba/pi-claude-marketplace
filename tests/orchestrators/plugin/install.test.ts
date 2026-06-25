@@ -2873,7 +2873,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
 
       // SURF-05 fixture: rewakeMessage WITHOUT asyncRewake: true triggers
       // detectOrphanRewake -> partial.orphanRewake = true (per resolver
-      // applyHooksConfig success branch, Plan 63-03).
+      // applyHooksConfig success branch).
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),

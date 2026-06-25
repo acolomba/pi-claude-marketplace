@@ -4,7 +4,7 @@
 // Verifies:
 //   1. Registering the extension installs a handler under the
 //      `resources_discover` event name (bound ctx -- the `unknown` cast that
-//      elided ctx in pre-Phase-55 versions has been dropped).
+//      elided ctx in a prior version has been dropped).
 //   2. The handler invokes applyReconcile BEFORE aggregateDiscoveredResources
 //      so newly-materialized artefacts are picked up on the SAME load.
 //   3. A catastrophic applyReconcile throw is caught and the handler still
@@ -108,7 +108,7 @@ test("RECON-04 wiring: extension registers a resources_discover handler with bou
   assert.equal(
     handler.length,
     2,
-    "handler must accept (event, ctx) -- the `unknown` cast elided ctx in pre-Phase-55 versions",
+    "handler must accept (event, ctx) -- the `unknown` cast elided ctx in earlier versions",
   );
 });
 
