@@ -155,7 +155,21 @@ Plans:
   3. The catalog floor is documented as the deliberate milestone boundary — one central catalog section per new rendered state, no generation/aggregation seam (deferred).
   4. `npm run check` (typecheck + ESLint + Prettier + tests) is green and `catalog-uat` byte-equality holds at the milestone close.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Extract soft-dep concern → `shared/concerns/soft-dep.ts` (DEPENDENCIES, Dependency, markers, pure `softDepMarkers`); `composeReasons` delegates its soft-dep branch (signature unchanged); repoint all `Dependency` importers (MOD-04) (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 — both touch notify.ts)*
+
+- [ ] 04-02-PLAN.md — Extract hooks concern → `shared/concerns/hooks.ts` (`appendHooksBlock` + hook types); info renderer calls it identically; repoint hook-type importers; `shared/`→`domain/` fence preserved (MOD-04) (Wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-03-PLAN.md — Author `docs/open-closed-proof.md` (D-02 ≤3-files/0-notify measurement + D-03 catalog floor + notify.ts line-count evidence) and run the GATE-03 milestone-close gate (`npm run check` + catalog byte-equality) (MOD-05, MOD-06, GATE-03) (Wave 3)
 
 ## Progress
 
@@ -164,4 +178,4 @@ Plans:
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
 | 3. Desired-state output & atomic catalog supersession | 3/3 | Complete    | 2026-06-25 |
-| 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
+| 4. Concern-module extraction & open-closed proof | 0/3 | Not started | - |
