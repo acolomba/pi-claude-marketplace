@@ -165,7 +165,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 — both touch notify.ts)*
 
-- [ ] 04-02-PLAN.md — Extract hooks concern → `shared/concerns/hooks.ts` (`appendHooksBlock` + hook types); info renderer calls it identically; repoint hook-type importers; `shared/`→`domain/` fence preserved (MOD-04) (Wave 2)
+- [x] 04-02-PLAN.md — Extract hooks concern → `shared/concerns/hooks.ts` (`appendHooksBlock` + hook types); info renderer calls it identically; repoint hook-type importers; `shared/`→`domain/` fence preserved (MOD-04) (Wave 2)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -178,4 +178,4 @@ Plans:
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
 | 3. Desired-state output & atomic catalog supersession | 3/3 | Complete    | 2026-06-25 |
-| 4. Concern-module extraction & open-closed proof | 1/3 | In Progress|  |
+| 4. Concern-module extraction & open-closed proof | 2/3 | In Progress|  |
