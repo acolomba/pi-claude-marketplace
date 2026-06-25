@@ -48,10 +48,9 @@ import { isRecordedButDisabled } from "../reconcile/plan.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ClaudeHookEvent, HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {
-  ClaudeHookEvent,
   ContentReason,
-  HookSummaryEntry,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,

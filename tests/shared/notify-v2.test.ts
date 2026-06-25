@@ -133,12 +133,12 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import { type HookSummaryEntry } from "../../extensions/pi-claude-marketplace/shared/concerns/hooks.ts";
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   notify,
   notifyUsageError,
   REASONS,
-  type HookSummaryEntry,
   type NotificationMessage,
   type UsageErrorMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";

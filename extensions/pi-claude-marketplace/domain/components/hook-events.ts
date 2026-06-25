@@ -2,7 +2,7 @@
 //
 // TOOL-02 bucket-A event closed-set + non-tool-event matcher target tables.
 
-import type { ClaudeHookEvent } from "../../shared/notify.ts";
+import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
 // This module is the source of truth `checkMatcherSupportability` reads at
 // parse time to trip TOOL-02 when a plugin's `hooks.json` declares hooks
 // under any non-bucket-A event key, or carries a non-tool matcher value
