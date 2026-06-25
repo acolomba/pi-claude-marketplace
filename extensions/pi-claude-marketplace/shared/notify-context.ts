@@ -122,11 +122,13 @@ export interface MarketplaceRows<Msg> {
  * each call site is checked against ITS command's shapes -- there is no central
  * row-type registry (D-01 / D-08).
  *
- * D-07: `context.render` and `Messaging.label` are the only members consumed
- * for output this phase; the inert `severity?` / `needsReload?` row fields are
- * NOT read here (reduction lands later). `Messaging.label` is threaded for the
- * migration's sake but the summary surface that renders it lands later, so it
- * does not change any rendered byte yet.
+ * D-07: `context.render` and `Messaging.label` are the members consumed for the
+ * per-row body rendering. The `severity?` / `needsReload?` row fields ARE read
+ * downstream of this seam: `emitContextCascade` -> `emitWithSummary` ->
+ * `computeSeverity` -> `cascadeSeverity` MAX-reduces every row's `severity` to
+ * the envelope severity, and the per-row `needsReload` OR-reduce drives the
+ * `/reload to pick up changes` trailer. `Messaging.label` feeds the trailing
+ * tally on plural cascades.
  *
  * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
  * `/claude:plugin disable` command no longer threads a distinguishing kind --

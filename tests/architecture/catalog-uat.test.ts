@@ -1176,6 +1176,34 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // CR-02 / D-01: standalone reinstall of a present marketplace whose plugin
+    // record is absent -> the `(skipped) {not installed}` row stamps `error`
+    // (absent-target across the board), single cardinality so no tally. Mirrors
+    // the byte form the `reinstallPlugin` standalone path now emits.
+    "standalone-not-installed-error": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                reasons: ["not installed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-03 / SCOPE-01 / M6 / M7 / M8: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,
@@ -1470,6 +1498,9 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin import": {
     "fresh-mixed-both-scopes": {
       pi: piWithBothLoaded(),
+      // WR-02: the lone `unavailable` row now stamps `warning`, so the cascade
+      // reduces to warning severity at the wire.
+      expectedSeverity: "warning",
       message: {
         label: "Import",
         cardinality: "plural",
@@ -1528,7 +1559,17 @@ const FIXTURES: FixtureMap = {
                 severity: "info",
                 needsReload: true,
               },
-              { status: "unavailable", name: "unavailable-plugin", reasons: ["unsupported hooks"] },
+              // WR-02: the import producer stamps unavailable rows `warning`
+              // (actionable -- the user cannot complete the install without
+              // addressing them), bumping the envelope severity and counting
+              // the row under the warning tally rather than success.
+              {
+                status: "unavailable",
+                name: "unavailable-plugin",
+                reasons: ["unsupported hooks"],
+                severity: "warning",
+                needsReload: false,
+              },
             ],
           },
           {

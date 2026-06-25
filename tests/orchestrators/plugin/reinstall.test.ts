@@ -277,7 +277,15 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
       assert.equal(outcome.partition, "skipped");
       assert.deepEqual(outcome.notes, ["not installed"]);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), before);
-      assert.equal(notifications.length, 0);
+      // CR-02 / D-01: the standalone path emits the absent-target row as an
+      // error (was a silent return). State/disk stay untouched; the notify is
+      // the only visible effect.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

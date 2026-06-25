@@ -429,6 +429,11 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: ["not in manifest"] as const,
+      // WR-03: `UnexpectedPluginFailureOutcome.cause` carries the original
+      // failure as a string (`errorMessage(err)`); wrap it in an Error so the
+      // depth-5 cause-chain trailer emits a diagnostic line instead of
+      // discarding the message. `cause` is always populated on this outcome.
+      cause: new Error(o.cause),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -450,6 +455,12 @@ function buildImportNotificationMarketplaces(
       status: "unavailable",
       name: o.plugin,
       reasons: [importWarningReason(o.reason)],
+      // WR-02: import unavailable/dependency rows are actionable -- the user
+      // cannot complete the install without addressing them -> warning. Without
+      // the stamp `cascadeSeverity` defaults them to `info`, so the envelope
+      // never bumps to `warning` and the summary line never shows. No reload.
+      severity: "warning",
+      needsReload: false,
     };
     block.plugins.push(row);
   }

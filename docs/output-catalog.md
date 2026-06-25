@@ -629,6 +629,19 @@ Plugin reinstall: 2 successes
 
 The marketplaces never collapse -- each per-scope header is a distinct marketplace block. OUT-03/D-04: the plural tally counts the two `reinstalled` rows across the per-scope blocks as two successes.
 
+### Failure -- plugin not installed, standalone form (CR-02 / D-01)
+
+Triggered when `reinstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope but whose plugin record is absent from state (never installed, or concurrently uninstalled). The standalone single-plugin path emits the absent-target row instead of returning silently: `not installed` is an absent-target precondition, so D-01 routes it to `error` ("absent-target -> error across the board") rather than the benign-skip `warning`. The row keeps its `(skipped) {not installed}` per-row grammar (severity is a stamp-only flip). Single cardinality, so no trailing tally. Two-block form: the `A plugin operation has failed.` summary on the host `Error:` label line, then the marketplace header + skipped row block (GRAM-01 / GRAM-02). No reload-hint (nothing changed on disk).
+
+<!-- catalog-state: standalone-not-installed-error -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ hello (skipped) {not installed}
+```
+
 ### Failure -- marketplace not added, explicit scope (ATTR-03 / SCOPE-01)
 
 Triggered when `reinstall <plugin>@<marketplace>` or `reinstall @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-03 makes the attribution form-INDEPENDENT: the explicit-scope-plugin, explicit-scope-marketplace, and bare forms ALL emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former per-form divergence (`(skipped) {not installed}` for the explicit-scope plugin form via a synthesized phantom target; `(failed) {not found}` for the explicit-scope-marketplace and bare forms via a raw throw -> synthetic `(reinstall)` row). The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The legitimate "marketplace present, plugin not installed" case keeps its `(skipped) {not installed}` outcome -- only the marketplace-absent precondition is re-attributed. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
@@ -802,6 +815,8 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 <!-- catalog-state: fresh-mixed-both-scopes -->
 
 ```text
+A plugin operation needs attention.
+
 ● claude-plugins-official [project] (added)
   ● official-plugin (installed)
 
@@ -821,12 +836,12 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 ● github-marketplace [user] (added)
   ● github-plugin (installed)
 
-Import: 13 successes
+Import: 1 warning, 12 successes
 
 /reload to pick up changes
 ```
 
-Six marketplace blocks joined by blank lines (D-16-07). OUT-03/OUT-06/D-03/D-04: import is a plural mixed-subject operation, so the trailing tally counts all rows uniformly under the `Import` label -- six `added` marketplace rows plus seven info plugin rows (six `installed` + one `unavailable`, which stamps no severity and defaults to info) yield `13 successes`. The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: info -- no `failed`, no `skipped/manual-recovery` in the payload; `unavailable` is not in the warning set.
+Six marketplace blocks joined by blank lines (D-16-07). WR-02: the import producer stamps `unavailable` rows `severity: warning` -- they are actionable (the user cannot complete the install without addressing them), so the envelope severity bumps to `warning` and the `A plugin operation needs attention.` summary line is prepended (GRAM-01 / GRAM-02). OUT-03/OUT-06/D-03/D-04: import is a plural mixed-subject operation, so the trailing tally counts all rows uniformly under the `Import` label -- the single `unavailable` row counts as `1 warning` and the six `added` marketplace rows plus six `installed` plugin rows count as `12 successes`. The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: warning -- no `failed` in the payload, but the actionable `unavailable` row routes the cascade to `warning`.
 
 ### `import --scope project` (narrows writes to project scope only)
 

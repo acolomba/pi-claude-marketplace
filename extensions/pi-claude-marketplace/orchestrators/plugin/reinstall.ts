@@ -254,6 +254,24 @@ export async function reinstallPlugin(
   }
 
   if (locked.outcome.partition !== "reinstalled") {
+    // CR-02 / D-01: the standalone single-plugin path must emit the absent-target
+    // row, not return silently. A `skipped` partition is the "not installed" case
+    // D-01 targets -> error; other skip reasons fall back to `skipSeverity`.
+    // Mirrors the bulk `outcomeToPluginMessage` skipped arm.
+    if (render !== "none") {
+      const reasons = narrowReasons(locked.outcome.notes);
+      const skippedRow: PluginSkippedMessage = {
+        status: "skipped",
+        name: plugin,
+        reasons,
+        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
+        needsReload: false,
+      };
+      notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+        { name: marketplace, scope, plugins: [skippedRow] },
+      ]);
+    }
+
     return locked.outcome;
   }
 
@@ -891,9 +909,15 @@ function outcomeToPluginMessage(
       //  (1) failureClass=manual-recovery -> ["rollback partial"]
       //  (2) typed outcome.reasons -> verbatim
       //  (3) narrowReasons(outcome.notes) -> substring fallback
-      const reasons: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
+      // WR-04: `narrowReasons([])` and `narrowReasons(undefined)` both return
+      // `[]`, which would render a failed row with no `{<reason>}` brace. Guard
+      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row never
+      // renders bare.
+      const narrowed: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
+      const reasons: readonly ContentReason[] =
+        narrowed.length > 0 ? narrowed : (["unreadable"] as const);
 
       if (isManualRecoveryOutcome(outcome)) {
         const manualRecovery: PluginManualRecoveryMessage = {

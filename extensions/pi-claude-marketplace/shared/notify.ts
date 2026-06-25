@@ -2290,8 +2290,9 @@ function countRowsBySeverity(
  * homogeneous cascade, or `null` for a mixed-subject cascade (D-03) where the
  * subject noun is dropped.
  *
- * Form: `[A|Some] <subject> operation[s] has/have failed | needs/need attention.`
- * -- `A` for a single row, `Some` for more than one; `operation` / `operations`
+ * Form: `[A|An|Some] <subject> operation[s] has/have failed | needs/need attention.`
+ * -- `A` / `An` (vowel-aware off the leading noun) for a single row, `Some` for
+ * more than one; `operation` / `operations`
  * pluralized by count; `has failed` / `have failed` for error and
  * `needs attention` / `need attention` for warning; terminal period kept. The
  * verb-number agrees with the count (singular for 1, plural otherwise).
@@ -2302,13 +2303,18 @@ function summaryPhrase(
   subject: "plugin" | "marketplace" | null,
 ): string {
   const singular = count === 1;
-  const article = singular ? "A" : "Some";
   const operationWord = singular ? "operation" : "operations";
   const errorVerb = singular ? "has failed" : "have failed";
   const warningVerb = singular ? "needs attention" : "need attention";
   const verbPhrase = severity === "error" ? errorVerb : warningVerb;
   const subjectWord = subject === null ? "" : `${subject} `;
-  return `${article} ${subjectWord}${operationWord} ${verbPhrase}.`;
+  const noun = `${subjectWord}${operationWord}`;
+  // CR-01: mixed-subject (subject === null) drops the noun, so the count-1 form
+  // would read "A operation" -- vowel-initial, grammatically "An". Choose the
+  // singular article off the resolved noun's leading letter; "Some" for plural.
+  const singularArticle = /^[aeiou]/i.test(noun) ? "An" : "A";
+  const article = singular ? singularArticle : "Some";
+  return `${article} ${noun} ${verbPhrase}.`;
 }
 
 /**

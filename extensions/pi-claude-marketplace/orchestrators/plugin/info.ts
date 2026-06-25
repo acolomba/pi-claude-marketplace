@@ -58,7 +58,7 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
-// SURF-01 / Pitfall 7: TOOL_EVENTS is a string[] tuple; rewrap as a Set
+// SURF-01: TOOL_EVENTS is a string[] tuple; rewrap as a Set
 // for O(1) membership tests in the HookSummaryEntry projector. Module-
 // scope so the Set is allocated once across all info.ts call sites.
 const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
@@ -443,7 +443,7 @@ function parseLenientHooksJson(raw: string): unknown {
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
  *
- * SURF-01 / Pitfall 7: object-literal field placement is documentation
+ * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
  * placement matches the alphabetical order for readability.
