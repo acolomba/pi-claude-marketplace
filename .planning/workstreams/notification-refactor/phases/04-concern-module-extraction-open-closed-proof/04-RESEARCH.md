@@ -502,15 +502,15 @@ This phase moves presentation code and writes one doc. No new input surfaces, no
 | A3 | `docs/open-closed-proof.md` is the proof-doc home | §5 | Low — Claude's discretion explicitly allows new doc / ADR / appended section, provided it's durable and not a code comment and not in the byte-frozen `output-catalog.md`. |
 | A4 | The D-02 proof should honestly note the `provider.ts`/`FIXTURES` caveat rather than claim absolute zero-touch | §5 | Low — matches the audit's own Part D; the locked D-02 target is the 3 grammar/registration files, which the doc proves. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does any consumer outside `orchestrators/`/`domain/` import the moved soft-dep/hook symbols?**
    - What we know: grep found importers in `orchestrators/plugin/info.ts` (HookSummaryEntry), the 13+ `*.messaging.ts` (composeReasons — unchanged signature), and `domain/components/hook-events.ts` (the satisfies pins, inferred). All are in allowed zones.
    - What's unclear: whether tests import `DEPENDENCIES`/`HookSummaryEntry` directly (MESSAGING-COUPLING §B.1 notes `DEPENDENCIES`/`MARKERS` are "only consumed by tests today" for some tuples).
-   - Recommendation: the planner greps both symbol families (commands in Risk 4) as the first task step and updates every importer in the same commit; `npm run typecheck` is the backstop.
+   - **RESOLVED:** Planning enumerated the full importer set. Plan 04-01 names all 8 `Dependency`/`DEPENDENCIES` importers under `orchestrators/` and repoints them in the same commit; plan 04-02 names the hook-type importers (`orchestrators/plugin/info.ts`, `domain/components/hook-events.ts`, `tests/shared/notify-v2.test.ts`). All live in allowed zones (no fence breach). `npm run typecheck` is the backstop for any missed repoint and is a literal acceptance criterion of both extraction tasks.
 
 2. **Exact `softDepMarkers` return shape — `readonly Reason[]` vs. mutating a passed array.**
-   - Recommendation: return `readonly Reason[]` and spread into `composed` (illustrated in §2) — cleanest, keeps the concern pure, preserves order. Planner's discretion per CONTEXT.
+   - **RESOLVED:** `readonly Reason[]`, spread into `composed` by the caller (see §2 and 04-PATTERNS.md) — keeps the concern pure, preserves agents-before-mcp order, and is the shape plan 04-01 builds against.
 
 ## Sources
 

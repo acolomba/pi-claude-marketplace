@@ -1,8 +1,8 @@
 ---
 phase: 4
 slug: concern-module-extraction-open-closed-proof
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-24
 ---
@@ -81,6 +81,6 @@ created: 2026-06-24
 - [ ] Wave 0 covers all MISSING references (none — existing catalog-uat suffices)
 - [ ] No watch-mode flags
 - [ ] Feedback latency < 10s for the per-commit byte-freeze
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-06-24 (validation architecture confirmed sound by plan-checker; the existing `catalog-uat` byte-equality test + `npm run check` cover all phase requirements — no new test files needed, no `notify.ts`-purity architecture test per D-02)
