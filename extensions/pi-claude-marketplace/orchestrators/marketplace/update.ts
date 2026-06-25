@@ -135,11 +135,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -605,7 +601,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
 }
 
 /**
- * Map a `PluginUpdateOutcome` to a discriminated `PluginNotificationMessage`.
+ * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
  * The renderer (`renderPluginRow` in shared/notify.ts) owns the icon
  * dispatch, the version-arrow composition, the reasons-brace composition, and
  * the per-row soft-dep marker injection. The mapper's job is structural --
@@ -632,10 +628,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * (`renderScopeBracket(plugin.scope, mp.scope)`) can suppress the redundant
  * `[<scope>]` bracket when the plugin scope matches the marketplace scope.
  */
-function outcomeToCascadePluginMessage(
-  outcome: PluginUpdateOutcome,
-  scope: Scope,
-): PluginNotificationMessage {
+function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scope): UpdateRowMsg {
   // PluginUpdateOutcome is a discriminated union; the switch exhausts all 4
   // partitions and ends with an `assertNever` so any future variant addition
   // fails at compile time.
@@ -934,12 +927,10 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       name,
       scope,
       status: "updated",
-      // WR-01: the cascade child rows are built through the broad
-      // `outcomeToCascadePluginMessage` helper, so widen to the narrowed Msg the
-      // UPDATE_CONTEXT requires; every emitted row is an UpdateRowMsg member.
-      plugins: outcomes.map((o) =>
-        outcomeToCascadePluginMessage(o, scope),
-      ) as readonly UpdateRowMsg[],
+      // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
+      // construction, so the mapped rows are the narrowed Msg the
+      // UPDATE_CONTEXT requires with no cast.
+      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
     },
   ];
   notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows);

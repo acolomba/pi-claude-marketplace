@@ -80,11 +80,7 @@ import { classifyAutoupdateFlip } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  MarketplaceNotificationMessage,
-  PluginFailedMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -552,7 +548,11 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   //   visible iteration order. NO alphabetic sort here.
   // - Reference: catalog UAT fixtures `enable-fresh`, `disable-fresh`,
   //   `enable-idempotent`, `disable-idempotent`.
-  const marketplaces: MarketplaceNotificationMessage[] = rows.map((row) => {
+  // WR-01: type the accumulator at the narrow `MarketplaceRows<PluginFailedMessage>`
+  // so each per-arm literal is checked against the flip context's row shape (the
+  // failed arm is the only plugin-carrying Msg; every row builds `plugins: []`),
+  // and the array widens to `notifyWithContext` with no cast.
+  const marketplaces: MarketplaceRows<PluginFailedMessage>[] = rows.map((row) => {
     if (row.alreadyMatching) {
       return {
         name: row.name,
@@ -598,9 +598,5 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
-  // WR-01: these flip rows carry no plugin child rows (plugins: []), so the broad builder array widens to the failed-Msg row shape the flip context requires.
-  const rowsOut: Plural<MarketplaceRows<PluginFailedMessage>> = marketplaces as Plural<
-    MarketplaceRows<PluginFailedMessage>
-  >;
-  notifyWithContext(opts.ctx, opts.pi, flipContext, rowsOut);
+  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces);
 }

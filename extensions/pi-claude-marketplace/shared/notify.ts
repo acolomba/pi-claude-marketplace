@@ -1058,7 +1058,7 @@ export type PluginInfoRow =
  * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
 interface PluginInfoRowBase {
-  readonly status: "installed" | "available" | "unavailable" | "failed";
+  readonly status: Extract<PluginStatus, "installed" | "available" | "unavailable" | "failed">;
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;

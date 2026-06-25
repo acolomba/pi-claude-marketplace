@@ -24,16 +24,11 @@
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import {
-  notifyWithContext,
-  type MarketplaceRows,
-  type Plural,
-} from "../../shared/notify-context.ts";
+import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-context.ts";
 
 import { LIST_CONTEXT } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { MarketplaceNotificationMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface ListMarketplacesOptions {
@@ -54,7 +49,11 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   // pairs render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
-  const marketplaces: MarketplaceNotificationMessage[] = [];
+  // WR-01: list rows carry no plugin child rows, so type the accumulator at the
+  // narrow `MarketplaceRows<never>` (plugins: readonly never[]). Every push is
+  // then checked against the empty-plugins invariant LIST_CONTEXT requires, and
+  // the array widens to `notifyWithContext` with no cast.
+  const marketplaces: MarketplaceRows<never>[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
@@ -102,9 +101,5 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   // OUT-07 / D-12: the inventory is a bulk surface -> Plural cardinality. The
   // list-arm headers render via the central renderMpHeader seam the spine
   // reuses; LIST_CONTEXT carries the localized list vocabulary.
-  // WR-01: list rows carry no plugin child rows (plugins: []), so the broad builder array widens to the empty-Msg row shape the empty-render LIST_CONTEXT requires.
-  const rows: Plural<MarketplaceRows<never>> = marketplaces as unknown as Plural<
-    MarketplaceRows<never>
-  >;
-  notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, rows);
+  notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, marketplaces);
 }

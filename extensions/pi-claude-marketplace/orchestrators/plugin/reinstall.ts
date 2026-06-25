@@ -797,15 +797,16 @@ function renderReinstallPartitionAndNotify(
   // OUT-07 / D-12: the reinstall cascade is a bulk op, so its row slot is typed
   // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
   // variable-length array, identical at runtime.
-  // WR-01: the per-block plugin rows are built through the broad
-  // `outcomeToPluginMessage` helper, so the narrowed annotation widens via cast;
-  // every emitted row is a ReinstallMsg member.
+  // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
+  // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
+  // annotation holds without a cast -- a status drift between the producer and
+  // the render map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
-    const plugins: PluginNotificationMessage[] = block.outcomes.map(
-      (o): PluginNotificationMessage => outcomeToPluginMessage(o, block.scope),
+    const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
+      outcomeToPluginMessage(o, block.scope),
     );
     return { name: block.name, scope: block.scope, plugins };
-  }) as Plural<MarketplaceRows<ReinstallMsg>>;
+  });
 
   // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
   // (`@marketplace` / bare) reinstall forms; a single-target `<plugin>@<mp>`
@@ -857,7 +858,7 @@ function isManualRecoveryOutcome(
 function outcomeToPluginMessage(
   outcome: ReinstallPluginOutcome,
   marketplaceScope: Scope,
-): PluginNotificationMessage {
+): ReinstallMsg {
   const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
   switch (outcome.partition) {
     case "reinstalled": {

@@ -169,6 +169,74 @@ test("OUT-03 / D-04: a plural all-success cascade still renders the success tall
   assert.equal(body.includes("Plugin import: 2 successes"), true);
 });
 
+test("SEV-02: status is INERT as a severity source -- the reducer reads only the stamped severity", () => {
+  // The central SEV-02 invariant: the reducer NEVER infers severity from a
+  // row's `status` (or `reasons`); it reduces the caller-stamped `severity`
+  // only. Two adversarial rows make status and stamped severity DISAGREE:
+  //
+  //   (a) an `unavailable` row stamped `severity:"info"` -- a status-inferring
+  //       reducer would map `unavailable` to `warning`; the stamped reducer
+  //       leaves it info. (`failed` cannot be used here: GATE-01 makes its
+  //       `severity` a REQUIRED `"error" | "warning"`, so it is not even
+  //       constructible with an info stamp -- the type system already pins that
+  //       arm.)
+  //   (b) an `installed` (success-transition) row stamped `severity:"error"`
+  //       -- a status-inferring reducer would force `info`; the stamped
+  //       reducer honors the error.
+  //
+  // Asserting on the actual emitted (wire) severity proves status is inert.
+
+  // (a) `unavailable` + stamped `info` -> emission stays info (undefined 2nd arg).
+  const unavailableButInfo: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unavailable",
+            name: "commit-commands",
+            reasons: ["no longer installable"],
+            severity: "info",
+          },
+        ],
+      },
+    ],
+  };
+  const unavailableArgs = renderArgs(unavailableButInfo);
+  // A status-inferring reducer would emit `warning` here; the stamped reducer
+  // emits the info severity (undefined 2nd arg) -- status did not bump it.
+  assert.equal(unavailableArgs.length, 1);
+  // The emitted body reflects the `unavailable` row (symmetry with case (b)).
+  assert.match(String(unavailableArgs[0]), /unavailable/);
+
+  // (b) `installed` (success status) + stamped `error` -> emission is error.
+  const installedButError: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            name: "commit-commands",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "error",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  };
+  const installedArgs = renderArgs(installedButError);
+  // A status-inferring reducer would emit info (a success status); the stamped
+  // reducer honors the error stamp -- status did not suppress it.
+  assert.equal(installedArgs.length, 2);
+  assert.equal(installedArgs[1], "error");
+});
+
 test("RLD-02: a stamped needsReload:true row adds the /reload trailer via the OR-reduce", () => {
   // Baseline: a `disabled` INVENTORY row stamps `needsReload:false`, so the
   // OR-reduce is false and NO `/reload` trailer is emitted.

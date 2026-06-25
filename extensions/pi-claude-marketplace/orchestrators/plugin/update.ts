@@ -131,11 +131,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -1522,7 +1518,7 @@ interface TargetedOutcome {
 function outcomeToCascadePluginMessage(
   target: ResolvedTarget,
   outcome: PluginUpdateOutcome,
-): PluginNotificationMessage {
+): UpdateMsg {
   switch (outcome.partition) {
     case "updated":
       return {
@@ -1669,7 +1665,7 @@ function renderUpdateCascadeAndNotify(
   interface MpGroup {
     readonly name: string;
     readonly scope: Scope;
-    readonly plugins: PluginNotificationMessage[];
+    readonly plugins: UpdateMsg[];
   }
   const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
@@ -1698,9 +1694,10 @@ function renderUpdateCascadeAndNotify(
   // OUT-07 / D-12: the update cascade is a bulk op, so its row slot is typed
   // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
   // variable-length array, identical at runtime.
-  // WR-01: the grouped plugin rows are accumulated through the broad
-  // `outcomeToCascadePluginMessage` helper, so the narrowed annotation widens via
-  // cast; every emitted row is an UpdateMsg member.
+  // WR-01: the grouped plugin rows are accumulated through the
+  // `outcomeToCascadePluginMessage` helper, now typed to `UpdateMsg`, so the
+  // `MarketplaceRows<UpdateMsg>` annotation holds without a cast -- a status
+  // drift between the producer and the render map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<UpdateMsg>> = [...byMp.values()]
     .sort((a, b) =>
       compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
@@ -1709,7 +1706,7 @@ function renderUpdateCascadeAndNotify(
       name: g.name,
       scope: g.scope,
       plugins: g.plugins,
-    })) as Plural<MarketplaceRows<UpdateMsg>>;
+    }));
 
   // cascade construction recipe (mirrors the recipe at
   // orchestrators/plugin/uninstall.ts; substitutes the

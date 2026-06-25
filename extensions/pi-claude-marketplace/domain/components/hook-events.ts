@@ -79,6 +79,15 @@ export const TOOL_EVENTS = [
 export type ToolEvent = (typeof TOOL_EVENTS)[number];
 
 /**
+ * Literal union of non-tool bucket-A event names. The complement of
+ * `ToolEvent` within `BucketAEvent`. Keying the matcher-disposition tables on
+ * this (rather than `Partial<Record<BucketAEvent, ...>>`) makes them TOTAL: a
+ * non-tool event added to `BUCKET_A_EVENTS` without a matcher disposition is a
+ * compile error at the table literal.
+ */
+export type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
+
+/**
  * Claude-side matcher target field per non-tool bucket-A event. The value
  * is the Claude `hooks.json` field name a matcher value compares against
  * (e.g. SessionStart matchers compare to the Claude-side `source` field).
@@ -98,7 +107,7 @@ export type ToolEvent = (typeof TOOL_EVENTS)[number];
  * intentionally absent from this map -- their matcher targets a tool name
  * and is handled by the TOOL-01 reverse map in `hook-tool-names.ts`.
  */
-export const NON_TOOL_EVENT_FIELDS: Readonly<Partial<Record<BucketAEvent, string | null>>> = {
+export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>> = {
   SessionStart: "source",
   SessionEnd: "reason",
   PreCompact: "trigger",

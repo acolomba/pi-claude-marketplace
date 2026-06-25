@@ -52,7 +52,7 @@ import type { ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, MarketplaceNotificationMessage } from "../../shared/notify.ts";
+import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
@@ -70,7 +70,7 @@ export interface PendingReconcileOptions {
  * file's BASENAME (never the absolute path -- information-disclosure
  * mitigation T-53-02-02).
  */
-function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceNotificationMessage {
+function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceRows<PendingMsg> {
   return {
     name: path.basename(filePath),
     scope,
@@ -128,7 +128,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   const plans: ReconcilePlan[] = [];
-  const invalidBlocks: MarketplaceNotificationMessage[] = [];
+  const invalidBlocks: MarketplaceRows<PendingMsg>[] = [];
 
   for (const scope of scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -204,13 +204,14 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
   // pending-tense rows render through reconcile's own render map (MOD-03), never
   // the central renderPluginRow switch.
-  // WR-01: the pending rows are assembled from the broad projection and
-  // invalid-block builders, so the narrowed annotation widens via cast; every
-  // emitted plugin row is a PendingMsg member.
+  // WR-01: the pending rows are assembled from the projection and invalid-block
+  // builders, both typed to `MarketplaceRows<PendingMsg>`, so the annotation
+  // holds without a cast -- every emitted plugin row is a PendingMsg member by
+  // construction.
   const marketplaces: Plural<MarketplaceRows<PendingMsg>> = [
     ...projection.marketplaces,
     ...invalidBlocks,
-  ].sort((a, b) => compareByNameThenScope(a, b)) as Plural<MarketplaceRows<PendingMsg>>;
+  ].sort((a, b) => compareByNameThenScope(a, b));
 
   notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces);
 }

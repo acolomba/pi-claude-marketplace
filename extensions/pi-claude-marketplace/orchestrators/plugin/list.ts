@@ -75,7 +75,6 @@ import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
-  MarketplaceNotificationMessage,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
@@ -420,8 +419,8 @@ async function enumerateMarketplacePlugins(
   marketplaceScope: Scope,
   manifest: MarketplaceManifest | undefined,
   excludeFromAvailable: ReadonlySet<string> = new Set(),
-): Promise<PluginNotificationMessage[]> {
-  const rows: PluginNotificationMessage[] = [];
+): Promise<ListMsg[]> {
+  const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
 
@@ -517,7 +516,7 @@ function isCloneOfUserMarketplace(
 }
 
 interface BuiltMarketplace {
-  readonly mp: MarketplaceNotificationMessage;
+  readonly mp: MarketplaceRows<ListMsg>;
   readonly emitScope: Scope;
 }
 
@@ -528,7 +527,7 @@ async function buildMarketplaceMessage(args: {
   mpRecord: ExtensionState["marketplaces"][string];
   /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
   autoupdate: boolean;
-  extraPlugins: readonly PluginNotificationMessage[];
+  extraPlugins: readonly ListMsg[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
   const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
@@ -564,7 +563,7 @@ async function buildMarketplaceMessage(args: {
     manifest,
     excludeFromAvailable,
   );
-  const merged: readonly PluginNotificationMessage[] = [...ownPlugins, ...extraPlugins];
+  const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
 
   // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
   // plugin-list surface carries only the `autoupdate` marker;
@@ -599,7 +598,7 @@ async function buildMarketplaceMessage(args: {
  */
 export async function loadPluginListPayload(
   opts: ListPluginsOptions,
-): Promise<readonly MarketplaceNotificationMessage[]> {
+): Promise<readonly MarketplaceRows<ListMsg>[]> {
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
@@ -650,7 +649,7 @@ export async function loadPluginListPayload(
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
     const isProjectMpClone = isCloneOfUserMarketplace(projectMp, mpRecord);
-    let folded: readonly PluginNotificationMessage[] = [];
+    let folded: readonly ListMsg[] = [];
     let foldedNames: ReadonlySet<string> = new Set();
     if (isProjectMpClone && projectMp !== undefined) {
       // Each folded row carries scope: "project" (D-13-18 actual install
@@ -732,10 +731,7 @@ export async function loadPluginListPayload(
  * (project-before-user). Marketplaces always carry both `name` and
  * `scope` (the field is required on `MarketplaceNotificationMessage`).
  */
-function compareMpForSort(
-  a: MarketplaceNotificationMessage,
-  b: MarketplaceNotificationMessage,
-): number {
+function compareMpForSort(a: MarketplaceRows<ListMsg>, b: MarketplaceRows<ListMsg>): number {
   const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   if (byName !== 0) {
     return byName;
@@ -757,10 +753,10 @@ function compareMpForSort(
  * yields a deterministic ordering against orphan-folded rows that DO
  * carry an explicit cross-scope `scope`.
  */
-function sortPluginsInBlock(
+function sortPluginsInBlock<M extends PluginNotificationMessage>(
   marketplaceScope: Scope,
-  plugins: readonly PluginNotificationMessage[],
-): readonly PluginNotificationMessage[] {
+  plugins: readonly M[],
+): readonly M[] {
   if (plugins.length === 0) {
     return plugins;
   }
@@ -855,12 +851,10 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   try {
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
-    // WR-01: loadPluginListPayload builds blocks through shared helpers typed to
-    // the broad union, so the narrowed call-site annotation widens via cast; every
-    // plugin row it emits is a ListMsg member.
-    const marketplaces: Plural<MarketplaceRows<ListMsg>> = (await loadPluginListPayload(
-      opts,
-    )) as Plural<MarketplaceRows<ListMsg>>;
+    // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the
+    // annotation holds without a cast -- every plugin row it emits is a ListMsg
+    // member by construction.
+    const marketplaces: Plural<MarketplaceRows<ListMsg>> = await loadPluginListPayload(opts);
     // notify call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable

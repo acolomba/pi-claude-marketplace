@@ -2,13 +2,9 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   type CascadeNotificationMessage,
-  type ContentReason,
-  type MarketplaceDetails,
   type MarketplaceNotificationMessage,
-  type MarketplaceStatus,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
-  type Severity,
 } from "./notify.ts";
 
 import type { Scope } from "./types.ts";
@@ -80,32 +76,35 @@ export type Plural<Row> = readonly Row[];
 
 /**
  * WR-01 / D-10: the marketplace-row shape `notifyWithContext` accepts, with its
- * `plugins` slot narrowed to the command's OWN `Msg`. The mirror to the broad
- * `MarketplaceNotificationMessage` keeps the marketplace-level fields (`status?`
- * / `reasons?` / `details?` are reachable per the broad union's per-arm rules),
- * but the child `plugins` carry only `Msg` rows. Combined with the
- * `Msg extends { status: Status }` bound on `notifyWithContext`, a call site
- * that pushes a plugin row whose `status` the context's render map does not
- * declare is a TS2741 compile error at the call site -- the design's stated
- * exhaustiveness guarantee in BOTH directions (render map total over `Status`,
- * AND rows carry only `Status`), not a runtime `TypeError` inside `dispatchRow`.
+ * `plugins` slot narrowed to the command's OWN `Msg`. This DISTRIBUTES over the
+ * real `MarketplaceNotificationMessage` union (one mapped member per arm),
+ * preserving each arm's per-status constraints (e.g. `MpFailed`'s REQUIRED
+ * `severity: "error" | "warning"`, `MpSkipped`'s reachable `reasons?`, `MpList`'s
+ * reachable `details?`), and replaces ONLY the `plugins` child slot with the
+ * command's `Msg`. Because it is built FROM the union, assigning a value of this
+ * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
+ * assignability relationship -- the `notifyWithContext` widening seam is a single
+ * safe upcast, not an `as unknown as` reinterpretation, so a status-drift between
+ * a producer and the render map surfaces as a real compile error rather than a
+ * runtime `TypeError` inside `dispatchRow`.
+ *
+ * Combined with the `Msg extends { status: Status }` bound on
+ * `notifyWithContext`, a call site that pushes a plugin row whose `status` the
+ * context's render map does not declare is a compile error at the call site --
+ * the design's stated exhaustiveness guarantee in BOTH directions (render map
+ * total over `Status`, AND rows carry only `Status`).
  */
-export interface MarketplaceRows<Msg> {
-  readonly name: string;
-  readonly scope: Scope;
-  readonly status?: MarketplaceStatus;
-  readonly reasons?: readonly ContentReason[];
-  readonly details?: MarketplaceDetails;
-  // SEV-01/RLD-01: the marketplace-level row carries the same caller-stamped
-  // severity/needsReload as `MpCommon` (its broad-union target) so a producer
-  // can stamp a header-only `(failed)` block whose error severity has no plugin
-  // child to carry it (e.g. an invalid-manifest `marketplace remove`). The
-  // widening cast in `notifyWithContext` preserves these into the
-  // `MarketplaceNotificationMessage` the reducer maxes over.
-  readonly severity?: Severity;
-  readonly needsReload?: boolean;
-  readonly plugins: readonly Msg[];
-}
+export type WithPlugins<MP, Msg> = MP extends unknown
+  ? Omit<MP, "plugins"> & { readonly plugins: readonly Msg[] }
+  : never;
+
+/**
+ * The marketplace-row shape `notifyWithContext` accepts: the broad
+ * `MarketplaceNotificationMessage` union with its `plugins` child slot narrowed
+ * to the command's OWN `Msg`. See `WithPlugins` for why this distributes over
+ * the real union (and thus widens back to it safely).
+ */
+export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, Msg>;
 
 /**
  * D-02 entry point. Dispatches each per-plugin row body through
@@ -137,7 +136,10 @@ export interface MarketplaceRows<Msg> {
  * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
  * per-row stamps, not via a cascade-kind straddle.
  */
-export function notifyWithContext<Status extends string, Msg extends { status: Status }>(
+export function notifyWithContext<
+  Status extends string,
+  Msg extends PluginNotificationMessage & { status: Status },
+>(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
@@ -148,10 +150,13 @@ export function notifyWithContext<Status extends string, Msg extends { status: S
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
   // the broad `MarketplaceNotificationMessage` union, so the narrowed rows widen
-  // back to it here at the single emission seam. The marketplace-level shape is
-  // unchanged -- only the child `plugins` were narrowed -- so the widening is a
-  // safe upcast, not a reinterpretation.
-  const marketplaces = rows as unknown as readonly MarketplaceNotificationMessage[];
+  // back to it here at the single emission seam. Because `Msg extends
+  // PluginNotificationMessage`, `MarketplaceRows<Msg>` (the distributive
+  // narrowing of the real union over the command's `Msg`) is a genuine SUBTYPE
+  // of `MarketplaceNotificationMessage[]` -- the widening is a plain assignment
+  // with NO cast. A status drift between a producer and the render map is a
+  // compile error at the producer, not an `as unknown as` reinterpretation here.
+  const marketplaces: readonly MarketplaceNotificationMessage[] = rows;
   // OUT-04 / D-04: thread the command's operation label + the STRUCTURAL
   // single-vs-bulk cardinality onto the cascade envelope. The trailing tally
   // (OUT-03) renders IFF `cardinality === "plural"`; `label` is its
@@ -182,7 +187,7 @@ export function notifyWithContext<Status extends string, Msg extends { status: S
  */
 export function notifyReconcileAppliedWithContext<
   Status extends string,
-  Msg extends { status: Status },
+  Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -215,12 +220,19 @@ export function notifyReconcileAppliedWithContext<
  * rows to `Msg` (WR-01), so a command only ever supplies rows whose statuses
  * its render map covers and the lookup is total at the call site.
  *
- * WR-02: the lookup is read as possibly-`undefined` and a missing arm throws a
- * diagnostic naming the offending status and the command label instead of a
- * bare `arm is not a function` `TypeError`. The compile-time `Msg`-constraint
- * means this branch is unreachable for type-checked call sites; the guard hardens
- * the single point where the otherwise-discriminated union loses its static
- * guarantee against projection drift in out-of-band callers (IN-03 / IN-05).
+ * WR-02: the lookup is read as possibly-`undefined`. Because the producers are
+ * now typed to their command's `Msg` (the `MarketplaceRows<Msg>` distributive
+ * type pins each producer's plugin rows to the render map's status set), this
+ * branch is unreachable for type-checked call sites -- a status drift between a
+ * producer and the render map is a compile error at the producer, not here.
+ *
+ * Defense-in-depth (IN-03 / IN-05): should an out-of-band caller still reach
+ * this seam with a status the render map omits, render a conspicuous fallback
+ * row rather than throwing. A bare throw would BOTH drop the user's notification
+ * AND escape before the single `ctx.ui.notify` seam, so a future projection
+ * drift would surface as an uncaught exception with no output. The fallback
+ * degrades gracefully -- the row still flows through the cascade and reaches the
+ * user, carrying a self-describing diagnostic instead of vanishing.
  */
 function dispatchRow<Status extends string, Msg>(
   context: CommandContext<Status, Msg>,
@@ -232,9 +244,21 @@ function dispatchRow<Status extends string, Msg>(
     | RenderFn<Extract<Msg, { status: Status }>>
     | undefined;
   if (arm === undefined) {
-    throw new Error(
-      `notify dispatch: command "${context.Messaging.label}" has no render arm for status "${p.status}"`,
-    );
+    // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
+    // must not surface as a quiet `info`. `cascadeSeverity` MAX-reduces the
+    // stamped `severity` of every row downstream of this seam (it reads the SAME
+    // row objects this dispatch walks), so stamp this row to `error` here to
+    // floor the envelope at error. The field is declared `readonly`; this single
+    // localized write is the seam that lets the fallback contribute its severity.
+    try {
+      (p as { severity?: "error" }).severity = "error";
+    } catch {
+      // A frozen/sealed out-of-band row rejects the write in ESM strict mode. The
+      // throw must not escape the single `ctx.ui.notify` seam, so degrade: keep
+      // whatever severity was already stamped and still render the diagnostic.
+    }
+
+    return `${"name" in p ? p.name : "?"} (failed) {internal: no render arm for "${p.status}"}`;
   }
 
   return (arm as unknown as RenderFn<PluginNotificationMessage>)(p, probe, mpScope);

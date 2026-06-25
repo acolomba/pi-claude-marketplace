@@ -20,7 +20,7 @@
 // runtime tuples `BUCKET_A_EVENTS` / `TOOL_EVENTS` in
 // `domain/components/hook-events.ts` are pinned to these literal unions
 // via a `satisfies readonly ClaudeHookEvent[]` (and respectively
-// `satisfies readonly _ToolEvent[]`) assertion in that file -- one
+// `satisfies readonly BucketAEvent[]`) assertion in that file -- one
 // drifts, the typecheck breaks at the source-of-truth assertion site.
 //
 // `HookSummaryEntry` is the discriminated union the info-surface renderer
