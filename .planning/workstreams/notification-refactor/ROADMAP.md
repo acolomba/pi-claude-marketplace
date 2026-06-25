@@ -137,7 +137,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — OUT-03/04 trailing tally gated on structural cardinality (D-04) + Messaging.label threading + widened countRowsBySeverity + mixed-subject tally (D-03); every plural catalog block/fixture updated atomically (Wave 2)
+- [x] 03-02-PLAN.md — OUT-03/04 trailing tally gated on structural cardinality (D-04) + Messaging.label threading + widened countRowsBySeverity + mixed-subject tally (D-03); every plural catalog block/fixture updated atomically (Wave 2)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -163,5 +163,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
-| 3. Desired-state output & atomic catalog supersession | 1/3 | In Progress|  |
+| 3. Desired-state output & atomic catalog supersession | 2/3 | In Progress|  |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |

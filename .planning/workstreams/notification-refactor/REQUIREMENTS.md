@@ -34,10 +34,10 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 
 - [x] **OUT-01**: Severity reaches the user via the host `ctx.ui.notify(msg, "warning"|"error")` channel, retaining the host `Error:` / `Warning:` label and default color (fork A — the host couples label+color to the severity arg in `@earendil-works/pi-coding-agent` 0.79.x; confirmed from `showExtensionNotify`/`showError`/`showWarning`). Info omits the second arg.
 - [x] **OUT-02**: Error/warning emissions carry a leading severity sentence keyed to the max severity: `[A|Some] <subject> operation[s] has/have failed | needs/need attention.` (`subject` = plugin|marketplace; `A`=1, `Some`>1; verb = `has/have failed` for error, `needs/need attention` for warning; sentence keeps its terminal period). The leading sentence prevents the host label from gluing onto a detail row.
-- [ ] **OUT-03**: Bulk operations carry a trailing tally line: `<Operation>: <n> failure(s), <n> warning(s), <n> success(es)` — counts pluralized by count, zero-count categories omitted, no terminal period.
-- [ ] **OUT-04**: The operation label in the tally is the command's human notification name (e.g. `Plugin install`, `Marketplace add`), supplied by the command (see MOD-01). Single-target operations omit the trailing tally (the row already embeds the outcome); the leading severity sentence still appears for single-target error/warning.
+- [x] **OUT-03**: Bulk operations carry a trailing tally line: `<Operation>: <n> failure(s), <n> warning(s), <n> success(es)` — counts pluralized by count, zero-count categories omitted, no terminal period.
+- [x] **OUT-04**: The operation label in the tally is the command's human notification name (e.g. `Plugin install`, `Marketplace add`), supplied by the command (see MOD-01). Single-target operations omit the trailing tally (the row already embeds the outcome); the leading severity sentence still appears for single-target error/warning.
 - [x] **OUT-05**: The marketplace header is always rendered; a plugin row never appears without its marketplace header.
-- [ ] **OUT-06**: Mixed-subject cascades (load-time `reconcile`, `import`) drop the subject noun in the leading sentence (`[A|Some] operation[s] …`) and use the operation name in the tally, counting all rows uniformly.
+- [x] **OUT-06**: Mixed-subject cascades (load-time `reconcile`, `import`) drop the subject noun in the leading sentence (`[A|Some] operation[s] …`) and use the operation name in the tally, counting all rows uniformly.
 - [x] **OUT-07**: Cascade cardinality is structural in the type model (single marketplace/plugin vs. plural), not inferred by counting rows at render time.
 - [x] **OUT-08**: `docs/output-catalog.md` and the `catalog-uat` byte fixtures are rewritten in lockstep for the new summary surfaces (atomic supersession); per-row grammar (icons, status tokens, reasons) is preserved except the `present`→`installed` collapse; the `reasons` set stays closed for output-grammar/catalog stability.
 
@@ -88,10 +88,10 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 | GATE-01 | Phase 2 | Complete |
 | OUT-01 | Phase 3 | Complete |
 | OUT-02 | Phase 3 | Complete |
-| OUT-03 | Phase 3 | Pending |
-| OUT-04 | Phase 3 | Pending |
+| OUT-03 | Phase 3 | Complete |
+| OUT-04 | Phase 3 | Complete |
 | OUT-05 | Phase 3 | Complete |
-| OUT-06 | Phase 3 | Pending |
+| OUT-06 | Phase 3 | Complete |
 | OUT-08 | Phase 3 | Complete |
 | GATE-02 | Phase 3 | Complete |
 | MOD-04 | Phase 4 | Pending |

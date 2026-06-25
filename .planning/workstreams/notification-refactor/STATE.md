@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: Notification Refactor
 milestone_name: milestone
 current_phase: 03
-current_plan: 2
+current_plan: 3
 status: executing
 last_updated: "2026-06-24T23:34:43.932Z"
 last_activity: 2026-06-24
@@ -11,8 +11,8 @@ progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
-  percent: 55
+  completed_plans: 10
+  percent: 64
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (shared project context)
 ## Current Position
 
 Phase: 03 (desired-state-output-atomic-catalog-supersession) — EXECUTING
-Plan: 2 of 3 (Plan 01 complete)
+Plan: 3 of 3 (Plans 01–02 complete)
 **Status:** Executing Phase 03
 **Current Phase:** 03
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
 **Last Activity:** 2026-06-24
-**Last Activity Description:** Completed 03-01 (D-02 leading sentence + D-03 mixed-subject + D-01 absent-target error flips)
+**Last Activity Description:** Completed 03-02 (OUT-03/04/D-04 trailing per-operation tally + Messaging.label/cardinality threading + atomic catalog supersession)
 
 ## Phases
 
@@ -44,7 +44,7 @@ Plan: 2 of 3 (Plan 01 complete)
 ## Progress
 
 **Phases Complete:** 2 / 4
-**Current Plan:** 2
+**Current Plan:** 3
 
 ## Decisions
 
@@ -58,9 +58,12 @@ Plan: 2 of 3 (Plan 01 complete)
 - 03-01: D-02 leading sentence via a single `summaryPhrase(count, severity, subject|null)` helper (replaces `operationPhrase`); D-03 mixed-subject branch drops the noun keyed off the combined row total. Single `emitWithSummary` notify seam preserved (IL-2).
 - 03-01: uninstall PU-5 already-gone row is `(failed) {not installed}`, NOT `(skipped)` — uninstall's render map renders `uninstalled`/`failed` only (no skipped arm). reinstall/update keep `(skipped) {not installed}` (severity-only flip). Absent-target severity stamped at the producer (`reasons.includes("not installed") ? "error" : skipSeverity`); skipSeverity + the reasons set untouched.
 - 03-01: ORCHESTRATED uninstall converge stays silent (apply.ts untouched, WR-06/NFR-2); only the STANDALONE path flips to error. enable/disable not-installed stays warning (not in the D-01 absent-target enumeration).
+- 03-02: OUT-03/04 trailing tally (`<Operation>: <n> failure(s), <n> warning(s), <n> success(es)`) gated on a STRUCTURAL single/plural cardinality threaded from the invocation form; `label`+`cardinality` ride on CascadeNotificationMessage/ReconcileAppliedCascadeMessage (so the catalog-uat notify() driver and fixtures exercise the tally). countRowsBySeverity widened to count "info" (success). Single emitWithSummary seam preserved.
+- 03-02: marketplace update OMITS the tally — it is STRUCTURALLY single (one named marketplace per invocation, Single<...> at the call site), diverging from the plan's plural-section enumeration; the D-04 structural-cardinality HARD constraint overrides. A bare marketplace grouping header (no status, no severity) is excluded from the success count; an mp row WITH a status (import added, remove removed) counts as a real operation (D-03 mixed-subject uniform counting).
+- 03-02: Wired the bulk reinstall/update/import orchestrators to thread cardinality (Rule 2 — the tally is dead without it); apply.ts (reconcile converge) untouched and notify-reasons.ts (closed set) untouched.
 
 ## Session Continuity
 
-**Stopped At:** 03-01 complete (leading sentence + absent-target error severity landed; catalog-uat green at every boundary)
-**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-01-SUMMARY.md
-**Next:** Plan/execute 03-02 (remaining Phase 3 scope, e.g. the OUT-03/04/D-04 trailing tally + Messaging.label threading)
+**Stopped At:** 03-02 complete (OUT-03/04 trailing tally landed; catalog-uat + npm run check green at every boundary)
+**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-02-SUMMARY.md
+**Next:** Plan/execute 03-03 (remaining Phase 3 scope — e.g. D-05 always-header audit + the present→installed catalog grammar collapse)
