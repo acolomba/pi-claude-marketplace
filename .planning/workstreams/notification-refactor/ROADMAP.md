@@ -161,7 +161,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Extract soft-dep concern → `shared/concerns/soft-dep.ts` (DEPENDENCIES, Dependency, markers, pure `softDepMarkers`); `composeReasons` delegates its soft-dep branch (signature unchanged); repoint all `Dependency` importers (MOD-04) (Wave 1)
+- [x] 04-01-PLAN.md — Extract soft-dep concern → `shared/concerns/soft-dep.ts` (DEPENDENCIES, Dependency, markers, pure `softDepMarkers`); `composeReasons` delegates its soft-dep branch (signature unchanged); repoint all `Dependency` importers (MOD-04) (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 — both touch notify.ts)*
 
@@ -178,4 +178,4 @@ Plans:
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
 | 3. Desired-state output & atomic catalog supersession | 3/3 | Complete    | 2026-06-25 |
-| 4. Concern-module extraction & open-closed proof | 0/3 | Not started | - |
+| 4. Concern-module extraction & open-closed proof | 1/3 | In Progress|  |
