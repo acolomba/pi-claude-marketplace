@@ -2427,7 +2427,7 @@ function tallyCategory(count: number, singular: string, plural: string): string 
  * zero-count categories are OMITTED, and there is NO terminal period.
  *
  * Returns `""` when the tally must not render: the operation is single-target
- * (cardinality !== "plural" -- D-04 / Pitfall 5, never a row-count heuristic),
+ * (cardinality !== "plural" -- D-04, never a row-count heuristic),
  * the label is absent (legacy `notify()` emissions), or every category is zero.
  * Per OUT-03 the tally renders on plural ops regardless of severity, so a
  * successful bulk import shows `Plugin import: 3 success(es)`.
