@@ -134,7 +134,10 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   assert.equal(notifications[0]?.severity, undefined);
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
+    // OUT-03/D-04: import is a plural operation, so the trailing tally counts
+    // the `(updated)` marketplace row + the idempotent `(skipped) {already
+    // installed}` plugin row as two successes.
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\nImport: 2 successes",
   );
 });
 
@@ -988,7 +991,10 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
   assert.equal(notifications.length, 1);
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
+    // OUT-03/D-04: import is a plural operation, so the trailing tally counts
+    // the `(updated)` marketplace row + the idempotent `(skipped) {already
+    // installed}` plugin row as two successes.
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\nImport: 2 successes",
   );
 });
 

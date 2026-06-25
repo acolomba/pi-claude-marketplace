@@ -516,10 +516,12 @@ Multi-plugin cascade. One marketplace header per affected marketplace; plugin ro
   ● alpha v1.0.0 (reinstalled)
   ● beta v0.5.0 (reinstalled)
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-Bare marketplace header (no status, no details). Plugin status `reinstalled` triggers reload-hint per D-16-12.
+Bare marketplace header (no status, no details). Plugin status `reinstalled` triggers reload-hint per D-16-12. OUT-03/D-04: the bulk reinstall is a plural operation, so the trailing tally (`Plugin reinstall: 2 successes`) sits between the body and the reload-hint; the two `reinstalled` plugin rows are the two successes (the bare marketplace header is bookkeeping, not counted).
 
 ### Success with soft-dep markers
 
@@ -529,10 +531,12 @@ Bare marketplace header (no status, no details). Plugin status `reinstalled` tri
 ● official [user]
   ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
 
+Plugin reinstall: 1 success
+
 /reload to pick up changes
 ```
 
-The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded.
+The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded. OUT-03/D-04: the single `reinstalled` row is the one success in the plural-operation tally.
 
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
@@ -546,10 +550,12 @@ A plugin operation has failed.
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {source missing}
 
+Plugin reinstall: 1 failure, 2 successes
+
 /reload to pick up changes
 ```
 
-Mixed-outcome cascade. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
+Mixed-outcome cascade. OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `reinstalled` + `(skipped) {up-to-date}` (idempotent -> info per D-01) rows as the two successes; zero-count categories (warnings) are omitted. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
 
 ### Single marketplace, all failed (no reload-hint)
 
@@ -561,9 +567,11 @@ Some plugin operations have failed.
 ● official [user]
   ⊘ alpha (failed) {source missing}
   ⊘ beta (failed) {invalid manifest}
+
+Plugin reinstall: 2 failures
 ```
 
-Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
+Failed-only cascade. OUT-03/D-04: both `failed` rows are the two failures in the plural tally; the success/warning categories are zero and omitted. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
 
 ### Plugin became unavailable after install (manifest now declares unsupported features)
 
@@ -574,10 +582,12 @@ Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing
   ● alpha v1.0.0 (reinstalled)
   ⊘ delta (unavailable) {unsupported hooks}
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row carries no bracket. Reload-hint fires because `alpha` was reinstalled. Severity: info -- the `unavailable` status is not in the failed/skipped/manual-recovery set, so the severity ladder falls through to info.
+Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row carries no bracket. OUT-03/D-04: both rows carry info severity (the `unavailable` row stamps no severity, defaulting to info per SEV-01), so the plural tally counts two successes. Reload-hint fires because `alpha` was reinstalled. Severity: info -- the `unavailable` status is not in the failed/skipped/manual-recovery set, so the severity ladder falls through to info.
 
 ### Across multiple marketplaces (bare `reinstall` form)
 
@@ -595,10 +605,12 @@ A plugin operation has failed.
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {source missing}
 
+Plugin reinstall: 1 failure, 4 successes
+
 /reload to pick up changes
 ```
 
-Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (the failed `delta` row in the second block triggers the first-match ladder).
+Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (the failed `delta` row in the second block triggers the first-match ladder). OUT-03/D-04: the plural tally counts uniformly across both marketplace blocks -- one `failed` row and four info rows (three `reinstalled` + one idempotent `(skipped) {up-to-date}`) yield `1 failure, 4 successes`.
 
 ### Same marketplace name in both scopes (orphan-fold absent; per-scope blocks)
 
@@ -611,10 +623,12 @@ Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (th
 ● official [user]
   ● beta v1.0.0 (reinstalled)
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-The marketplaces never collapse -- each per-scope header is a distinct marketplace block.
+The marketplaces never collapse -- each per-scope header is a distinct marketplace block. OUT-03/D-04: the plural tally counts the two `reinstalled` rows across the per-scope blocks as two successes.
 
 ### Failure -- marketplace not added, explicit scope (ATTR-03 / SCOPE-01)
 
@@ -658,10 +672,12 @@ A plugin operation has failed.
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
+Plugin update: 1 failure, 2 successes
+
 /reload to pick up changes
 ```
 
-The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `updated` + idempotent `(skipped) {up-to-date}` rows as the two successes. The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -677,9 +693,11 @@ A plugin operation has failed.
       cause: failed to remove staged agent: EACCES
     [phase3b] (rollback failed)
       cause: orphan path: /.../delta.bak
+
+Plugin update: 1 failure
 ```
 
-`failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
+OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
 
 ### All up-to-date (no-op cascade)
 
@@ -689,9 +707,11 @@ A plugin operation has failed.
 ● official [user]
   ⊘ alpha (skipped) {up-to-date}
   ⊘ beta (skipped) {up-to-date}
+
+Plugin update: 2 successes
 ```
 
-Skipped-only cascade. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
+Skipped-only cascade. OUT-03/D-04: both `(skipped) {up-to-date}` rows are idempotent (info per D-01), so the plural tally reports two successes even though the operation changed nothing. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
 
 ### Across multiple marketplaces (bare `update` form)
 
@@ -708,10 +728,12 @@ A plugin operation has failed.
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
+Plugin update: 1 failure, 3 successes
+
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
+Two marketplace blocks. Severity: `error`. OUT-03/D-04: the plural tally counts uniformly across both blocks -- one `failed` row and three info rows (two `updated` + one idempotent `(skipped) {up-to-date}`) yield `1 failure, 3 successes`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
 
 ### Same marketplace name in both scopes
 
@@ -724,10 +746,12 @@ Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plug
 ● official [user]
   ● beta v0.5.0 → v1.0.0 (updated)
 
+Plugin update: 2 successes
+
 /reload to pick up changes
 ```
 
-Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes.
+Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes. OUT-03/D-04: the two `updated` rows across the per-scope blocks are the two successes in the plural tally.
 
 ### Hash-version update arrow (PI-7 short-SHA display, both sides)
 
@@ -737,10 +761,12 @@ Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse a
 ● official [user]
   ● hashed-plugin v#2ea95f8 → v#1c3d9a0 (updated)
 
+Plugin update: 1 success
+
 /reload to pick up changes
 ```
 
-Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
+OUT-03/D-04: the single `updated` row is the one success in the plural tally. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
@@ -796,10 +822,12 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 ● github-marketplace [user] (added)
   ● github-plugin (installed)
 
+Import: 13 successes
+
 /reload to pick up changes
 ```
 
-Six marketplace blocks joined by blank lines (D-16-07). The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: info -- no `failed`, no `skipped/manual-recovery` in the payload; `unavailable` is not in the warning set.
+Six marketplace blocks joined by blank lines (D-16-07). OUT-03/OUT-06/D-03/D-04: import is a plural mixed-subject operation, so the trailing tally counts all rows uniformly under the `Import` label -- six `added` marketplace rows plus seven info plugin rows (six `installed` + one `unavailable`, which stamps no severity and defaults to info) yield `13 successes`. The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: info -- no `failed`, no `skipped/manual-recovery` in the payload; `unavailable` is not in the warning set.
 
 ### `import --scope project` (narrows writes to project scope only)
 
@@ -815,10 +843,12 @@ Six marketplace blocks joined by blank lines (D-16-07). The `directory-marketpla
 ● github-marketplace [project] (added)
   ● github-plugin (installed)
 
+Import: 6 successes
+
 /reload to pick up changes
 ```
 
-Three project-scope marketplace blocks. Reload-hint fires. Severity: info.
+Three project-scope marketplace blocks. OUT-03/D-04: three `added` marketplace rows plus three `installed` plugin rows yield `6 successes`. Reload-hint fires. Severity: info.
 
 ### Per-row soft-dep markers on import cascade rows
 
@@ -829,10 +859,12 @@ Three project-scope marketplace blocks. Reload-hint fires. Severity: info.
   ● agent-only-plugin (installed) {requires pi-subagents}
   ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp}
 
+Import: 3 successes
+
 /reload to pick up changes
 ```
 
-Each `installed` row's `dependencies` field drives the marker. The combined-row brace block joins markers with a comma-space separator (the renderer's `composeReasons` helper). Reload-hint fires. Severity: info.
+OUT-03/D-04: one `added` marketplace row plus two `installed` plugin rows yield `3 successes`. Each `installed` row's `dependencies` field drives the marker. The combined-row brace block joins markers with a comma-space separator (the renderer's `composeReasons` helper). Reload-hint fires. Severity: info.
 
 ### Same marketplace name in both scopes
 
@@ -845,10 +877,12 @@ Each `installed` row's `dependencies` field drives the marker. The combined-row 
 ● official [user] (added)
   ● beta (installed)
 
+Import: 4 successes
+
 /reload to pick up changes
 ```
 
-Per-scope marketplace blocks. Reload-hint fires. Severity: info.
+Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
 
 ______________________________________________________________________
 
@@ -1331,11 +1365,11 @@ ______________________________________________________________________
 
 ## reconcile-applied-cascade
 
-RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (Pitfall 4 / RECON-04 -- the reconcile already ran ON /reload). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
+RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (RECON-04 -- the reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) is appended as the cascade's FINAL block, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name (the reload-hint slot the apply structurally suppresses). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 
-A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line.
+A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so the trailing tally (`Reconcile: 4 successes`) counts the two `added` marketplace rows + the two `installed` plugin rows uniformly under the operation name; it takes the reload-hint's structural slot (the reconcile already ran ON /reload, so no `/reload` trailer follows).
 
 <!-- catalog-state: success-cascade-mixed -->
 
@@ -1345,6 +1379,8 @@ A reconcile that materialized one new marketplace + one plugin install per scope
 
 ● other-mp [user] (added)
   ● other-plugin (installed)
+
+Reconcile: 4 successes
 ```
 
 ### Soft-fail per-entry -- one (failed) {network unreachable} row, other entries continue
@@ -1360,7 +1396,11 @@ A marketplace operation has failed.
 
 ● ok-mp [user] (added)
   ● ok-plugin (installed)
+
+Reconcile: 1 failure, 2 successes
 ```
+
+OUT-03/D-04: the mixed-subject tally counts the failed marketplace row as one failure and the `added` marketplace + `installed` plugin rows as two successes, all under the `Reconcile` operation name.
 
 ### CFG-03 invalid-config row -- BASENAME only (T-55-02-01)
 
@@ -1372,6 +1412,8 @@ A reconcile where `claude-plugins.json` is unparseable. The read pass surfaces t
 A marketplace operation has failed.
 
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
+
+Reconcile: 1 failure
 ```
 
 ### CFG-03 invalid-config row -- with cause-chain trailer (I5 / PR #51)
@@ -1386,7 +1428,11 @@ Some operations have failed.
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
   ⊘ claude-plugins.json (failed) {invalid manifest}
     cause: schema validation failed: /marketplaces: Expected object
+
+Reconcile: 2 failures
 ```
+
+OUT-03/D-04: both the mp-level failed row and its synthetic failed child are counted, so the plural tally reports `2 failures`.
 
 ### Partial marketplace remove -- per-plugin children (I1 / PR #51)
 
@@ -1401,7 +1447,11 @@ Some operations have failed.
   ○ plugin-ok (uninstalled)
   ⊘ plugin-fail-a (failed) {permission denied}
   ⊘ plugin-fail-b (failed) {source missing}
+
+Reconcile: 3 failures, 1 success
 ```
+
+OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugin rows as three failures and the `uninstalled` plugin row as one success (`uninstalled` stamps info), all under the `Reconcile` operation name.
 
 ______________________________________________________________________
 

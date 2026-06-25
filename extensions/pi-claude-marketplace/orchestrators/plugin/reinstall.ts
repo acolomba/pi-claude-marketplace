@@ -422,6 +422,10 @@ export async function reinstallPlugins(
   }
 
   const outcomes: ReinstallPluginOutcome[] = [];
+  // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
+  // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
+  // the `@<marketplace>` and bare forms are bulk (emit the tally).
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   for (const target of targets) {
     try {
       outcomes.push(
@@ -466,7 +470,7 @@ export async function reinstallPlugins(
     }
   }
 
-  renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+  renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
   return Object.freeze(outcomes);
 }
 
@@ -740,6 +744,7 @@ function renderReinstallPartitionAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly ReinstallPluginOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   // Group rows by (scope, marketplace) in input order. Two different scopes
   // for the same marketplace name render as two separate marketplace
@@ -784,7 +789,12 @@ function renderReinstallPartitionAndNotify(
     return { name: block.name, scope: block.scope, plugins };
   }) as Plural<MarketplaceRows<ReinstallMsg>>;
 
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces);
+  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
+  // (`@marketplace` / bare) reinstall forms; a single-target `<plugin>@<mp>`
+  // reinstall omits it (the row embeds the outcome). The structural
+  // single-vs-plural signal is the invocation FORM, threaded from
+  // `reinstallPlugins`.
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 /**

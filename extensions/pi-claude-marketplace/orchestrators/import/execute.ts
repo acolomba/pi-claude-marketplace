@@ -1062,7 +1062,9 @@ export async function importClaudeSettings(
   // switch.
   const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
     buildImportNotificationMarketplaces(result);
-  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces);
+  // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
+  // per-operation tally under the `Import` label.
+  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
 
   return result;
 }

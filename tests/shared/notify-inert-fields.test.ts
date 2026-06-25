@@ -105,6 +105,70 @@ test("OUT-04 / D-04: a single-target (no cardinality) cascade carrying a label r
   assert.equal(body.includes("Plugin uninstall: "), false);
 });
 
+test("OUT-03 / D-04: a plural cascade renders the trailing tally under the operation label", () => {
+  // A plural (bulk) cascade carries `cardinality:"plural"` + the label. The
+  // tally appears after the body, counting rows by stamped severity (zero-count
+  // categories omitted, no terminal period).
+  const plural: NotificationMessage = {
+    label: "Plugin reinstall",
+    cardinality: "plural",
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            name: "a",
+            reasons: ["network unreachable"],
+            severity: "error",
+            needsReload: false,
+          },
+          {
+            status: "skipped",
+            name: "b",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
+          {
+            status: "disabled",
+            name: "c",
+            version: "1.0.0",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  const body = String(renderArgs(plural)[0]);
+  assert.equal(body.includes("Plugin reinstall: 1 failure, 1 warning, 1 success"), true);
+});
+
+test("OUT-03 / D-04: a plural all-success cascade still renders the success tally", () => {
+  // OUT-03: the tally appears on plural ops regardless of severity, so a
+  // successful bulk operation shows `<Operation>: <n> success(es)`.
+  const allSuccess: NotificationMessage = {
+    label: "Plugin import",
+    cardinality: "plural",
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          { status: "disabled", name: "a", version: "1.0.0", severity: "info", needsReload: false },
+          { status: "disabled", name: "b", version: "1.0.0", severity: "info", needsReload: false },
+        ],
+      },
+    ],
+  };
+
+  const body = String(renderArgs(allSuccess)[0]);
+  assert.equal(body.includes("Plugin import: 2 successes"), true);
+});
+
 test("RLD-02: a stamped needsReload:true row adds the /reload trailer via the OR-reduce", () => {
   // Baseline: a `disabled` INVENTORY row stamps `needsReload:false`, so the
   // OR-reduce is false and NO `/reload` trailer is emitted.

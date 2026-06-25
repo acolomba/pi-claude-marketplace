@@ -1549,7 +1549,7 @@ test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginMan
     },
   ];
 
-  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
 
   // Exactly one notification was emitted; severity routes via notify()'s
   // content-derived ladder (D-16-11): manual-recovery in plugins[] -> warning.

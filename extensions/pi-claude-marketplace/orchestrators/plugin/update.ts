@@ -256,6 +256,10 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   // The bare update across multiple scopes / marketplaces becomes one
   // cascade block per (scope, marketplace) pair.
   const outcomes: { readonly target: ResolvedTarget; readonly outcome: PluginUpdateOutcome }[] = [];
+  // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
+  // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
+  // the `@<marketplace>` and bare forms are bulk (emit the tally).
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   for (const t of targets) {
     try {
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
@@ -345,14 +349,14 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      renderUpdateCascadeIfAny(ctx, pi, outcomes);
+      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality);
       return;
     }
 
     outcomes.push({ target: t, outcome });
   }
 
-  renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+  renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
 }
 
 /**
@@ -436,9 +440,10 @@ function renderUpdateCascadeIfAny(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   if (outcomes.length > 0) {
-    renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+    renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
   }
 }
 
@@ -1654,6 +1659,7 @@ function renderUpdateCascadeAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   // Group by (scope, marketplace) per CMC-21. Insertion order tracks the
   // first occurrence of each (scope, marketplace) pair -- the post-grouping
@@ -1724,7 +1730,11 @@ function renderUpdateCascadeAndNotify(
   //  docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
   //  rollback-partial, all-up-to-date-noop, bare-multi-mp,
   //  same-mp-both-scopes).
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces);
+  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
+  // (`@marketplace` / bare) update forms; a single-target `<plugin>@<mp>` update
+  // omits it (the row embeds the outcome). The structural single-vs-plural
+  // signal is the invocation FORM, threaded from `updatePlugins`.
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

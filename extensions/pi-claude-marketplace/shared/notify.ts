@@ -2410,6 +2410,90 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
 }
 
 /**
+ * OUT-03: pluralize one tally category by count. Mirrors the `summaryPhrase`
+ * `count === 1 ? singular : plural` idiom: `failure`/`failures`,
+ * `warning`/`warnings`, `success`/`successes`.
+ */
+function tallyCategory(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a PLURAL
+ * (bulk) cascade. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>
+ * success(es)` where `<Operation>` is the threaded `Messaging.label`, the counts
+ * come from `countRowsBySeverity` over the marketplace + nested plugin rows
+ * (D-03 mixed-subject: all rows counted uniformly under the operation name),
+ * zero-count categories are OMITTED, and there is NO terminal period.
+ *
+ * Returns `""` when the tally must not render: the operation is single-target
+ * (cardinality !== "plural" -- D-04 / Pitfall 5, never a row-count heuristic),
+ * the label is absent (legacy `notify()` emissions), or every category is zero.
+ * Per OUT-03 the tally renders on plural ops regardless of severity, so a
+ * successful bulk import shows `Plugin import: 3 success(es)`.
+ */
+function composeTally(message: {
+  readonly label?: string;
+  readonly cardinality?: "single" | "plural";
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}): string {
+  if (message.cardinality !== "plural" || message.label === undefined) {
+    return "";
+  }
+
+  const errorCount = countRowsBySeverity(message.marketplaces, "error");
+  const warningCount = countRowsBySeverity(message.marketplaces, "warning");
+  const successCount = countRowsBySeverity(message.marketplaces, "info");
+
+  const failures = errorCount.plugins + errorCount.marketplaces;
+  const warnings = warningCount.plugins + warningCount.marketplaces;
+  // OUT-03 / OUT-06 / D-03: the tally counts OPERATION rows uniformly across the
+  // plugin and marketplace subjects. A BARE marketplace header -- one carrying
+  // neither a `status` (a realized mp outcome: `added` / `updated` / `removed` /
+  // `failed` / `skipped`) NOR a stamped `severity` -- is a pure grouping label
+  // (bookkeeping, not an operation), so it must not inflate the success count. A
+  // marketplace row WITH a `status` IS a real mp-level operation and counts (an
+  // import `added` block, a `marketplace remove` `removed` block). The `info`
+  // count from `countRowsBySeverity` includes bare headers via its `?? "info"`
+  // default, so subtract them; plugin rows always represent an operation and
+  // always count.
+  const bareHeaders = message.marketplaces.filter(
+    (mp) => mp.severity === undefined && mp.status === undefined,
+  ).length;
+  const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
+
+  const parts: string[] = [];
+
+  if (failures > 0) {
+    parts.push(tallyCategory(failures, "failure", "failures"));
+  }
+
+  if (warnings > 0) {
+    parts.push(tallyCategory(warnings, "warning", "warnings"));
+  }
+
+  if (successes > 0) {
+    parts.push(tallyCategory(successes, "success", "successes"));
+  }
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `${message.label}: ${parts.join(", ")}`;
+}
+
+/**
+ * OUT-03: fold the optional trailing tally into the body BETWEEN the cascade
+ * body and the reload-hint trailer, yielding `{body}\n\n{tally}\n\n{hint}` when
+ * both are present (each segment omitted when empty). The tally placement is the
+ * binding catalog byte contract.
+ */
+function foldTallyAndHint(body: string, tally: string, hint: string): string {
+  return [body, tally, hint].filter((segment) => segment !== "").join("\n\n");
+}
+
+/**
  * Reload-hint trigger per SNM-33. The trailer is reserved for
  * operations that actually change a Pi-visible resource. The ONLY Pi-visible
  * resources are plugin rows (skill / agent / command / MCP entry); marketplace
@@ -3024,10 +3108,18 @@ function dispatchInfoMessage(
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
       // (per-mp header + per-plugin row via the existing helpers). The
-      // reload-hint trailer is structurally suppressed by
-      // shouldEmitReloadHint's arm above; emitWithSummary handles the
-      // summary prepend at error/warning severity.
-      body = composeReconcileAppliedBody(message, probe);
+      // reload-hint trailer is structurally suppressed (the reconcile already
+      // ran ON /reload); emitWithSummary handles the summary prepend at
+      // error/warning severity. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a
+      // plural mixed-subject operation, so the trailing tally folds in after the
+      // body (no reload-hint segment), mirroring the
+      // `emitReconcileAppliedContextCascade` production path so the byte form is
+      // identical whichever entry composes it.
+      body = foldTallyAndHint(
+        composeReconcileAppliedBody(message, probe),
+        composeTally(message),
+        "",
+      );
       break;
     default:
       assertNever(message);
@@ -3092,16 +3184,22 @@ export function notify(
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
   const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 
+  // OUT-03 / OUT-04 / D-04: the per-operation tally renders on PLURAL ops
+  // (cardinality === "plural"), sits AFTER the body and BEFORE the reload-hint
+  // trailer, and is empty for single-target / legacy emissions.
+  const tally = composeTally(message);
+
   // Compute reload-hint per the state-change trigger ladder and append it
   // with one blank line.
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  const withHint = hint === "" ? body : `${body}\n\n${hint}`;
+  const withTally = foldTallyAndHint(body, tally, hint);
 
   // Emit through the shared summary seam (GRAM-04). At info severity the body
   // emits unchanged; at error/warning severity the summary is prepended as its
-  // own block, with the reload-hint (if any) already folded into `withHint`
-  // last: `{summary}\n\n{cascade body}\n\n{reload-hint}` (UXG-07 / GRAM-01).
-  emitWithSummary(ctx, message, withHint);
+  // own block, with the tally + reload-hint already folded last:
+  // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
+  // OUT-03).
+  emitWithSummary(ctx, message, withTally);
 }
 
 /**
@@ -3149,10 +3247,14 @@ export function emitContextCascade(
   });
   const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 
-  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  const withHint = hint === "" ? body : `${body}\n\n${hint}`;
+  // OUT-03 / OUT-04 / D-04: trailing per-operation tally for plural cascades,
+  // placed between the body and the reload-hint trailer.
+  const tally = composeTally(message);
 
-  emitWithSummary(ctx, message, withHint);
+  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
+  const withTally = foldTallyAndHint(body, tally, hint);
+
+  emitWithSummary(ctx, message, withTally);
 }
 
 /**
@@ -3195,7 +3297,14 @@ export function emitReconcileAppliedContextCascade(
   });
   const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 
-  emitWithSummary(ctx, message, body);
+  // OUT-03 / OUT-04 / OUT-06 / D-03 / D-04: a load-time reconcile apply is a
+  // plural mixed-subject cascade; the tally renders under the operation label,
+  // counting all rows uniformly. No reload-hint trailer on the applied-cascade
+  // standalone arm, so the tally is the body's final segment.
+  const tally = composeTally(message);
+  const withTally = foldTallyAndHint(body, tally, "");
+
+  emitWithSummary(ctx, message, withTally);
 }
 
 /**

@@ -929,6 +929,8 @@ const FIXTURES: FixtureMap = {
     "single-mp-all-reinstalled": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -959,6 +961,8 @@ const FIXTURES: FixtureMap = {
     "success-with-soft-dep": {
       pi: piWithNothingLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -982,6 +986,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1019,6 +1025,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1047,6 +1055,8 @@ const FIXTURES: FixtureMap = {
     "plugin-became-unavailable": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1071,6 +1081,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "local-mp",
@@ -1129,6 +1141,8 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1198,6 +1212,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1236,6 +1252,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1268,6 +1286,8 @@ const FIXTURES: FixtureMap = {
       // UXG-02 / D-28-06: every reason is `up-to-date` (in BENIGN_REASONS), so
       // this all-benign skip cascade computes INFO -- no `expectedSeverity`.
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1297,6 +1317,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "local-mp",
@@ -1349,6 +1371,8 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1390,6 +1414,8 @@ const FIXTURES: FixtureMap = {
     "hash-version-arrow": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1445,6 +1471,8 @@ const FIXTURES: FixtureMap = {
     "fresh-mixed-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -1538,6 +1566,8 @@ const FIXTURES: FixtureMap = {
     "scope-project-narrow": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -1588,6 +1618,8 @@ const FIXTURES: FixtureMap = {
     "soft-dep-markers": {
       pi: piWithNothingLoaded(),
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -1617,6 +1649,8 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -2896,6 +2930,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "new-mp",
@@ -2933,6 +2969,8 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "flaky-mp",
@@ -2966,6 +3004,8 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins.json",
@@ -2990,6 +3030,8 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins.json",
@@ -3023,6 +3065,8 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "acme-mp",

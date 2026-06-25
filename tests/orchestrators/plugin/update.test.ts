@@ -651,11 +651,17 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       // Plugin-row `[<scope>]` brackets suppressed by orphan-fold. The
       // (updated) row has no soft-dep markers (plugin declares no agents
       // / no mcp; PUP-1 @mp fixture sets only `hasSkill: true`).
+      // OUT-03/D-04: the `@mp` form is a bulk (plural) update, so the trailing
+      // per-operation tally renders between the body and the reload-hint -- the
+      // `updated` + idempotent `(skipped) {up-to-date}` rows are the two
+      // successes.
       assert.equal(
         body,
         "● mp [project]\n" +
           "  ● alpha v1.0.0 → v1.0.1 (updated)\n" +
           "  ⊘ beta (skipped) {up-to-date}\n" +
+          "\n" +
+          "Plugin update: 2 successes\n" +
           "\n" +
           "/reload to pick up changes",
       );
