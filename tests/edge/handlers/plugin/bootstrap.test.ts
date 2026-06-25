@@ -234,6 +234,30 @@ test("bootstrap handler (invalid --scope value): surfaces parseArgs error", asyn
   });
 });
 
+test("bootstrap handler (orchestrator throws): catch routes a failed marketplace row at error severity", async () => {
+  // IL-2: `addMarketplace` signals a first-run clone failure by THROWING. The
+  // handler's catch must route it through `notify` as a caller-stamped
+  // `severity: "error"` failed marketplace row -- never a raw stack trace.
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const throwingGitOps = {
+      clone: (): Promise<void> => Promise.reject(new Error("network unreachable")),
+    } as unknown as EdgeDeps["gitOps"];
+    const deps: EdgeDeps = {
+      gitOps: throwingGitOps,
+      pluginUpdate: () =>
+        Promise.reject(new Error("bootstrap handler unexpectedly invoked pluginUpdate")),
+    };
+    const handler = makeBootstrapHandler(makePi(), deps);
+
+    await handler("", ctx);
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]?.severity, "error");
+    assert.match(notifications[0]?.message ?? "", /\(failed\)/);
+  });
+});
+
 // Sanity: the existing reusable marketplace fixture still exists where
 // the orchestrator-side test points to it; this keeps the cross-test
 // directory contract explicit in one place.

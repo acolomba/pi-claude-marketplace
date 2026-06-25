@@ -73,6 +73,7 @@ export function makeEnableDisableHandler(
             plugins: [
               {
                 status: "failed",
+                severity: "error",
                 name: parsed.plugin,
                 reasons: ["unreadable"] as const,
                 cause,

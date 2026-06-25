@@ -8,6 +8,7 @@ import {
   type MarketplaceStatus,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
+  type Severity,
 } from "./notify.ts";
 
 import type { Scope } from "./types.ts";
@@ -101,7 +102,7 @@ export interface MarketplaceRows<Msg> {
   // child to carry it (e.g. an invalid-manifest `marketplace remove`). The
   // widening cast in `notifyWithContext` preserves these into the
   // `MarketplaceNotificationMessage` the reducer maxes over.
-  readonly severity?: "info" | "warning" | "error";
+  readonly severity?: Severity;
   readonly needsReload?: boolean;
   readonly plugins: readonly Msg[];
 }

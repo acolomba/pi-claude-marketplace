@@ -112,6 +112,36 @@ test("Flag: --local is parsed and forwarded to the orchestrator (enable)", async
   });
 });
 
+test("C1 defense-in-depth: a throw escaping the orchestrator surfaces as an error-severity failed row, not a stack trace", () => {
+  // The orchestrator's "never re-throws" contract makes the handler's catch
+  // unreachable in normal operation; inject a throw at the `cwd: ctx.cwd` arg
+  // construction (inside the try) so the IL-2 defense-in-depth row is exercised.
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    ui: {
+      notify: (m: string, s?: string): void => {
+        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      },
+    },
+  } as unknown as ExtensionCommandContext;
+  Object.defineProperty(ctx, "cwd", {
+    get(): string {
+      throw new Error("injected cwd failure");
+    },
+  });
+
+  const handler = makeEnableDisableHandler(makePi(), true);
+
+  return handler("foo@mp --scope user", ctx).then(() => {
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    const message = notifications[0]!.message;
+    assert.match(message, /\(failed\)/);
+    assert.match(message, /\{unreadable\}/);
+    assert.match(message, /foo/);
+  });
+});
+
 test("WR-02: --local BEFORE the ref parses identically to --local after (flag position must not change the outcome)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);

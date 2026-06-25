@@ -11,13 +11,16 @@ import type { Dependency } from "./concerns/soft-dep.ts";
 
 /**
  * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site and the
- * single source of truth for the structured-notification surface. Severity
- * is structural, not a field. The Pi API's `notify(msg, type?)` accepts a
- * magic-string `"info" | "warning" | "error"` second arg; severity is
- * computed from message contents at notify time rather than caller-supplied
- * as a prefix or field (PRD §6.12 ES-2). The eslint per-file override in
- * eslint.config.js disables `no-restricted-syntax` for this file so inline
- * `eslint-disable-next-line` comments are unnecessary here.
+ * single source of truth for the structured-notification surface. Severity is
+ * a caller-stamped per-row field (`Severity`): each producer stamps every row's
+ * `severity`, and `computeSeverity` takes the numeric MAX over the rows (SEV-02)
+ * to derive the magic-string `"info" | "warning" | "error"` second arg the Pi
+ * API's `notify(msg, type?)` accepts -- NOT content inference. The standalone
+ * info-surface kinds (`marketplace-not-added`, `plugin-info`, and the read-only
+ * info/cascade kinds) carry no per-row severity array, so they keep a tiny
+ * kind->severity map. The eslint per-file override in eslint.config.js disables
+ * `no-restricted-syntax` for this file so inline `eslint-disable-next-line`
+ * comments are unnecessary here.
  *
  * Public API:
  *
@@ -475,16 +478,23 @@ export interface UsageErrorMessage {
 // ---------------------------------------------------------------------------
 
 /**
+ * The closed severity union stamped on every notification row and passed as the
+ * Pi API `notify(msg, type?)` second arg. `computeSeverity` MAX-reduces it
+ * across rows (SEV-02); rank `info < warning < error`.
+ */
+export type Severity = "info" | "warning" | "error";
+
+/**
  * D-05 / D-06: the universal caller-intent fields carried on the base message
  * shape common to every plugin and marketplace notification row. The member
  * names are the fixed shared convention (`severity`, `needsReload`,
  * `dependencies`) so every command's message shapes look identical.
  *
- * D-07: `severity?` and `needsReload?` are INERT here -- the renderer NEVER
- * reads them, so output stays byte-identical. They exist only so a later phase
- * can flip caller-stamped reduction on (max-severity / OR-needsReload) without
- * a second type-model change. Typed as the closed `"info" | "warning" |
- * "error"` severity union and a plain `boolean` respectively.
+ * D-07: `severity?` and `needsReload?` are the caller-stamped reduction inputs.
+ * `computeSeverity` MAX-reduces `severity` across rows (SEV-02) and the
+ * reload-hint trailer is the OR-reduce of `needsReload` (RLD-02); an absent
+ * value defaults to `info` / `false` (SEV-01 / RLD-01). Typed as the closed
+ * `Severity` union and a plain `boolean` respectively.
  *
  * D-06 / TYPE-04: `dependencies` is the universal soft-dep field. It is NOT
  * promoted to this base as optional, because three plugin variants
@@ -497,7 +507,7 @@ export interface UsageErrorMessage {
  * that it is the universal soft-dep member of the shared convention.
  */
 export interface MessageBase {
-  readonly severity?: "info" | "warning" | "error";
+  readonly severity?: Severity;
   readonly needsReload?: boolean;
 }
 
@@ -514,7 +524,7 @@ export interface MessageBase {
  * remain optional and default to info/false (SEV-01/RLD-01).
  */
 export interface TransitionMessageBase extends MessageBase {
-  readonly severity: "info" | "warning" | "error"; // narrowed: required
+  readonly severity: Severity; // narrowed: required
   readonly needsReload: boolean; // narrowed: required
 }
 
@@ -670,6 +680,11 @@ export interface PluginUpgradableMessage extends MessageBase {
  */
 export interface PluginFailedMessage extends MessageBase {
   readonly status: "failed";
+  // GATE-01 / SEV-02: a failure row must stamp an error-bearing severity --
+  // narrowed from the optional `MessageBase.severity` to REQUIRED `"error" |
+  // "warning"`, so a `failed` row that omits it (or stamps `info`) is a compile
+  // error at the construction site rather than defaulting to info (rank 0).
+  readonly severity: "error" | "warning";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
@@ -834,6 +849,10 @@ interface MpUpdated extends MpCommon {
  */
 interface MpFailed extends MpCommon {
   readonly status: "failed";
+  // GATE-01 / SEV-02: a marketplace failure row must stamp an error-bearing
+  // severity -- narrowed from the optional `MessageBase.severity` to REQUIRED
+  // `"error" | "warning"` so an omitted (or `info`) stamp is a compile error.
+  readonly severity: "error" | "warning";
   readonly reasons?: readonly ContentReason[];
 }
 
@@ -2053,9 +2072,9 @@ type ComputedSeverity = "warning" | "error" | undefined;
  */
 function cascadeSeverity(message: {
   readonly marketplaces: readonly {
-    readonly severity?: "info" | "warning" | "error";
+    readonly severity?: Severity;
     readonly plugins: readonly {
-      readonly severity?: "info" | "warning" | "error";
+      readonly severity?: Severity;
     }[];
   }[];
 }): ComputedSeverity {
@@ -2183,7 +2202,7 @@ function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[
  */
 function countRowsBySeverity(
   marketplaces: readonly MarketplaceNotificationMessage[],
-  target: "info" | "warning" | "error",
+  target: Severity,
 ): SummaryCounts {
   let plugins = 0;
   let mpCount = 0;
@@ -2577,38 +2596,12 @@ function composePluginLines(
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string[] {
-  const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
-
-  // PL-4: emit description as a 4-space-indented second line when present and
-  // non-empty. Only the four list-surface variants carry the field (RLD-04 /
-  // D-08: the list inventory row is `installed`, populated from the manifest
-  // entry; cascade `installed` rows never set `description`, so the
-  // `p.description !== undefined` guard keeps them single-line).
-  if (
-    (p.status === "installed" ||
-      p.status === "upgradable" ||
-      p.status === "available" ||
-      p.status === "unavailable") &&
-    p.description !== undefined &&
-    p.description.length > 0
-  ) {
-    lines.push(`    ${truncateDescription(p.description)}`);
-  }
-
-  if (p.status === "failed" || p.status === "manual recovery") {
-    const trailer = renderIndentedCauseChain(p.cause, "    ");
-    if (trailer !== "") {
-      lines.push(trailer);
-    }
-
-    // AS-7: name the leaked files the user must clean up by hand.
-    for (const leak of collectManualRecoveryLeaks(p.cause)) {
-      lines.push(`    leaked: ${leak}`);
-    }
-  }
-
-  lines.push(...composeRollbackPartialLines(p));
-  return lines;
+  // Byte-identical to dispatching through the central `renderPluginRow` switch:
+  // delegate to the body-parameterized variant with `renderPluginRow` as the
+  // row renderer, so the PL-4 description line, the cause-chain / AS-7
+  // leaked-paths trailers, and the rollback-partial lines are composed in
+  // exactly one place (`composePluginLinesWith`).
+  return composePluginLinesWith(p, probe, mpScope, renderPluginRow);
 }
 
 /**
@@ -3093,37 +3086,38 @@ export function notify(
 }
 
 /**
- * D-02 adapter seam: compose and emit a cascade exactly like the cascade arm
- * of `notify()` above, but dispatch each per-plugin row body through a
- * caller-supplied `renderPluginRowBody` instead of the central
- * `renderPluginRow` switch. The `notifyWithContext` entry point in
+ * D-02 adapter seam shared by both context-cascade emitters: compose and emit a
+ * cascade exactly like the cascade arm of `notify()` above, but dispatch each
+ * per-plugin row body through a caller-supplied `renderPluginRowBody` instead of
+ * the central `renderPluginRow` switch. The `notifyWithContext` entry point in
  * `shared/notify-context.ts` passes `(row, probe, mpScope) =>
  * context.render[row.status](row, probe, mpScope)` so the per-row bytes come
  * from the command's own render map, while the marketplace header, description
  * lines, cause-chain trailers, rollback-partial lines, the empty
- * `(no marketplaces)` sentinel, the reload-hint trailer, and the
- * severity/summary `emitWithSummary` seam all stay byte-identical to the legacy
- * path. Each Wave-2 render map reproduces the EXACT bytes of the central switch
- * arm it lifts, so this dispatch yields output byte-identical to `notify()` for
- * every migrated command (proven by that command's catalog-uat run).
+ * `(no marketplaces)` sentinel, and the severity/summary `emitWithSummary` seam
+ * all stay byte-identical to the legacy path. Each render map reproduces the
+ * EXACT bytes of the central switch arm it lifts, so this dispatch yields output
+ * byte-identical to `notify()` for every migrated command (proven by that
+ * command's catalog-uat run).
  *
- * D-07: `severity?` / `needsReload?` on the rows stay INERT here -- this seam
- * derives severity and the reload-hint from message CONTENTS exactly as the
- * legacy cascade arm does; it never reads the inert caller-intent fields. Only
- * the per-row body dispatch is parameterized.
- *
- * The single soft-dep probe (`softDepStatus(pi)`) and the single
- * `ctx.ui.notify` call (IL-2, via `emitWithSummary`) discipline is preserved.
+ * SEV-02 / RLD-02: severity and the reload-hint come from the rows' caller-
+ * stamped `severity` / `needsReload` -- `emitWithSummary` -> `computeSeverity`
+ * MAX-reduces the stamped severities, and the `hint` arg is the caller's
+ * reload-hint decision (the reconcile applied-cascade passes `""`, the plain
+ * cascade passes the OR-reduced `shouldEmitReloadHint` trailer). The single
+ * soft-dep probe (`softDepStatus(pi)`) and the single `ctx.ui.notify` call
+ * (IL-2, via `emitWithSummary`) discipline is preserved.
  */
-export function emitContextCascade(
+function emitCascadeWith(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
-  message: CascadeNotificationMessage,
+  message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
     probe: SoftDepStatus,
     mpScope: Scope,
   ) => string,
+  hint: string,
 ): void {
   const probe = softDepStatus(pi);
 
@@ -3140,30 +3134,37 @@ export function emitContextCascade(
   // OUT-03 / OUT-04 / D-04: trailing per-operation tally for plural cascades,
   // placed between the body and the reload-hint trailer.
   const tally = composeTally(message);
-
-  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
   const withTally = foldTallyAndHint(body, tally, hint);
 
   emitWithSummary(ctx, message, withTally);
 }
 
 /**
+ * The state-change context-cascade emitter (the `notifyWithContext` seam). The
+ * reload-hint is the OR-reduce of the rows' caller-stamped `needsReload`
+ * (`shouldEmitReloadHint`, RLD-02).
+ */
+export function emitContextCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: CascadeNotificationMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
+}
+
+/**
  * RECON-04 / D-02 adapter seam: emit the `reconcile-applied-cascade` standalone
- * envelope exactly like the `dispatchInfoMessage` applied-cascade arm
- * (`composeReconcileAppliedBody` -> `emitWithSummary`), but dispatch each
- * per-plugin row body through a caller-supplied `renderPluginRowBody` instead of
- * the central `renderPluginRow` switch. The reconcile context's render map
- * supplies the per-row bytes (the verbatim lifted arms), while the marketplace
- * header, cause-chain trailers, rollback-partial lines, the empty
- * `(no marketplaces)` sentinel, and the stamped-severity/summary reduce
- * (`computeSeverity` via `emitWithSummary`) all stay central and
- * byte-identical.
- *
- * Like `dispatchInfoMessage`'s standalone arm, NO reload-hint trailer is
- * appended (a load-time applied cascade is a standalone info kind, not a
- * state-change cascade) -- this matches the legacy applied-cascade byte form
- * exactly. IL-2: the single soft-dep probe and the single `ctx.ui.notify` call
- * (via `emitWithSummary`) are preserved.
+ * envelope through the shared cascade emitter. Like `dispatchInfoMessage`'s
+ * standalone applied-cascade arm, NO reload-hint trailer is appended (a
+ * load-time applied cascade is a standalone info kind, not a state-change
+ * cascade), so the `hint` arg is `""` -- matching the legacy applied-cascade
+ * byte form exactly (OUT-03 / OUT-04 / OUT-06 / D-03 / D-04).
  */
 export function emitReconcileAppliedContextCascade(
   ctx: ExtensionContext,
@@ -3175,26 +3176,7 @@ export function emitReconcileAppliedContextCascade(
     mpScope: Scope,
   ) => string,
 ): void {
-  const probe = softDepStatus(pi);
-
-  const blocks = message.marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp, probe)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
-    }
-
-    return lines.join("\n");
-  });
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
-
-  // OUT-03 / OUT-04 / OUT-06 / D-03 / D-04: a load-time reconcile apply is a
-  // plural mixed-subject cascade; the tally renders under the operation label,
-  // counting all rows uniformly. No reload-hint trailer on the applied-cascade
-  // standalone arm, so the tally is the body's final segment.
-  const tally = composeTally(message);
-  const withTally = foldTallyAndHint(body, tally, "");
-
-  emitWithSummary(ctx, message, withTally);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "");
 }
 
 /**
@@ -3304,8 +3286,8 @@ export function compareByNameThenScope(a: Sortable, b: Sortable): number {
  */
 export function makeRawNotifyFn(
   ctx: ExtensionContext,
-): (message: string, severity?: "info" | "warning" | "error") => void {
-  return (message: string, severity?: "info" | "warning" | "error"): void => {
+): (message: string, severity?: Severity) => void {
+  return (message: string, severity?: Severity): void => {
     if (severity === undefined) {
       ctx.ui.notify(message);
     } else {

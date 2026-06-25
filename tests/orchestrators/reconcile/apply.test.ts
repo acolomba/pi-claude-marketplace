@@ -1152,9 +1152,10 @@ test("SEV-02: cascadeSeverity's structural-subset param reduces the caller-stamp
   const fnMatch = /function cascadeSeverity\(message:[\s\S]*?\}\): ComputedSeverity/.exec(src);
   assert.ok(fnMatch, "SEV-02: cascadeSeverity declaration not found");
   const fnDecl = fnMatch[0];
-  // The structural-subset param reads `severity` on both row levels.
+  // The structural-subset param reads `severity` on both row levels (typed as
+  // the shared `Severity` alias).
   assert.ok(
-    fnDecl.includes('severity?: "info" | "warning" | "error"'),
+    fnDecl.includes("severity?: Severity"),
     `SEV-02: cascadeSeverity's structural-subset param must read the stamped severity; decl was:\n${fnDecl}`,
   );
   // It must NOT read `status` or `reasons` -- that is the deleted content ladder.

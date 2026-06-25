@@ -43,10 +43,12 @@ export type RemoveMpStatus = (typeof REMOVE_MP_STATUSES)[number];
  * of the closed `Reason` set; the pin below rejects a typo at compile time.
  */
 export const REMOVE_PRIVATE_REASONS = ["plugins remain"] as const;
-export type RemovePrivateReason = (typeof REMOVE_PRIVATE_REASONS)[number];
-
-const _removePrivateReasonsClosed: readonly Reason[] = REMOVE_PRIVATE_REASONS;
-void _removePrivateReasonsClosed;
+// `_ReasonInSet<R extends Reason> = R` pins the private reason to the closed
+// `Reason` set as it derives `RemovePrivateReason`: an out-of-set literal
+// violates the `extends Reason` constraint -- a TS2344 compile error here, with
+// no runtime footprint.
+type _ReasonInSet<R extends Reason> = R;
+export type RemovePrivateReason = _ReasonInSet<(typeof REMOVE_PRIVATE_REASONS)[number]>;
 
 /**
  * The plugin-child-row statuses `marketplace remove` emits inside its cascade:

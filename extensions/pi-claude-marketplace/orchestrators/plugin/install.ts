@@ -1171,6 +1171,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         plugins: [
           {
             status: "failed",
+            severity: "error" as const,
             name: plugin,
             reasons: ["invalid manifest"] as const,
             cause: invalidErr,
@@ -1223,6 +1224,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         plugins: [
           {
             status: "failed",
+            severity: "error" as const,
             name: plugin,
             reasons: [] as const,
             cause: internalErr,

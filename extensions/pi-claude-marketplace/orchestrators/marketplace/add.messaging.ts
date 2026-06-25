@@ -38,12 +38,12 @@ export type AddMpStatus = (typeof ADD_MP_STATUSES)[number];
  * here.
  */
 export const ADD_PRIVATE_REASONS = ["duplicate name", "stale clone"] as const;
-export type AddPrivateReason = (typeof ADD_PRIVATE_REASONS)[number];
-
-// Compile-time pin: the command-private reasons are members of the closed
-// `Reason` set (a typo or out-of-set literal is a compile error here).
-const _addPrivateReasonsClosed: readonly Reason[] = ADD_PRIVATE_REASONS;
-void _addPrivateReasonsClosed;
+// `_ReasonInSet<R extends Reason> = R` pins each private reason to the closed
+// `Reason` set as it derives `AddPrivateReason`: a typo or out-of-set literal
+// makes the tuple violate the `extends Reason` constraint -- a TS2344 compile
+// error here, with no runtime footprint.
+type _ReasonInSet<R extends Reason> = R;
+export type AddPrivateReason = _ReasonInSet<(typeof ADD_PRIVATE_REASONS)[number]>;
 
 /**
  * D-04 / D-05 / MOD-01: the `marketplace add` command context. `marketplace add`

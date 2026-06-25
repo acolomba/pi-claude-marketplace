@@ -15,7 +15,7 @@ import type { Reason } from "./notify.ts";
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
  * closed `Reason` set (each group's element type extends `Reason`), and the
- * `_ReasonsCoverage` proof at the bottom asserts the union of all groups + the
+ * `_ReasonsCoverageProof` at the bottom asserts the union of all groups + the
  * command-private reasons + the structural `"not added"` marker is EXACTLY the
  * closed set -- a literal added to `REASONS` without a home here, or a typo,
  * becomes a compile error.
@@ -124,13 +124,11 @@ type CommandPrivateReason =
  * command-private reasons + the structural marker must be EXACTLY the closed
  * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
  * partition is total (no shared literal missing a home, no stray literal that
- * is not in `REASONS`). `_ReasonsCoverage` is a compile-time-only type alias;
- * it has no runtime footprint.
+ * is not in `REASONS`). `_ReasonsCoverageProof` pins each to `never` via a
+ * default-type constraint -- a non-`never` result is a TS2344 compile error.
+ * It is a type-only check with no runtime footprint.
  */
+type _AssertNever<T extends never> = T;
 type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
 type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
-export type _ReasonsCoverage = [_UncoveredReason, _ExtraReason] extends [never, never]
-  ? true
-  : never;
-const _reasonsCoverageProof: _ReasonsCoverage = true;
-void _reasonsCoverageProof;
+export type _ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];

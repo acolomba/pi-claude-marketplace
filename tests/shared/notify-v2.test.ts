@@ -456,7 +456,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
   // The marketplace-status arm is deleted per SNM-33 / D-22-01, so a
   // `(skipped)` row under an `(added)` marketplace emits NO trailer
   // (`skipped` is not one of installed/updated/reinstalled/uninstalled).
-  // Per UXG-02 / D-28-06 the single reason `up-to-date` is in BENIGN_REASONS,
+  // Per UXG-02 / D-28-06 the single reason `up-to-date` is in IDEMPOTENT_REASONS,
   // so this all-benign cascade computes INFO (no 2nd severity arg).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}`,
@@ -729,7 +729,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // UXG-04 byte form: idempotent flip renders the marker-as-outcome plus the
   // idempotence brace (no `(skipped)` token). Per UXG-02 / D-28-07 the mp-level
-  // `skipped` reason `already autoupdate` is in BENIGN_REASONS, so this benign
+  // `skipped` reason `already autoupdate` is in IDEMPOTENT_REASONS, so this benign
   // no-op computes INFO (no 2nd arg); NO reload-hint (no state changed).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● foo [user] <autoupdate> {already autoupdate}`,
@@ -756,7 +756,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Structural assertion of the severity-arg ABSENCE; the byte form is
   // covered by the preceding test. Per UXG-02 / D-28-07 the mp-level
-  // `skipped` reason `already no autoupdate` is in BENIGN_REASONS, so this
+  // `skipped` reason `already no autoupdate` is in IDEMPOTENT_REASONS, so this
   // benign no-op computes INFO -- the 2nd arg is omitted (length 1).
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
 });
@@ -790,7 +790,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   // (a) Byte form: the shared mp-skipped arm renders `(skipped) {up-to-date}`.
   assert.equal(body, "● local-mp [user] (skipped) {up-to-date}");
   // (b) Severity: mp.status === "skipped" with the benign reason `up-to-date`
-  //     (in BENIGN_REASONS) computes INFO via computeSeverity -- the 2nd arg
+  //     (in IDEMPOTENT_REASONS) computes INFO via computeSeverity -- the 2nd arg
   //     is omitted (length 1). This realizes UXG-02 / D-28-07.
   assert.equal(args.length, 1);
   // (c) NO reload-hint: plugins:[] means no Pi-visible resource change, so the
@@ -846,7 +846,7 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   // Benign-only payload: mp-level "skipped" (idempotent autoupdate flip,
-  // reason `already autoupdate` in BENIGN_REASONS) sitting OVER a healthy
+  // reason `already autoupdate` in IDEMPOTENT_REASONS) sitting OVER a healthy
   // plugin row. This proves the benign-softening ladder dominates a
   // non-empty healthy plugin set: the cascade's ONLY non-success row is a
   // BENIGN mp-skip, so per UXG-02 / D-28-06 arm 5 it computes INFO.
@@ -2073,7 +2073,7 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // An ACTIONABLE skip (`not installed`, D-28-03) is NOT in BENIGN_REASONS, so
+  // An ACTIONABLE skip (`not installed`, D-28-03) is NOT in IDEMPOTENT_REASONS, so
   // arm 3 of the D-28-06 ladder routes it to "warning" (a benign `up-to-date`
   // skip would compute info per UXG-02 -- see the dedicated info tests above).
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
@@ -2415,7 +2415,7 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   // `not installed` is the actionable "can't update/reinstall a plugin that
-  // isn't there" reason (D-28-03); it is NOT in BENIGN_REASONS, so arm 3 of
+  // isn't there" reason (D-28-03); it is NOT in IDEMPOTENT_REASONS, so arm 3 of
   // the D-28-06 ladder routes the cascade to "warning".
   const msg: NotificationMessage = {
     marketplaces: [
