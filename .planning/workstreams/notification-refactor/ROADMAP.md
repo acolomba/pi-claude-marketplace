@@ -53,7 +53,7 @@ every phase boundary. The catalog generation seam is out of scope (MOD-06 floor 
 - [x] **Phase 1: Localized type model & command-context spine** - Each command owns its status set, reasons, label (via `CommandContext.Messaging`), and per-status render map locally (no central registry); rows gain `severity`/`needsReload`/`dependencies` + structural cardinality (tuple-vs-array) shape (output-neutral). (completed 2026-06-24)
 - [x] **Phase 2: Caller-stamped severity & reload reducer** - `notify()` becomes a dumb reducer; every producer stamps `severity` + `needsReload`; content-derived ladders deleted; relocation gated by an architecture test. (completed 2026-06-24)
 - [x] **Phase 3: Desired-state output & atomic catalog supersession** - Leading severity sentence, trailing tally, header invariants; catalog markdown + byte fixtures rewritten in lockstep. (completed 2026-06-25)
-- [ ] **Phase 4: Concern-module extraction & open-closed proof** - Hooks-summary and soft-dep injection extracted; `notify.ts` slims to envelope + reducer + vocabulary; ≤3-central-files / 0-notify-edits target proven and green.
+- [x] **Phase 4: Concern-module extraction & open-closed proof** - Hooks-summary and soft-dep injection extracted; `notify.ts` slims to envelope + reducer + vocabulary; ≤3-central-files / 0-notify-edits target proven and green. (completed 2026-06-25)
 
 ## Phase Details
 
@@ -169,7 +169,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-03-PLAN.md — Author `docs/open-closed-proof.md` (D-02 ≤3-files/0-notify measurement + D-03 catalog floor + notify.ts line-count evidence) and run the GATE-03 milestone-close gate (`npm run check` + catalog byte-equality) (MOD-05, MOD-06, GATE-03) (Wave 3)
+- [x] 04-03-PLAN.md — Author `docs/open-closed-proof.md` (D-02 ≤3-files/0-notify measurement + D-03 catalog floor + notify.ts line-count evidence) and run the GATE-03 milestone-close gate (`npm run check` + catalog byte-equality) (MOD-05, MOD-06, GATE-03) (Wave 3)
 
 ## Progress
 
@@ -178,4 +178,4 @@ Plans:
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
 | 3. Desired-state output & atomic catalog supersession | 3/3 | Complete    | 2026-06-25 |
-| 4. Concern-module extraction & open-closed proof | 2/3 | In Progress|  |
+| 4. Concern-module extraction & open-closed proof | 3/3 | Complete   | 2026-06-25 |
