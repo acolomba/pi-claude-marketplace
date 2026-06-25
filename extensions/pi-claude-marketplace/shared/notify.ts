@@ -1016,6 +1016,18 @@ export type MarketplaceNotificationMessage =
 export interface CascadeNotificationMessage {
   readonly kind?: "cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
+  // OUT-04 / D-04: the command's human operation name (`CommandContext.
+  // Messaging.label`, e.g. `Plugin install`) used as the trailing tally's
+  // `<Operation>` prefix. Threaded from `notifyWithContext`; the tally only
+  // renders when `cardinality === "plural"`, so this is unread on single-target
+  // and legacy emissions.
+  readonly label?: string;
+  // OUT-07 / D-04: the STRUCTURAL single-vs-bulk cardinality, set at the call
+  // site (a single-target op constructs the 1-tuple `single`; a bulk /
+  // @marketplace / import / reconcile op constructs the `plural` array). The
+  // trailing tally renders IFF `cardinality === "plural"` -- NOT a render-time
+  // row-count heuristic. Absent defaults to no tally.
+  readonly cardinality?: "single" | "plural";
 }
 
 /**
@@ -1246,6 +1258,12 @@ export interface MarketplaceNotAddedMessage {
 export interface ReconcileAppliedCascadeMessage {
   readonly kind: "reconcile-applied-cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
+  // OUT-04 / OUT-06 / D-03 / D-04: the operation label + structural cardinality
+  // for the trailing tally, threaded from `notifyReconcileAppliedWithContext`.
+  // A load-time reconcile cascade is mixed-subject (plugin + marketplace rows);
+  // the tally uses the operation `label` and counts all rows uniformly.
+  readonly label?: string;
+  readonly cardinality?: "single" | "plural";
 }
 
 /**
@@ -2240,11 +2258,17 @@ function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[
 /**
  * Shared tally of marketplace rows AND their nested plugin rows whose stamped
  * `severity` equals `target`. An absent `severity` defaults to `info` (SEV-01),
- * so it is never counted as error/warning.
+ * so an absent-severity row is counted under the `"info"` target.
+ *
+ * OUT-03: the `target` union includes `"info"` so the trailing tally can count
+ * `<n> success(es)` (the desired-state-reached rows) alongside the existing
+ * error/warning counts -- the `(x.severity ?? "info") === target` predicate
+ * already classifies an absent or explicit `info` severity, so widening the
+ * union needs no further change.
  */
 function countRowsBySeverity(
   marketplaces: readonly MarketplaceNotificationMessage[],
-  target: "warning" | "error",
+  target: "info" | "warning" | "error",
 ): SummaryCounts {
   let plugins = 0;
   let mpCount = 0;

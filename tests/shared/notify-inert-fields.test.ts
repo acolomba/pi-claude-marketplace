@@ -77,6 +77,34 @@ test('SEV-02: a stamped severity:"error" plugin row drives the emission to error
   assert.match(String(args[0]), /^A plugin operation has failed\.\n\n/);
 });
 
+test("OUT-04 / D-04: a single-target (no cardinality) cascade carrying a label renders no tally (label inert without plural)", () => {
+  // A single-target cascade carries the operation label but omits `cardinality`.
+  // The tally is gated on `cardinality === "plural"`, so a label alone never
+  // produces a tally line -- the single row already embeds the outcome.
+  const singleTarget: NotificationMessage = {
+    label: "Plugin uninstall",
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            name: "commit-commands",
+            reasons: ["not installed"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  const body = String(renderArgs(singleTarget)[0]);
+  // No `<Operation>: ... failure(s)` tally for a single-target op.
+  assert.equal(body.includes("Plugin uninstall: "), false);
+});
+
 test("RLD-02: a stamped needsReload:true row adds the /reload trailer via the OR-reduce", () => {
   // Baseline: a `disabled` INVENTORY row stamps `needsReload:false`, so the
   // OR-reduce is false and NO `/reload` trailer is emitted.

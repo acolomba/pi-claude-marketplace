@@ -140,6 +140,7 @@ export function notifyWithContext<Status extends string, Msg extends { status: S
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   kind?: "cascade",
+  cardinality?: "single" | "plural",
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -148,8 +149,18 @@ export function notifyWithContext<Status extends string, Msg extends { status: S
   // unchanged -- only the child `plugins` were narrowed -- so the widening is a
   // safe upcast, not a reinterpretation.
   const marketplaces = rows as unknown as readonly MarketplaceNotificationMessage[];
-  const message: CascadeNotificationMessage =
-    kind === undefined ? { marketplaces } : { kind, marketplaces };
+  // OUT-04 / D-04: thread the command's operation label + the STRUCTURAL
+  // single-vs-bulk cardinality onto the cascade envelope. The trailing tally
+  // (OUT-03) renders IFF `cardinality === "plural"`; `label` is its
+  // `<Operation>` prefix. A call site that omits `cardinality` (single-target
+  // ops) gets no tally. These fields are read only by the tally composer in
+  // `emitWithSummary` -- they never affect the per-row body or severity.
+  const message: CascadeNotificationMessage = {
+    ...(kind === undefined ? {} : { kind }),
+    marketplaces,
+    label: context.Messaging.label,
+    ...(cardinality !== undefined && { cardinality }),
+  };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
@@ -175,7 +186,19 @@ export function notifyReconcileAppliedWithContext<
   context: CommandContext<Status, Msg>,
   message: ReconcileAppliedCascadeMessage,
 ): void {
-  emitReconcileAppliedContextCascade(ctx, pi, message, (p, probe, mpScope) =>
+  // OUT-04 / OUT-06 / D-03 / D-04: stamp the operation label + plural
+  // cardinality onto the reconcile-applied envelope. A load-time apply is a bulk
+  // (plural) operation spanning mixed plugin + marketplace subjects, so the
+  // trailing tally renders under the operation `label`, counting all rows
+  // uniformly. These fields are consumed only by the tally composer in
+  // `emitWithSummary`.
+  const labeled: ReconcileAppliedCascadeMessage = {
+    ...message,
+    label: context.Messaging.label,
+    cardinality: "plural",
+  };
+
+  emitReconcileAppliedContextCascade(ctx, pi, labeled, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
   );
 }
