@@ -4,15 +4,15 @@ milestone: Notification Refactor
 milestone_name: milestone
 current_phase: 03
 current_plan: 3
-status: executing
-last_updated: "2026-06-24T23:34:43.932Z"
+status: phase-complete
+last_updated: "2026-06-24T23:55:00.000Z"
 last_activity: 2026-06-24
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 64
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (shared project context)
 
 ## Current Position
 
-Phase: 03 (desired-state-output-atomic-catalog-supersession) — EXECUTING
-Plan: 3 of 3 (Plans 01–02 complete)
-**Status:** Executing Phase 03
+Phase: 03 (desired-state-output-atomic-catalog-supersession) — COMPLETE
+Plan: 3 of 3 (all Phase-3 plans complete)
+**Status:** Phase 03 complete
 **Current Phase:** 03
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
 **Last Activity:** 2026-06-24
-**Last Activity Description:** Completed 03-02 (OUT-03/04/D-04 trailing per-operation tally + Messaging.label/cardinality threading + atomic catalog supersession)
+**Last Activity Description:** Completed 03-03 (OUT-08/D-06 catalog present->installed grammar collapse; prose/table-only, zero fixture-byte change, catalog-uat green)
 
 ## Phases
 
@@ -43,8 +43,8 @@ Plan: 3 of 3 (Plans 01–02 complete)
 
 ## Progress
 
-**Phases Complete:** 2 / 4
-**Current Plan:** 3
+**Phases Complete:** 3 / 4
+**Current Plan:** 3 (complete)
 
 ## Decisions
 
@@ -61,9 +61,10 @@ Plan: 3 of 3 (Plans 01–02 complete)
 - 03-02: OUT-03/04 trailing tally (`<Operation>: <n> failure(s), <n> warning(s), <n> success(es)`) gated on a STRUCTURAL single/plural cardinality threaded from the invocation form; `label`+`cardinality` ride on CascadeNotificationMessage/ReconcileAppliedCascadeMessage (so the catalog-uat notify() driver and fixtures exercise the tally). countRowsBySeverity widened to count "info" (success). Single emitWithSummary seam preserved.
 - 03-02: marketplace update OMITS the tally — it is STRUCTURALLY single (one named marketplace per invocation, Single<...> at the call site), diverging from the plan's plural-section enumeration; the D-04 structural-cardinality HARD constraint overrides. A bare marketplace grouping header (no status, no severity) is excluded from the success count; an mp row WITH a status (import added, remove removed) counts as a real operation (D-03 mixed-subject uniform counting).
 - 03-02: Wired the bulk reinstall/update/import orchestrators to thread cardinality (Rule 2 — the tally is dead without it); apply.ts (reconcile converge) untouched and notify-reasons.ts (closed set) untouched.
+- 03-03: OUT-08/D-06 catalog present→installed grammar collapse landed prose/table-only (catalog L73/L131-132/L247/L289/L318). Merged the two status-token table rows into a single (installed) row; zero fenced-block byte change confirmed (RESEARCH A4 — no fence emitted (present)), so catalog-uat + notify-grammar-invariant stay green with no fixture edit. mdformat re-tabulated the table column widths after removing the wide (via present discriminator) row label (mechanical).
 
 ## Session Continuity
 
-**Stopped At:** 03-02 complete (OUT-03/04 trailing tally landed; catalog-uat + npm run check green at every boundary)
-**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-02-SUMMARY.md
-**Next:** Plan/execute 03-03 (remaining Phase 3 scope — e.g. D-05 always-header audit + the present→installed catalog grammar collapse)
+**Stopped At:** 03-03 complete — Phase 03 complete (catalog present→installed collapse landed; catalog-uat + npm run check green at every boundary)
+**Resume File:** .planning/workstreams/notification-refactor/phases/03-desired-state-output-atomic-catalog-supersession/03-03-SUMMARY.md
+**Next:** Phase 04 (concern-module extraction & open-closed proof — MOD-04/05/06, GATE-03)
