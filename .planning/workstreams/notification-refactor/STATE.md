@@ -4,15 +4,16 @@ milestone: Notification Refactor
 milestone_name: milestone
 current_phase: 03
 current_plan: 3
-status: phase-complete
-last_updated: "2026-06-24T23:55:00.000Z"
+status: ready_to_plan
+last_updated: 2026-06-25T01:07:44.017Z
 last_activity: 2026-06-24
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
   completed_plans: 11
-  percent: 100
+  percent: 75
+stopped_at: Phase 03 complete (3/3) — ready to discuss Phase 4
 ---
 
 # Project State
@@ -28,10 +29,10 @@ See: .planning/PROJECT.md (shared project context)
 
 Phase: 03 (desired-state-output-atomic-catalog-supersession) — COMPLETE
 Plan: 3 of 3 (all Phase-3 plans complete)
-**Status:** Phase 03 complete
-**Current Phase:** 03
+**Status:** Ready to plan
+**Current Phase:** 4
 **Phase Count:** 4 (Phase 1–4; isolated workstream numbering, does not continue from main project)
-**Last Activity:** 2026-06-24
+**Last Activity:** 2026-06-25
 **Last Activity Description:** Completed 03-03 (OUT-08/D-06 catalog present->installed grammar collapse; prose/table-only, zero fixture-byte change, catalog-uat green)
 
 ## Phases
@@ -44,7 +45,7 @@ Plan: 3 of 3 (all Phase-3 plans complete)
 ## Progress
 
 **Phases Complete:** 3 / 4
-**Current Plan:** 3 (complete)
+**Current Plan:** Not started
 
 ## Decisions
 

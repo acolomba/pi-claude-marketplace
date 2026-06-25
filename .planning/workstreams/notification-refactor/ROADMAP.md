@@ -163,5 +163,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Localized type model & command-context spine | 5/5 | Complete    | 2026-06-24 |
 | 2. Caller-stamped severity & reload reducer | 3/3 | Complete    | 2026-06-24 |
-| 3. Desired-state output & atomic catalog supersession | 3/3 | Complete   | 2026-06-25 |
+| 3. Desired-state output & atomic catalog supersession | 3/3 | Complete    | 2026-06-25 |
 | 4. Concern-module extraction & open-closed proof | 0/? | Not started | - |
