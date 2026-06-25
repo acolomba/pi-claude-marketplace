@@ -36,9 +36,9 @@ import type {
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
-  Dependency,
   MarketplaceStatus,
   PluginFailedMessage,
   PluginInstalledMessage,

@@ -1,9 +1,11 @@
 import { softDepStatus } from "../platform/pi-api.ts";
 
+import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { assertNever, causeChainTrailer, ManualRecoveryError } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
+import type { Dependency } from "./concerns/soft-dep.ts";
 
 /**
  * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site and the
@@ -467,15 +469,6 @@ export const MARKETPLACE_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every dependency literal (SNM-06). 2 entries. Drives the
- * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
- * `requires pi-mcp` reason emission).
- *
- * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
- */
-export const DEPENDENCIES = ["agents", "mcp"] as const;
-
-/**
  * Closed set of plugin status discriminators (SNM-04). Derived from
  * `PLUGIN_STATUSES` via indexed access so the runtime tuple and the type
  * stay in lockstep.
@@ -487,12 +480,6 @@ export type PluginStatus = (typeof PLUGIN_STATUSES)[number];
  * `MARKETPLACE_STATUSES` via indexed access.
  */
 export type MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number];
-
-/**
- * Closed set of dependency probe targets (SNM-06). Derived from
- * `DEPENDENCIES` via indexed access.
- */
-export type Dependency = (typeof DEPENDENCIES)[number];
 
 /**
  * Marketplace-level details surfaced on the `marketplace list` rendering
@@ -1616,10 +1603,6 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // expression).
 // ---------------------------------------------------------------------------
 
-/** Soft-dep marker literals -- both are REASONS members (closed set). */
-const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
-const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
-
 /**
  * Join tokens with single spaces, suppressing empty slots so absent
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
@@ -1753,14 +1736,7 @@ export function composeReasons(
   probe: SoftDepStatus,
 ): string {
   const composed: Reason[] = reasons === undefined ? [] : [...reasons];
-
-  if (declaresAgents && !probe.piSubagentsLoaded) {
-    composed.push(SOFT_DEP_MARKER_AGENTS);
-  }
-
-  if (declaresMcp && !probe.piMcpAdapterLoaded) {
-    composed.push(SOFT_DEP_MARKER_MCP);
-  }
+  composed.push(...softDepMarkers(declaresAgents, declaresMcp, probe));
 
   if (composed.length === 0) {
     return "";

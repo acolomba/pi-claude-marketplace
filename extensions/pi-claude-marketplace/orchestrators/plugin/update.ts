@@ -130,9 +130,9 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
-  Dependency,
   PluginFailedMessage,
   PluginNotificationMessage,
 } from "../../shared/notify.ts";

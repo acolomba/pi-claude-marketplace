@@ -65,7 +65,8 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Dependency, Reason } from "../../shared/notify.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 

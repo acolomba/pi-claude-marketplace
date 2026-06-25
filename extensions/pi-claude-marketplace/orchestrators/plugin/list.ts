@@ -73,8 +73,8 @@ import { isRecordedButDisabled } from "../reconcile/plan.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
-  Dependency,
   MarketplaceNotificationMessage,
   PluginAvailableMessage,
   PluginDisabledMessage,
