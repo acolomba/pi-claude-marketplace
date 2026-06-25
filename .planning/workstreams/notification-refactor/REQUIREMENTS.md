@@ -46,15 +46,15 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 - [x] **MOD-01**: Each command co-locates its own notification vocabulary with its vertical slice (handler/orchestrator): its private status set, its owned reasons, its operation label (exposed via a `Messaging` member on the command's `CommandContext`), and its per-status render map — none of it hand-appended to central tuples in `notify.ts`. (Revised 2026-06-24: command-local ownership, no central "grammar" registry.)
 - [x] **MOD-02**: There is no central status/reason registry. Each command owns its status set and message shapes locally, so value/type drift is caught at the command module — a command cannot construct a message whose status it did not declare. `notify()` receives the command's `CommandContext` and rows at the call site rather than unioning contributions centrally. The bidirectional `notify-types.test.ts` set-equality proofs are deleted (the central tuples they guarded are gone). (Revised 2026-06-24: intent preserved — no drift, proofs deleted — via command-local ownership instead of a central registry.)
 - [x] **MOD-03**: Each command renders its own rows via a render map total over its OWN status set — omitting an arm for one of the command's statuses is a compile error — calling the shared presentation vocabulary (`ICON_*`, scope/version/reason composers) that stays central in `notify.ts`. The exhaustiveness guarantee is local per command; there is no central per-status `switch` + `assertNever` to keep in sync. (Revised 2026-06-24: missing-arm-is-a-compile-error preserved, relocated from a central `Record<Status,RenderFn>` to per-command render maps.)
-- [ ] **MOD-04**: Cross-cutting concerns are extracted into concern-modules that contribute to the central composer: the hooks summary (`appendHooksBlock`) and soft-dep marker injection (`composeReasons` soft-dep branch + `DEPENDENCIES` + the host probe). `shared/notify.ts` slims to the envelope, the reducer spine, and the shared presentation vocabulary (`ICON_*`, scope/version/reason composers).
-- [ ] **MOD-05**: Adding a command touches **≤3 central files** — router registration (interface field + tuple + switch + usage), `register.ts` wiring, and one catalog section — and **zero `notify.ts` edits**, measured against the `research/MESSAGING-COUPLING.md` baseline.
-- [ ] **MOD-06**: The catalog floor is accepted for this milestone — one central catalog section per new rendered state, no generation/aggregation seam. Documented as the deliberate floor (generation deferred).
+- [x] **MOD-04**: Cross-cutting concerns are extracted into concern-modules that contribute to the central composer: the hooks summary (`appendHooksBlock`) and soft-dep marker injection (`composeReasons` soft-dep branch + `DEPENDENCIES` + the host probe). `shared/notify.ts` slims to the envelope, the reducer spine, and the shared presentation vocabulary (`ICON_*`, scope/version/reason composers).
+- [x] **MOD-05**: Adding a command touches **≤3 central files** — router registration (interface field + tuple + switch + usage), `register.ts` wiring, and one catalog section — and **zero `notify.ts` edits**, measured against the `research/MESSAGING-COUPLING.md` baseline.
+- [x] **MOD-06**: The catalog floor is accepted for this milestone — one central catalog section per new rendered state, no generation/aggregation seam. Documented as the deliberate floor (generation deferred).
 
 ### Correctness preservation (GATE)
 
 - [x] **GATE-01**: An architecture test asserts every cascade-producing orchestrator stamps both `severity` and `needsReload` on its state-change rows (no silent reliance on the `info` / `false` defaults for transitions), since correctness relocates from one audited reducer to ~18 producers.
 - [x] **GATE-02**: The `catalog-uat` byte-equality runner remains the end-to-end gate that stamped values render correctly, green at every phase boundary.
-- [ ] **GATE-03**: `npm run check` (typecheck + ESLint + Prettier + tests) stays green at every phase boundary (NFR-6).
+- [x] **GATE-03**: `npm run check` (typecheck + ESLint + Prettier + tests) stays green at every phase boundary (NFR-6).
 
 ## Out of Scope
 
@@ -94,12 +94,13 @@ Baseline established by `research/MESSAGING-COUPLING.md`: today a new command to
 | OUT-06 | Phase 3 | Complete |
 | OUT-08 | Phase 3 | Complete |
 | GATE-02 | Phase 3 | Complete |
-| MOD-04 | Phase 4 | Pending |
-| MOD-05 | Phase 4 | Pending |
-| MOD-06 | Phase 4 | Pending |
-| GATE-03 | Phase 4 | Pending |
+| MOD-04 | Phase 4 | Complete |
+| MOD-05 | Phase 4 | Complete |
+| MOD-06 | Phase 4 | Complete |
+| GATE-03 | Phase 4 | Complete |
 
 **Coverage:**
+
 - Requirements: 27 total (SEV ×5, RLD ×5, OUT ×8, MOD ×6, GATE ×3)
 - Mapped to phases: 27 ✓
 - Unmapped: 0 ✓
