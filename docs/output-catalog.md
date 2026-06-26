@@ -314,7 +314,19 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 
 Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◌` glyph (shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will add)`, `○` for `(available)` / `(will remove)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
-PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`installed`, `upgradable`, `available`, `unavailable`) all support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The five list-surface variants (`installed`, `upgradable`, `available`, `unavailable`, `disabled`) all support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+
+### Disabled inventory row with a description (PL-4)
+
+<!-- catalog-state: disabled-inventory-with-description -->
+
+```text
+● official [user] <autoupdate>
+  ◌ foo-plugin v1.2.3 (disabled)
+    Disabled plugin that still surfaces its description.
+```
+
+Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
 
 ______________________________________________________________________
 

@@ -617,13 +617,16 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
  * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
- * (`◌`) -- the same glyph the `will disable` row uses.
+ * (`◌`) -- the same glyph the `will disable` row uses. PL-4: optional
+ * `description` rendered as a second 4-space-indented line, truncated at
+ * column 66 (same as the other list-surface inventory variants).
  */
 export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly status: "disabled";
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
+  readonly description?: string;
 }
 
 /**
@@ -3196,14 +3199,16 @@ function composePluginLinesWith(
 ): string[] {
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
-  // PL-4 (RLD-04 / D-08): the list inventory row is `installed`; cascade
-  // `installed` rows never set `description`, so the guard keeps them
+  // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
+  // / `available` / `unavailable` / `disabled`) carry the manifest description;
+  // cascade `installed` rows never set `description`, so the guard keeps them
   // single-line.
   if (
     (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
-      p.status === "unavailable") &&
+      p.status === "unavailable" ||
+      p.status === "disabled") &&
     p.description !== undefined &&
     p.description.length > 0
   ) {

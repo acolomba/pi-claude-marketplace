@@ -614,6 +614,31 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // PL-4: the disabled inventory row carries the manifest description on a
+    // second 4-space-indented line, same as the other list-surface variants.
+    "disabled-inventory-with-description": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+                description: "Disabled plugin that still surfaces its description.",
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

@@ -264,6 +264,7 @@ function installedRowMessage(
       name: pluginName,
       version: record.version,
       ...scopeField,
+      ...descriptionField,
       severity: "info",
       needsReload: false,
     };
