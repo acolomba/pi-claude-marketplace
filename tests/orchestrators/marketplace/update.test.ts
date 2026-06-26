@@ -1509,7 +1509,7 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {not a
     assert.ok(first !== undefined);
     assert.equal(
       first.message,
-      "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {not added}",
     );
     assert.equal(first.severity, "error");
   });
@@ -1524,7 +1524,7 @@ test("CR-01 TOCTOU: marketplace removed between pre-guard read and snapshotAfter
   // MarketplaceNotFoundError there, which refreshOneMarketplace's generic catch
   // misattributed (reasonsFromCascadeError -> undefined -> `?? network
   // unreachable`) as the LYING `(failed) {network unreachable}` row -- exactly
-  // the NFR-5/ATTR-10 misattribution class this milestone closes.
+  // the NFR-5/ATTR-10 misattribution class this change closes.
   //
   // The fix mirrors remove.ts:235-244: snapshotAfterRefresh returns `undefined`
   // (sentinel) instead of throwing, and refreshOneMarketplace returns silently.
@@ -1591,7 +1591,7 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
     assert.ok(first !== undefined);
     assert.equal(
       first.message,
-      "1 marketplace operation failed.\n\n⊘ vanished [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ vanished [project] (failed) {not added}",
     );
   });
 });
@@ -1614,7 +1614,10 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {not added
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message, "1 marketplace operation failed.\n\n⊘ ghost (failed) {not added}");
+    assert.equal(
+      first.message,
+      "A marketplace operation has failed.\n\n⊘ ghost (failed) {not added}",
+    );
     assert.equal(first.severity, "error");
   });
 });

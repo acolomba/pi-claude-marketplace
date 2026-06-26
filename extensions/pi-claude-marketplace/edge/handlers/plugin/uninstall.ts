@@ -2,7 +2,7 @@
 //
 // Thin-shim handler factory for
 // `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project]`.
-// Identical Pattern 1 shape as install.ts; delegates to `uninstallPlugin`.
+// Identical shim shape as install.ts; delegates to `uninstallPlugin`.
 
 import { uninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
 import { extractLocalFlag } from "../shared.ts";

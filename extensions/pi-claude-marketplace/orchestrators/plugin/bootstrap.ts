@@ -11,6 +11,10 @@
 // Notes / forbidden patterns (reviewer guard rails):
 //   - No direct `ctx.ui.notify` here. All user-visible signals come
 //     from the two composed orchestrators via shared/notify.ts (BLOCK A).
+//     MOD-01: bootstrap owns NO notification vocabulary of its own; the
+//     delegated `addMarketplace` / `setMarketplaceAutoupdate` emit through
+//     their own command contexts (ADD_CONTEXT / AUTOUPDATE_CONTEXT), so the
+//     bootstrap-emitted bytes are exactly those commands' bytes.
 //   - No `notifySuccess` wrapper added on top of the composed
 //     orchestrators -- the contract is one user-visible signal per
 //     state change; the composed orchestrators each emit exactly that.

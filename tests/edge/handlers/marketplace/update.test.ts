@@ -113,7 +113,7 @@ test("shim :: named /marketplace update <name> calls updateMarketplace with name
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });

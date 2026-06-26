@@ -13,9 +13,15 @@ import {
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
+import { compareByNameThenScope } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
@@ -30,14 +36,12 @@ import type {
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
-  Dependency,
-  MarketplaceNotificationMessage,
   MarketplaceStatus,
   PluginFailedMessage,
   PluginInstalledMessage,
-  PluginNotificationMessage,
   PluginSkippedMessage,
   PluginUnavailableMessage,
 } from "../../shared/notify.ts";
@@ -277,7 +281,7 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status?: MarketplaceStatus;
-  plugins: PluginNotificationMessage[];
+  plugins: ImportMsg[];
 }
 
 function ensureMarketplaceBlock(
@@ -346,7 +350,7 @@ function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependen
  */
 function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
-): readonly MarketplaceNotificationMessage[] {
+): Plural<MarketplaceRows<ImportMsg>> {
   const byMp = new Map<string, MarketplaceBlock>();
 
   // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
@@ -385,6 +389,9 @@ function buildImportNotificationMarketplaces(
       status: "installed",
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
+      // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      severity: "info",
+      needsReload: true,
     };
     block.plugins.push(row);
   }
@@ -395,6 +402,10 @@ function buildImportNotificationMarketplaces(
       status: "skipped",
       name: o.plugin,
       reasons: ["already installed"] as const,
+      // D-03/D-06: `already installed` is a benign idempotent skip -> info,
+      // no reload.
+      severity: "info",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -405,6 +416,9 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: ["source mismatch"] as const,
+      // D-03/D-06: a source-mismatch import row -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -415,6 +429,14 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: ["not in manifest"] as const,
+      // WR-03: `UnexpectedPluginFailureOutcome.cause` carries the original
+      // failure as a string (`errorMessage(err)`); wrap it in an Error so the
+      // depth-5 cause-chain trailer emits a diagnostic line instead of
+      // discarding the message. `cause` is always populated on this outcome.
+      cause: new Error(o.cause),
+      // D-03/D-06: an unexpected import failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -433,6 +455,12 @@ function buildImportNotificationMarketplaces(
       status: "unavailable",
       name: o.plugin,
       reasons: [importWarningReason(o.reason)],
+      // WR-02: import unavailable/dependency rows are actionable -- the user
+      // cannot complete the install without addressing them -> warning. Without
+      // the stamp `cascadeSeverity` defaults them to `info`, so the envelope
+      // never bumps to `warning` and the summary line never shows. No reload.
+      severity: "warning",
+      needsReload: false,
     };
     block.plugins.push(row);
   }
@@ -458,7 +486,7 @@ function buildImportNotificationMarketplaces(
  * `assertNever`. (The full B-6 reducer cleanup, TYPE-F3, is deferred
  * post-v1.10.)
  */
-function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotificationMessage {
+function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceRows<ImportMsg> {
   const name = block.name;
   const scope = block.scope;
   // defense-in-depth: typed readonly + runtime freeze (codebase convention)
@@ -469,7 +497,8 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
     case "updated":
       return { name, scope, status: "updated", plugins };
     case "failed":
-      return { name, scope, status: "failed", plugins };
+      // D-03: a failed import marketplace block -> error.
+      return { name, scope, status: "failed", severity: "error", plugins };
     case undefined:
       return { name, scope, plugins };
     default:
@@ -1037,8 +1066,16 @@ export async function importClaudeSettings(
   // Truly catastrophic throws bubble to Pi runtime -- better for debugging
   // than a polished error message that masks the bug. The inner
   // executeScopedPlan try/catch covers expected loadState failures.
-  const marketplaces = buildImportNotificationMarketplaces(result);
-  notify(opts.ctx, opts.pi, { marketplaces });
+  // D-12 / OUT-07: the import cascade is bulk (one import touches many
+  // marketplaces) -> Plural row cardinality. D-02: thread IMPORT_CONTEXT + the
+  // rows through notifyWithContext, so import's per-row rendering dispatches
+  // through its own render map (MOD-03), never the central renderPluginRow
+  // switch.
+  const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
+    buildImportNotificationMarketplaces(result);
+  // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
+  // per-operation tally under the `Import` label.
+  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
 
   return result;
 }

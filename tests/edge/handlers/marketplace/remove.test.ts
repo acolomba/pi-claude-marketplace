@@ -83,7 +83,7 @@ test("shim :: valid name reaches the orchestrator; bare-form miss routes to `{no
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ ghost (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });
@@ -101,7 +101,7 @@ test("shim :: --scope propagated; explicit-scope miss routes to `{not added}` WI
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {not added}",
     );
     assert.equal(notifications[0]!.severity, "error");
   });

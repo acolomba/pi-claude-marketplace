@@ -165,7 +165,7 @@ test("shim :: @marketplace form calls reinstallPlugins marketplace target", asyn
     assert.equal(notifications[0]?.severity, "error");
     assert.equal(
       notifications[0]?.message ?? "",
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });
@@ -181,7 +181,7 @@ test("shim :: plugin@marketplace form calls reinstallPlugins plugin target", asy
     assert.equal(notifications[0]?.severity, "error");
     assert.equal(
       notifications[0]?.message ?? "",
-      "1 marketplace operation failed.\n\n⊘ mymkt (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt (failed) {not added}",
     );
   });
 });
@@ -208,7 +208,7 @@ test("shim :: --scope works before and after reinstall ref", async () => {
     assert.equal(second.notifications[0]?.severity, "error");
     assert.equal(
       second.notifications[0]?.message ?? "",
-      "1 marketplace operation failed.\n\n⊘ mymkt [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ mymkt [project] (failed) {not added}",
     );
   });
 });

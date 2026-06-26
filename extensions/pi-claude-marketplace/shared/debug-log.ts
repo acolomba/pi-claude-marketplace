@@ -14,8 +14,9 @@
  * than a silently-absorbed inline disable.
  *
  * Pure leaf module: no imports, no module-level state. Consumers (the hooks
- * parse/supportability path and -- once Plan 02 lands -- the dispatch
- * router) import the named export by relative path; no re-export surface.
+ * parse/supportability path and -- once the dispatch path lands -- the
+ * dispatch router) import the named export by relative path; no re-export
+ * surface.
  */
 export function hookDebugLog(detail: string): void {
   if (process.env.PI_CLAUDE_MARKETPLACE_DEBUG === "1") {

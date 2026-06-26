@@ -35,24 +35,29 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
+import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
+
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ClaudeHookEvent, HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {
-  ClaudeHookEvent,
   ContentReason,
-  HookSummaryEntry,
-  MarketplaceNotificationMessage,
   NotificationMessage,
   PluginInfoMessage,
   PluginInfoRow,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
-// SURF-01 / Pitfall 7: TOOL_EVENTS is a string[] tuple; rewrap as a Set
+// SURF-01: TOOL_EVENTS is a string[] tuple; rewrap as a Set
 // for O(1) membership tests in the HookSummaryEntry projector. Module-
 // scope so the Set is allocated once across all info.ts call sites.
 const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
@@ -437,7 +442,7 @@ function parseLenientHooksJson(raw: string): unknown {
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
  *
- * SURF-01 / Pitfall 7: object-literal field placement is documentation
+ * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills"]` ordering. Source
  * placement matches the alphabetical order for readability.
@@ -895,7 +900,7 @@ function buildDisabledInventoryBlock(
   scope: Scope,
   installed: MarketplaceRecord["plugins"][string],
   autoupdate: boolean,
-): MarketplaceNotificationMessage {
+): MarketplaceRows<PluginInfoCascadeMsg> {
   // Mirror the list surface's `<autoupdate>` marker composition (details is
   // emitted ONLY when the flag is true; `lastUpdatedAt` never on this
   // surface).
@@ -906,7 +911,17 @@ function buildDisabledInventoryBlock(
     name: marketplace,
     scope,
     ...detailsField,
-    plugins: [{ status: "disabled", name: pluginName, version: installed.version }],
+    plugins: [
+      {
+        // D-03/D-06: a disabled INVENTORY row (info surface) is steady state,
+        // not a realized transition -> info, never reloads.
+        status: "disabled",
+        name: pluginName,
+        version: installed.version,
+        severity: "info",
+        needsReload: false,
+      },
+    ],
   };
 }
 
@@ -920,10 +935,10 @@ function partitionDisabledScopes(
   opts: GetPluginInfoOptions,
   found: readonly { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[],
 ): {
-  disabledBlocks: MarketplaceNotificationMessage[];
+  disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[];
   infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[];
 } {
-  const disabledBlocks: MarketplaceNotificationMessage[] = [];
+  const disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[] = [];
   const infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const f of found) {
     const installed = f.record.plugins[opts.plugin];
@@ -994,10 +1009,12 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // instead of the standalone `PluginInfoMessage` shape.
   const { disabledBlocks, infoFound } = partitionDisabledScopes(opts, found);
 
-  // Every found scope holds the disabled marker: a single list-arm notify
-  // (one block per scope) preserves IL-2 on this all-disabled path.
+  // Every found scope holds the disabled marker: a single list-arm cascade
+  // (one block per scope) preserves IL-2 on this all-disabled path. OUT-07 /
+  // D-12: a per-scope bulk of disabled inventory rows -> `Plural<Row>`.
   if (infoFound.length === 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
+    const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
+    notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
     return;
   }
 
@@ -1027,7 +1044,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // the single-scope `plugin-info` arm but would be SILENT here. Mirror
   // `getMarketplaceInfo`'s failure separation -- each failed scope is surfaced
   // as its own standalone `plugin-info` notify (which routes to `error` + the
-  // `1 plugin operation failed.` summary via the single arm), and only the info
+  // `A plugin operation has failed.` summary via the single arm), and only the info
   // blocks form the cascade. This intentionally breaks IL-2's single-notify
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
@@ -1059,7 +1076,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // surfaces have incompatible message kinds, and hiding one behind the
   // other would silently drop a scope's state.
   if (disabledBlocks.length > 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: disabledBlocks });
+    const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
+    notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
   }
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).

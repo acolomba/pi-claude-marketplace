@@ -100,6 +100,12 @@ import {
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
@@ -113,6 +119,7 @@ import {
   resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
+import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -123,13 +130,8 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  Dependency,
-  MarketplaceNotificationMessage,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-} from "../../shared/notify.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -250,6 +252,10 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   // The bare update across multiple scopes / marketplaces becomes one
   // cascade block per (scope, marketplace) pair.
   const outcomes: { readonly target: ResolvedTarget; readonly outcome: PluginUpdateOutcome }[] = [];
+  // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
+  // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
+  // the `@<marketplace>` and bare forms are bulk (emit the tally).
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   for (const t of targets) {
     try {
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
@@ -339,14 +345,14 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      renderUpdateCascadeIfAny(ctx, pi, outcomes);
+      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality);
       return;
     }
 
     outcomes.push({ target: t, outcome });
   }
 
-  renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+  renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
 }
 
 /**
@@ -430,9 +436,10 @@ function renderUpdateCascadeIfAny(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   if (outcomes.length > 0) {
-    renderUpdateCascadeAndNotify(ctx, pi, outcomes);
+    renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
   }
 }
 
@@ -856,7 +863,7 @@ const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] a
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**
- * TR-04 Pattern 1: pre-commit intent-mark.
+ * TR-04: pre-commit intent-mark.
  *
  * Runs INSIDE a `withStateGuard` BEFORE phase-3a commits begin. Re-reads
  * the per-marketplace per-plugin state record, performs the ST-9
@@ -920,7 +927,7 @@ async function markUpdateInProgress(
 }
 
 /**
- * TR-04 Pattern 2: post-commit finalize.
+ * TR-04: post-commit finalize.
  *
  * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
  * has TWO distinct failure semantics:
@@ -1433,22 +1440,23 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     const targetBasename = path.basename(
       args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
     );
-    notify(args.ctx, args.pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(args.ctx, args.pi, UPDATE_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid-config abort -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
+          },
+        ],
+      },
+    ]);
   }
 
   return {
@@ -1510,7 +1518,7 @@ interface TargetedOutcome {
 function outcomeToCascadePluginMessage(
   target: ResolvedTarget,
   outcome: PluginUpdateOutcome,
-): PluginNotificationMessage {
+): UpdateMsg {
   switch (outcome.partition) {
     case "updated":
       return {
@@ -1523,17 +1531,21 @@ function outcomeToCascadePluginMessage(
         // marker (MSG-SD-3). The renderer narrows on `dependencies`
         // membership + the notify-time probe.
         dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
+        // D-03/D-06: realized update transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     case "unchanged":
       // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
-      // unchanged renders as `(skipped) {up-to-date}`. severity for
-      // skipped is `warning` (consistent with the existing
-      // CMC-26 dispatch ternary's `aggregatedSeverity` behavior).
+      // unchanged renders as `(skipped) {up-to-date}`.
       return {
         status: "skipped",
         name: outcome.name,
         scope: target.scope,
         reasons: ["up-to-date"],
+        // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
+        severity: "info",
+        needsReload: false,
       };
     case "skipped": {
       // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over
@@ -1548,6 +1560,16 @@ function outcomeToCascadePluginMessage(
         ...(outcome.fromVersion !== undefined &&
           outcome.fromVersion !== "" && { version: outcome.fromVersion }),
         reasons,
+        // D-01: an absent-target update (the named plugin is not installed /
+        // not found) cannot be carried out -> error (severity-only flip; the
+        // `(skipped) {not installed}` per-row grammar is preserved). Otherwise
+        // benign idempotent skip -> info, actionable skip -> warning; never
+        // reloads.
+        severity:
+          reasons.includes("not installed") || reasons.includes("not found")
+            ? "error"
+            : skipSeverity(reasons),
+        needsReload: false,
       };
     }
 
@@ -1572,6 +1594,10 @@ function outcomeToCascadePluginMessage(
         reasons,
         ...(version !== undefined && version !== "" && { version }),
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-03/D-06: a failed update -> error, no reload (the rollbackPartial
+        // spread below inherits these).
+        severity: "error",
+        needsReload: false,
       };
       if (!hasPhaseFailures) {
         return base;
@@ -1629,6 +1655,7 @@ function renderUpdateCascadeAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   // Group by (scope, marketplace) per CMC-21. Insertion order tracks the
   // first occurrence of each (scope, marketplace) pair -- the post-grouping
@@ -1638,7 +1665,7 @@ function renderUpdateCascadeAndNotify(
   interface MpGroup {
     readonly name: string;
     readonly scope: Scope;
-    readonly plugins: PluginNotificationMessage[];
+    readonly plugins: UpdateMsg[];
   }
   const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
@@ -1664,7 +1691,14 @@ function renderUpdateCascadeAndNotify(
   // Sort marketplace blocks via compareByNameThenScope (orchestrator
   // controls iteration order; notify does not sort). The comparator's
   // `Sortable` shape requires only `name` + `scope`.
-  const marketplaces: MarketplaceNotificationMessage[] = [...byMp.values()]
+  // OUT-07 / D-12: the update cascade is a bulk op, so its row slot is typed
+  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
+  // variable-length array, identical at runtime.
+  // WR-01: the grouped plugin rows are accumulated through the
+  // `outcomeToCascadePluginMessage` helper, now typed to `UpdateMsg`, so the
+  // `MarketplaceRows<UpdateMsg>` annotation holds without a cast -- a status
+  // drift between the producer and the render map is a compile error here.
+  const marketplaces: Plural<MarketplaceRows<UpdateMsg>> = [...byMp.values()]
     .sort((a, b) =>
       compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
     )
@@ -1693,7 +1727,11 @@ function renderUpdateCascadeAndNotify(
   //  docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
   //  rollback-partial, all-up-to-date-noop, bare-multi-mp,
   //  same-mp-both-scopes).
-  notify(ctx, pi, { marketplaces });
+  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
+  // (`@marketplace` / bare) update forms; a single-target `<plugin>@<mp>` update
+  // omits it (the row embeds the outcome). The structural single-vs-plural
+  // signal is the invocation FORM, threaded from `updatePlugins`.
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1747,6 +1785,9 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
     name: pluginName,
     reasons,
     cause,
+    // D-03/D-06: a direct update failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
     ...(args.rollbackPartial !== undefined &&
       args.rollbackPartial.length > 0 && {
         rollbackPartial: args.rollbackPartial.map((p) => ({
@@ -1755,15 +1796,13 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
         })),
       }),
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failedRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
+    {
+      name: marketplace,
+      scope,
+      plugins: [failedRow],
+    },
+  ]);
 }
 
 /**
@@ -1891,16 +1930,17 @@ function notifyBareFormEnumerateFailure(args: {
     name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
     reasons,
     cause,
+    // D-03/D-06: bare-form enumerate failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
-        scope: scope ?? "user",
-        plugins: [failedRow],
-      },
-    ],
-  });
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
+    {
+      name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
+      scope: scope ?? "user",
+      plugins: [failedRow],
+    },
+  ]);
 }
 
 /**

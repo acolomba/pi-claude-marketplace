@@ -43,7 +43,7 @@ const PLUGIN = "acme";
 const HOOKS_VALUE = {};
 
 // Symlink creation requires elevated permissions on Windows; the entire
-// Phase 63 supported-platform matrix is Linux + macOS, so we skip these
+// The supported-platform matrix is Linux + macOS, so we skip these
 // tests if the runtime can't create symlinks. The skip is defensive.
 const canSymlink = process.platform !== "win32";
 

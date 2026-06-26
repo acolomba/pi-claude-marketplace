@@ -22,15 +22,14 @@
 // separate warning -- the per-row shape already carries the signal.
 //
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
-// `PluginPresentMessage` carries `dependencies: readonly Dependency[]`
+// `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded).
 // `notify` owns the single softDepStatus(pi) probe per call
 // and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
-// when (declares AND companion unloaded). UAT G-21-01 (SNM-15 surface
-// tightening): the list orchestrator emits the list-only present token
-// for steady-state inventory rows instead of the cascade-context
-// installed token, so `shouldEmitReloadHint` does NOT fire the
-// `/reload to pick up changes` trailer on plain list invocations.
+// when (declares AND companion unloaded). RLD-04 / D-08: the list
+// orchestrator stamps the steady-state inventory row `installed` with
+// `needsReload: false`, so the OR-reduce reload-hint (RLD-02) does NOT
+// fire the `/reload to pick up changes` trailer on plain list invocations.
 //
 // Contract (from PRD §5.3.1):
 //   - PL-1 filter union semantics: when NO filter flags (--installed /
@@ -59,22 +58,28 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notify } from "../../shared/notify.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
 } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
+import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
+
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
-  Dependency,
-  MarketplaceNotificationMessage,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
+  PluginInstalledMessage,
   PluginNotificationMessage,
-  PluginPresentMessage,
   PluginUnavailableMessage,
   PluginUpgradableMessage,
 } from "../../shared/notify.ts";
@@ -82,17 +87,17 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
- * bucketing logic (present / upgradable / available / unavailable) typed.
+ * bucketing logic (installed / upgradable / available / unavailable) typed.
  * Maps 1:1 onto the PluginNotificationMessage list-surface discriminator
- * subset per shared/notify.ts. UAT G-21-01: the installed bucket emits the
- * list-only `present` token instead of the cascade-context `installed`
- * token so `shouldEmitReloadHint` does not misfire on steady-state list
- * invocations; the PL-1 `--installed` filter treats `present`, `upgradable`,
- * and `disabled` as the installed bucket (a disabled plugin IS recorded --
- * the catalog's `disabled-inventory` state sits under the installed
- * inventory; D-54-01 / ENBL-04).
+ * subset per shared/notify.ts. RLD-04 / D-08: the installed bucket emits the
+ * `installed` token with `needsReload: false` (the stamped flag suppresses the
+ * OR-reduce reload-hint on steady-state list invocations); the PL-1
+ * `--installed` filter treats `installed`, `upgradable`, and `disabled` as the
+ * installed bucket (a disabled plugin IS recorded -- the catalog's
+ * `disabled-inventory` state sits under the installed inventory; D-54-01 /
+ * ENBL-04).
  */
-type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable" | "disabled";
+type PluginRenderStatus = "installed" | "upgradable" | "available" | "unavailable" | "disabled";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -101,7 +106,7 @@ type PluginRenderStatus = "present" | "upgradable" | "available" | "unavailable"
  * `pi` is REQUIRED -- the `notify(ctx, pi, message)` call consumes it
  * for the single softDepStatus(pi) probe per invocation. The
  * renderer derives per-row soft-dep markers from each
- * `PluginPresentMessage.dependencies` field plus the probe result.
+ * `PluginInstalledMessage.dependencies` field plus the probe result.
  */
 export interface ListPluginsOptions {
   readonly ctx: ExtensionContext;
@@ -137,7 +142,7 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
 
   if (
     opts.installed === true &&
-    (status === "present" || status === "upgradable" || status === "disabled")
+    (status === "installed" || status === "upgradable" || status === "disabled")
   ) {
     return true;
   }
@@ -202,7 +207,7 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
 }
 
 /**
- * Build a `PluginPresentMessage` (or `PluginUpgradableMessage` when the
+ * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
  * from the installed record's `resources` (state-recorded counts).
@@ -212,13 +217,12 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * scope -- the renderer's MSG-PL-6 orphan-fold rule suppresses
  * the `[<scope>]` bracket when `p.scope === mp.scope`.
  *
- * Inventory-vs-transition discriminator (UAT G-21-01): the steady-state
- * list row emits the list-only `present` inventory token (absent from
- * `shouldEmitReloadHint`'s trigger set) instead of the cascade transition
- * `installed` token (which DOES trigger the reload hint). The renderer
- * arm for `"present"` is byte-identical to the `"installed"` arm so the
- * human-visible row text `● <name> [<scope>] v<ver> (installed)` is
- * preserved.
+ * Inventory-vs-transition discriminator (RLD-04 / D-08): the steady-state
+ * list row emits the `installed` token with `needsReload: false`. The
+ * stamped flag suppresses the OR-reduce reload-hint (RLD-02) for inventory,
+ * and `reasons` is OMITTED so the orphan-rewake brace never leaks onto a
+ * steady-state row; the rendered byte form `● <name> [<scope>] v<ver>
+ * (installed)` is preserved.
  *
  * PL-4: `description` is sourced from the manifest entry (when available).
  * The installed state record does not carry description; if the manifest is
@@ -230,7 +234,7 @@ function installedRowMessage(
   marketplaceScope: Scope,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-): PluginPresentMessage | PluginUpgradableMessage | PluginDisabledMessage {
+): PluginInstalledMessage | PluginUpgradableMessage | PluginDisabledMessage {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -254,10 +258,15 @@ function installedRowMessage(
   // surface a misleading `(upgradable)` on a plugin with no artefacts.
   if (isRecordedButDisabled(record)) {
     return {
+      // D-03/D-06: a disabled INVENTORY row (list surface) is steady state,
+      // not a realized transition -> info, never reloads.
       status: "disabled",
       name: pluginName,
       version: record.version,
       ...scopeField,
+      ...descriptionField,
+      severity: "info",
+      needsReload: false,
     };
   }
 
@@ -278,12 +287,19 @@ function installedRowMessage(
   }
 
   return {
-    status: "present",
+    // RLD-04 / D-08: the list-surface inventory row is `installed` with
+    // `needsReload: false` -- the stamped flag IS the old `present`
+    // reload-suppression (the OR-reduce reload-hint stays suppressed for
+    // steady-state inventory). `reasons` is OMITTED so the orphan-rewake brace
+    // never leaks onto an inventory row.
+    status: "installed",
     name: pluginName,
     dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),
     version: record.version,
     ...scopeField,
     ...descriptionField,
+    severity: "info",
+    needsReload: false,
   };
 }
 
@@ -404,8 +420,8 @@ async function enumerateMarketplacePlugins(
   marketplaceScope: Scope,
   manifest: MarketplaceManifest | undefined,
   excludeFromAvailable: ReadonlySet<string> = new Set(),
-): Promise<PluginNotificationMessage[]> {
-  const rows: PluginNotificationMessage[] = [];
+): Promise<ListMsg[]> {
+  const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
 
@@ -501,7 +517,7 @@ function isCloneOfUserMarketplace(
 }
 
 interface BuiltMarketplace {
-  readonly mp: MarketplaceNotificationMessage;
+  readonly mp: MarketplaceRows<ListMsg>;
   readonly emitScope: Scope;
 }
 
@@ -512,7 +528,7 @@ async function buildMarketplaceMessage(args: {
   mpRecord: ExtensionState["marketplaces"][string];
   /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
   autoupdate: boolean;
-  extraPlugins: readonly PluginNotificationMessage[];
+  extraPlugins: readonly ListMsg[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
   const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
@@ -531,6 +547,8 @@ async function buildMarketplaceMessage(args: {
         name: mpName,
         scope: mpScope,
         status: "failed",
+        // D-03: a failed marketplace header on the list surface -> error.
+        severity: "error",
         plugins: [],
       },
       emitScope: mpScope,
@@ -546,7 +564,7 @@ async function buildMarketplaceMessage(args: {
     manifest,
     excludeFromAvailable,
   );
-  const merged: readonly PluginNotificationMessage[] = [...ownPlugins, ...extraPlugins];
+  const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
 
   // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
   // plugin-list surface carries only the `autoupdate` marker;
@@ -581,7 +599,7 @@ async function buildMarketplaceMessage(args: {
  */
 export async function loadPluginListPayload(
   opts: ListPluginsOptions,
-): Promise<readonly MarketplaceNotificationMessage[]> {
+): Promise<readonly MarketplaceRows<ListMsg>[]> {
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
@@ -632,7 +650,7 @@ export async function loadPluginListPayload(
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
     const isProjectMpClone = isCloneOfUserMarketplace(projectMp, mpRecord);
-    let folded: readonly PluginNotificationMessage[] = [];
+    let folded: readonly ListMsg[] = [];
     let foldedNames: ReadonlySet<string> = new Set();
     if (isProjectMpClone && projectMp !== undefined) {
       // Each folded row carries scope: "project" (D-13-18 actual install
@@ -655,19 +673,19 @@ export async function loadPluginListPayload(
         "user",
         manifest,
       );
-      // UAT G-21-01: `installedRowMessage` emits `status: "present"`
-      // (list-only) for the steady-state inventory row, not the
-      // cascade-context `"installed"` token. The carry-over filter MUST
-      // discriminate on `"present"` (plus the `"upgradable"` and ENBL-04
-      // `"disabled"` arms) so orphan-folded rows survive (CR-01). A disabled
-      // record IS an installed record -- dropping it here would both hide
-      // the row and let the user-side enumeration re-emit the plugin as a
-      // duplicate `(available)`. The integration regression for
-      // this fold lives at tests/integration/fold-adoption.test.ts; the
-      // orchestrator-level reproduction is in
-      // tests/orchestrators/plugin/list.test.ts ("CR-01 / G-21-01 fold-carryover...").
+      // RLD-04 / D-08: `installedRowMessage` emits `status: "installed"` with
+      // `needsReload: false` for the steady-state inventory row. The
+      // carry-over filter MUST discriminate on `"installed"` (plus the
+      // `"upgradable"` and ENBL-04 `"disabled"` arms) so orphan-folded rows
+      // survive (CR-01). A disabled record IS an installed record -- dropping
+      // it here would both hide the row and let the user-side enumeration
+      // re-emit the plugin as a duplicate `(available)`. The integration
+      // regression for this fold lives at
+      // tests/integration/fold-adoption.test.ts; the orchestrator-level
+      // reproduction is in tests/orchestrators/plugin/list.test.ts
+      // ("CR-01 / G-21-01 fold-carryover...").
       folded = projectSideRows.filter(
-        (r) => r.status === "present" || r.status === "upgradable" || r.status === "disabled",
+        (r) => r.status === "installed" || r.status === "upgradable" || r.status === "disabled",
       );
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
@@ -714,10 +732,7 @@ export async function loadPluginListPayload(
  * (project-before-user). Marketplaces always carry both `name` and
  * `scope` (the field is required on `MarketplaceNotificationMessage`).
  */
-function compareMpForSort(
-  a: MarketplaceNotificationMessage,
-  b: MarketplaceNotificationMessage,
-): number {
+function compareMpForSort(a: MarketplaceRows<ListMsg>, b: MarketplaceRows<ListMsg>): number {
   const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   if (byName !== 0) {
     return byName;
@@ -739,31 +754,26 @@ function compareMpForSort(
  * yields a deterministic ordering against orphan-folded rows that DO
  * carry an explicit cross-scope `scope`.
  */
-function sortPluginsInBlock(
+function sortPluginsInBlock<M extends PluginNotificationMessage>(
   marketplaceScope: Scope,
-  plugins: readonly PluginNotificationMessage[],
-): readonly PluginNotificationMessage[] {
+  plugins: readonly M[],
+): readonly M[] {
   if (plugins.length === 0) {
     return plugins;
   }
 
   // SNM-11: `available` / `unavailable` variants have no `scope` field by
-  // construction; the other list-surface variants (`present` /
+  // construction; the other list-surface variants (`installed` /
   // `upgradable`) carry an optional `scope`. The status-narrowing switch
-  // is the only safe access path under TS strict. UAT G-21-01: the list
-  // orchestrator emits `present` (list-only inventory token) for
-  // steady-state inventory rows; `installed` is the cascade-context
-  // transition token. WR-02: keep `installed` in the scope-bearing arm
-  // alongside `present` / `upgradable`. The body
-  // `return p.scope ?? marketplaceScope` is correct for both the
-  // unreachable list-surface case AND any future regression
-  // that re-routes a cascade-context `installed` row through the list
-  // orchestrator -- the cross-scope orphan-fold scope on a
-  // `PluginInstalledMessage` (SNM-11 / D-13-18) is preserved instead of
-  // silently overwritten with `marketplaceScope`.
+  // is the only safe access path under TS strict. RLD-04 / D-08: the list
+  // orchestrator emits the steady-state inventory row as `installed` (with
+  // `needsReload: false`); the same `installed` token also carries the
+  // cascade transition. The body `return p.scope ?? marketplaceScope`
+  // preserves the cross-scope orphan-fold scope on a
+  // `PluginInstalledMessage` (SNM-11 / D-13-18) instead of silently
+  // overwriting it with `marketplaceScope`.
   const scopeOf = (p: PluginNotificationMessage): Scope => {
     switch (p.status) {
-      case "present":
       case "upgradable":
       case "installed":
       case "disabled":
@@ -840,16 +850,21 @@ function narrowListFailReason(err: unknown): ListReason {
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
   try {
-    const marketplaces = await loadPluginListPayload(opts);
-    // notify() call mirrors the recipe at
+    // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
+    // `Plural<Row>` (a readonly array). Additive typing only.
+    // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the
+    // annotation holds without a cast -- every plugin row it emits is a ListMsg
+    // member by construction.
+    const marketplaces: Plural<MarketplaceRows<ListMsg>> = await loadPluginListPayload(opts);
+    // notify call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; list.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable
     // / installed) per D-19-02. Severity (info; omitted 2nd arg) and
-    // the `/reload to pick up changes` trailer are computed by notify()
-    //  (the trailer fires when at least one
+    // the `/reload to pick up changes` trailer are computed by the cascade
+    // seam (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
-    notify(ctx, pi, { marketplaces });
+    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces);
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
     // catalog state for orchestrator-level failure (D-19-03 Option B):
@@ -875,8 +890,11 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       name: SYNTHETIC_LIST_FAILURE_PLUGIN_NAME,
       reasons: [narrowListFailReason(err)],
       cause,
+      // D-03/D-06: a synthetic list-failure row -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
-    const mp: MarketplaceNotificationMessage = {
+    const mp: MarketplaceRows<ListMsg> = {
       // WR-03: the `MarketplaceNotificationMessage` shape does not support
       // a failure-trailer channel separate from the marketplace-row form,
       // so use a conspicuously-synthetic placeholder name (mirrors the
@@ -887,7 +905,10 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       scope: opts.scope ?? "user",
       plugins: [failedRow],
     };
-    notify(ctx, pi, { marketplaces: [mp] });
+    // OUT-07 / D-12: the synthetic list-failure surface emits exactly one
+    // marketplace row, so its slot is typed `Single<Row>` (a 1-tuple).
+    const failureRows: Single<MarketplaceRows<ListMsg>> = [mp];
+    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows);
   }
 }
 

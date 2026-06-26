@@ -163,7 +163,7 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
     // notify() prepends the UXG-07 summary line for error severity.
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
     );
     assert.equal(note.severity, "error");
   });
@@ -204,7 +204,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
     // Post-manifest failure: subject is the derived marketplace name (A2).
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
+      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
     );
     assert.equal(note.severity, "error");
   });
@@ -234,7 +234,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
     assert.ok(note, "addMarketplace should notify on invalid manifest");
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n" +
+      "A marketplace operation has failed.\n\n" +
         "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
     );
     assert.equal(note.severity, "error");
@@ -289,7 +289,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
     assert.ok(note);
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n" +
+      "A marketplace operation has failed.\n\n" +
         "⊘ git@github.com:foo/bar.git [project] (failed) {unsupported source}",
     );
     assert.equal(note.severity, "error");
@@ -527,7 +527,7 @@ test("ATTR-07: a Unix domain socket path renders (failed) {source missing}", asy
       // Pre-name failure (no readable manifest) -> subject is the raw source.
       assert.equal(
         note.message,
-        `1 marketplace operation failed.\n\n⊘ ${socketPath} [project] (failed) {source missing}`,
+        `A marketplace operation has failed.\n\n⊘ ${socketPath} [project] (failed) {source missing}`,
       );
       assert.equal(note.severity, "error");
     } finally {
@@ -557,7 +557,7 @@ test("ATTR-07: a missing path source (ENOENT) renders (failed) {source missing}"
     assert.ok(note);
     assert.equal(
       note.message,
-      `1 marketplace operation failed.\n\n⊘ ${missingDir} [project] (failed) {source missing}`,
+      `A marketplace operation has failed.\n\n⊘ ${missingDir} [project] (failed) {source missing}`,
     );
     assert.equal(note.severity, "error");
     // NFR-5: a path source never touches gitOps.
@@ -600,7 +600,7 @@ test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed
       // Post-manifest failure -> subject is the derived marketplace name (A2).
       assert.equal(
         note.message,
-        "1 marketplace operation failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
+        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
       );
       assert.equal(note.severity, "error");
     } finally {

@@ -277,7 +277,15 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
       assert.equal(outcome.partition, "skipped");
       assert.deepEqual(outcome.notes, ["not installed"]);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), before);
-      assert.equal(notifications.length, 0);
+      // CR-02 / D-01: the standalone path emits the absent-target row as an
+      // error (was a silent return). State/disk stay untouched; the notify is
+      // the only visible effect.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -848,7 +856,10 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       // No raw throw escapes; the entrypoint returns [] before the cascade.
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}");
+      assert.equal(
+        body,
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
+      );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -886,7 +897,10 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of a not-added mark
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}");
+      assert.equal(
+        body,
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
+      );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -924,7 +938,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
 
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
-      assert.equal(body, "1 marketplace operation failed.\n\n⊘ ghost-mp (failed) {not added}");
+      assert.equal(body, "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {not added}");
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1543,7 +1557,7 @@ test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginMan
     },
   ];
 
-  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+  __test_renderReinstallPartitionAndNotify(ctx, pi, outcomes, "plural");
 
   // Exactly one notification was emitted; severity routes via notify()'s
   // content-derived ladder (D-16-11): manual-recovery in plugins[] -> warning.
@@ -2238,7 +2252,7 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
         body,
-        "1 marketplace operation failed.\n\n⊘ onlyuser [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ onlyuser [project] (failed) {not added}",
       );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
@@ -2473,7 +2487,7 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
 // table reflects the post-reinstall entry set. Reinstall does NOT delegate
-// to install/uninstall (per Phase 59 Plan 03 SUMMARY), so the cache lifecycle
+// to install/uninstall, so the cache lifecycle
 // is wired explicitly inside the per-plugin lock and verified end-to-end.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@
  * Failure-mode contract: when git is absent from PATH, the
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
  * `credentialApprove` / `credentialReject` swallow and silently no-op
- * (best-effort persistence per Pattern 3). The current operation still
+ * (best-effort persistence). The current operation still
  * succeeds via Device Flow -- only keychain reuse is lost.
  *
  * Error-message discipline (AUTH-09): no Error constructor in
@@ -219,8 +219,8 @@ async function credentialFill(host: string): Promise<GitCredentials | null> {
  * AUTH-06: approve semantics. Persists the credential via the configured
  * git credential helper (osxkeychain / manager-core / libsecret).
  *
- * Best-effort: failures (ENOENT, non-zero exit, timeout) silently no-op
- * per Pattern 3. The in-memory token still works for the current
+ * Best-effort: failures (ENOENT, non-zero exit, timeout) silently no-op.
+ * The in-memory token still works for the current
  * operation; the user simply does not get keychain reuse on subsequent
  * runs (they will re-run Device Flow next time).
  */

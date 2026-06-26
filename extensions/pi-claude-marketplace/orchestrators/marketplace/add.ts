@@ -67,9 +67,15 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
-import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Single,
+} from "../../shared/notify-context.ts";
+import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { ADD_CONTEXT } from "./add.messaging.ts";
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
@@ -218,7 +224,7 @@ function unwrapAddError(err: unknown): unknown {
 }
 
 /**
- * ATTR-07 (Pattern 3): map an `addMarketplace` precondition error to its
+ * ATTR-07: map an `addMarketplace` precondition error to its
  * closed-set `ContentReason`. Fully `instanceof`-driven (D-48-C A3) so the
  * catch-all returns `undefined` -- a non-enumerated error (e.g.
  * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the
@@ -466,17 +472,21 @@ function handleAddFailure(
     return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
   }
 
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: addSubjectName(err, opts.rawSource),
-        scope: opts.scope,
-        status: "failed",
-        reasons: [reason],
-        plugins: [],
-      },
-    ],
-  });
+  // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
+  // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
+  // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
+  const failedRows: Single<MarketplaceRows<never>> = [
+    {
+      name: addSubjectName(err, opts.rawSource),
+      scope: opts.scope,
+      status: "failed",
+      reasons: [reason],
+      // D-03: a failed marketplace add -> error.
+      severity: "error",
+      plugins: [],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows);
   return undefined;
 }
 
@@ -552,18 +562,19 @@ export async function addMarketplace(
   }
 
   // Emit one MarketplaceNotificationMessage per outcome. Severity and
-  // reload-hint are computed by notify(); callers MUST NOT compose them.
+  // reload-hint are computed by the shared seam; callers MUST NOT compose them.
   // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: recordedName,
-        scope: opts.scope,
-        status: "added",
-        plugins: [],
-      },
-    ],
-  });
+  // OUT-07 / D-12: single-target op -> Single 1-tuple. The `(added)` header
+  // renders via the central renderMpHeader seam the spine reuses.
+  const addedRows: Single<MarketplaceRows<never>> = [
+    {
+      name: recordedName,
+      scope: opts.scope,
+      status: "added",
+      plugins: [],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows);
   return undefined;
 }
 

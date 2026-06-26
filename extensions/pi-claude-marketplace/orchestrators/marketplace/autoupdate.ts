@@ -12,10 +12,10 @@
 //  -> `● <mp> [<scope>] <no autoupdate>`
 //  - enable idempotent -> status: "skipped", reasons: ["already autoupdate"]
 //  -> `● <mp> [<scope>] <autoupdate> {already autoupdate}`
-//  severity: "warning"
+//  severity: "info"
 //  - disable idempotent -> status: "skipped", reasons: ["already no autoupdate"]
 //  -> `● <mp> [<scope>] <no autoupdate> {already no autoupdate}`
-//  severity: "warning"
+//  severity: "info"
 //  - failure (not-found) -> status: "failed"
 //  -> `⊘ <mp> [<scope>] (failed)`
 //  severity: "error"
@@ -66,18 +66,21 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
 import { classifyAutoupdateFlip } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  MarketplaceNotificationMessage,
-  PluginFailedMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -178,6 +181,9 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
     name,
     reasons,
     cause: err instanceof Error ? err : new Error(errorMessage(err)),
+    // D-03/D-06: a synthetic autoupdate-failure child -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
 }
 
@@ -187,13 +193,22 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
  * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
  * missing-marketplace precondition, NOT a flip failure -- it routes to the
  * standalone MarketplaceNotAddedMessage `⊘ <name> [<scope>] (failed) {not added}`
- * variant (Pattern 1) carrying the explicit scope bracket (the former
+ * variant carrying the explicit scope bracket (the former
  * synthetic-child `{not found}` reason lied about the blocker). Every OTHER
  * error -- notably `StateLockHeldError`, whose message carries an actionable
  * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
+/**
+ * Selects the command context for the shared autoupdate orchestrator: the
+ * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
+ * context when disabling. Mirrors the enable/disable boolean-flag split.
+ */
+function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
+  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
+}
+
 function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
   const failureName = opts.name ?? "(unknown)";
 
@@ -206,16 +221,21 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
     return;
   }
 
-  notify(opts.ctx, opts.pi, {
-    marketplaces: [
-      {
-        name: failureName,
-        scope,
-        status: "failed",
-        plugins: [autoupdateFailedRow(failureName, err)],
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
+  // row -> Single. The flip command is selected by the boolean `opts.enable`
+  // flag (mirrors enable/disable); the `(failed)` header renders via the
+  // central seam, the failed child row dispatches through the command context.
+  const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
+    {
+      name: failureName,
+      scope,
+      status: "failed",
+      // D-03: a failed autoupdate flip -> error.
+      severity: "error",
+      plugins: [autoupdateFailedRow(failureName, err)],
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
 }
 
 /**
@@ -445,6 +465,11 @@ async function flipOneScope(
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
+  // The autoupdate / noautoupdate commands share this orchestrator, selected by
+  // the boolean `opts.enable` flag (mirrors enable/disable). Resolve the command
+  // context once so every emission below routes through the same selection.
+  const flipContext = flipContextFor(opts.enable);
+
   const rows: AutoupdateFlipRow[] = [];
   const errors: { scope: Scope; cause: unknown }[] = [];
 
@@ -487,7 +512,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
       // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
       // iterated scope is a missing-marketplace precondition. Route it to the
       // standalone MarketplaceNotAddedMessage `(failed) {not added}` variant
-      // (Pattern 1) instead of the former reason-LESS bare `(failed)` row.
+      // instead of the former reason-LESS bare `(failed)` row.
       // Scope bracket: an explicit `opts.scope` carries it; the bare form
       // carries `first.scope` (the scope where the first not-found was
       // observed), per the RESEARCH recommendation.
@@ -502,10 +527,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     return;
   }
 
-  // Empty marketplaces[] -> notify emits the `(no marketplaces)` sentinel
-  // verbatim. No orchestrator-side composition.
+  // Empty marketplaces[] -> the `(no marketplaces)` sentinel renders verbatim
+  // via the central seam. No orchestrator-side composition.
+  // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: [] });
+    const emptyRows: Plural<MarketplaceRows<PluginFailedMessage>> = [];
+    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows);
     return;
   }
 
@@ -521,7 +548,11 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   //   visible iteration order. NO alphabetic sort here.
   // - Reference: catalog UAT fixtures `enable-fresh`, `disable-fresh`,
   //   `enable-idempotent`, `disable-idempotent`.
-  const marketplaces: MarketplaceNotificationMessage[] = rows.map((row) => {
+  // WR-01: type the accumulator at the narrow `MarketplaceRows<PluginFailedMessage>`
+  // so each per-arm literal is checked against the flip context's row shape (the
+  // failed arm is the only plugin-carrying Msg; every row builds `plugins: []`),
+  // and the array widens to `notifyWithContext` with no cast.
+  const marketplaces: MarketplaceRows<PluginFailedMessage>[] = rows.map((row) => {
     if (row.alreadyMatching) {
       return {
         name: row.name,
@@ -529,6 +560,12 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         status: "skipped",
         reasons: [opts.enable ? "already autoupdate" : "already no autoupdate"],
         plugins: [],
+        // D-03/D-06: a benign idempotent autoupdate skip -> info, no reload.
+        // Stamped explicitly (defaults coincide) so every producer row carries
+        // an auditable severity/needsReload fact rather than relying on the
+        // implicit SEV-01/RLD-01 default.
+        severity: "info",
+        needsReload: false,
       };
     }
 
@@ -544,6 +581,8 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         scope: row.scope,
         status: "failed",
         reasons: ["not found"],
+        // D-03: a failed autoupdate flip -> error.
+        severity: "error",
         plugins: [],
       };
     }
@@ -556,5 +595,8 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     };
   });
 
-  notify(opts.ctx, opts.pi, { marketplaces });
+  // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
+  // autoupdate enabled/disabled/skipped/failed headers render via the central
+  // seam; the command is selected by the boolean `opts.enable` flag.
+  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces);
 }

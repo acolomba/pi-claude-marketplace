@@ -129,8 +129,8 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
 // HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
 // `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
 // rejected with "contains hooks" -- the resolver only owns convention-file
-// discovery; entry/manifest-level hooks-field semantics are deferred to a
-// future dispatch milestone.
+// discovery; entry/manifest-level hooks-field semantics are deferred to
+// future dispatch work.
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", hooks: { onLoad: "x" } }), ctx);

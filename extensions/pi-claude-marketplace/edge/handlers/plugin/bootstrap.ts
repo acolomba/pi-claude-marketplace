@@ -69,16 +69,16 @@ export function makeBootstrapHandler(
     } catch {
       // `addMarketplace` throws on failure (e.g. a first-run GitHub clone
       // failure) rather than notifying, so route the thrown error through
-      // the notify path as a failed marketplace row (IL-2). notify()
-      // computes `error` severity for a failed marketplace status. The
-      // marketplace-level row carries no cause chain -- SNM-10 confines
-      // `cause` to plugin-level variants.
+      // the notify path as a failed marketplace row (IL-2). The row stamps
+      // caller `severity: "error"` (SEV-02). The marketplace-level row carries
+      // no cause chain -- SNM-10 confines `cause` to plugin-level variants.
       notify(ctx, pi, {
         marketplaces: [
           {
             name: BOOTSTRAP_MARKETPLACE_NAME,
             scope: "user",
             status: "failed",
+            severity: "error",
             plugins: [],
           },
         ],

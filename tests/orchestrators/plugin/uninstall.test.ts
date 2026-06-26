@@ -429,12 +429,12 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // `"not in manifest"` lied that the plugin was gone from the manifest.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      // UXG-07 (D-29-02/03): the "1 plugin operation failed."
+      // UXG-07 (D-29-02/03): the "A plugin operation has failed."
       // summary line is prepended before the cascade body (1 failed plugin,
       // mp glyph `●` so the marketplace did not fail).
       assert.equal(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         true,
         `V2 failure row prefix mismatch: got "${notifications[0]?.message ?? ""}"`,
@@ -458,7 +458,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
 
 // PU-5 silent converge -- record absent -----------------------------
 
-test("PU-5: record already absent -> NO notification (literal silence)", async () => {
+test("PU-5 / D-01: standalone uninstall of an already-gone plugin -> error row (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-pu5-"));
     try {
@@ -488,8 +488,16 @@ test("PU-5: record already absent -> NO notification (literal silence)", async (
         plugin: "absent-plugin",
       });
 
-      // Literal silence -- no notification at all.
-      assert.equal(notifications.length, 0, "no notification per PRD §5.2.2 PU-5");
+      // D-01: the standalone command names an absent target it cannot operate
+      // on -> error row (was literal silence). The orchestrated reconcile
+      // converge stays silent (covered separately).
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith("A plugin operation has failed.\n\n"),
+        `PU-5 error summary mismatch: got "${notifications[0]?.message ?? ""}"`,
+      );
+      assert.match(notifications[0]?.message ?? "", /⊘ absent-plugin \(failed\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -518,7 +526,7 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {not added} (explic
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {not added}",
       );
       // No state mutation -- the resolver short-circuits before the guard.
       const after = await loadState(locations.extensionRoot);
@@ -567,7 +575,7 @@ test("SCOPE-01: explicit-scope uninstall of an other-scope-only target -> LOUD {
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "1 marketplace operation failed.\n\n⊘ mp [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {not added}",
       );
       const userAfter = await loadState(userLocations.extensionRoot);
       assert.ok("hello" in (userAfter.marketplaces["mp"]?.plugins ?? {}), "user record retained");
@@ -913,7 +921,7 @@ test("narrowCascadeFailure: EACCES maps to 'permission denied' in PluginFailedMe
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
         ),
         `expected 'permission denied' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
@@ -972,7 +980,7 @@ test("narrowCascadeFailure: EPERM maps to 'permission denied' in PluginFailedMes
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
         ),
         `expected 'permission denied' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
@@ -1031,7 +1039,7 @@ test("narrowCascadeFailure: ENOENT maps to 'source missing' in PluginFailedMessa
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source missing}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source missing}\n",
         ),
         `expected 'source missing' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
@@ -1089,7 +1097,7 @@ test("narrowCascadeFailure: unknown errno (ETIMEDOUT default branch) maps to 'un
       // truthful `return "unreadable"` (was the lying `"not in manifest"`).
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
         ),
         `expected 'unreadable' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
@@ -1145,7 +1153,7 @@ test("narrowCascadeFailure: plain Error (no .code) maps to 'unreadable' (ATTR-09
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {unreadable}\n",
         ),
         `expected 'unreadable' reason; got: "${notifications[0]?.message ?? ""}"`,
       );
@@ -1343,7 +1351,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n",
         ),
         `TR-03 partial: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
@@ -1458,7 +1466,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
       assert.equal(notifications[0]?.severity, "error");
       assert.ok(
         (notifications[0]?.message ?? "").startsWith(
-          "1 plugin operation failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );

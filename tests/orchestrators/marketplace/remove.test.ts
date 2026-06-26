@@ -118,7 +118,7 @@ test("ATTR-06 (S4): --scope omitted + name not in either scope renders standalon
       // prefix.
       assert.equal(
         notifications[0]!.message,
-        "1 marketplace operation failed.\n\n⊘ absent-mp-zzz-9999 (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ absent-mp-zzz-9999 (failed) {not added}",
       );
       assert.equal(notifications[0]!.severity, "error");
     } finally {
@@ -140,7 +140,7 @@ test("ATTR-06 (S3): explicit --scope + name absent in that scope renders standal
       // bracket. No raw MarketplaceNotFoundError escapes; state untouched.
       assert.equal(
         notifications[0]!.message,
-        "1 marketplace operation failed.\n\n⊘ ghost [project] (failed) {not added}",
+        "A marketplace operation has failed.\n\n⊘ ghost [project] (failed) {not added}",
       );
       assert.equal(notifications[0]!.severity, "error");
     } finally {

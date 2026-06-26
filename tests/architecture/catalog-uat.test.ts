@@ -262,7 +262,14 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             details: { autoupdate: true },
             plugins: [
-              { status: "present", name: "alpha", version: "1.0.0", dependencies: [] },
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
               {
                 status: "upgradable",
                 name: "beta",
@@ -290,13 +297,31 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "project",
             details: { autoupdate: true },
-            plugins: [{ status: "present", name: "alpha", version: "0.9.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "0.9.0",
+                dependencies: [],
+              },
+            ],
           },
           {
             name: "official",
             scope: "user",
             details: { autoupdate: true },
-            plugins: [{ status: "present", name: "alpha", version: "1.0.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
           },
         ],
       },
@@ -312,14 +337,18 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "alpha",
                 version: "0.9.0",
                 dependencies: [],
                 scope: "project",
               },
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -347,19 +376,25 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "dual",
                 version: "0.5.0",
                 dependencies: ["agents", "mcp"],
               },
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents"],
               },
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "mcp-tool",
                 version: "2.0.0",
                 dependencies: ["mcp"],
@@ -379,12 +414,23 @@ const FIXTURES: FixtureMap = {
             name: "other-mp",
             scope: "user",
             details: { autoupdate: true },
-            plugins: [{ status: "present", name: "helper", version: "1.0.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
           },
           {
             name: "unparseable-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             // Empty plugins[] -- the bare failed marketplace header is the
             // entire block. The type model does not carry cause on
             // marketplace headers; orchestrators wanting to surface the
@@ -405,7 +451,16 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "user",
             details: { autoupdate: true },
-            plugins: [{ status: "present", name: "alpha", version: "1.0.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+            ],
           },
         ],
       },
@@ -419,14 +474,30 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "project",
             details: { autoupdate: true },
-            plugins: [{ status: "present", name: "alpha", version: "0.9.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "0.9.0",
+                dependencies: [],
+              },
+            ],
           },
           {
             name: "official",
             scope: "user",
             details: { autoupdate: true },
             plugins: [
-              { status: "present", name: "alpha", version: "1.0.0", dependencies: [] },
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
               { status: "available", name: "beta", version: "2.0.0" },
             ],
           },
@@ -435,7 +506,9 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "tool",
                 version: "1.0.0",
                 dependencies: ["agents"],
@@ -457,7 +530,9 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "hashed-plugin",
                 version: "hash-2ea95f85703d",
                 dependencies: [],
@@ -480,7 +555,9 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "present",
+                status: "installed",
+                severity: "info",
+                needsReload: false,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -524,7 +601,40 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "user",
             details: { autoupdate: true },
-            plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // PL-4: the disabled inventory row carries the manifest description on a
+    // second 4-space-indented line, same as the other list-surface variants.
+    "disabled-inventory-with-description": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+                description: "Disabled plugin that still surfaces its description.",
+              },
+            ],
           },
         ],
       },
@@ -542,7 +652,16 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "installed", name: "helper", version: "1.0.0", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -558,6 +677,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
@@ -583,6 +704,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: [],
@@ -609,6 +732,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents"],
@@ -650,6 +775,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "helper",
                 version: "1.0.0",
                 reasons: ["permission denied"],
@@ -674,6 +801,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "helper",
                 version: "1.0.0",
                 reasons: ["rollback partial"],
@@ -718,7 +847,15 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -731,7 +868,15 @@ const FIXTURES: FixtureMap = {
           {
             name: "official",
             scope: "user",
-            plugins: [{ status: "uninstalled", name: "helper", version: "1.0.0" }],
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -748,6 +893,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "helper",
                 version: "1.0.0",
                 reasons: ["permission denied"],
@@ -772,6 +919,32 @@ const FIXTURES: FixtureMap = {
         scope: "user",
       } satisfies NotificationMessage,
     },
+
+    // D-01 / PU-5: standalone uninstall of an already-gone (not-installed)
+    // plugin -- the marketplace IS present, so the header renders; the absent
+    // target reports an `error` row (was literal silence). The orchestrated
+    // reconcile converge stays silent (no row) per WR-06 / NFR-2.
+    "already-gone-not-installed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["not installed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -781,6 +954,8 @@ const FIXTURES: FixtureMap = {
     "single-mp-all-reinstalled": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -788,12 +963,16 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
               },
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 version: "0.5.0",
                 dependencies: [],
@@ -807,6 +986,8 @@ const FIXTURES: FixtureMap = {
     "success-with-soft-dep": {
       pi: piWithNothingLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -814,6 +995,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
@@ -828,6 +1011,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -835,12 +1020,26 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
               },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
-              { status: "failed", name: "delta", reasons: ["source missing"] },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "delta",
+                reasons: ["source missing"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -851,13 +1050,27 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
             scope: "user",
             plugins: [
-              { status: "failed", name: "alpha", reasons: ["source missing"] },
-              { status: "failed", name: "beta", reasons: ["invalid manifest"] },
+              {
+                status: "failed",
+                name: "alpha",
+                reasons: ["source missing"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "beta",
+                reasons: ["invalid manifest"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -867,6 +1080,8 @@ const FIXTURES: FixtureMap = {
     "plugin-became-unavailable": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -874,6 +1089,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -889,6 +1106,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "local-mp",
@@ -896,12 +1115,16 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "0.5.0",
                 dependencies: [],
               },
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "tool",
                 version: "1.0.0",
                 dependencies: [],
@@ -914,12 +1137,26 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
               },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
-              { status: "failed", name: "delta", reasons: ["source missing"] },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "delta",
+                reasons: ["source missing"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -929,6 +1166,8 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -936,6 +1175,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 version: "1.0.0",
                 dependencies: [],
@@ -948,9 +1189,39 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "reinstalled",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 version: "1.0.0",
                 dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // CR-02 / D-01: standalone reinstall of a present marketplace whose plugin
+    // record is absent -> the `(skipped) {not installed}` row stamps `error`
+    // (absent-target across the board), single cardinality so no tally. Mirrors
+    // the byte form the `reinstallPlugin` standalone path now emits.
+    "standalone-not-installed-error": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                reasons: ["not installed"],
+                severity: "error",
+                needsReload: false,
               },
             ],
           },
@@ -994,6 +1265,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1001,14 +1274,24 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
                 dependencies: [],
               },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "delta",
                 reasons: ["network unreachable"],
               },
@@ -1022,6 +1305,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1029,6 +1314,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "delta",
                 version: "1.0.0",
                 reasons: ["rollback partial"],
@@ -1052,13 +1339,27 @@ const FIXTURES: FixtureMap = {
       // UXG-02 / D-28-06: every reason is `up-to-date` (in BENIGN_REASONS), so
       // this all-benign skip cascade computes INFO -- no `expectedSeverity`.
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
             scope: "user",
             plugins: [
-              { status: "skipped", name: "alpha", reasons: ["up-to-date"] },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "skipped",
+                name: "alpha",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -1069,6 +1370,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "local-mp",
@@ -1076,6 +1379,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1089,14 +1394,24 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
                 dependencies: [],
               },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "delta",
                 reasons: ["network unreachable"],
               },
@@ -1109,6 +1424,8 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1116,6 +1433,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.9.0",
                 to: "1.0.0",
@@ -1129,6 +1448,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "beta",
                 from: "0.5.0",
                 to: "1.0.0",
@@ -1146,6 +1467,8 @@ const FIXTURES: FixtureMap = {
     "hash-version-arrow": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Plugin update",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
@@ -1153,6 +1476,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "hashed-plugin",
                 from: "hash-2ea95f85703d",
                 to: "hash-1c3d9a0bbef1",
@@ -1198,46 +1523,107 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin import": {
     "fresh-mixed-both-scopes": {
       pi: piWithBothLoaded(),
+      // WR-02: the lone `unavailable` row now stamps `warning`, so the cascade
+      // reduces to warning severity at the wire.
+      expectedSeverity: "warning",
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins-official",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "claude-plugins-official",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "directory-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "directory-marketplace",
             scope: "user",
             status: "added",
             plugins: [
-              { status: "installed", name: "local-plugin", dependencies: [] },
-              { status: "unavailable", name: "unavailable-plugin", reasons: ["unsupported hooks"] },
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              // WR-02: the import producer stamps unavailable rows `warning`
+              // (actionable -- the user cannot complete the install without
+              // addressing them), bumping the envelope severity and counting
+              // the row under the warning tally rather than success.
+              {
+                status: "unavailable",
+                name: "unavailable-plugin",
+                reasons: ["unsupported hooks"],
+                severity: "warning",
+                needsReload: false,
+              },
             ],
           },
           {
             name: "github-marketplace",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "github-marketplace",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -1246,32 +1632,8 @@ const FIXTURES: FixtureMap = {
     "scope-project-narrow": {
       pi: piWithBothLoaded(),
       message: {
-        marketplaces: [
-          {
-            name: "claude-plugins-official",
-            scope: "project",
-            status: "added",
-            plugins: [{ status: "installed", name: "official-plugin", dependencies: [] }],
-          },
-          {
-            name: "directory-marketplace",
-            scope: "project",
-            status: "added",
-            plugins: [{ status: "installed", name: "local-plugin", dependencies: [] }],
-          },
-          {
-            name: "github-marketplace",
-            scope: "project",
-            status: "added",
-            plugins: [{ status: "installed", name: "github-plugin", dependencies: [] }],
-          },
-        ],
-      },
-    },
-
-    "soft-dep-markers": {
-      pi: piWithNothingLoaded(),
-      message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -1280,11 +1642,67 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                name: "official-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "directory-marketplace",
+            scope: "project",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "local-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "github-marketplace",
+            scope: "project",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "github-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "soft-dep-markers": {
+      pi: piWithNothingLoaded(),
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "project",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "agent-only-plugin",
                 dependencies: ["agents"],
               },
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "dual-plugin",
                 dependencies: ["agents", "mcp"],
               },
@@ -1297,18 +1715,36 @@ const FIXTURES: FixtureMap = {
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Import",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "official",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "alpha", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "alpha",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "official",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "beta", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "beta",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -1414,6 +1850,8 @@ const FIXTURES: FixtureMap = {
             name: "unreachable-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             plugins: [],
           },
         ],
@@ -1433,6 +1871,8 @@ const FIXTURES: FixtureMap = {
             name: "claude-plugins-official",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["duplicate name"],
             plugins: [],
           },
@@ -1449,6 +1889,8 @@ const FIXTURES: FixtureMap = {
             name: "claude-plugins-official",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["stale clone"],
             plugins: [],
           },
@@ -1465,6 +1907,8 @@ const FIXTURES: FixtureMap = {
             name: "git@github.com:foo/bar.git",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["unsupported source"],
             plugins: [],
           },
@@ -1481,6 +1925,8 @@ const FIXTURES: FixtureMap = {
             name: "./missing-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["source missing"],
             plugins: [],
           },
@@ -1497,6 +1943,8 @@ const FIXTURES: FixtureMap = {
             name: "anthropics/claude-plugins-official",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["invalid manifest"],
             plugins: [],
           },
@@ -1876,7 +2324,9 @@ const FIXTURES: FixtureMap = {
             name: "local-mp",
             scope: "user",
             status: "removed",
-            plugins: [{ status: "uninstalled", name: "helper" }],
+            plugins: [
+              { status: "uninstalled", name: "helper", severity: "info", needsReload: true },
+            ],
           },
         ],
       },
@@ -1891,10 +2341,13 @@ const FIXTURES: FixtureMap = {
             name: "local-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
             plugins: [
-              { status: "uninstalled", name: "helper" },
+              { status: "uninstalled", name: "helper", severity: "info", needsReload: true },
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "tool",
                 reasons: ["permission denied"],
                 cause: new Error("EACCES: permission denied"),
@@ -1948,6 +2401,8 @@ const FIXTURES: FixtureMap = {
             name: "local-mp",
             scope: "user",
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             reasons: ["up-to-date"],
             plugins: [],
           },
@@ -1969,6 +2424,8 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "user",
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             reasons: ["up-to-date"],
             plugins: [],
           },
@@ -1995,14 +2452,24 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "updated",
+                severity: "info",
+                needsReload: true,
                 name: "alpha",
                 from: "0.5.0",
                 to: "1.0.0",
                 dependencies: [],
               },
-              { status: "skipped", name: "beta", reasons: ["up-to-date"] },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "delta",
                 reasons: ["network unreachable"],
               },
@@ -2016,7 +2483,16 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
-        marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "failed",
+            plugins: [],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
       },
     },
 
@@ -2037,7 +2513,17 @@ const FIXTURES: FixtureMap = {
             name: "official",
             scope: "user",
             status: "failed",
-            plugins: [{ status: "failed", name: "official", reasons: ["invalid manifest"] }],
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "official",
+                reasons: ["invalid manifest"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
           },
         ],
       },
@@ -2096,6 +2582,8 @@ const FIXTURES: FixtureMap = {
             name: "foo",
             scope: "user",
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             reasons: ["already autoupdate"],
             plugins: [],
           },
@@ -2113,6 +2601,8 @@ const FIXTURES: FixtureMap = {
             name: "foo",
             scope: "user",
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             reasons: ["already no autoupdate"],
             plugins: [],
           },
@@ -2155,8 +2645,8 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin enable <plugin>@<marketplace>": {
     "enable-fresh": {
       pi: piWithBothLoaded(),
-      // Re-materialization through the install ledger -- UAT-04 (v1.12
-      // milestone UAT decision 2026-06-11): BARE always-marketplace-header
+      // Re-materialization through the install ledger -- UAT-04 (decision
+      // 2026-06-11): BARE always-marketplace-header
       // form (no `(added)` token; that header belongs to `marketplace add`)
       // + `(installed)` plugin row (existing state-change token);
       // reload-hint fires per SNM-33.
@@ -2168,6 +2658,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                severity: "info",
+                needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",
                 dependencies: [],
@@ -2189,6 +2681,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "skipped",
+                severity: "info",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["already enabled"],
               },
@@ -2212,6 +2706,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "skipped",
+                severity: "warning",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["not installed"],
               },
@@ -2232,6 +2728,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["source missing"],
               },
@@ -2267,6 +2765,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["invalid manifest"],
               },
@@ -2285,11 +2785,11 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       // UAT-03: the fresh-disable
       // row carries the closed-set `(disabled)` token -- same glyph + token
-      // as the disabled-inventory row, version slot kept. The reload-hint
-      // fires via the `disable-cascade` kind (SNM-33 carve-out); kind-less
-      // list/info inventory `disabled` rows stay hint-free.
+      // as the disabled-inventory row, version slot kept. RLD-05 / D-07: the
+      // reload-hint fires via the row's `needsReload: true` stamp (RLD-02
+      // OR-reduce), not a cascade kind; list/info inventory `disabled` rows
+      // stamp `needsReload: false` and stay hint-free.
       message: {
-        kind: "disable-cascade",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -2297,6 +2797,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "disabled",
+                severity: "info",
+                needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",
               },
@@ -2317,6 +2819,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "skipped",
+                severity: "info",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["already disabled"],
               },
@@ -2347,6 +2851,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "foo-plugin",
                 reasons: ["invalid manifest"],
               },
@@ -2372,6 +2878,8 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "manual recovery",
+                severity: "warning",
+                needsReload: false,
                 name: "helper",
                 version: "1.0.0",
                 reasons: ["unreadable"],
@@ -2447,6 +2955,8 @@ const FIXTURES: FixtureMap = {
             name: "mp",
             scope: "project",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["source mismatch"],
             plugins: [],
           },
@@ -2465,6 +2975,8 @@ const FIXTURES: FixtureMap = {
             name: "claude-plugins.json",
             scope: "project",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["invalid manifest"],
             plugins: [],
           },
@@ -2484,18 +2996,36 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "new-mp",
             scope: "project",
             status: "added",
-            plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "new-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
           {
             name: "other-mp",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "other-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -2505,11 +3035,15 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "flaky-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["network unreachable"],
             plugins: [],
           },
@@ -2517,7 +3051,15 @@ const FIXTURES: FixtureMap = {
             name: "ok-mp",
             scope: "user",
             status: "added",
-            plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+            plugins: [
+              {
+                status: "installed",
+                name: "ok-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
           },
         ],
       },
@@ -2528,11 +3070,15 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins.json",
             scope: "project",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             reasons: ["invalid manifest"],
             plugins: [],
           },
@@ -2550,15 +3096,20 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "claude-plugins.json",
             scope: "project",
             status: "failed",
+            severity: "error",
             reasons: ["invalid manifest"],
             plugins: [
               {
                 status: "failed",
+                severity: "error",
+                needsReload: false,
                 name: "claude-plugins.json",
                 reasons: ["invalid manifest"],
                 cause: new Error("schema validation failed: /marketplaces: Expected object"),
@@ -2580,15 +3131,31 @@ const FIXTURES: FixtureMap = {
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "acme-mp",
             scope: "user",
             status: "failed",
+            severity: "error",
+            needsReload: false,
             plugins: [
-              { status: "uninstalled", name: "plugin-ok" },
-              { status: "failed", name: "plugin-fail-a", reasons: ["permission denied"] },
-              { status: "failed", name: "plugin-fail-b", reasons: ["source missing"] },
+              { status: "uninstalled", name: "plugin-ok", severity: "info", needsReload: true },
+              {
+                status: "failed",
+                name: "plugin-fail-a",
+                reasons: ["permission denied"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "plugin-fail-b",
+                reasons: ["source missing"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],

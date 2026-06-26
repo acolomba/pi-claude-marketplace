@@ -1,19 +1,26 @@
 import { softDepStatus } from "../platform/pi-api.ts";
 
+import { appendHooksBlock } from "./concerns/hooks.ts";
+import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { assertNever, causeChainTrailer, ManualRecoveryError } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
+import type { HookSummaryEntry } from "./concerns/hooks.ts";
+import type { Dependency } from "./concerns/soft-dep.ts";
 
 /**
  * shared/notify.ts -- the SOLE sanctioned ctx.ui.notify call site and the
- * single source of truth for the structured-notification surface. Severity
- * is structural, not a field. The Pi API's `notify(msg, type?)` accepts a
- * magic-string `"info" | "warning" | "error"` second arg; severity is
- * computed from message contents at notify time rather than caller-supplied
- * as a prefix or field (PRD §6.12 ES-2). The eslint per-file override in
- * eslint.config.js disables `no-restricted-syntax` for this file so inline
- * `eslint-disable-next-line` comments are unnecessary here.
+ * single source of truth for the structured-notification surface. Severity is
+ * a caller-stamped per-row field (`Severity`): each producer stamps every row's
+ * `severity`, and `computeSeverity` takes the numeric MAX over the rows (SEV-02)
+ * to derive the magic-string `"info" | "warning" | "error"` second arg the Pi
+ * API's `notify(msg, type?)` accepts -- NOT content inference. The standalone
+ * info-surface kinds (`marketplace-not-added`, `plugin-info`, and the read-only
+ * info/cascade kinds) carry no per-row severity array, so they keep a tiny
+ * kind->severity map. The eslint per-file override in eslint.config.js disables
+ * `no-restricted-syntax` for this file so inline `eslint-disable-next-line`
+ * comments are unnecessary here.
  *
  * Public API:
  *
@@ -68,6 +75,16 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  * hard-codes the `{not added}` brace). A request for a scope where the target
  * marketplace is not present renders `⊘ <name> [<scope>] (failed) {not added}`
  * at column 0 with severity `"error"`.
+ *
+ * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
+ * 32-entry membership AND order are catalog-stable and MUST NOT change. The
+ * topic-grouped organization of these literals (idempotent / unsupported-
+ * components / failure-class shared groups, plus the command-private reasons)
+ * lives in `shared/notify-reasons.ts` as typed VIEWS over this set; that module
+ * carries a compile-time completeness proof that its partition exactly covers
+ * this tuple. Command-private reasons (`duplicate name` / `stale clone` /
+ * `not found` / `not installed` / `plugins remain` / `orphan rewake`) and the
+ * structural `"not added"` marker are owned outside the shared topic groups.
  */
 export const REASONS = [
   "up-to-date",
@@ -125,100 +142,6 @@ export type Reason = (typeof REASONS)[number];
  * rather than a render-time `length === 1` guard.
  */
 export type ContentReason = Exclude<Reason, "not added">;
-
-/**
- * UXG-02 (D-28-02): the closed set of `Reason` members that mark a
- * `skipped` row as a BENIGN idempotent no-op -- the resource already matches
- * the exact state the command requested (D-28-01 classification principle).
- * A `skipped` cascade whose reasons are ALL drawn from this set routes the
- * notification to `info` (no 2nd `ctx.ui.notify` arg) via `computeSeverity`;
- * any non-benign reason (or a missing/empty reason set on an mp-level skip)
- * routes to `warning`. These four are the idempotent "already in requested
- * state" reasons; `already autoupdate` / `already no autoupdate` are the
- * UXG-04 autoupdate-flip forms.
- */
-const BENIGN_REASONS: ReadonlySet<Reason> = new Set([
-  "up-to-date",
-  "already installed",
-  "already autoupdate",
-  "already no autoupdate",
-  "already enabled",
-  "already disabled",
-]);
-
-/**
- * UXG-02 (D-28-06): a skip's reasons are "all benign" iff the set
- * is NON-EMPTY and every member is in `BENIGN_REASONS`. An empty array returns
- * `false` -- a no-reason skip cannot be PROVEN benign, so it routes to
- * `warning` (the D-28-08 safe default for an mp-level `skipped` whose optional
- * `reasons?` is missing/empty). Shared by the plugin-skip and mp-skip arms.
- */
-function allBenign(reasons: readonly Reason[] | undefined): boolean {
-  return reasons !== undefined && reasons.length > 0 && reasons.every((r) => BENIGN_REASONS.has(r));
-}
-
-// ---------------------------------------------------------------------------
-// SURF-02 / D-63-06 / D-63-07: hook summary type seam.
-//
-// `ClaudeHookEvent` is the public literal-union of the 8 supported Claude
-// hook events. Type definitions live here (in `shared/`) so the rendering
-// surface can consume them without violating the `shared/` -> `domain/`
-// import-direction fence (`import-x/no-restricted-paths`). The matching
-// runtime tuples `BUCKET_A_EVENTS` / `TOOL_EVENTS` in
-// `domain/components/hook-events.ts` are pinned to these literal unions
-// via a `satisfies readonly ClaudeHookEvent[]` (and respectively
-// `satisfies readonly _ToolEvent[]`) assertion in that file -- one
-// drifts, the typecheck breaks at the source-of-truth assertion site.
-//
-// `HookSummaryEntry` is the discriminated union the info-surface renderer
-// consumes. Three arms:
-//   - tool event (untagged): statically carries `matcher: string`.
-//   - non-tool event (untagged): statically cannot carry a matcher.
-//   - lenient (tagged `kind: "lenient"`): produced by the info-surface
-//     lenient reader when the resolver bailed (it did NOT record
-//     `hooksConfigPath`). Carries an arbitrary `event: string` (the
-//     resolver rejected this key, so it may be `Stop`, `Notification`,
-//     or any other token the plugin author wrote) plus a
-//     `supported: boolean` bucket-A membership flag. Rendered with a
-//     ` (unsupported)` suffix iff `supported === false`. The lenient
-//     arm exists ONLY on the info surface; the resolver-side strict
-//     parser (`domain/components/hooks.ts::parseHooksConfig`) remains
-//     strict and never produces lenient entries.
-// Discriminator is structural: the untagged arms have no `kind` field;
-// the lenient arm is the only one carrying `kind: "lenient"`. The
-// renderer branches on `"kind" in entry` first, then on `"matcher" in
-// entry` for the tool/non-tool split.
-//
-// `HookSummary` is the public wrapper interface. The payload boundary uses
-// the raw `readonly HookSummaryEntry[]` shape (see
-// `PluginInfoComponentsResolved.components.hooks?` below); `HookSummary`
-// exists as a labelled handle for consumers that want the named wrapper.
-// ---------------------------------------------------------------------------
-
-export type ClaudeHookEvent =
-  | "SessionStart"
-  | "UserPromptSubmit"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "PostToolUseFailure"
-  | "PreCompact"
-  | "PostCompact"
-  | "SessionEnd";
-
-type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
-
-export type HookSummaryEntry =
-  | { readonly event: _ToolEvent; readonly matcher: string }
-  | { readonly event: Exclude<ClaudeHookEvent, _ToolEvent> }
-  | {
-      readonly kind: "lenient";
-      readonly event: string;
-      readonly supported: boolean;
-    };
-
-export interface HookSummary {
-  readonly entries: readonly HookSummaryEntry[];
-}
 
 /**
  * I5 / PR #51 / T-53-02-02 / T-55-02-01: collapse any absolute-path token
@@ -407,8 +330,9 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
 //
 // Satisfies SNM-01 (NotificationMessage), SNM-02
 // (MarketplaceNotificationMessage), SNM-03 (PluginNotificationMessage
-// discriminated union; variant count is type-length-locked in
-// tests/architecture/notify-types.test.ts), SNM-04 (PluginStatus derived via indexed
+// discriminated union; each command's render map is total over its OWN
+// statuses, so a missing or extra variant is a local compile error -- D-10),
+// SNM-04 (PluginStatus derived via indexed
 // access), SNM-05 (MarketplaceStatus closed set), SNM-06 (Dependency +
 // required `dependencies` on installed/updated/reinstalled), SNM-07
 // (MarketplaceDetails shape), SNM-08 (UsageErrorMessage shape), SNM-09
@@ -426,24 +350,23 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
 // ---------------------------------------------------------------------------
 
 /**
- * Runtime tuple of every plugin status literal (entry count is
- * type-length-locked in tests/architecture/notify-types.test.ts).
+ * Runtime tuple of every plugin status literal; the derived `PluginStatus`
+ * union is the SNM-04 closed set each command's render map narrows over.
  * `"manual recovery"` is a literal string WITH A SPACE; do not transform to
  * kebab-case ("manual-recovery") or camelCase ("manualRecovery") -- the
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * The `"present"` entry is the list-only inventory token (SNM-15); the four
+ * RLD-04 / D-08: the list-only inventory row uses `"installed"` with
+ * `needsReload: false` (the list surface's reload-suppression is carried by the
+ * stamped `needsReload` flag, not by a separate status token). The four
  * `"will *"` entries are the DIFF-02 pending-tense tokens; the
- * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. The four
- * state-change tokens at the head of the tuple (`installed`, `updated`,
- * `reinstalled`, `uninstalled`) are the structurally-distinguished
- * transition tokens that drive `shouldEmitReloadHint`; `"present"` and
- * `"disabled"` are deliberately ABSENT from that default trigger set so
- * steady-state `/claude:plugin list` rows never emit the
- * `/reload to pick up changes` trailer. `"disabled"` joins the hint set
- * only under the `disable-cascade` kind (UAT-03 -- the disable command's
- * realized-transition cascade).
+ * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. Per RLD-02 the
+ * `/reload to pick up changes` trailer is driven by the OR-reduce of the
+ * caller-stamped `needsReload` over the rows -- a steady-state
+ * `/claude:plugin list` inventory row stamps `needsReload: false`, while a
+ * realized transition (install / update / reinstall / uninstall / disable)
+ * stamps `needsReload: true`.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -458,7 +381,6 @@ export const PLUGIN_STATUSES = [
   "failed",
   "skipped",
   "manual recovery",
-  "present",
   "will install",
   "will uninstall",
   "will enable",
@@ -467,8 +389,8 @@ export const PLUGIN_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every marketplace status literal (entry count is
- * type-length-locked in tests/architecture/notify-types.test.ts).
+ * Runtime tuple of every marketplace status literal; the derived
+ * `MarketplaceStatus` union is the SNM-05 closed set.
  * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
  * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
  * pending-tense tokens. Order is normative -- the 4 leading entries
@@ -489,15 +411,6 @@ export const MARKETPLACE_STATUSES = [
 ] as const;
 
 /**
- * Runtime tuple of every dependency literal (SNM-06). 2 entries. Drives the
- * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
- * `requires pi-mcp` reason emission).
- *
- * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
- */
-export const DEPENDENCIES = ["agents", "mcp"] as const;
-
-/**
  * Closed set of plugin status discriminators (SNM-04). Derived from
  * `PLUGIN_STATUSES` via indexed access so the runtime tuple and the type
  * stay in lockstep.
@@ -509,12 +422,6 @@ export type PluginStatus = (typeof PLUGIN_STATUSES)[number];
  * `MARKETPLACE_STATUSES` via indexed access.
  */
 export type MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number];
-
-/**
- * Closed set of dependency probe targets (SNM-06). Derived from
- * `DEPENDENCIES` via indexed access.
- */
-export type Dependency = (typeof DEPENDENCIES)[number];
 
 /**
  * Marketplace-level details surfaced on the `marketplace list` rendering
@@ -571,6 +478,57 @@ export interface UsageErrorMessage {
 // ---------------------------------------------------------------------------
 
 /**
+ * The closed severity union stamped on every notification row and passed as the
+ * Pi API `notify(msg, type?)` second arg. `computeSeverity` MAX-reduces it
+ * across rows (SEV-02); rank `info < warning < error`.
+ */
+export type Severity = "info" | "warning" | "error";
+
+/**
+ * D-05 / D-06: the universal caller-intent fields carried on the base message
+ * shape common to every plugin and marketplace notification row. The member
+ * names are the fixed shared convention (`severity`, `needsReload`,
+ * `dependencies`) so every command's message shapes look identical.
+ *
+ * D-07: `severity?` and `needsReload?` are the caller-stamped reduction inputs.
+ * `computeSeverity` MAX-reduces `severity` across rows (SEV-02) and the
+ * reload-hint trailer is the OR-reduce of `needsReload` (RLD-02); an absent
+ * value defaults to `info` / `false` (SEV-01 / RLD-01). Typed as the closed
+ * `Severity` union and a plain `boolean` respectively.
+ *
+ * D-06 / TYPE-04: `dependencies` is the universal soft-dep field. It is NOT
+ * promoted to this base as optional, because three plugin variants
+ * (`installed` / `updated` / `reinstalled`) declare it as a REQUIRED
+ * `readonly Dependency[]` and the soft-dep marker injection in `composeReasons`
+ * is gated to exactly those three render arms. Promoting it to an optional base
+ * field here would let any row carry it and risk a `requires pi-subagents`
+ * marker leaking onto a row that structurally never declares a soft dep; so the
+ * field stays declared on those three arms (notify.ts) and this anchor records
+ * that it is the universal soft-dep member of the shared convention.
+ */
+export interface MessageBase {
+  readonly severity?: Severity;
+  readonly needsReload?: boolean;
+}
+
+/**
+ * GATE-01 / D-04: the narrowing base for state-change (transition) message
+ * arms. It redeclares the two optional `MessageBase` fields as REQUIRED, so a
+ * producer literal that omits either `severity` or `needsReload` on a
+ * transition row is a TS2741 compile error at the construction site. The
+ * `MarketplaceRows<Msg>` call-site type narrows `plugins` to the command's
+ * `Msg` union BEFORE the post-check widening cast in `notifyWithContext`, so
+ * the gate reaches every producer that builds a transition row. Non-transition
+ * arms (`available`/`unavailable`/`upgradable`/`failed`/`skipped`/`manual
+ * recovery`/`will *`) stay on `extends MessageBase` -- their fields
+ * remain optional and default to info/false (SEV-01/RLD-01).
+ */
+export interface TransitionMessageBase extends MessageBase {
+  readonly severity: Severity; // narrowed: required
+  readonly needsReload: boolean; // narrowed: required
+}
+
+/**
  * `(installed)` -- single-shot install or cascade install row. Carries
  * `dependencies` (SNM-06) so the renderer can emit the
  * `requires pi-subagents` / `requires pi-mcp` probe reasons; no `reasons`
@@ -583,17 +541,25 @@ export interface UsageErrorMessage {
  * successful install row (`(installed) {orphan rewake}`). The reasons
  * brace renders through the existing `composeReasons` helper so the
  * soft-dep markers and reasons share one brace block per MSG-GR-4
- * (`(installed) {orphan rewake, requires pi-subagents}`). Plan 63-04
- * pushes the resolver-side `resolved.orphanRewake === true` plugins
- * into `reasons[]`; this plan only extends the type seam + renderer.
+ * (`(installed) {orphan rewake, requires pi-subagents}`). The resolver-side
+ * `resolved.orphanRewake === true` plugins are pushed into `reasons[]`.
+ *
+ * RLD-04 / D-08: this arm ALSO carries the list-surface steady-state inventory
+ * row (the former `present` status, now collapsed into `installed`). The list
+ * orchestrator emits it with `needsReload: false` so the OR-reduce reload-hint
+ * (RLD-02) stays suppressed for inventory, and OMITS `reasons` so the
+ * orphan-rewake brace never leaks onto a steady-state row. `description?` is the
+ * PL-4 optional second line, populated only on the list surface from the
+ * manifest entry; cascade install rows never carry it.
  */
-export interface PluginInstalledMessage {
+export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly status: "installed";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  readonly description?: string;
 }
 
 /**
@@ -601,7 +567,7 @@ export interface PluginInstalledMessage {
  * so the renderer can compose the `v1.0 → v1.2` arrow form;
  * `dependencies` REQUIRED; no `reasons`.
  */
-export interface PluginUpdatedMessage {
+export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
@@ -614,7 +580,7 @@ export interface PluginUpdatedMessage {
  * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06);
  * no `reasons`.
  */
-export interface PluginReinstalledMessage {
+export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -627,7 +593,7 @@ export interface PluginReinstalledMessage {
  * `dependencies` (MSG-SD-3 forbids the soft-dep marker on uninstalled
  * rows); no `reasons`.
  */
-export interface PluginUninstalledMessage {
+export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly status: "uninstalled";
   readonly name: string;
   readonly version?: string;
@@ -640,22 +606,27 @@ export interface PluginUninstalledMessage {
  * empty-resources + `installable: true` marker (the load-bearing predicate is
  * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
  * UAT-03 decision -- as the `/claude:plugin
- * disable` command's fresh cascade row (byte-identical to the inventory row;
- * the reload-hint fires there via the cascade's `"disable-cascade"` kind,
- * never via this variant alone). Structurally
+ * disable` command's fresh cascade row (byte-identical to the inventory row).
+ * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
+ * -- the fresh-disable transition stamps `true`, the list / info inventory row
+ * stamps `false` -- so the row's reload behavior no longer depends on a cascade
+ * kind. Structurally
  * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
  * plugin is in the user-requested state, not a failure state), and the byte
  * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
  * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
- * (`◌`) -- the same glyph the `will disable` row uses.
+ * (`◌`) -- the same glyph the `will disable` row uses. PL-4: optional
+ * `description` rendered as a second 4-space-indented line, truncated at
+ * column 66 (same as the other list-surface inventory variants).
  */
-export interface PluginDisabledMessage {
+export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly status: "disabled";
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
+  readonly description?: string;
 }
 
 /**
@@ -665,7 +636,7 @@ export interface PluginDisabledMessage {
  * optional `description` rendered as a second 4-space-indented line,
  * truncated at column 66.
  */
-export interface PluginAvailableMessage {
+export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
   readonly name: string;
   readonly version?: string;
@@ -679,7 +650,7 @@ export interface PluginAvailableMessage {
  * no `dependencies`. PL-4: optional `description` rendered as a second
  * 4-space-indented line, truncated at column 66.
  */
-export interface PluginUnavailableMessage {
+export interface PluginUnavailableMessage extends MessageBase {
   readonly status: "unavailable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -694,39 +665,10 @@ export interface PluginUnavailableMessage {
  * `reasons`; no `dependencies`. PL-4: optional `description` rendered as
  * a second 4-space-indented line, truncated at column 66.
  */
-export interface PluginUpgradableMessage {
+export interface PluginUpgradableMessage extends MessageBase {
   readonly status: "upgradable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
-  readonly version?: string;
-  readonly scope?: Scope;
-  readonly description?: string;
-}
-
-/**
- * `(present)` -- list-only inventory row emitted by
- * `list.ts::installedRowMessage`; never emitted by cascade-row code paths.
- * STRUCTURALLY constrained to the list surface so `shouldEmitReloadHint`
- * can distinguish steady-state inventory (no `/reload` trailer) from
- * actual state-changing transitions (with `/reload` trailer). Introduced
- * to close UAT gap G-21-01 (SNM-15 surface tightening): the four
- * state-change tokens (installed / updated / reinstalled / uninstalled)
- * unambiguously trigger the reload-hint, while `"present"` is deliberately
- * ABSENT from the trigger set.
- *
- * The structural shape mirrors `PluginInstalledMessage` exactly (dependencies
- * REQUIRED so the soft-dep marker injection still applies; version optional;
- * scope optional). The renderer arm for this discriminator is BYTE-IDENTICAL
- * to the `installed` arm -- the human-visible row text
- * `● <name> [<scope>] v<ver> (installed)` is preserved; only the trailing
- * `/reload to pick up changes` line that the inventory case was misfiring
- * is removed by virtue of the new discriminator. PL-4: optional `description`
- * rendered as a second 4-space-indented line, truncated at column 66.
- */
-export interface PluginPresentMessage {
-  readonly status: "present";
-  readonly name: string;
-  readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -739,8 +681,13 @@ export interface PluginPresentMessage {
  * `rollbackPartial?: readonly { phase; cause? }[]` (SNM-09) drives the
  * MSG-RP-1 indented child rows when a rollback was partial.
  */
-export interface PluginFailedMessage {
+export interface PluginFailedMessage extends MessageBase {
   readonly status: "failed";
+  // GATE-01 / SEV-02: a failure row must stamp an error-bearing severity --
+  // narrowed from the optional `MessageBase.severity` to REQUIRED `"error" |
+  // "warning"`, so a `failed` row that omits it (or stamps `info`) is a compile
+  // error at the construction site rather than defaulting to info (rank 0).
+  readonly severity: "error" | "warning";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
@@ -762,7 +709,7 @@ export interface PluginFailedMessage {
  * no `dependencies`; no `cause` (skipped is not a failure -- SNM-10
  * confines `cause` to failed / manual recovery).
  */
-export interface PluginSkippedMessage {
+export interface PluginSkippedMessage extends MessageBase {
   readonly status: "skipped";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -776,7 +723,7 @@ export interface PluginSkippedMessage {
  * SPACE. Carries REQUIRED `reasons` and optional `cause?: Error` (SNM-10); no
  * `dependencies`; no `rollbackPartial` (only `failed` carries it per SNM-09).
  */
-export interface PluginManualRecoveryMessage {
+export interface PluginManualRecoveryMessage extends MessageBase {
   readonly status: "manual recovery";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -791,7 +738,7 @@ export interface PluginManualRecoveryMessage {
  * meaningless before installation); NO `reasons`; NO `version` (the recorded
  * version does not exist yet for an install).
  */
-export interface PluginWillInstallMessage {
+export interface PluginWillInstallMessage extends MessageBase {
   readonly status: "will install";
   readonly name: string;
   readonly scope?: Scope;
@@ -802,7 +749,7 @@ export interface PluginWillInstallMessage {
  * but no longer declared. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
-export interface PluginWillUninstallMessage {
+export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
   readonly scope?: Scope;
@@ -816,7 +763,7 @@ export interface PluginWillUninstallMessage {
  * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`) is paired
  * with a config entry whose `enabled !== false`.
  */
-export interface PluginWillEnableMessage {
+export interface PluginWillEnableMessage extends MessageBase {
   readonly status: "will enable";
   readonly name: string;
   readonly scope?: Scope;
@@ -827,7 +774,7 @@ export interface PluginWillEnableMessage {
  * declared `enabled: false`. Carries NO `reasons`; NO `version`; NO
  * `dependencies`.
  */
-export interface PluginWillDisableMessage {
+export interface PluginWillDisableMessage extends MessageBase {
   readonly status: "will disable";
   readonly name: string;
   readonly scope?: Scope;
@@ -849,7 +796,6 @@ export type PluginNotificationMessage =
   | PluginAvailableMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
-  | PluginPresentMessage
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginManualRecoveryMessage
@@ -870,7 +816,7 @@ export type PluginNotificationMessage =
  * normal case (renderer emits the marketplace header alone). No separate
  * `noPlugins` discriminator field.
  */
-interface MpCommon {
+interface MpCommon extends MessageBase {
   readonly name: string;
   readonly scope: Scope;
   readonly plugins: readonly PluginNotificationMessage[];
@@ -906,6 +852,10 @@ interface MpUpdated extends MpCommon {
  */
 interface MpFailed extends MpCommon {
   readonly status: "failed";
+  // GATE-01 / SEV-02: a marketplace failure row must stamp an error-bearing
+  // severity -- narrowed from the optional `MessageBase.severity` to REQUIRED
+  // `"error" | "warning"` so an omitted (or `info`) stamp is a compile error.
+  readonly severity: "error" | "warning";
   readonly reasons?: readonly ContentReason[];
 }
 
@@ -923,10 +873,10 @@ interface MpAutoupdateDisabled extends MpCommon {
  * `(skipped)` marketplace block. `reasons?` is reachable ONLY on this arm
  * (TYPE-04): the `"skipped"` mp-status renderer arm composes the
  * `{<reason>, <reason>}` brace (e.g. `{already autoupdate}` for idempotent
- * autoupdate flips, `{up-to-date}` for the `marketplace update` no-op). Kept
- * OPTIONAL -- `allBenign(undefined)` returns false and `computeSeverity`
- * arm 4 reads `mp.reasons` on the skipped arm, so a missing reason set routes
- * to `warning` (the D-28-08 safe default).
+ * autoupdate flips, `{up-to-date}` for the `marketplace update` no-op). The
+ * skip's severity is caller-stamped (SEV-01): a benign idempotent skip stamps
+ * `info`, an actionable skip `warning`; a missing reason set routes to the
+ * `warning` safe default at the producer.
  */
 interface MpSkipped extends MpCommon {
   readonly status: "skipped";
@@ -1004,20 +954,28 @@ export type MarketplaceNotificationMessage =
  * carry a REQUIRED `kind` literal so they cannot be confused with a cascade
  * payload at construction time.
  *
- * UAT-03: the `"disable-cascade"`
- * kind marks the `/claude:plugin disable` command's realized-transition
- * cascade. Rendering is byte-identical to the plain cascade arm; the ONLY
- * behavioral difference is in `shouldEmitReloadHint`, where a `(disabled)`
- * plugin row counts as a state-change transition (artefacts were unstaged
- * -- SNM-33) and fires the `/reload to pick up changes` trailer. Kind-less
- * / `"cascade"` payloads (the list / info inventory surfaces, which emit
- * structurally identical `disabled` rows) stay hint-free. The split is
- * structural at the KIND level, mirroring `reconcile-applied-cascade`'s
- * structural trailer exclusion.
+ * RLD-05 / D-07: the `/claude:plugin disable` command's realized-transition
+ * cascade no longer needs a distinguishing kind. The fresh `(disabled)` row
+ * stamps `needsReload: true` directly, while the list / info inventory
+ * `(disabled)` rows stamp `needsReload: false`; the RLD-02 OR-reduce reads
+ * those per-row facts, so the disable reload-hint is driven by the stamp, not
+ * by a kind-level straddle.
  */
 export interface CascadeNotificationMessage {
-  readonly kind?: "cascade" | "disable-cascade";
+  readonly kind?: "cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
+  // OUT-04 / D-04: the command's human operation name (`CommandContext.
+  // Messaging.label`, e.g. `Plugin install`) used as the trailing tally's
+  // `<Operation>` prefix. Threaded from `notifyWithContext`; the tally only
+  // renders when `cardinality === "plural"`, so this is unread on single-target
+  // and legacy emissions.
+  readonly label?: string;
+  // OUT-07 / D-04: the STRUCTURAL single-vs-bulk cardinality, set at the call
+  // site (a single-target op constructs the 1-tuple `single`; a bulk /
+  // @marketplace / import / reconcile op constructs the `plural` array). The
+  // trailing tally renders IFF `cardinality === "plural"` -- NOT a render-time
+  // row-count heuristic. Absent defaults to no tally.
+  readonly cardinality?: "single" | "plural";
 }
 
 /**
@@ -1103,7 +1061,7 @@ export type PluginInfoRow =
  * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
 interface PluginInfoRowBase {
-  readonly status: "installed" | "available" | "unavailable" | "failed";
+  readonly status: Extract<PluginStatus, "installed" | "available" | "unavailable" | "failed">;
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
@@ -1248,6 +1206,12 @@ export interface MarketplaceNotAddedMessage {
 export interface ReconcileAppliedCascadeMessage {
   readonly kind: "reconcile-applied-cascade";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
+  // OUT-04 / OUT-06 / D-03 / D-04: the operation label + structural cardinality
+  // for the trailing tally, threaded from `notifyReconcileAppliedWithContext`.
+  // A load-time reconcile cascade is mixed-subject (plugin + marketplace rows);
+  // the tally uses the operation `label` and counts all rows uniformly.
+  readonly label?: string;
+  readonly cardinality?: "single" | "plural";
 }
 
 /**
@@ -1319,10 +1283,16 @@ function isInfoKind(
 // entry point.
 // ---------------------------------------------------------------------------
 
-/** Grammar icon literals. */
-const ICON_INSTALLED = "●";
-const ICON_AVAILABLE = "○";
-const ICON_UNINSTALLABLE = "⊘";
+/**
+ * Grammar icon literals.
+ *
+ * D-11: the shared presentation vocabulary stays central in this file;
+ * `export` only widens visibility so sibling command modules can CALL these
+ * glyphs from their own render maps without redeclaring them.
+ */
+export const ICON_INSTALLED = "●";
+export const ICON_AVAILABLE = "○";
+export const ICON_UNINSTALLABLE = "⊘";
 /**
  * D-54-01 / ENBL-04: dedicated glyph for the deliberate, user-requested
  * disabled-class rows -- `(disabled)` (realized inventory) and
@@ -1333,7 +1303,7 @@ const ICON_UNINSTALLABLE = "⊘";
  * already in the grammar (`●` for `(installed)` / `(will add)`,
  * `○` for `(available)` / `(will remove)`).
  */
-const ICON_DISABLED = "◌";
+export const ICON_DISABLED = "◌";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1568,7 +1538,23 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // ---------------------------------------------------------------------------
 // File-private renderPluginRow + supporting helpers.
 //
-// SNM-17 / SNM-18: the per-plugin row grammar lives HERE as the sole site.
+// MOD-03 / D-02 / D-10: this central switch is NO LONGER the per-row dispatch
+// path for any command's cascade rows. Every state-change producer routes its
+// rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
+// dispatch each per-plugin body via the command's OWN `context.render[status]`
+// map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
+// or extra arm is now a per-command compile error, not a central concern.
+// This switch survives only as a STATICALLY-REFERENCED seam on the central
+// envelope: the legacy `notify(ctx, pi, message)` cascade arm (reached today
+// only by the `{ marketplaces: [] }` empty sentinel, which short-circuits to
+// `(no marketplaces)` before the plugin loop runs) and the
+// `composeReconcileAppliedBody` arm of `dispatchInfoMessage` (kept for the
+// `reconcile-applied-cascade` StandaloneKind exhaustiveness; its live emitter
+// goes through `emitReconcileAppliedContextCascade`, not this body). Removing
+// it would either break that exhaustiveness switch or require rewriting the
+// legacy envelope the deferred-central standalone surfaces still depend on, so
+// it stays until those surfaces relocate.
+//
 // SNM-16: soft-dep markers are injected at render time from the per-row
 // `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
 // switch ends with the hardened shape `default: { assertNever(p);
@@ -1578,16 +1564,17 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
 // expression).
 // ---------------------------------------------------------------------------
 
-/** Soft-dep marker literals -- both are REASONS members (closed set). */
-const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
-const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
-
 /**
  * Join tokens with single spaces, suppressing empty slots so absent
  * optional tokens (e.g. an undefined scope-bracket on `available` rows)
  * never produce a double-space. Single canonical implementation.
  */
-function joinTokens(parts: readonly string[]): string {
+// D-11: the row-composition primitives below (joinTokens, renderScopeBracket,
+// renderVersion, composeVersionArrow, composeReasons, pluginRow) stay declared
+// HERE as the single source of the byte-stable presentation vocabulary; the
+// `export` keyword only widens their visibility so sibling command render maps
+// can CALL them without duplicating the brace/space/join logic.
+export function joinTokens(parts: readonly string[]): string {
   return parts.filter((p) => p !== "").join(" ");
 }
 
@@ -1629,7 +1616,7 @@ function formatHashVersionForDisplay(v: string): string {
  * PI-7 `hash-<12hex>` renders as `v#<7hex>` while a SemVer passes through to
  * `v<version>` (SNM-35). Single canonical implementation.
  */
-function renderVersion(version: string | undefined): string {
+export function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
     return "";
   }
@@ -1660,7 +1647,7 @@ function renderVersion(version: string | undefined): string {
  * and orphan-fold short-circuits in the body cover both that carve-out
  * and the same-scope case uniformly.
  */
-function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
+export function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): string {
   if (pluginScope === undefined || pluginScope === mpScope) {
     return "";
   }
@@ -1680,7 +1667,7 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
  * hash pairs render `v#<7hex> → v#<7hex>` (e.g. `v#2ea95f8 → v#1c3d9a0`,
  * SNM-35).
  */
-function composeVersionArrow(from: string, to: string): string {
+export function composeVersionArrow(from: string, to: string): string {
   return `${renderVersion(from)} → ${renderVersion(to)}`;
 }
 
@@ -1703,21 +1690,14 @@ function composeVersionArrow(from: string, to: string): string {
  * parameter and accumulator as `Reason` rejects out-of-set strings at the
  * call sites at compile time (CMC-11 closed-set discipline).
  */
-function composeReasons(
+export function composeReasons(
   reasons: readonly Reason[] | undefined,
   declaresAgents: boolean,
   declaresMcp: boolean,
   probe: SoftDepStatus,
 ): string {
   const composed: Reason[] = reasons === undefined ? [] : [...reasons];
-
-  if (declaresAgents && !probe.piSubagentsLoaded) {
-    composed.push(SOFT_DEP_MARKER_AGENTS);
-  }
-
-  if (declaresMcp && !probe.piMcpAdapterLoaded) {
-    composed.push(SOFT_DEP_MARKER_MCP);
-  }
+  composed.push(...softDepMarkers(declaresAgents, declaresMcp, probe));
 
   if (composed.length === 0) {
     return "";
@@ -1773,7 +1753,7 @@ function composeReasons(
  * `readonly ContentReason[]` reasons. Both declares-flags are `false` (these
  * arms never carry `dependencies`).
  */
-function pluginRow(
+export function pluginRow(
   icon: string,
   p: {
     readonly name: string;
@@ -1795,17 +1775,70 @@ function pluginRow(
   ]);
 }
 
+/**
+ * WR-03: SOLE composition site for the soft-dep-bearing
+ * `installed` / `updated` / `reinstalled` plugin rows. Folds the
+ * 7 command-arm copies that each repeated the same
+ * `joinTokens([icon, name, scope, versionToken, label,
+ * composeReasons(reasons, dependencies.includes("agents"),
+ * dependencies.includes("mcp"), probe)])` block, differing ONLY in their
+ * version token (`renderVersion(p.version)` vs `composeVersionArrow(p.from,
+ * p.to)`), their parenthesized `label`, and whether they thread `p.reasons` or
+ * `undefined`. Those three remain caller-supplied so the byte form is verbatim;
+ * the `dependencies.includes(...)` soft-dep gate + `composeReasons`
+ * composition is owned here (D-11 "call, never duplicate"), keeping every
+ * soft-dep arm byte-identical to one another and to the central
+ * `renderPluginRow` `installed` arm.
+ *
+ * `versionToken` is the already-rendered version slot (the caller passes
+ * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
+ * reason set (the `installed` arm threads `p.reasons`, the reasons-less variants
+ * pass `undefined`); `dependencies` drives the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` markers via `composeReasons`.
+ */
+export function installedLikeRow(
+  icon: string,
+  p: {
+    readonly name: string;
+    readonly scope?: Scope;
+    readonly dependencies: readonly Dependency[];
+  },
+  mpScope: Scope,
+  versionToken: string,
+  label: string,
+  reasons: readonly ContentReason[] | undefined,
+  probe: SoftDepStatus,
+): string {
+  return joinTokens([
+    icon,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    versionToken,
+    label,
+    composeReasons(
+      reasons,
+      p.dependencies.includes("agents"),
+      p.dependencies.includes("mcp"),
+      probe,
+    ),
+  ]);
+}
+
 function renderPluginRow(
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   switch (p.status) {
-    // `installed` (cascade transition) -- SURF-05 / D-63-08 threads
-    // the optional `reasons` brace through composeReasons; soft-dep
-    // markers append into the SAME brace block per MSG-GR-4 (a plugin
-    // with orphan-rewake AND a missing companion extension renders as
-    // `(installed) {orphan rewake, requires pi-subagents}`).
+    // `installed` (cascade transition AND the RLD-04 / D-08 list-surface
+    // inventory row) -- SURF-05 / D-63-08 threads the optional `reasons`
+    // brace through composeReasons; soft-dep markers append into the SAME
+    // brace block per MSG-GR-4 (a plugin with orphan-rewake AND a missing
+    // companion extension renders as
+    // `(installed) {orphan rewake, requires pi-subagents}`). The list
+    // inventory row OMITS `reasons` (the orphan-rewake warning is an
+    // install-cascade surface, not a steady-state inventory surface), so it
+    // renders byte-identically to a bare `(installed)` row.
     case "installed":
       return joinTokens([
         ICON_INSTALLED,
@@ -1815,26 +1848,6 @@ function renderPluginRow(
         "(installed)",
         composeReasons(
           p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          probe,
-        ),
-      ]);
-    // `present` (UAT G-21-01) is a list-only inventory row that renders
-    // byte-identically to `installed`; it stays a distinct status so
-    // shouldEmitReloadHint suppresses the /reload trailer for inventory
-    // rows. SURF-05 / D-63-08: `present` is list-only and carries NO
-    // `reasons` field by design -- the orphan-rewake warning is an
-    // install-cascade surface, not a steady-state inventory surface.
-    case "present":
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(installed)",
-        composeReasons(
-          undefined,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
           probe,
@@ -1993,7 +2006,7 @@ function renderPluginRow(
 //   <mp-header-2>
 //   ...
 //
-//   /reload to pick up changes  <-- iff any state-changing status set
+//   /reload to pick up changes  <-- iff any row stamps needsReload:true
 //
 // Joins / separators:
 //   - Plugin row prefix:                "  " (2 spaces)
@@ -2003,17 +2016,17 @@ function renderPluginRow(
 //   - Between marketplace blocks:       "\n\n" (one blank line)
 //   - Between body and reload-hint:     "\n\n" (one blank line)
 //
-// Severity ladder (first match wins):
-//   1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
-//   2. Any plugin.status in {"skipped", "manual recovery"} -> "warning"
-//   3. Otherwise -> undefined (info)
+// Severity (SEV-02): the numeric MAX over the caller-stamped `row.severity`
+// (info=0 < warning=1 < error=2) across the marketplace rows AND their plugin
+// rows; rank 0 -> undefined (info, no 2nd arg). No status/reasons inference.
 //
-// Reload-hint trigger (SNM-33):
-//   - Any plugin.status in {"installed", "updated", "reinstalled", "uninstalled"}.
-//   - Any plugin.status === "disabled" iff message.kind === "disable-cascade"
-//     (UAT-03: the disable command's realized-transition cascade; kind-less
-//     list/info inventory `disabled` rows stay hint-free).
-//   - No marketplace-status arm: marketplace records are bookkeeping, not Pi-visible.
+// Reload-hint (RLD-02): the OR-reduce of the caller-stamped `row.needsReload`
+// over the same flattened rows. Realized transitions (install/update/reinstall/
+// uninstall + the fresh-disable) stamp needsReload:true; inventory rows stamp
+// false. No marketplace-status / cascade-kind inference -- the former
+// `disable-cascade` straddle is now a per-row stamped fact. Info-surface kinds
+// short-circuit to no-trailer (including reconcile-applied-cascade, which
+// suppresses the trailer at the kind level even though its rows stamp true).
 //
 // Empty-marketplaces sentinel: "(no marketplaces)".
 //
@@ -2030,110 +2043,68 @@ function renderPluginRow(
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
- * Severity ladder per SNM-14 / UXG-02 (D-28-06/07/08/09). A first-match
- * ladder with FIVE arms, in this order:
- *
- *   1. any `plugin.status === "failed"` OR `mp.status === "failed"` -> "error"
- *   2. any `plugin.status === "manual recovery"`                    -> "warning"
- *      (always actionable -- a manual-recovery anchor is never benign)
- *   3. any `plugin.status === "skipped"` whose REQUIRED `reasons` are NOT all
- *      benign                                                       -> "warning"
- *   4. any `mp.status === "skipped"` whose OPTIONAL `reasons?` are NOT all
- *      benign (missing/empty `reasons?` is NOT all-benign per D-28-08, so a
- *      no-reason mp-skip routes to warning -- the safe default)      -> "warning"
- *   5. otherwise                                                    -> undefined (info)
- *
- * A cascade whose ONLY non-success rows are BENIGN idempotent no-op skips
- * (every reason in `BENIGN_REASONS`, per SNM-14 / D-16-11) computes `info`
- * and omits the 2nd `ctx.ui.notify` arg. mp-level skips soften SYMMETRICALLY
- * with plugin-level skips (D-28-07): the UXG-04 idempotent autoupdate flip
- * and the UXG-05 `marketplace update` no-op are benign -> info. First-match
- * poisoning is intentional (D-28-09): a MIXED cascade (one benign skip + one
- * actionable skip, or any manual-recovery row) routes the whole notification
- * to `warning`. This ladder is independent of `shouldEmitReloadHint`
- * (SNM-33) -- severity and reload-hint are separate ladders. Severity is the
- * second arg, never part of the body.
+ * SEV-03: the desired-state tri-state contract every producer stamps on a row:
+ *   - `info`    = the resource reached the desired state (success / steady
+ *                 inventory / benign idempotent no-op);
+ *   - `warning` = the command fell short of the desired state but did not
+ *                 crash (an actionable skip, a manual-recovery anchor);
+ *   - `error`   = the command could not carry out the desired state (a failure).
+ * `notify()` does NOT re-derive these from content -- it reduces the stamped
+ * facts (SEV-02).
  */
-/**
- * Cascade severity ladder body shared by the cascade arm of `computeSeverity`
- * and the RECON-04 `reconcile-applied-cascade` standalone arm
- * (`reconcileAppliedSeverity`). Structural-subset typed so any message whose
- * marketplaces[] carries the (status, reasons?, plugins[].status,
- * plugins[].reasons) shape can be evaluated.
- *
- * 4-arm first-match (D-28-08 / D-28-09):
- *   1. any failed plugin / mp row                           -> "error"
- *   2. any manual-recovery plugin row                       -> "warning"
- *   3. any plugin-level "skipped" with not-all-benign reasons
- *      (first-match poisoning per D-28-09)                  -> "warning"
- *   4. any mp-level "skipped" with not-all-benign reasons?
- *      (missing/empty reasons? -> warning, the D-28-08 safe default
- *      since allBenign(undefined|[]) === false)             -> "warning"
- *   5. otherwise                                            -> undefined (info)
- */
+
+/** Numeric rank for the SEV-02 max-severity reduce: info < warning < error. */
+const SEVERITY_RANK = { info: 0, warning: 1, error: 2 } as const;
+
 type ComputedSeverity = "warning" | "error" | undefined;
 
-// S9 (PR #51): the structural-subset shape `cascadeSeverity` evaluates is
-// pinned to the closed `PluginStatus` / `MarketplaceStatus` literal unions
-// (instead of bare `string`). Every caller passes a `NotificationMessage`
-// cascade arm or a `ReconcileAppliedCascadeMessage`, both of which carry the
-// closed-set status discriminants -- a future caller that supplied a `string`
-// would lose first-match-ladder correctness (e.g. typoed `"failed "` would
-// silently route to info), and the tighter parameter type catches that at the
-// call site instead of at first-match runtime.
+/**
+ * SEV-02: the cascade severity is the numeric MAX over the caller-stamped
+ * `severity` of every row -- both the marketplace-level rows AND their nested
+ * plugin rows (the same flattened traversal the deleted content ladder walked).
+ * An absent `severity` defaults to `info` (rank 0) per SEV-01. The reducer reads
+ * ONLY the stamped field -- no `status`/`reasons` content inference. Rank 0
+ * returns `undefined` (info -> no 2nd `ctx.ui.notify` arg); rank 1 -> "warning";
+ * rank 2 -> "error", preserving the `ComputedSeverity` host-arg contract. The
+ * D-03 producer stamps reproduce the former first-match ladder's output exactly,
+ * so this is byte-identical (gated by catalog-uat).
+ *
+ * Structural-subset typed so any message whose `marketplaces[]` carries the
+ * `(severity?, plugins[].severity?)` shape can be evaluated (the cascade arm and
+ * the RECON-04 `reconcile-applied-cascade` standalone arm share it).
+ */
 function cascadeSeverity(message: {
   readonly marketplaces: readonly {
-    readonly status?: MarketplaceStatus | undefined;
-    readonly reasons?: readonly Reason[] | undefined;
+    readonly severity?: Severity;
     readonly plugins: readonly {
-      readonly status: PluginStatus;
-      readonly reasons?: readonly Reason[] | undefined;
+      readonly severity?: Severity;
     }[];
   }[];
 }): ComputedSeverity {
-  const hasError = message.marketplaces.some(
-    (mp) => mp.status === "failed" || mp.plugins.some((p) => p.status === "failed"),
-  );
-  if (hasError) {
-    return "error";
+  let rank = 0; // info
+  for (const mp of message.marketplaces) {
+    rank = Math.max(rank, SEVERITY_RANK[mp.severity ?? "info"]);
+    for (const p of mp.plugins) {
+      rank = Math.max(rank, SEVERITY_RANK[p.severity ?? "info"]);
+    }
   }
 
-  const hasManualRecovery = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "manual recovery"),
-  );
-  if (hasManualRecovery) {
-    return "warning";
+  if (rank === 0) {
+    return undefined;
   }
 
-  const hasActionablePluginSkip = message.marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.status === "skipped" && !allBenign(p.reasons)),
-  );
-  if (hasActionablePluginSkip) {
-    return "warning";
-  }
-
-  const hasActionableMpSkip = message.marketplaces.some(
-    (mp) => mp.status === "skipped" && !allBenign(mp.reasons),
-  );
-  if (hasActionableMpSkip) {
-    return "warning";
-  }
-
-  return undefined;
-}
-
-/**
- * RECON-04 severity for the `reconcile-applied-cascade` standalone variant.
- * Empty-and-clean cascades MUST be short-circuited by the caller (NFR-2 / A4)
- * and never reach this arm.
- */
-function reconcileAppliedSeverity(message: ReconcileAppliedCascadeMessage): ComputedSeverity {
-  return cascadeSeverity(message);
+  return rank === 1 ? "warning" : "error";
 }
 
 function computeSeverity(message: NotificationMessage): ComputedSeverity {
+  // SEV-02: the cascade severity is the MAX over the rows' caller-stamped
+  // `severity` (see `cascadeSeverity`), NOT content inference.
+  //
+  // The standalone info-kind switch below STAYS (Q1 LOCKED): these kinds carry
+  // no per-row `severity` array to reduce, so they keep a tiny kind->severity
+  // map (a kind lookup, NOT reason inference, so SEV-02 holds).
   // INFO-04 / SC#2 / INFO-03 / INFO-02: info-surface kinds take precedence
-  // over the cascade severity ladder.
+  // over the cascade reduce.
   // `marketplace-info` payloads carry no failure state and route to info
   // (undefined 2nd arg); `plugin-info` payloads route to `"error"` ONLY when
   // the embedded plugin row is `(failed)` (e.g. an unreadable manifest), else
@@ -2141,22 +2112,21 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
   // to info unconditionally -- no failure can be expressed on a fan-out
   // wrapper. The `{not added}` --scope mismatch condition is carried by the
   // dedicated `marketplace-not-added` arm, which always routes to `"error"`.
-  // The cascade arm executes the existing first-match ladder below.
   if (isInfoKind(message)) {
     // The `marketplace-not-added` variant routes to "error" (the marketplace
     // is absent -- a failure surface); `plugin-info` routes to "error" only
     // when its embedded row is `(failed)`; the read-only info/cascade kinds
     // carry no failure state and route to info (undefined).
-    // `reconcile-applied-cascade` (RECON-04) is content-derived: any failed
-    // row -> error, any actionable skip -> warning, otherwise info (mirrors
-    // the cascade-arm ladder below).
+    // `reconcile-applied-cascade` (RECON-04) carries the same stamped
+    // `MarketplaceNotificationMessage[]` rows as the plain cascade, so it
+    // reduces through the SEV-02 max-severity reducer too.
     switch (message.kind) {
       case "marketplace-not-added":
         return "error";
       case "plugin-info":
         return message.plugin.status === "failed" ? "error" : undefined;
       case "reconcile-applied-cascade":
-        return reconcileAppliedSeverity(message);
+        return cascadeSeverity(message);
       case "marketplace-info":
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
@@ -2169,7 +2139,7 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
     }
   }
 
-  // Cascade arm: delegate to the shared 4-arm ladder (D-28-08 / D-28-09).
+  // Cascade arm: reduce the stamped row severities (SEV-02).
   return cascadeSeverity(message);
 }
 
@@ -2194,88 +2164,122 @@ function countFailedOperations(message: CascadeNotificationMessage): SummaryCoun
 }
 
 /**
- * Shared per-marketplaces-array failure counter consumed by both the cascade
- * arm and the RECON-04 `reconcile-applied-cascade` standalone arm. Both
- * carry a structurally identical `readonly MarketplaceNotificationMessage[]`
- * shape so the counting logic is single-sourced.
+ * SEV-02: error-severity tally by stamped fact -- the marketplace rows AND
+ * plugin rows whose caller-stamped `severity === "error"`. The D-03 stamps map
+ * `failed` rows to `error`, exactly the rows the former status-based counter
+ * matched, so the count is byte-identical. Consumed by both the cascade arm and
+ * the RECON-04 `reconcile-applied-cascade` standalone arm.
  */
 function countFailedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  return countRowsBySeverity(marketplaces, "error");
+}
+
+/**
+ * `warning`-severity counting consumed by the summary line. Cascade-only (SC#1;
+ * see `countFailedOperations`).
+ */
+function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
+  return countSkippedRows(message.marketplaces);
+}
+
+/**
+ * SEV-02: warning-severity tally by stamped fact -- the rows whose caller-
+ * stamped `severity === "warning"`. The D-03 stamps map actionable skips and
+ * manual-recovery anchors to `warning` (benign idempotent skips stamp `info`),
+ * so this is byte-identical to the former content-derived counter.
+ */
+function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
+  return countRowsBySeverity(marketplaces, "warning");
+}
+
+/**
+ * Shared tally of marketplace rows AND their nested plugin rows whose stamped
+ * `severity` equals `target`. An absent `severity` defaults to `info` (SEV-01),
+ * so an absent-severity row is counted under the `"info"` target.
+ *
+ * OUT-03: the `target` union includes `"info"` so the trailing tally can count
+ * `<n> success(es)` (the desired-state-reached rows) alongside the existing
+ * error/warning counts -- the `(x.severity ?? "info") === target` predicate
+ * already classifies an absent or explicit `info` severity, so widening the
+ * union needs no further change.
+ */
+function countRowsBySeverity(
+  marketplaces: readonly MarketplaceNotificationMessage[],
+  target: Severity,
+): SummaryCounts {
   let plugins = 0;
   let mpCount = 0;
 
   for (const mp of marketplaces) {
-    if (mp.status === "failed") {
+    if ((mp.severity ?? "info") === target) {
       mpCount++;
     }
 
-    plugins += mp.plugins.filter((p) => p.status === "failed").length;
+    plugins += mp.plugins.filter((p) => (p.severity ?? "info") === target).length;
   }
 
   return { plugins, marketplaces: mpCount };
 }
 
 /**
- * `warning`-severity counting (D-29-04): actionable-skip plugin rows
- * (`skipped` with NON-benign reasons) plus `manual recovery` plugin rows, and
- * actionable-skip marketplace rows (`skipped` with non-benign `reasons`).
- * Mirrors `computeSeverity` arms 2-4 / `allBenign`. Cascade-only (SC#1; see
- * `countFailedOperations`).
+ * OUT-02 / D-02: build the leading severity sentence from a row count, the max
+ * severity, and the row subject. `subject` is `"plugin"` / `"marketplace"` for a
+ * homogeneous cascade, or `null` for a mixed-subject cascade (D-03) where the
+ * subject noun is dropped.
+ *
+ * Form: `[A|An|Some] <subject> operation[s] has/have failed | needs/need attention.`
+ * -- `A` / `An` (vowel-aware off the leading noun) for a single row, `Some` for
+ * more than one; `operation` / `operations`
+ * pluralized by count; `has failed` / `have failed` for error and
+ * `needs attention` / `need attention` for warning; terminal period kept. The
+ * verb-number agrees with the count (singular for 1, plural otherwise).
  */
-function countSkippedOperations(message: CascadeNotificationMessage): SummaryCounts {
-  return countSkippedRows(message.marketplaces);
-}
-
-/** Shared per-marketplaces-array skip counter (mirrors countFailedRows). */
-function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[]): SummaryCounts {
-  let plugins = 0;
-  let mpCount = 0;
-
-  for (const mp of marketplaces) {
-    if (mp.status === "skipped" && !allBenign(mp.reasons)) {
-      mpCount++;
-    }
-
-    plugins += mp.plugins.filter(
-      (p) => p.status === "manual recovery" || (p.status === "skipped" && !allBenign(p.reasons)),
-    ).length;
-  }
-
-  return { plugins, marketplaces: mpCount };
+function summaryPhrase(
+  count: number,
+  severity: "error" | "warning",
+  subject: "plugin" | "marketplace" | null,
+): string {
+  const singular = count === 1;
+  const operationWord = singular ? "operation" : "operations";
+  const errorVerb = singular ? "has failed" : "have failed";
+  const warningVerb = singular ? "needs attention" : "need attention";
+  const verbPhrase = severity === "error" ? errorVerb : warningVerb;
+  const subjectWord = subject === null ? "" : `${subject} `;
+  const noun = `${subjectWord}${operationWord}`;
+  // CR-01: mixed-subject (subject === null) drops the noun, so the count-1 form
+  // would read "A operation" -- vowel-initial, grammatically "An". Choose the
+  // singular article off the resolved noun's leading letter; "Some" for plural.
+  const singularArticle = /^[aeiou]/i.test(noun) ? "An" : "A";
+  const article = singular ? singularArticle : "Some";
+  return `${article} ${noun} ${verbPhrase}.`;
 }
 
 /**
  * RECON-04: shared summary-line wording over a marketplaces array. Mirrors
  * the cascade-arm tail of `buildSummaryLine` so the reconcile-applied
  * variant emits identical phrasing.
+ *
+ * D-03: mixed-subject detection is render-time -- a cascade whose rows span
+ * BOTH plugin and marketplace subjects (`counts.plugins > 0 &&
+ * counts.marketplaces > 0`) drops the subject noun and counts all rows
+ * uniformly off the combined total.
  */
 function buildSummaryLineForCascade(
   marketplaces: readonly MarketplaceNotificationMessage[],
   severity: "error" | "warning",
 ): string {
-  const verb = severity === "error" ? "failed" : "skipped";
   const counts =
     severity === "error" ? countFailedRows(marketplaces) : countSkippedRows(marketplaces);
 
-  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
-  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
-
   if (counts.plugins > 0 && counts.marketplaces > 0) {
-    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.plugins + counts.marketplaces, severity, null);
   }
 
   if (counts.marketplaces > 0) {
-    return `${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.marketplaces, severity, "marketplace");
   }
 
-  return `${pluginPhrase} ${verb}.`;
-}
-
-/**
- * D-29-03 pluralization: singular `"operation"` for a count of 1, plural
- * `"operations"` otherwise.
- */
-function operationPhrase(count: number, kind: "plugin" | "marketplace"): string {
-  return `${count} ${kind} ${count === 1 ? "operation" : "operations"}`;
+  return summaryPhrase(counts.plugins, severity, "plugin");
 }
 
 /**
@@ -2290,16 +2294,14 @@ function operationPhrase(count: number, kind: "plugin" | "marketplace"): string 
  * `plugin-info`) take a hard-count-1 summary on the FAILED ROW's subject
  * (GRAM-02); the cascade arm counts the failed/skipped rows.
  *
- * Verb is `"failed"` for error severity, `"skipped"` for warning severity.
- *
- * Wording (D-29-03): when only one type is non-zero the sentence is
- * `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`;
- * when both are non-zero it is
- * `"N plugin operation(s) and M marketplace operation(s) <verb>."`. When BOTH
- * counts are zero (an unreachable shape -- `computeSeverity` only returns
- * error/warning when a matching row exists) the function degrades gracefully to
- * the plugin-only plural form (`"0 plugin operations <verb>."`) rather than
- * crashing.
+ * Wording (OUT-02 / D-02): `[A|Some] <subject> operation[s] has/have failed |
+ * needs/need attention.` -- `A` for a single row, `Some` otherwise; `has failed`
+ * / `have failed` for error and `needs attention` / `need attention` for
+ * warning. D-03: a mixed-subject cascade (plugin AND marketplace rows present)
+ * drops the subject noun and counts all rows uniformly. When BOTH counts are
+ * zero (an unreachable shape -- `computeSeverity` only returns error/warning
+ * when a matching row exists) the function degrades gracefully to the
+ * plugin-only plural form rather than crashing.
  */
 function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
   // GRAM-02: the standalone-dispatched kinds derive their summary from the
@@ -2313,9 +2315,9 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
   if (isInfoKind(message)) {
     switch (message.kind) {
       case "marketplace-not-added":
-        return `${operationPhrase(1, "marketplace")} failed.`;
+        return summaryPhrase(1, "error", "marketplace");
       case "plugin-info":
-        return message.plugin.status === "failed" ? `${operationPhrase(1, "plugin")} failed.` : "";
+        return message.plugin.status === "failed" ? summaryPhrase(1, "error", "plugin") : "";
       case "reconcile-applied-cascade":
         // RECON-04: at error/warning severity reuse the cascade-arm counting
         // helpers over the same per-status `marketplaces` shape; at info
@@ -2334,23 +2336,104 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
     }
   }
 
-  const verb = severity === "error" ? "failed" : "skipped";
   const counts =
     severity === "error" ? countFailedOperations(message) : countSkippedOperations(message);
 
-  const pluginPhrase = operationPhrase(counts.plugins, "plugin");
-  const marketplacePhrase = operationPhrase(counts.marketplaces, "marketplace");
-
+  // D-03: mixed-subject cascade drops the noun and counts all rows uniformly.
   if (counts.plugins > 0 && counts.marketplaces > 0) {
-    return `${pluginPhrase} and ${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.plugins + counts.marketplaces, severity, null);
   }
 
   if (counts.marketplaces > 0) {
-    return `${marketplacePhrase} ${verb}.`;
+    return summaryPhrase(counts.marketplaces, severity, "marketplace");
   }
 
   // counts.plugins > 0, or the unreachable 0/0 degrade-to-plugin-plural case.
-  return `${pluginPhrase} ${verb}.`;
+  return summaryPhrase(counts.plugins, severity, "plugin");
+}
+
+/**
+ * OUT-03: pluralize one tally category by count. Mirrors the `summaryPhrase`
+ * `count === 1 ? singular : plural` idiom: `failure`/`failures`,
+ * `warning`/`warnings`, `success`/`successes`.
+ */
+function tallyCategory(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a PLURAL
+ * (bulk) cascade. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>
+ * success(es)` where `<Operation>` is the threaded `Messaging.label`, the counts
+ * come from `countRowsBySeverity` over the marketplace + nested plugin rows
+ * (D-03 mixed-subject: all rows counted uniformly under the operation name),
+ * zero-count categories are OMITTED, and there is NO terminal period.
+ *
+ * Returns `""` when the tally must not render: the operation is single-target
+ * (cardinality !== "plural" -- D-04, never a row-count heuristic),
+ * the label is absent (legacy `notify()` emissions), or every category is zero.
+ * Per OUT-03 the tally renders on plural ops regardless of severity, so a
+ * successful bulk import shows `Plugin import: 3 success(es)`.
+ */
+function composeTally(message: {
+  readonly label?: string;
+  readonly cardinality?: "single" | "plural";
+  readonly marketplaces: readonly MarketplaceNotificationMessage[];
+}): string {
+  if (message.cardinality !== "plural" || message.label === undefined) {
+    return "";
+  }
+
+  const errorCount = countRowsBySeverity(message.marketplaces, "error");
+  const warningCount = countRowsBySeverity(message.marketplaces, "warning");
+  const successCount = countRowsBySeverity(message.marketplaces, "info");
+
+  const failures = errorCount.plugins + errorCount.marketplaces;
+  const warnings = warningCount.plugins + warningCount.marketplaces;
+  // OUT-03 / OUT-06 / D-03: the tally counts OPERATION rows uniformly across the
+  // plugin and marketplace subjects. A BARE marketplace header -- one carrying
+  // neither a `status` (a realized mp outcome: `added` / `updated` / `removed` /
+  // `failed` / `skipped`) NOR a stamped `severity` -- is a pure grouping label
+  // (bookkeeping, not an operation), so it must not inflate the success count. A
+  // marketplace row WITH a `status` IS a real mp-level operation and counts (an
+  // import `added` block, a `marketplace remove` `removed` block). The `info`
+  // count from `countRowsBySeverity` includes bare headers via its `?? "info"`
+  // default, so subtract them; plugin rows always represent an operation and
+  // always count.
+  const bareHeaders = message.marketplaces.filter(
+    (mp) => mp.severity === undefined && mp.status === undefined,
+  ).length;
+  const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
+
+  const parts: string[] = [];
+
+  if (failures > 0) {
+    parts.push(tallyCategory(failures, "failure", "failures"));
+  }
+
+  if (warnings > 0) {
+    parts.push(tallyCategory(warnings, "warning", "warnings"));
+  }
+
+  if (successes > 0) {
+    parts.push(tallyCategory(successes, "success", "successes"));
+  }
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `${message.label}: ${parts.join(", ")}`;
+}
+
+/**
+ * OUT-03: fold the optional trailing tally into the body BETWEEN the cascade
+ * body and the reload-hint trailer, yielding `{body}\n\n{tally}\n\n{hint}` when
+ * both are present (each segment omitted when empty). The tally placement is the
+ * binding catalog byte contract.
+ */
+function foldTallyAndHint(body: string, tally: string, hint: string): string {
+  return [body, tally, hint].filter((segment) => segment !== "").join("\n\n");
 }
 
 /**
@@ -2359,20 +2442,16 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * resources are plugin rows (skill / agent / command / MCP entry); marketplace
  * records are bookkeeping, not resources, so they never warrant a `/reload`.
  *
- * The rule is therefore plugin-row-driven only: emit iff some marketplace
- * carries a plugin row whose status is one of the four state-change tokens
- * `installed | updated | reinstalled | uninstalled` -- or, ONLY on a cascade
- * dispatched with the `"disable-cascade"` kind (the `/claude:plugin disable`
- * command's realized-transition cascade, UAT-03), a `disabled` row. No
- * marketplace status
- * (added / removed / updated / autoupdate enabled / autoupdate disabled /
- * skipped / failed) triggers on its own. This refines the G-21-01 invariant:
- * within a given cascade KIND every status discriminator either always
- * triggers the reload-hint or never does; `disabled` is inventory (hint-free)
- * on kind-less / `"cascade"` payloads (list / info surfaces) and a realized
- * transition (hint fires) on `"disable-cascade"` payloads -- the straddle is
- * resolved structurally at the kind level, mirroring
- * `reconcile-applied-cascade`'s structural exclusion below.
+ * RLD-02 / RLD-05 / D-07: the rule is the OR-reduce of the caller-stamped
+ * `needsReload` over the cascade rows -- no status-token or cascade-kind
+ * inference. The D-06 stamps reproduce the former trigger set exactly: the
+ * realized install / update / reinstall / uninstall transitions AND the
+ * realized fresh-disable transition stamp `needsReload: true`, while
+ * list / info inventory `disabled` / `installed` rows and every marketplace
+ * status (added / removed / updated / autoupdate enabled / autoupdate disabled
+ * / skipped / failed) stamp `needsReload: false`. The former `"disable-cascade"`
+ * kind straddle (where a `disabled` row's hint depended on the cascade kind) is
+ * thus replaced by a per-row stamped fact.
  *
  * A fresh autoupdate enabled/disabled flip does NOT emit the trailer (the
  * flip changes a marketplace record, not a Pi-visible resource). The
@@ -2384,6 +2463,9 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * the `uninstalled` token while an empty remove (header-only) does not.
  */
 function shouldEmitReloadHint(message: NotificationMessage): boolean {
+  // RLD-02: the reload hint is the OR-reduce of the caller-stamped
+  // `needsReload` over the cascade rows (see the flattened loop below) -- NOT
+  // status-token / cascade-kind inference.
   // INFO-03 / INFO-02: info-surface kinds NEVER trigger the reload-hint
   // trailer. The info commands (`marketplace info`,
   // `plugin info`) are read-only surfaces that do not change a Pi-visible
@@ -2406,7 +2488,9 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
         // RECON-04: the reconcile already ran ON /reload (the
         // resources_discover handler IS the trailer's nominal trigger), so
         // emitting `Run /reload to pick up changes` after applying changes
-        // would be a lie. Structurally false closes the trailer-leak gap.
+        // would be a lie. Structurally false closes the trailer-leak gap --
+        // this kind-level exclusion stands EVEN THOUGH its rows stamp
+        // needsReload:true (they are realized transitions).
         return false;
       default:
         assertNever(message);
@@ -2414,20 +2498,20 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
     }
   }
 
-  // UAT-03: the `"disable-cascade"` kind is the structural marker under
-  // which a `(disabled)` row counts as a realized transition (the disable
-  // command unstaged Pi-visible artefacts -- SNM-33). Kind-less / "cascade"
-  // payloads keep `disabled` hint-free (list / info inventory surfaces).
-  const disabledIsTransition = message.kind === "disable-cascade";
+  // RLD-02: the trailer fires iff the OR-reduce of the stamped `needsReload`
+  // over the flattened marketplace + plugin rows is true. The D-06 stamps
+  // reproduce the former trigger set exactly: realized install/update/
+  // reinstall/uninstall and the realized fresh-disable transition stamp
+  // needsReload:true, while list/info inventory `disabled`/`installed` rows
+  // stamp needsReload:false. (See this function's JSDoc for the migration
+  // rationale that retired the former cascade-kind straddle.)
   for (const mp of message.marketplaces) {
+    if (mp.needsReload === true) {
+      return true;
+    }
+
     for (const p of mp.plugins) {
-      if (
-        p.status === "installed" ||
-        p.status === "updated" ||
-        p.status === "reinstalled" ||
-        p.status === "uninstalled" ||
-        (disabledIsTransition && p.status === "disabled")
-      ) {
+      if (p.needsReload === true) {
         return true;
       }
     }
@@ -2441,8 +2525,8 @@ function shouldEmitReloadHint(message: NotificationMessage): boolean {
  * prefix when `cause` is defined and the walker returns a non-empty string.
  * Returns `""` otherwise so callers can `if (trailer !== "") lines.push(...)`.
  * Centralizes the "guard + walker + indent" composition reused for both the
- * per-plugin cause (`indent = " "`, 4 spaces) and the per-rollback-phase
- * cause (`indent = " "`, 6 spaces).
+ * per-plugin cause (4-space indent) and the per-rollback-phase
+ * cause (6-space indent).
  */
 function renderIndentedCauseChain(cause: unknown, indent: string): string {
   if (cause === undefined) {
@@ -2515,37 +2599,12 @@ function composePluginLines(
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string[] {
-  const lines: string[] = [`  ${renderPluginRow(p, probe, mpScope)}`];
-
-  // PL-4: emit description as a 4-space-indented second line when present and
-  // non-empty. Only the four list-surface variants carry the field; the type
-  // narrowing is intentionally structural (switch on status) so the compiler
-  // rejects any future attempt to add description to a cascade-only variant.
-  if (
-    (p.status === "present" ||
-      p.status === "upgradable" ||
-      p.status === "available" ||
-      p.status === "unavailable") &&
-    p.description !== undefined &&
-    p.description.length > 0
-  ) {
-    lines.push(`    ${truncateDescription(p.description)}`);
-  }
-
-  if (p.status === "failed" || p.status === "manual recovery") {
-    const trailer = renderIndentedCauseChain(p.cause, "    ");
-    if (trailer !== "") {
-      lines.push(trailer);
-    }
-
-    // AS-7: name the leaked files the user must clean up by hand.
-    for (const leak of collectManualRecoveryLeaks(p.cause)) {
-      lines.push(`    leaked: ${leak}`);
-    }
-  }
-
-  lines.push(...composeRollbackPartialLines(p));
-  return lines;
+  // Byte-identical to dispatching through the central `renderPluginRow` switch:
+  // delegate to the body-parameterized variant with `renderPluginRow` as the
+  // row renderer, so the PL-4 description line, the cause-chain / AS-7
+  // leaked-paths trailers, and the rollback-partial lines are composed in
+  // exactly one place (`composePluginLinesWith`).
+  return composePluginLinesWith(p, probe, mpScope, renderPluginRow);
 }
 
 /**
@@ -2707,37 +2766,6 @@ const COMPONENT_KINDS: readonly [
   ComponentKind,
   ComponentKind,
 ] = ["agents", "commands", "hooks", "mcp", "skills"];
-
-/**
- * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
- * carries one or more entries. Emits a 4-space-indent header followed by
- * one 6-space-indent line per entry. Three arm shapes:
- *   - lenient arm (`kind === "lenient"`): bare `<event>`, with a
- *     ` (unsupported)` suffix iff `supported === false`. Produced only
- *     by the info-surface lenient reader on rows where the resolver did
- *     NOT record `hooksConfigPath`.
- *   - tool event (untagged, has `matcher`): `<event>(<matcher>)`.
- *   - non-tool event (untagged, no `matcher`): bare `<event>`.
- * Reads `entry.event` / `entry.matcher` directly -- no re-derivation
- * from a closed-set tuple, no runtime guard (the union is exhaustive,
- * every arm renders).
- */
-function appendHooksBlock(lines: string[], entries: readonly HookSummaryEntry[] | undefined): void {
-  if (entries === undefined || entries.length === 0) {
-    return;
-  }
-
-  lines.push("    hooks:");
-  for (const entry of entries) {
-    if ("kind" in entry) {
-      lines.push(`      ${entry.event}${entry.supported ? "" : " (unsupported)"}`);
-    } else if ("matcher" in entry) {
-      lines.push(`      ${entry.event}(${entry.matcher})`);
-    } else {
-      lines.push(`      ${entry.event}`);
-    }
-  }
-}
 
 /**
  * Append the per-kind component lines + optional dependencies line
@@ -2966,10 +2994,18 @@ function dispatchInfoMessage(
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
       // (per-mp header + per-plugin row via the existing helpers). The
-      // reload-hint trailer is structurally suppressed by
-      // shouldEmitReloadHint's arm above; emitWithSummary handles the
-      // summary prepend at error/warning severity.
-      body = composeReconcileAppliedBody(message, probe);
+      // reload-hint trailer is structurally suppressed (the reconcile already
+      // ran ON /reload); emitWithSummary handles the summary prepend at
+      // error/warning severity. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a
+      // plural mixed-subject operation, so the trailing tally folds in after the
+      // body (no reload-hint segment), mirroring the
+      // `emitReconcileAppliedContextCascade` production path so the byte form is
+      // identical whichever entry composes it.
+      body = foldTallyAndHint(
+        composeReconcileAppliedBody(message, probe),
+        composeTally(message),
+        "",
+      );
       break;
     default:
       assertNever(message);
@@ -3017,11 +3053,10 @@ export function notify(
   switch (message.kind) {
     case undefined:
     case "cascade":
-    case "disable-cascade":
-      // Cascade body falls through below. The `disable-cascade` kind
-      // (UAT-03) renders byte-identically; it differs only inside
-      // `shouldEmitReloadHint`, where `(disabled)` rows count as realized
-      // transitions.
+      // Cascade body falls through below. RLD-05 / D-07: the disable
+      // command's realized (disabled) rows stamp `needsReload: true`, so the
+      // reload-hint is driven by the per-row stamp, not by a distinguishing
+      // kind.
       break;
     default:
       assertNever(message);
@@ -3035,16 +3070,164 @@ export function notify(
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
   const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 
+  // OUT-03 / OUT-04 / D-04: the per-operation tally renders on PLURAL ops
+  // (cardinality === "plural"), sits AFTER the body and BEFORE the reload-hint
+  // trailer, and is empty for single-target / legacy emissions.
+  const tally = composeTally(message);
+
   // Compute reload-hint per the state-change trigger ladder and append it
   // with one blank line.
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  const withHint = hint === "" ? body : `${body}\n\n${hint}`;
+  const withTally = foldTallyAndHint(body, tally, hint);
 
   // Emit through the shared summary seam (GRAM-04). At info severity the body
   // emits unchanged; at error/warning severity the summary is prepended as its
-  // own block, with the reload-hint (if any) already folded into `withHint`
-  // last: `{summary}\n\n{cascade body}\n\n{reload-hint}` (UXG-07 / GRAM-01).
-  emitWithSummary(ctx, message, withHint);
+  // own block, with the tally + reload-hint already folded last:
+  // `{summary}\n\n{cascade body}\n\n{tally}\n\n{reload-hint}` (UXG-07 / GRAM-01 /
+  // OUT-03).
+  emitWithSummary(ctx, message, withTally);
+}
+
+/**
+ * D-02 adapter seam shared by both context-cascade emitters: compose and emit a
+ * cascade exactly like the cascade arm of `notify()` above, but dispatch each
+ * per-plugin row body through a caller-supplied `renderPluginRowBody` instead of
+ * the central `renderPluginRow` switch. The `notifyWithContext` entry point in
+ * `shared/notify-context.ts` passes `(row, probe, mpScope) =>
+ * context.render[row.status](row, probe, mpScope)` so the per-row bytes come
+ * from the command's own render map, while the marketplace header, description
+ * lines, cause-chain trailers, rollback-partial lines, the empty
+ * `(no marketplaces)` sentinel, and the severity/summary `emitWithSummary` seam
+ * all stay byte-identical to the legacy path. Each render map reproduces the
+ * EXACT bytes of the central switch arm it lifts, so this dispatch yields output
+ * byte-identical to `notify()` for every migrated command (proven by that
+ * command's catalog-uat run).
+ *
+ * SEV-02 / RLD-02: severity and the reload-hint come from the rows' caller-
+ * stamped `severity` / `needsReload` -- `emitWithSummary` -> `computeSeverity`
+ * MAX-reduces the stamped severities, and the `hint` arg is the caller's
+ * reload-hint decision (the reconcile applied-cascade passes `""`, the plain
+ * cascade passes the OR-reduced `shouldEmitReloadHint` trailer). The single
+ * soft-dep probe (`softDepStatus(pi)`) and the single `ctx.ui.notify` call
+ * (IL-2, via `emitWithSummary`) discipline is preserved.
+ */
+function emitCascadeWith(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+  hint: string,
+): void {
+  const probe = softDepStatus(pi);
+
+  const blocks = message.marketplaces.map((mp) => {
+    const lines: string[] = [renderMpHeader(mp, probe)];
+    for (const p of mp.plugins) {
+      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
+    }
+
+    return lines.join("\n");
+  });
+  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+
+  // OUT-03 / OUT-04 / D-04: trailing per-operation tally for plural cascades,
+  // placed between the body and the reload-hint trailer.
+  const tally = composeTally(message);
+  const withTally = foldTallyAndHint(body, tally, hint);
+
+  emitWithSummary(ctx, message, withTally);
+}
+
+/**
+ * The state-change context-cascade emitter (the `notifyWithContext` seam). The
+ * reload-hint is the OR-reduce of the rows' caller-stamped `needsReload`
+ * (`shouldEmitReloadHint`, RLD-02).
+ */
+export function emitContextCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: CascadeNotificationMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
+}
+
+/**
+ * RECON-04 / D-02 adapter seam: emit the `reconcile-applied-cascade` standalone
+ * envelope through the shared cascade emitter. Like `dispatchInfoMessage`'s
+ * standalone applied-cascade arm, NO reload-hint trailer is appended (a
+ * load-time applied cascade is a standalone info kind, not a state-change
+ * cascade), so the `hint` arg is `""` -- matching the legacy applied-cascade
+ * byte form exactly (OUT-03 / OUT-04 / OUT-06 / D-03 / D-04).
+ */
+export function emitReconcileAppliedContextCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: ReconcileAppliedCascadeMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "");
+}
+
+/**
+ * `composePluginLines` parameterized over the per-row body renderer (D-02).
+ * Byte-identical to `composePluginLines` except the column-0-indented row body
+ * comes from `renderRow` rather than the central `renderPluginRow`. The
+ * description / cause-chain / rollback-partial trailing lines stay composed by
+ * the shared helpers so a migrated command's render map only owns the single
+ * row line, never the multi-line trailers (those route through the central
+ * path-redaction seam, NFR-9).
+ */
+function composePluginLinesWith(
+  p: PluginNotificationMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+  renderRow: (p: PluginNotificationMessage, probe: SoftDepStatus, mpScope: Scope) => string,
+): string[] {
+  const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
+
+  // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
+  // / `available` / `unavailable` / `disabled`) carry the manifest description;
+  // cascade `installed` rows never set `description`, so the guard keeps them
+  // single-line.
+  if (
+    (p.status === "installed" ||
+      p.status === "upgradable" ||
+      p.status === "available" ||
+      p.status === "unavailable" ||
+      p.status === "disabled") &&
+    p.description !== undefined &&
+    p.description.length > 0
+  ) {
+    lines.push(`    ${truncateDescription(p.description)}`);
+  }
+
+  if (p.status === "failed" || p.status === "manual recovery") {
+    const trailer = renderIndentedCauseChain(p.cause, "    ");
+    if (trailer !== "") {
+      lines.push(trailer);
+    }
+
+    for (const leak of collectManualRecoveryLeaks(p.cause)) {
+      lines.push(`    leaked: ${leak}`);
+    }
+  }
+
+  lines.push(...composeRollbackPartialLines(p));
+  return lines;
 }
 
 // ---------------------------------------------------------------------------
@@ -3108,8 +3291,8 @@ export function compareByNameThenScope(a: Sortable, b: Sortable): number {
  */
 export function makeRawNotifyFn(
   ctx: ExtensionContext,
-): (message: string, severity?: "info" | "warning" | "error") => void {
-  return (message: string, severity?: "info" | "warning" | "error"): void => {
+): (message: string, severity?: Severity) => void {
+  return (message: string, severity?: Severity): void => {
     if (severity === undefined) {
       ctx.ui.notify(message);
     } else {

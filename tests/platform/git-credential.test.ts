@@ -285,7 +285,7 @@ test("credOps: credentialFill returns null when git exits non-zero (no credentia
 
 test("credOps: credentialApprove swallows subprocess error (best-effort, lines 222-229)", async () => {
   // credentialReject has identical try/catch structure; this test proves both
-  // approve AND reject swallow subprocess failures silently (Pattern 3).
+  // approve AND reject swallow subprocess failures silently.
   // Use a fake git that exits non-zero to trigger the error branch.
   if (process.platform === "win32") {
     return;

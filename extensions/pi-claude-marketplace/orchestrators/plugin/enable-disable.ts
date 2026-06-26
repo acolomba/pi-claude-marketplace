@@ -58,10 +58,17 @@ import { writeBatchedConfigEntries } from "../../persistence/config-write-back.t
 import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
+import {
+  DISABLE_CONTEXT,
+  ENABLE_CONTEXT,
+  type DisableMsg,
+  type EnableMsg,
+} from "./enable-disable.messaging.ts";
 import { runInstallLedger } from "./install.ts";
 import {
   applyPartialCascadeFold,
@@ -75,12 +82,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-  Reason,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
@@ -410,6 +412,7 @@ export async function setPluginEnabled(
       plugin,
       requestedScope: opts.scope,
       cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      enable,
       orchestrated,
     });
   }
@@ -596,21 +599,24 @@ export async function setPluginEnabled(
       };
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: [] as const,
-              cause,
-            },
-          ],
-        },
-      ],
+    // D-04: the `failed` row's bytes are identical across both verbs; emit it
+    // through the active verb's CommandContext for naming consistency.
+    emitEnableDisableFailedRow({
+      ctx,
+      pi,
+      enable,
+      marketplace,
+      scope,
+      row: {
+        status: "failed",
+        name: plugin,
+        reasons: [] as const,
+        cause,
+        // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+        // reload.
+        severity: "error",
+        needsReload: false,
+      },
     });
     return undefined;
   }
@@ -657,9 +663,10 @@ function emitResolutionFailure(args: {
   plugin: string;
   requestedScope: Scope | undefined;
   cause: Error;
+  enable: boolean;
   orchestrated: boolean;
 }): EnableDisablePluginOutcome | undefined {
-  const { ctx, pi, marketplace, plugin, requestedScope, cause, orchestrated } = args;
+  const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
   // classifyTransactionThrow returns a `Reason` (closed set including
   // "lock held"); none of the narrower outputs are the structural
@@ -675,23 +682,49 @@ function emitResolutionFailure(args: {
   }
 
   const scope: Scope = requestedScope ?? "user";
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: [reason],
-            cause: sanitized,
-          },
-        ],
-      },
-    ],
+  // D-04: the `failed` row's bytes are identical across both verbs; emit it
+  // through the active verb's CommandContext for naming consistency.
+  emitEnableDisableFailedRow({
+    ctx,
+    pi,
+    enable,
+    marketplace,
+    scope,
+    row: {
+      status: "failed",
+      name: plugin,
+      reasons: [reason],
+      cause: sanitized,
+      // D-03/D-06: a pre-lock resolution failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
+    },
   });
   return undefined;
+}
+
+/**
+ * D-04: emit a single `(failed)` cascade row through the active verb's
+ * CommandContext. The `failed` arm is byte-identical in `ENABLE_CONTEXT` and
+ * `DISABLE_CONTEXT`, so this helper only selects which context's
+ * `Messaging.label` owns the row; it exists to keep the verb-branch confined to
+ * a single concrete (non-union) `notifyWithContext` call per arm so each context
+ * keeps its own `Status` / `Msg` instantiation.
+ */
+function emitEnableDisableFailedRow(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly enable: boolean;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly row: PluginFailedMessage;
+}): void {
+  const { ctx, pi, enable, marketplace, scope, row } = args;
+  if (enable) {
+    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+  } else {
+    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+  }
 }
 
 /**
@@ -815,23 +848,34 @@ function dispatchOutcome(args: {
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
   const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
-  // UAT-03: the disable verb
-  // dispatches with the `"disable-cascade"` kind so the fresh `(disabled)`
-  // row counts as a realized transition in `shouldEmitReloadHint` (artefacts
-  // were unstaged -- SNM-33). Rendering is byte-identical to the plain
-  // cascade arm, so carrying the kind on the disable verb's non-fresh arms
-  // (idempotent / failed / not-recorded) is a no-op. The enable verb stays
-  // kind-less (its `(installed)` row is already a trigger token).
-  notify(ctx, pi, {
-    ...(!enable && { kind: "disable-cascade" as const }),
-    marketplaces: [
-      {
-        name: marketplace,
-        scope,
-        plugins: [row],
-      },
-    ],
-  });
+  // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
+  // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
+  // artefacts were unstaged -- SNM-33), so the `/reload to pick up changes`
+  // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable
+  // verb's non-fresh arms (idempotent / failed / not-recorded) stamp
+  // `needsReload: false`; the enable verb's `(installed)` fresh row stamps
+  // `true`.
+  //
+  // D-04 / D-10: the verb selects its OWN CommandContext -- ENABLE_CONTEXT
+  // renders the fresh `(installed)` row, DISABLE_CONTEXT the fresh
+  // `(disabled)` row; both share byte-identical `skipped` / `failed` arms.
+  if (enable) {
+    // WR-01: `composeOutcomeRow` returns `EnableMsg | DisableMsg`; the `enable`
+    // branch only ever yields an `EnableMsg` (its `fresh` arm emits `installed`,
+    // never `disabled`), so narrowing to the ENABLE_CONTEXT row type is sound.
+    const enableRow = row as EnableMsg;
+    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [
+      { name: marketplace, scope, plugins: [enableRow] },
+    ]);
+  } else {
+    // WR-01: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
+    // arm emits `disabled`, never `installed`), so narrowing to the
+    // DISABLE_CONTEXT row type is sound.
+    const disableRow = row as DisableMsg;
+    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [
+      { name: marketplace, scope, plugins: [disableRow] },
+    ]);
+  }
 }
 
 /** Internal: build the plugin row for the outcome (bare mp header -- UAT-04). */
@@ -840,7 +884,7 @@ function composeOutcomeRow(args: {
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome | undefined;
-}): PluginNotificationMessage {
+}): EnableMsg | DisableMsg {
   const { plugin, enable, configBasename, outcome } = args;
   if (outcome === undefined) {
     return {
@@ -850,6 +894,9 @@ function composeOutcomeRow(args: {
       cause: new Error(
         `setPluginEnabled: internal error -- guard returned cleanly without populating outcome for plugin "${plugin}".`,
       ),
+      // D-03/D-06: enable/disable failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
   }
 
@@ -860,6 +907,9 @@ function composeOutcomeRow(args: {
         name: plugin,
         reasons: ["invalid manifest"] as const,
         cause: new Error(`Config file "${configBasename}" failed schema validation.`),
+        // D-03/D-06: invalid-config abort -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     case "not-recorded":
       // WR-03: the marketplace container is PRESENT but the plugin row is
@@ -873,6 +923,9 @@ function composeOutcomeRow(args: {
         status: "skipped",
         name: plugin,
         reasons: ["not installed"] as const,
+        // D-03/D-06: `not installed` is actionable -> warning, no reload.
+        severity: "warning",
+        needsReload: false,
       };
     case "idempotent": {
       const reason: ContentReason = enable ? "already enabled" : "already disabled";
@@ -880,6 +933,10 @@ function composeOutcomeRow(args: {
         status: "skipped",
         name: plugin,
         reasons: [reason],
+        // D-03/D-06: `already enabled`/`already disabled` is benign -> info,
+        // no reload.
+        severity: "info",
+        needsReload: false,
       };
     }
 
@@ -898,6 +955,9 @@ function composeOutcomeRow(args: {
         reasons: baseReasons,
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
+        // D-03/D-06: a failed enable -> error, no reload.
+        severity: "error",
+        needsReload: false,
         ...(partials.length > 0 && {
           rollbackPartial: partials.map((p) => ({
             phase: p.phase,
@@ -915,6 +975,9 @@ function composeOutcomeRow(args: {
         reasons: narrowDisableFailure(outcome.cause),
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
+        // D-03/D-06: a failed disable -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     case "fresh":
       // UAT-04: the fresh-enable header is the BARE always-marketplace-header
@@ -923,19 +986,32 @@ function composeOutcomeRow(args: {
       // shape with mp.status "added"). UAT-03: the fresh-disable row carries
       // the closed-set `(disabled)` token -- same glyph + token as the
       // disabled-inventory row, version slot kept -- instead of
-      // `(uninstalled)`; the reload-hint fires via the `"disable-cascade"`
-      // kind set in `dispatchOutcome`.
+      // `(uninstalled)`. RLD-05 / D-07: the reload-hint fires via the
+      // per-row `needsReload: true` stamp (RLD-02 OR-reduce), not a cascade
+      // kind.
       return enable
         ? {
             status: "installed",
             name: plugin,
             dependencies: [],
             ...(outcome.version !== undefined && { version: outcome.version }),
+            // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+            // reloads Pi resources.
+            severity: "info",
+            needsReload: true,
           }
         : {
+            // D-06/RLD-02: a realized fresh disable unstages Pi-visible
+            // artefacts, so it stamps needsReload directly -- this is what lets
+            // the reload trailer fire via the OR-reduce instead of the
+            // kind-based `disable-cascade` straddle. List/info `disabled`
+            // inventory rows stamp needsReload:false, so the trailer stays
+            // scoped to the realized transition.
             status: "disabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
+            severity: "info",
+            needsReload: true,
           };
   }
 }

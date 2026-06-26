@@ -78,6 +78,12 @@ import {
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -87,6 +93,7 @@ import {
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { REINSTALL_CONTEXT, type ReinstallMsg } from "./reinstall.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
@@ -103,10 +110,9 @@ import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
-  Dependency,
-  MarketplaceNotificationMessage,
   PluginFailedMessage,
   PluginManualRecoveryMessage,
   PluginNotificationMessage,
@@ -248,6 +254,24 @@ export async function reinstallPlugin(
   }
 
   if (locked.outcome.partition !== "reinstalled") {
+    // CR-02 / D-01: the standalone single-plugin path must emit the absent-target
+    // row, not return silently. A `skipped` partition is the "not installed" case
+    // D-01 targets -> error; other skip reasons fall back to `skipSeverity`.
+    // Mirrors the bulk `outcomeToPluginMessage` skipped arm.
+    if (render !== "none") {
+      const reasons = narrowReasons(locked.outcome.notes);
+      const skippedRow: PluginSkippedMessage = {
+        status: "skipped",
+        name: plugin,
+        reasons,
+        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
+        needsReload: false,
+      };
+      notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+        { name: marketplace, scope, plugins: [skippedRow] },
+      ]);
+    }
+
     return locked.outcome;
   }
 
@@ -284,10 +308,13 @@ export async function reinstallPlugin(
     name: plugin,
     dependencies: dependenciesFromOutcome(locked.outcome),
     version: locked.outcome.version,
+    // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
+    severity: "info",
+    needsReload: true,
   };
-  notify(ctx, pi, {
-    marketplaces: [{ name: marketplace, scope, plugins: [reinstalledRow] }],
-  });
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+    { name: marketplace, scope, plugins: [reinstalledRow] },
+  ]);
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artefacts were
@@ -297,22 +324,23 @@ export async function reinstallPlugin(
     const targetBasename = path.basename(
       opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
     );
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid config write-back -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
+          },
+        ],
+      },
+    ]);
   }
 
   return locked.outcome;
@@ -358,16 +386,23 @@ function handleSinglePluginFailure(
           name: plugin,
           reasons,
           cause: causeErr,
+          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
+          // no reload.
+          severity: "warning",
+          needsReload: false,
         } satisfies PluginManualRecoveryMessage)
       : ({
           status: "failed",
           name: plugin,
           reasons,
           cause: causeErr,
+          // D-03/D-06: a failed reinstall -> error, no reload.
+          severity: "error",
+          needsReload: false,
         } satisfies PluginFailedMessage);
-    notify(ctx, pi, {
-      marketplaces: [{ name: marketplace, scope, plugins: [failureRow] }],
-    });
+    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+      { name: marketplace, scope, plugins: [failureRow] },
+    ]);
   }
 
   return {
@@ -405,6 +440,10 @@ export async function reinstallPlugins(
   }
 
   const outcomes: ReinstallPluginOutcome[] = [];
+  // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
+  // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
+  // the `@<marketplace>` and bare forms are bulk (emit the tally).
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   for (const target of targets) {
     try {
       outcomes.push(
@@ -449,7 +488,7 @@ export async function reinstallPlugins(
     }
   }
 
-  renderReinstallPartitionAndNotify(ctx, pi, outcomes);
+  renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
   return Object.freeze(outcomes);
 }
 
@@ -497,10 +536,13 @@ function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: unknown): 
     name: "(reinstall)",
     reasons,
     cause: causeErr,
+    // D-03/D-06: bare-form reinstall enumerate failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
   };
-  notify(ctx, pi, {
-    marketplaces: [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
-  });
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
+    { name: targetingMp, scope: targetingScope, plugins: [failedRow] },
+  ]);
 }
 
 async function enumerateReinstallTargets(
@@ -720,6 +762,7 @@ function renderReinstallPartitionAndNotify(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   outcomes: readonly ReinstallPluginOutcome[],
+  cardinality: "single" | "plural",
 ): void {
   // Group rows by (scope, marketplace) in input order. Two different scopes
   // for the same marketplace name render as two separate marketplace
@@ -751,14 +794,26 @@ function renderReinstallPartitionAndNotify(
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
 
-  const marketplaces: MarketplaceNotificationMessage[] = sortedBlocks.map((block) => {
-    const plugins: PluginNotificationMessage[] = block.outcomes.map(
-      (o): PluginNotificationMessage => outcomeToPluginMessage(o, block.scope),
+  // OUT-07 / D-12: the reinstall cascade is a bulk op, so its row slot is typed
+  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
+  // variable-length array, identical at runtime.
+  // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
+  // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
+  // annotation holds without a cast -- a status drift between the producer and
+  // the render map is a compile error here.
+  const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
+    const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
+      outcomeToPluginMessage(o, block.scope),
     );
     return { name: block.name, scope: block.scope, plugins };
   });
 
-  notify(ctx, pi, { marketplaces });
+  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
+  // (`@marketplace` / bare) reinstall forms; a single-target `<plugin>@<mp>`
+  // reinstall omits it (the row embeds the outcome). The structural
+  // single-vs-plural signal is the invocation FORM, threaded from
+  // `reinstallPlugins`.
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 /**
@@ -803,7 +858,7 @@ function isManualRecoveryOutcome(
 function outcomeToPluginMessage(
   outcome: ReinstallPluginOutcome,
   marketplaceScope: Scope,
-): PluginNotificationMessage {
+): ReinstallMsg {
   const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
   switch (outcome.partition) {
     case "reinstalled": {
@@ -819,6 +874,9 @@ function outcomeToPluginMessage(
         dependencies,
         ...(outcome.version !== "" && { version: outcome.version }),
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     }
 
@@ -829,6 +887,12 @@ function outcomeToPluginMessage(
         name: outcome.name,
         reasons,
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-01: an absent-target reinstall (the named plugin is not installed)
+        // cannot be carried out -> error (severity-only flip; the `(skipped)
+        // {not installed}` per-row grammar is preserved). Otherwise benign
+        // idempotent skip -> info, actionable skip -> warning; never reloads.
+        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
+        needsReload: false,
       };
       return skipped;
     }
@@ -846,9 +910,15 @@ function outcomeToPluginMessage(
       //  (1) failureClass=manual-recovery -> ["rollback partial"]
       //  (2) typed outcome.reasons -> verbatim
       //  (3) narrowReasons(outcome.notes) -> substring fallback
-      const reasons: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
+      // WR-04: `narrowReasons([])` and `narrowReasons(undefined)` both return
+      // `[]`, which would render a failed row with no `{<reason>}` brace. Guard
+      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row never
+      // renders bare.
+      const narrowed: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
+      const reasons: readonly ContentReason[] =
+        narrowed.length > 0 ? narrowed : (["unreadable"] as const);
 
       if (isManualRecoveryOutcome(outcome)) {
         const manualRecovery: PluginManualRecoveryMessage = {
@@ -856,6 +926,10 @@ function outcomeToPluginMessage(
           name: outcome.name,
           reasons,
           ...(rowScope !== undefined && { scope: rowScope }),
+          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
+          // no reload.
+          severity: "warning",
+          needsReload: false,
         };
         return manualRecovery;
       }
@@ -865,6 +939,9 @@ function outcomeToPluginMessage(
         name: outcome.name,
         reasons,
         ...(rowScope !== undefined && { scope: rowScope }),
+        // D-03/D-06: a failed reinstall -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
       return failed;
     }

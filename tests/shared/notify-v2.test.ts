@@ -89,21 +89,23 @@
  *     - Empty `plugins: []` on a per-marketplace block: bare header alone
  *       (no `(no plugins)` sentinel inside the body; D-15-08).
  *
- *   RELOAD-HINT TRIGGER LADDER (D-16-12 -- refines SNM-15):
- *     - Any plugin.status in {"installed", "updated", "reinstalled",
- *       "uninstalled"}, OR
- *     - Any mp.status in {"added", "removed", "updated"} (state-changing;
- *       NOT "failed").
+ *   RELOAD-HINT TRIGGER (RLD-02 / D-07):
+ *     - The `/reload to pick up changes` trailer fires iff the OR-reduce of
+ *       the caller-stamped `row.needsReload` over the flattened marketplace +
+ *       plugin rows is true. The reducer performs NO status-token or
+ *       cascade-kind inference -- it reads the stamped flag directly.
  *     - Otherwise: suppressed.
  *
  *   RELOAD-HINT APPEND:
  *     `${body}\n\n/reload to pick up changes` -- one blank line between
  *     body and trailer (D-16-13; mirrors V1's appendReloadHint shape).
  *
- *   SEVERITY LADDER (D-16-11, first match wins):
- *     1. Any plugin.status === "failed" OR mp.status === "failed" -> "error"
- *     2. Any plugin.status in {"skipped", "manual recovery"}      -> "warning"
- *     3. Otherwise                                                -> undefined (info)
+ *   SEVERITY REDUCE (SEV-02 / D-16-11):
+ *     Emission severity is the numeric MAX over the caller-stamped
+ *     `row.severity` across every marketplace + plugin row (info < warning <
+ *     error), with an `info` default when no row stamps a higher rank. The
+ *     reducer performs NO content/status inference -- it reduces the stamped
+ *     fields directly.
  *
  *     Pi-API surface: omit-2nd-arg = info severity; pass "warning" / "error"
  *     otherwise.
@@ -131,12 +133,12 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import { type HookSummaryEntry } from "../../extensions/pi-claude-marketplace/shared/concerns/hooks.ts";
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   notify,
   notifyUsageError,
   REASONS,
-  type HookSummaryEntry,
   type NotificationMessage,
   type UsageErrorMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
@@ -211,6 +213,8 @@ test("notify renders single installed plugin with empty deps under added marketp
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -238,6 +242,8 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: ["agents"],
@@ -265,6 +271,8 @@ test("notify renders updated plugin with version arrow + mcp dep marker", () => 
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             from: "1.0.0",
             to: "1.1.0",
@@ -293,6 +301,8 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
         plugins: [
           {
             status: "reinstalled",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: ["agents", "mcp"],
@@ -320,6 +330,8 @@ test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)"
         plugins: [
           {
             status: "uninstalled",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
           },
@@ -429,6 +441,8 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["up-to-date"],
@@ -442,7 +456,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
   // The marketplace-status arm is deleted per SNM-33 / D-22-01, so a
   // `(skipped)` row under an `(added)` marketplace emits NO trailer
   // (`skipped` is not one of installed/updated/reinstalled/uninstalled).
-  // Per UXG-02 / D-28-06 the single reason `up-to-date` is in BENIGN_REASONS,
+  // Per UXG-02 / D-28-06 the single reason `up-to-date` is in IDEMPOTENT_REASONS,
   // so this all-benign cascade computes INFO (no 2nd severity arg).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ⊘ commit-commands v1.0.0 (skipped) {up-to-date}`,
@@ -458,9 +472,12 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["network unreachable"],
@@ -476,7 +493,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   // routes severity to "error" per D-16-11. UXG-07 (D-29-02/03):
   // 1 failed plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
     "error",
   ]);
 });
@@ -529,7 +546,16 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -540,7 +566,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   // (D-29-03): 0 failed plugins, 1 failed marketplace -> marketplace-only
   // singular summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ demo [user] (failed)`,
     "error",
   ]);
 });
@@ -551,7 +577,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 // marketplace state that omits `reasons`. `composeReasons(undefined, ...)`
 // returns "", and the renderer's `reasonsBrace === ""` ternary then emits the
 // bare `⊘ <name> [<scope>] (failed)` header with NO reason brace. These tests
-// pin the THREE pre-existing bare-`(failed)` byte forms that this milestone's
+// pin the THREE pre-existing bare-`(failed)` byte forms that the current
 // catalog states reference:
 //   - `failure-unreachable` (marketplace add)  -> `⊘ <mp> [<scope>] (failed)`
 //   - `mp-failure-network`  (marketplace update) -> same header (cause rides a
@@ -567,13 +593,22 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "unreachable-mp", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "unreachable-mp",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ unreachable-mp [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ unreachable-mp [user] (failed)`,
     "error",
   ]);
   // The header carries NO reason brace -- the D-48-A `reasons?` addition did not
@@ -586,13 +621,22 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "official", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ official [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ official [user] (failed)`,
     "error",
   ]);
   assert.match(rendered, /⊘ official \[user\] \(failed\)$/m);
@@ -604,13 +648,22 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
   const pi = piWithBothLoaded();
   // Explicitly omit `reasons` on the MpFailed arm: the brace MUST collapse.
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "missing-mp", scope: "project", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "missing-mp",
+        scope: "project",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ missing-mp [project] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed)`,
     "error",
   ]);
   assert.match(rendered, /⊘ missing-mp \[project\] \(failed\)$/m);
@@ -665,6 +718,8 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already autoupdate"],
         plugins: [],
       },
@@ -674,7 +729,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // UXG-04 byte form: idempotent flip renders the marker-as-outcome plus the
   // idempotence brace (no `(skipped)` token). Per UXG-02 / D-28-07 the mp-level
-  // `skipped` reason `already autoupdate` is in BENIGN_REASONS, so this benign
+  // `skipped` reason `already autoupdate` is in IDEMPOTENT_REASONS, so this benign
   // no-op computes INFO (no 2nd arg); NO reload-hint (no state changed).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● foo [user] <autoupdate> {already autoupdate}`,
@@ -690,6 +745,8 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already no autoupdate"],
         plugins: [],
       },
@@ -699,7 +756,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // Structural assertion of the severity-arg ABSENCE; the byte form is
   // covered by the preceding test. Per UXG-02 / D-28-07 the mp-level
-  // `skipped` reason `already no autoupdate` is in BENIGN_REASONS, so this
+  // `skipped` reason `already no autoupdate` is in IDEMPOTENT_REASONS, so this
   // benign no-op computes INFO -- the 2nd arg is omitted (length 1).
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 1);
 });
@@ -719,6 +776,8 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
         name: "local-mp",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["up-to-date"],
         plugins: [],
       },
@@ -731,7 +790,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   // (a) Byte form: the shared mp-skipped arm renders `(skipped) {up-to-date}`.
   assert.equal(body, "● local-mp [user] (skipped) {up-to-date}");
   // (b) Severity: mp.status === "skipped" with the benign reason `up-to-date`
-  //     (in BENIGN_REASONS) computes INFO via computeSeverity -- the 2nd arg
+  //     (in IDEMPOTENT_REASONS) computes INFO via computeSeverity -- the 2nd arg
   //     is omitted (length 1). This realizes UXG-02 / D-28-07.
   assert.equal(args.length, 1);
   // (c) NO reload-hint: plugins:[] means no Pi-visible resource change, so the
@@ -759,6 +818,8 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
         name: "official",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["up-to-date"],
         plugins: [],
       },
@@ -785,7 +846,7 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   // Benign-only payload: mp-level "skipped" (idempotent autoupdate flip,
-  // reason `already autoupdate` in BENIGN_REASONS) sitting OVER a healthy
+  // reason `already autoupdate` in IDEMPOTENT_REASONS) sitting OVER a healthy
   // plugin row. This proves the benign-softening ladder dominates a
   // non-empty healthy plugin set: the cascade's ONLY non-success row is a
   // BENIGN mp-skip, so per UXG-02 / D-28-06 arm 5 it computes INFO.
@@ -802,6 +863,8 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
         name: "foo",
         scope: "user",
         status: "skipped",
+        severity: "info",
+        needsReload: false,
         reasons: ["already autoupdate"],
         plugins: [
           // "available" is a non-state-changing plugin row (no version,
@@ -884,18 +947,19 @@ test("notify renders header-only block on empty plugins under added marketplace 
 });
 
 // ===========================================================================
-// 16a / 16b: UAT G-21-01 inventory-vs-transition discriminator (SNM-15
-// surface tightening). The list-only `present` token does NOT trigger
-// the reload-hint; the cascade-context `installed` token DOES.
+// 16a / 16b: RLD-04 / RLD-02 inventory-vs-transition discriminator. The
+// steady-state `installed` inventory row stamps `needsReload: false` and does
+// NOT trigger the reload-hint; the `installed` cascade transition stamps
+// `needsReload: true` and DOES.
 // ===========================================================================
 
-test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits NO /reload trailer (SNM-15 inventory-vs-transition discriminator)", () => {
+test("RLD-04: list-shaped message with an installed inventory row (needsReload:false) emits NO /reload trailer (RLD-02 OR-reduce)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // List-shaped payload: mp.status === undefined (list surface) +
-  // single steady-state inventory row using the new list-only token
-  // `status: "present"`. shouldEmitReloadHint must NOT fire because
-  // "present" is deliberately ABSENT from the trigger set (gap fix).
+  // single steady-state inventory row stamped `needsReload: false`. The
+  // OR-reduce reload-hint (RLD-02) must NOT fire because no row stamps
+  // `needsReload: true`.
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -903,7 +967,9 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
         scope: "user",
         plugins: [
           {
-            status: "present",
+            status: "installed",
+            severity: "info",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -915,13 +981,12 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-  // The list-only `present` token renders byte-identical to `installed`
-  // on the human-visible row text (the renderer arm preserves the
-  // `(installed)` parenthetical so the list-surface byte assertions are
-  // preserved); only the trailing reload-hint is removed.
+  // The inventory `installed` row (needsReload:false) renders the
+  // `(installed)` parenthetical row text; only the trailing reload-hint is
+  // suppressed by the OR-reduce.
   assert.ok(
     body.includes("● alpha v1.0.0 (installed)"),
-    `expected body to include byte-identical-to-installed row, got: ${body}`,
+    `expected body to include the installed inventory row, got: ${body}`,
   );
   assert.ok(
     !body.includes("/reload to pick up changes"),
@@ -929,7 +994,7 @@ test("UAT G-21-01: list-shaped message with status: 'present' plugin row emits N
   );
 });
 
-test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row continues to emit the /reload trailer (transition token preserved)", () => {
+test("RLD-02: cascade-shaped message with an installed transition row (needsReload:true) emits the /reload trailer", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // Cascade-shaped payload: bare marketplace header (mp.status ===
@@ -945,6 +1010,8 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -964,11 +1031,11 @@ test("UAT G-21-01: cascade-shaped message with status: 'installed' plugin row co
 
 // ===========================================================================
 // PL-4: description second line (4-space indent, truncated at column 66).
-// Tests cover all four list-surface variants (present / upgradable /
+// Tests cover all four list-surface variants (installed / upgradable /
 // available / unavailable) and the truncation boundary.
 // ===========================================================================
 
-test("PL-4: present row with description emits a 4-space-indented second line", () => {
+test("PL-4: installed inventory row with description emits a 4-space-indented second line", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -978,7 +1045,9 @@ test("PL-4: present row with description emits a 4-space-indented second line", 
         scope: "user",
         plugins: [
           {
-            status: "present",
+            status: "installed",
+            severity: "info",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1075,6 +1144,35 @@ test("PL-4: unavailable row with description emits description line", () => {
   assert.equal(
     body,
     "● official [user]\n  ⊘ delta (unavailable) {unsupported hooks}\n    Unavailable plugin that still surfaces its description.",
+  );
+});
+
+test("PL-4: disabled inventory row with description emits description line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "disabled",
+            severity: "info",
+            needsReload: false,
+            name: "foo-plugin",
+            version: "1.2.3",
+            description: "Disabled plugin that still surfaces its description.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)\n    Disabled plugin that still surfaces its description.",
   );
 });
 
@@ -1202,7 +1300,15 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
         name: "local-mp",
         scope: "user",
         status: "updated",
-        plugins: [{ status: "skipped", name: "alpha", reasons: ["up-to-date"] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -1226,7 +1332,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
         name: "local-mp",
         scope: "user",
         status: "removed",
-        plugins: [{ status: "uninstalled", name: "alpha" }],
+        plugins: [{ status: "uninstalled", name: "alpha", severity: "info", needsReload: true }],
       },
     ],
   };
@@ -1249,7 +1355,15 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
         scope: "user",
         status: "updated",
         plugins: [
-          { status: "updated", name: "alpha", from: "1.0.0", to: "2.0.0", dependencies: [] },
+          {
+            status: "updated",
+            name: "alpha",
+            from: "1.0.0",
+            to: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
     ],
@@ -1339,6 +1453,8 @@ test("notify renders single-plugin payload as 2-line body (header + 2-space inde
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1371,9 +1487,30 @@ test("notify preserves caller-supplied plugin order across multi-plugin payload 
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "gamma", version: "1.0.0", dependencies: [] },
-          { status: "installed", name: "alpha", version: "2.0.0", dependencies: [] },
-          { status: "installed", name: "beta", version: "3.0.0", dependencies: [] },
+          {
+            status: "installed",
+            name: "gamma",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+          {
+            status: "installed",
+            name: "alpha",
+            version: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+          {
+            status: "installed",
+            name: "beta",
+            version: "3.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
     ],
@@ -1404,14 +1541,30 @@ test("notify joins multi-marketplace blocks with single blank line and appends r
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "alpha-plugin", version: "1.0.0", dependencies: [] },
+          {
+            status: "installed",
+            name: "alpha-plugin",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
         ],
       },
       {
         name: "beta-mp",
         scope: "project",
         status: "added",
-        plugins: [{ status: "installed", name: "beta-plugin", version: "2.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "beta-plugin",
+            version: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -1443,6 +1596,8 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -1487,6 +1642,8 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -1554,6 +1711,8 @@ test("notify omits scope bracket on installed plugin row when p.scope === mp.sco
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1602,6 +1761,8 @@ test("notify emits [project] bracket on installed plugin row when p.scope !== mp
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             version: "1.0.0",
             dependencies: [],
@@ -1645,6 +1806,8 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "alpha",
             from: "0.9.0",
             to: "1.0.0",
@@ -1695,6 +1858,8 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             reasons: ["unsupported source"],
@@ -1714,7 +1879,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   // UXG-07 (D-29-03): 1 failed plugin, 0 failed marketplace
   // (mp.status is "added", not "failed") -> plugin-only singular summary.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
+    `A plugin operation has failed.\n\n● demo [user] (added)\n  ⊘ alpha [project] v1.0.0 (failed) {unsupported source}`,
     "error",
   ]);
 
@@ -1749,9 +1914,12 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1769,7 +1937,7 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   // no reload-hint (D-16-12). UXG-07 (D-29-02/03): 1 failed
   // plugin + 1 failed marketplace -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    [skills] (rollback failed)\n    [agents] (rollback failed)`,
     "error",
   ]);
 });
@@ -1791,9 +1959,12 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1816,7 +1987,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}\n    cause: inner -> root\n    [skills] (rollback failed)\n      cause: EACCES`,
     "error",
   ]);
 });
@@ -1840,6 +2011,8 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "alpha",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1847,6 +2020,8 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
           },
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "beta",
             version: "2.0.0",
             reasons: ["network unreachable"],
@@ -1866,7 +2041,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   // UXG-07 (D-29-03): 2 failed plugins, 0 failed marketplace (mp "added")
   // -> plugin-only plural summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `2 plugin operations failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
+    `Some plugin operations have failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {permission denied}\n    cause: alpha-root\n  ⊘ beta v2.0.0 (failed) {network unreachable}\n    cause: beta-root`,
     "error",
   ]);
 });
@@ -1885,7 +2060,16 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
         name: "demo",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -1906,6 +2090,8 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -1916,7 +2102,7 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // An ACTIONABLE skip (`not installed`, D-28-03) is NOT in BENIGN_REASONS, so
+  // An ACTIONABLE skip (`not installed`, D-28-03) is NOT in IDEMPOTENT_REASONS, so
   // arm 3 of the D-28-06 ladder routes it to "warning" (a benign `up-to-date`
   // skip would compute info per UXG-02 -- see the dedicated info tests above).
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments.length, 2);
@@ -1932,8 +2118,22 @@ test('notify severity tier error first-match: failed + skipped in same payload -
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -1961,9 +2161,12 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["permission denied"],
@@ -1986,7 +2189,7 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
   // UXG-07 (D-29-02/03): 1 failed plugin + 1 failed marketplace
   // -> mixed-type summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {permission denied}`,
     "error",
   ]);
 });
@@ -2029,6 +2232,8 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2043,9 +2248,9 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   // status slot is the literal "(manual recovery)" WITH a space. Severity
   // is "warning" per D-16-11. Cause-chain at 4-space indent below the row
   // per D-16-08. UXG-07 (D-29-04): a manual-recovery row counts
-  // as 1 actionable skip -> "1 plugin operation skipped." summary prefix.
+  // as 1 actionable skip -> "A plugin operation needs attention." summary prefix.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    `A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
 });
@@ -2065,6 +2270,8 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2099,6 +2306,8 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2137,6 +2346,8 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "hash-2ea95f85703d",
             dependencies: [],
@@ -2166,6 +2377,8 @@ test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7he
         plugins: [
           {
             status: "updated",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             from: "hash-2ea95f85703d",
             to: "hash-1c3d9a0bbef1",
@@ -2195,6 +2408,8 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "commit-commands",
             version: "1.0.0",
             dependencies: [],
@@ -2229,7 +2444,7 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   // `not installed` is the actionable "can't update/reinstall a plugin that
-  // isn't there" reason (D-28-03); it is NOT in BENIGN_REASONS, so arm 3 of
+  // isn't there" reason (D-28-03); it is NOT in IDEMPOTENT_REASONS, so arm 3 of
   // the D-28-06 ladder routes the cascade to "warning".
   const msg: NotificationMessage = {
     marketplaces: [
@@ -2239,6 +2454,8 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -2267,8 +2484,22 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] },
-          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+          {
+            status: "skipped",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2294,7 +2525,16 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
       {
         name: "demo",
         scope: "user",
-        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: [] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: [],
+            severity: "warning",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -2312,7 +2552,16 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   // proven benign (allBenign returns false on undefined), so arm 4 of the
   // D-28-06 ladder routes it to "warning" -- the D-28-08 safe default.
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "skipped", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "skipped",
+        plugins: [],
+        severity: "warning",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2333,7 +2582,7 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
 // file-private).
 // ===========================================================================
 
-test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 plugin operation and 1 marketplace operation failed.' summary prepended", () => {
+test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Some operations have failed.' summary prepended", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2342,9 +2591,12 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 p
         name: "demo",
         scope: "user",
         status: "failed",
+        severity: "error",
         plugins: [
           {
             status: "failed",
+            severity: "error",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["network unreachable"],
@@ -2357,12 +2609,43 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> '1 p
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // 1 failed plugin + 1 failed marketplace -> mixed-type sentence.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation and 1 marketplace operation failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
+    `Some operations have failed.\n\n⊘ demo [user] (failed)\n  ⊘ commit-commands v1.0.0 (failed) {network unreachable}`,
     "error",
   ]);
 });
 
-test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugin operation failed.' (single-type singular)", () => {
+test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugin operation has failed.' (single-type singular)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["unsupported source"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // 1 failed plugin, 0 failed marketplace -> single-type singular.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `A plugin operation has failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
+    "error",
+  ]);
+});
+
+test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plugin operations have failed.' (single-type plural)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2376,33 +2659,18 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> '1 plugi
             status: "failed",
             name: "alpha",
             version: "1.0.0",
-            reasons: ["unsupported source"],
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
           },
-        ],
-      },
-    ],
-  };
-  notify(ctx as never, pi as never, msg);
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  // 1 failed plugin, 0 failed marketplace -> single-type singular.
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation failed.\n\n● demo [user] (added)\n  ⊘ alpha v1.0.0 (failed) {unsupported source}`,
-    "error",
-  ]);
-});
-
-test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin operations failed.' (single-type plural)", () => {
-  const ctx = makeCtx();
-  const pi = piWithNothingLoaded();
-  const msg: NotificationMessage = {
-    marketplaces: [
-      {
-        name: "demo",
-        scope: "user",
-        status: "added",
-        plugins: [
-          { status: "failed", name: "alpha", version: "1.0.0", reasons: ["permission denied"] },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["network unreachable"] },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["network unreachable"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2411,28 +2679,37 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> '2 plugin 
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("2 plugin operations failed.\n\n"),
-    "two-failed-plugin cascade summary must read '2 plugin operations failed.'",
+    body.startsWith("Some plugin operations have failed.\n\n"),
+    "two-failed-plugin cascade summary must read 'Some plugin operations have failed.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "error");
 });
 
-test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> '1 marketplace operation failed.' (single-type marketplace)", () => {
+test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplace operation has failed.' (single-type marketplace)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
-    marketplaces: [{ name: "demo", scope: "user", status: "failed", plugins: [] }],
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "failed",
+        plugins: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // 0 failed plugins, 1 failed marketplace -> single-type marketplace.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 marketplace operation failed.\n\n⊘ demo [user] (failed)`,
+    `A marketplace operation has failed.\n\n⊘ demo [user] (failed)`,
     "error",
   ]);
 });
 
-test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin operation skipped.'", () => {
+test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin operation needs attention.'", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2443,6 +2720,8 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin
         plugins: [
           {
             status: "skipped",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["not installed"],
@@ -2455,13 +2734,13 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> '1 plugin
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("1 plugin operation skipped.\n\n"),
-    "single actionable-skip cascade summary must read '1 plugin operation skipped.'",
+    body.startsWith("A plugin operation needs attention.\n\n"),
+    "single actionable-skip cascade summary must read 'A plugin operation needs attention.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
 
-test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> '1 plugin operation skipped.'", () => {
+test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionable skip -> 'A plugin operation needs attention.'", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2472,6 +2751,8 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
         plugins: [
           {
             status: "manual recovery",
+            severity: "warning",
+            needsReload: false,
             name: "commit-commands",
             version: "1.0.0",
             reasons: ["rollback partial"],
@@ -2485,7 +2766,7 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // manual-recovery row counts toward the skipped/actionable count (D-29-04).
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `1 plugin operation skipped.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
+    `A plugin operation needs attention.\n\n● demo [user]\n  ⊘ commit-commands v1.0.0 (manual recovery) {rollback partial}\n    cause: EACCES`,
     "warning",
   ]);
 });
@@ -2499,24 +2780,45 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "skipped", name: "alpha", version: "1.0.0", reasons: ["not installed"] },
-          { status: "skipped", name: "beta", version: "2.0.0", reasons: ["not installed"] },
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
+          {
+            status: "skipped",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
         ],
       },
-      { name: "other", scope: "user", status: "skipped", plugins: [] },
+      {
+        name: "other",
+        scope: "user",
+        status: "skipped",
+        plugins: [],
+        severity: "warning",
+        needsReload: false,
+      },
     ],
   };
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("2 plugin operations and 1 marketplace operation skipped.\n\n"),
-    "mixed actionable-skip cascade summary must read '2 plugin operations and 1 marketplace operation skipped.'",
+    body.startsWith("Some operations need attention.\n\n"),
+    "mixed actionable-skip cascade summary must read 'Some operations need attention.'",
   );
   assert.equal(ctx.ui.notify.mock.calls[0]!.arguments[1], "warning");
 });
 
-test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to pre-Phase-29)", () => {
+test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identical to prior info-severity behavior)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -2525,7 +2827,16 @@ test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identic
         name: "demo",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -2549,8 +2860,21 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
         name: "demo",
         scope: "user",
         plugins: [
-          { status: "uninstalled", name: "alpha", version: "1.0.0" },
-          { status: "failed", name: "beta", version: "2.0.0", reasons: ["permission denied"] },
+          {
+            status: "uninstalled",
+            name: "alpha",
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+          {
+            status: "failed",
+            name: "beta",
+            version: "2.0.0",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
         ],
       },
     ],
@@ -2559,7 +2883,7 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.ok(
-    body.startsWith("1 plugin operation failed.\n\n"),
+    body.startsWith("A plugin operation has failed.\n\n"),
     "summary line must be the first line of the composed string",
   );
   assert.ok(
@@ -2581,7 +2905,16 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
       {
         name: "demo",
         scope: "user",
-        plugins: [{ status: "skipped", name: "alpha", version: "1.0.0", reasons: ["up-to-date"] }],
+        plugins: [
+          {
+            status: "skipped",
+            name: "alpha",
+            version: "1.0.0",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -2590,7 +2923,8 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1, "benign-only skip is info severity -- single-arg call, no summary");
   assert.ok(
-    !(args[0] as string).includes("operation skipped."),
+    !(args[0] as string).includes("needs attention.") &&
+      !(args[0] as string).includes("need attention."),
     "info-severity cascade must NOT carry a summary line",
   );
 });
@@ -2739,7 +3073,7 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   // first line, with the detail row as its own block below (separated by
   // `\n\n`) -- never the glued single line. GRAM-02: the summary subject
   // follows the failed row -- a `marketplace-not-added` failure reads
-  // "1 marketplace operation failed." The variant routes to "error" through
+  // "A marketplace operation has failed." The variant routes to "error" through
   // the single `isInfoKind` guard.
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
@@ -2751,12 +3085,12 @@ test("GRAM-01 / GRAM-02: standalone {not added} row renders the two-block summar
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "1 marketplace operation failed.\n\n⊘ my-mp [user] (failed) {not added}",
+    "A marketplace operation has failed.\n\n⊘ my-mp [user] (failed) {not added}",
     "error",
   ]);
 });
 
-test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.` + separate multi-line detail block", () => {
+test("GRAM-02: standalone failed plugin-info renders `A plugin operation has failed.` + separate multi-line detail block", () => {
   // GRAM-02: a failed `plugin-info` emission (e.g. plugin info on a
   // schema-invalid manifest) takes the PLUGIN subject. The summary is its own
   // block above the existing multi-line plugin-info body (header + indented
@@ -2781,7 +3115,7 @@ test("GRAM-02: standalone failed plugin-info renders `1 plugin operation failed.
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     [
-      "1 plugin operation failed.",
+      "A plugin operation has failed.",
       "",
       "● bad-mp [user] <no autoupdate>",
       "  ⊘ bad-mp (failed) {invalid manifest}",
@@ -2984,7 +3318,7 @@ test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for too
 });
 
 test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", () => {
-  // Task 1 Test 4 fixture: 3 tool events with matchers + 1 non-tool event
+  // Fixture: 3 tool events with matchers + 1 non-tool event
   // without one. Lock the exact 5-line block (header + 4 entries) in the
   // exact order supplied by the caller (the renderer does NOT sort).
   const ctx = makeCtx();
@@ -3589,7 +3923,16 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3599,7 +3942,16 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "installed", name: "alpha", version: "1.0.0", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3782,7 +4134,15 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
         name: "official",
         scope: "user",
         details: { autoupdate: true },
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3801,7 +4161,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin" }],
+        plugins: [{ status: "disabled", name: "foo-plugin", severity: "info", needsReload: false }],
       },
     ],
   };
@@ -3819,7 +4179,16 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
       {
         name: "shared",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "project" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            scope: "project",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3837,7 +4206,16 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
       {
         name: "official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3", scope: "user" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            scope: "user",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
@@ -3847,21 +4225,28 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   assert.equal(args[0], `● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
-test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
+test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
-  // The /claude:plugin disable command's fresh cascade: the orchestrator
-  // dispatches with the `disable-cascade` kind so the `(disabled)` row
-  // counts as a state-change transition in shouldEmitReloadHint (artefacts
-  // were unstaged -- SNM-33). The row itself renders byte-identically to
-  // the kind-less inventory form asserted above; ONLY the trailer differs.
+  // The /claude:plugin disable command's fresh cascade: the fresh
+  // `(disabled)` row stamps `needsReload: true` (its artefacts were unstaged
+  // -- SNM-33), so the RLD-02 OR-reduce fires the trailer with no
+  // distinguishing cascade kind. The row renders byte-identically to the
+  // inventory form asserted above; ONLY the trailer differs.
   const msg: NotificationMessage = {
-    kind: "disable-cascade",
     marketplaces: [
       {
         name: "claude-plugins-official",
         scope: "user",
-        plugins: [{ status: "disabled", name: "foo-plugin", version: "1.2.3" }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -3881,30 +4266,36 @@ test("UAT-03: (disabled) row on a `disable-cascade`-kind cascade DOES emit the /
   );
 });
 
-test("UAT-03: `disable-cascade` kind WITHOUT a (disabled) row stays trailer-free for non-trigger rows (kind alone is not a trigger)", () => {
+test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false stays trailer-free (stamp drives the hint, not the row status)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
-  // The disable verb's idempotent arm also carries the kind (a no-op for
-  // the hint ladder): a (skipped) {already disabled} row must NOT emit the
-  // trailer -- the kind only promotes `(disabled)` rows, it is not a
-  // blanket trigger.
+  // A list/info inventory `(disabled)` row -- byte-identical to the fresh
+  // transition row above -- stamps `needsReload: false`, so the RLD-02
+  // OR-reduce stays false and NO trailer fires. This is the per-row stamp
+  // replacing the former `disable-cascade` kind straddle: the same status
+  // token can be a realized transition (stamp true) or steady-state
+  // inventory (stamp false).
   const msg: NotificationMessage = {
-    kind: "disable-cascade",
     marketplaces: [
       {
         name: "claude-plugins-official",
         scope: "user",
-        plugins: [{ status: "skipped", name: "foo-plugin", reasons: ["already disabled"] }],
+        plugins: [
+          {
+            status: "disabled",
+            name: "foo-plugin",
+            version: "1.2.3",
+            severity: "info",
+            needsReload: false,
+          },
+        ],
       },
     ],
   };
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(
-    args[0],
-    `● claude-plugins-official [user]\n  ⊘ foo-plugin (skipped) {already disabled}`,
-  );
+  assert.equal(args[0], `● claude-plugins-official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {
@@ -3918,6 +4309,8 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "foo-plugin",
             reasons: ["already enabled"],
           },
@@ -3946,6 +4339,8 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
         plugins: [
           {
             status: "skipped",
+            severity: "info",
+            needsReload: false,
             name: "foo-plugin",
             reasons: ["already disabled"],
           },
@@ -3974,6 +4369,8 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "foo-plugin",
             version: "1.2.3",
             dependencies: [],
@@ -4002,6 +4399,8 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
         plugins: [
           {
             status: "uninstalled",
+            severity: "info",
+            needsReload: true,
             name: "foo-plugin",
             version: "1.2.3",
           },
@@ -4045,13 +4444,29 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
         name: "new-mp",
         scope: "project",
         status: "added",
-        plugins: [{ status: "installed", name: "new-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "new-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
       {
         name: "other-mp",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "other-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "other-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -4077,8 +4492,8 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
         scope: "user",
         status: "added",
         plugins: [
-          { status: "installed", name: "a", dependencies: [] },
-          { status: "uninstalled", name: "b" },
+          { status: "installed", name: "a", dependencies: [], severity: "info", needsReload: true },
+          { status: "uninstalled", name: "b", severity: "info", needsReload: true },
         ],
       },
     ],
@@ -4101,6 +4516,8 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
         name: "flaky-mp",
         scope: "user",
         status: "failed",
+        severity: "error",
+        needsReload: false,
         reasons: ["network unreachable"],
         plugins: [],
       },
@@ -4108,7 +4525,15 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
         name: "ok-mp",
         scope: "user",
         status: "added",
-        plugins: [{ status: "installed", name: "ok-plugin", dependencies: [] }],
+        plugins: [
+          {
+            status: "installed",
+            name: "ok-plugin",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
       },
     ],
   };
@@ -4118,7 +4543,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `1 marketplace operation failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
+    `A marketplace operation has failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
   );
 });
 
@@ -4132,6 +4557,8 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
         name: "claude-plugins.json",
         scope: "project",
         status: "failed",
+        severity: "error",
+        needsReload: false,
         reasons: ["invalid manifest"],
         plugins: [],
       },
@@ -4143,7 +4570,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `1 marketplace operation failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
+    `A marketplace operation has failed.\n\n⊘ claude-plugins.json [project] (failed) {invalid manifest}`,
   );
 });
 
@@ -4154,7 +4581,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
 test("SURF-05 / D-63-08: REASONS tuple includes the literal 'orphan rewake' member", () => {
   // Closed-set membership proof. The tuple addition is the only seam the
   // resolver-side `partial.orphanRewake` and the install row composition
-  // (Plan 63-04) depend on; if the tuple ever drops the member the
+  // depend on; if the tuple ever drops the member the
   // composition site stops typechecking.
   assert.ok(
     (REASONS as readonly string[]).includes("orphan rewake"),
@@ -4177,6 +4604,8 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
         plugins: [
           {
             status: "installed",
+            severity: "info",
+            needsReload: true,
             name: "helper",
             version: "1.0.0",
             dependencies: [],

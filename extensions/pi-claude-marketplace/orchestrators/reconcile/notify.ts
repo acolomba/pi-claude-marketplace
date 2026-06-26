@@ -38,9 +38,10 @@ import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { ReconcilePlan } from "./types.ts";
+import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
 import type {
-  CascadeNotificationMessage,
   ContentReason,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
@@ -65,27 +66,27 @@ type ReconcileBlockStatus = Extract<
   "will add" | "will remove" | "added" | "removed" | "failed"
 >;
 
-interface MarketplaceBlock {
+interface MarketplaceBlock<Msg extends PluginNotificationMessage = PluginNotificationMessage> {
   readonly key: string;
   readonly name: string;
   readonly scope: Scope;
   status?: ReconcileBlockStatus;
   reasons?: readonly ContentReason[];
-  plugins: PluginNotificationMessage[];
+  plugins: Msg[];
 }
 
-function ensureMarketplaceBlock(
-  byMp: Map<string, MarketplaceBlock>,
+function ensureMarketplaceBlock<Msg extends PluginNotificationMessage>(
+  byMp: Map<string, MarketplaceBlock<Msg>>,
   scope: Scope,
   marketplaceName: string,
-): MarketplaceBlock {
+): MarketplaceBlock<Msg> {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
   if (existing !== undefined) {
     return existing;
   }
 
-  const block: MarketplaceBlock = {
+  const block: MarketplaceBlock<Msg> = {
     key,
     name: marketplaceName,
     scope,
@@ -107,7 +108,9 @@ function ensureMarketplaceBlock(
  *    plugin child rows (e.g. a pending-uninstall under an existing
  *    marketplace whose source matches).
  */
-function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotificationMessage {
+function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
+  block: MarketplaceBlock<Msg>,
+): WithPlugins<MarketplaceNotificationMessage, Msg> {
   const name = block.name;
   const scope = block.scope;
   const plugins = Object.freeze(block.plugins);
@@ -132,6 +135,8 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
         name,
         scope,
         status: "failed",
+        // D-03: a failed reconcile block -> error.
+        severity: "error",
         plugins,
         ...(block.reasons !== undefined && { reasons: block.reasons }),
       };
@@ -157,7 +162,7 @@ function blockToMarketplaceMessage(block: MarketplaceBlock): MarketplaceNotifica
  * collapsing into one anonymous marketplace row.
  */
 function applySourceMismatch(
-  block: MarketplaceBlock,
+  block: MarketplaceBlock<PendingMsg>,
   mismatch: ReconcilePlan["sourceMismatches"][number],
 ): void {
   block.status = "failed";
@@ -167,12 +172,18 @@ function applySourceMismatch(
       status: "failed",
       name: mismatch.plugin,
       reasons: ["source mismatch"],
+      // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+      severity: "error",
+      needsReload: false,
     });
   }
 }
 
 /**
- * Pure projection: ReconcilePlan[] -> CascadeNotificationMessage.
+ * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
+ * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
+ * statically pinned to the pending render map's status set -- the consumer
+ * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
  *
  * Every plan action is folded into its `(scope, marketplace)` block. The
  * mapping is:
@@ -194,10 +205,10 @@ function applySourceMismatch(
  * block preserve insertion order per their owning bucket -- the apply path
  * will re-order at execution time if needed.
  */
-export function buildReconcilePendingNotification(
-  plans: readonly ReconcilePlan[],
-): CascadeNotificationMessage {
-  const byMp = new Map<string, MarketplaceBlock>();
+export function buildReconcilePendingNotification(plans: readonly ReconcilePlan[]): {
+  readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
+} {
+  const byMp = new Map<string, MarketplaceBlock<PendingMsg>>();
 
   for (const plan of plans) {
     for (const o of plan.marketplacesToAdd) {
@@ -308,7 +319,10 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * declaresMcp). The reverse asymmetry (a successful disable maps to
  * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
  */
-function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome): void {
+function applyOutcomeToBlock(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: PerEntryOutcome,
+): void {
   switch (outcome.kind) {
     case "mp-added":
       block.status = "added";
@@ -334,6 +348,11 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
         dependencies: outcome.dependencies,
+        // D-03/D-06: realized install transition -> info, reloads. (The
+        // reconcile-applied cascade still suppresses the /reload trailer at the
+        // kind level -- RECON-04 -- so this needsReload never surfaces a hint.)
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-uninstalled":
@@ -341,6 +360,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "uninstalled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
+        // D-03/D-06: realized uninstall transition -> info, reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-enabled":
@@ -357,6 +379,10 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
         dependencies: [],
+        // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+        // reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-disabled":
@@ -364,6 +390,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "disabled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
+        // D-03/D-06: a realized disable transition -> info, reloads.
+        severity: "info",
+        needsReload: true,
       });
       return;
     case "plugin-install-failed":
@@ -374,6 +403,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
         status: "failed",
         name: outcome.plugin,
         reasons: reasonAsContent(outcome.reason),
+        // D-03/D-06: a failed reconcile apply row -> error, no reload.
+        severity: "error",
+        needsReload: false,
       });
       return;
     case "source-mismatch":
@@ -384,6 +416,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
           status: "failed",
           name: outcome.plugin,
           reasons: ["source mismatch"],
+          // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+          severity: "error",
+          needsReload: false,
         });
       }
 
@@ -409,6 +444,9 @@ function applyOutcomeToBlock(block: MarketplaceBlock, outcome: PerEntryOutcome):
           name: outcome.basename,
           reasons: [outcome.reason],
           cause: outcome.cause,
+          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+          severity: "error",
+          needsReload: false,
         });
       }
 
@@ -471,7 +509,14 @@ function reasonAsContent(reason: Reason): readonly ContentReason[] {
 export function buildReconcileAppliedCascade(
   outcomes: readonly PerEntryOutcome[],
 ): ReconcileAppliedCascadeMessage {
-  const byMp = new Map<string, MarketplaceBlock>();
+  // RECON-04 / WR-02: pin the block's plugin children to the applied context's
+  // `ReconcileAppliedMsg` union so each `applyOutcomeToBlock` push is checked
+  // against the render map's status set (installed/uninstalled/disabled/failed).
+  // A status drift between this producer and `RECONCILE_APPLIED_CONTEXT.render`
+  // is then a compile error here, not a reachable `dispatchRow` fallback at load
+  // time. The resulting rows widen to the broad `ReconcileAppliedCascadeMessage`
+  // shape (a safe upcast, mirroring the pending-cascade pattern).
+  const byMp = new Map<string, MarketplaceBlock<ReconcileAppliedMsg>>();
 
   for (const outcome of outcomes) {
     // Block keying derives the renderable subject per outcome variant: most

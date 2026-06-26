@@ -49,11 +49,11 @@ test("HOOK-04: narrowResolverNotes emits `unsupported hooks` for the resolver's 
   assert.deepEqual([...reasons], ["unsupported hooks"]);
 });
 
-test("HOOK-04 Pitfall 2: a free-form note containing `hooks` outside any known prefix does NOT classify as `unsupported hooks`", () => {
+test("HOOK-04: a free-form note containing `hooks` outside any known prefix does NOT classify as `unsupported hooks`", () => {
   // The old `note.includes("hooks")` form would have matched this note
   // and falsely emitted `unsupported hooks`. The tightened `startsWith`
   // form lets this fall through to the permissive `unsupported source`
-  // fallback. Locks Pitfall 2.
+  // fallback. Locks this classification.
   const reasons = narrowResolverNotes(["contains lspServers / hooks mentioned elsewhere"]);
   // The `lspServers` substring takes precedence at order (2); the
   // `unsupported hooks` arm is NOT triggered because the note does not

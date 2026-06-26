@@ -70,7 +70,7 @@ The soft-dep markers `requires pi-subagents` and `requires pi-mcp` live INSIDE t
 
 The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries a state-change token. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
-The list-only inventory token `present` (emitted by `/claude:plugin list` for already-installed plugins as a steady-state row -- distinct from the cascade-context `installed` transition token) is deliberately ABSENT from the plugin-status trigger set. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: within a given cascade kind, every status discriminator either always triggers or never triggers. The `disabled` token resolves its inventory-vs-transition straddle structurally at the KIND level (UAT-03): hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on `disable-cascade` payloads (the disable command's fresh cascade) -- mirroring the `reconcile-applied-cascade` kind's structural trailer exclusion. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the original split closes.
+The `installed` token straddles two surfaces: a list-only steady-state inventory row (emitted by `/claude:plugin list` for already-installed plugins) and a cascade-context install transition. On the list / info inventory surfaces it is deliberately ABSENT from the plugin-status trigger set, resolving its inventory-vs-transition straddle structurally at the KIND level: hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on the install cascade. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: within a given cascade kind, every status discriminator either always triggers or never triggers. The `disabled` token resolves its inventory-vs-transition straddle the same way (UAT-03): hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on `disable-cascade` payloads (the disable command's fresh cascade) -- mirroring the `reconcile-applied-cascade` kind's structural trailer exclusion. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the original split closes.
 
 ### Severity routing
 
@@ -113,37 +113,36 @@ ______________________________________________________________________
 
 For `error` and `warning` severity, `notify()` prepends a human-readable summary line before the cascade body (Phase 29 / UXG-07 / D-29-02/03/04). The composed on-the-wire body is `{summary}\n\n{cascade body}` (the reload-hint, if any, stays last). Info severity emits no summary line -- the cascade body is byte-identical to the pre-Phase-29 form.
 
-The summary counts the operations that drive the severity, by type (plugin vs marketplace), with the verb chosen by severity:
+The summary counts the operations that drive the severity, by stamped severity, across both plugin and marketplace subjects:
 
-| Severity  | Counts (D-29-04)                                                                                              | Verb        |
-| --------- | ------------------------------------------------------------------------------------------------------------- | ----------- |
-| `error`   | plugin rows with `status === "failed"` + marketplace rows with `status === "failed"`                          | `"failed"`  |
-| `warning` | plugin `skipped` (non-benign reasons) + plugin `manual recovery` + marketplace `skipped` (non-benign reasons) | `"skipped"` |
+| Severity  | Counts (D-02 / SEV-02)                                                      | Verb phrase                          |
+| --------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| `error`   | plugin rows + marketplace rows with caller-stamped `severity === "error"`   | `has failed` / `have failed`         |
+| `warning` | plugin rows + marketplace rows with caller-stamped `severity === "warning"` | `needs attention` / `need attention` |
 
-Wording (D-29-03): singular `"operation"` for a count of 1, plural `"operations"` otherwise. When only one type is non-zero the line is `"N plugin operation(s) <verb>."` or `"N marketplace operation(s) <verb>."`; when both are non-zero it is `"N plugin operation(s) and M marketplace operation(s) <verb>."`. Examples: `"1 plugin operation failed."`, `"2 plugin operations failed."`, `"1 marketplace operation failed."`, `"1 plugin operation and 1 marketplace operation failed."`, `"1 plugin operation skipped."`. The summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs -- it is not caller-supplied free text, so it does not violate the "no top-level free text" principle (D-17-09).
+Wording (OUT-02 / D-02): `[A|Some] <subject> operation[s] has/have failed | needs/need attention.` -- `subject` is `plugin` or `marketplace`; `A` for a single row, `Some` for more than one; `operation` / `operations` pluralized by count; `has failed` / `have failed` for error and `needs attention` / `need attention` for warning; terminal period kept. D-03: when a cascade's rows span BOTH plugin and marketplace subjects (load-time `reconcile`, `import`) the subject noun is dropped and all rows are counted uniformly (`[A|Some] operation[s] has/have failed | needs/need attention.`), detected at render time from the live row counts. Examples: `"A plugin operation has failed."`, `"Some plugin operations have failed."`, `"A marketplace operation has failed."`, `"Some operations have failed."` (mixed-subject), `"A plugin operation needs attention."`. The summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs -- it is not caller-supplied free text, so it does not violate the "no top-level free text" principle (D-17-09).
 
 ______________________________________________________________________
 
 ## Status token reference
 
-| Token                                       | Icon | Where it appears                                                                                                                                                                |
-| ------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `(installed)`                               | ●    | Plugin row -- `list` (steady-state inventory via `present` discriminator), install, import cascade, reinstall (rare), update (rare).                                            |
-| `(installed)` (via `present` discriminator) | ●    | Plugin row -- list surface (steady-state inventory). Byte-identical render to the transition `(installed)` token but does not trigger the reload-hint per SNM-15 / G-21-01.     |
-| `(updated)`                                 | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                          |
-| `(reinstalled)`                             | ●    | Plugin row -- reinstall cascade.                                                                                                                                                |
-| `(uninstalled)`                             | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                 |
-| `(available)`                               | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                |
-| `(unavailable)`                             | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.                   |
-| `(upgradable)`                              | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                              |
-| `(failed)`                                  | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                           |
-| `(skipped)`                                 | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                  |
-| `(manual recovery)`                         | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                  |
-| `(will install)`                            | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                         |
-| `(will uninstall)`                          | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                  |
-| `(will enable)`                             | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                            |
-| `(will disable)`                            | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                   |
-| `(disabled)`                                | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker. |
+| Token               | Icon | Where it appears                                                                                                                                                                                                                                                                    |
+| ------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(installed)`       | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does. |
+| `(updated)`         | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                              |
+| `(reinstalled)`     | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                    |
+| `(uninstalled)`     | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                     |
+| `(available)`       | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                                                                                                                    |
+| `(unavailable)`     | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.                                                                                                                       |
+| `(upgradable)`      | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                  |
+| `(failed)`          | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                               |
+| `(skipped)`         | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                      |
+| `(manual recovery)` | ⊘    | Plugin row -- per-plugin manual-recovery anchor inside a marketplace block; status discriminator includes the space literally.                                                                                                                                                      |
+| `(will install)`    | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                             |
+| `(will uninstall)`  | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                      |
+| `(will enable)`     | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                |
+| `(will disable)`    | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                       |
+| `(disabled)`        | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker.                                                                                                     |
 
 Marketplace status tokens (drawn from the 9-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -236,7 +235,7 @@ Each `(installed)` row's `dependencies` field drives the soft-dep probe; the pro
 <!-- catalog-state: unparseable-mp -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ● other-mp [user] <autoupdate>
   ● helper v1.0.0 (installed)
@@ -244,7 +243,7 @@ Each `(installed)` row's `dependencies` field drives the soft-dep probe; the pro
 ⊘ unparseable-mp [user] (failed)
 ```
 
-When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). No reload-hint trailer fires on the list surface: the failed marketplace header is not in the marketplace-status trigger set (per D-16-12 + the SNM-15 ladder), and the other marketplace's `present` plugin row is the list-only inventory token deliberately excluded from the trigger set (UAT gap G-21-01).
+When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). No reload-hint trailer fires on the list surface: the failed marketplace header is not in the marketplace-status trigger set (per D-16-12 + the SNM-15 ladder), and the other marketplace's `installed` plugin row is, on the list surface, the steady-state inventory token deliberately excluded from the trigger set (UAT gap G-21-01).
 
 ### Marketplace whose manifest declares ZERO plugins
 
@@ -286,7 +285,7 @@ Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is 
   ● hashed-plugin v#2ea95f8 (installed)
 ```
 
-The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `present` inventory discriminator carries no `/reload` trailer.
+The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `installed` inventory row carries no `/reload` trailer on the list surface.
 
 ### Description lines (PL-4)
 
@@ -315,7 +314,19 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 
 Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◌` glyph (shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will add)`, `○` for `(available)` / `(will remove)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
-PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The four list-surface variants (`present`, `upgradable`, `available`, `unavailable`) all support the description field; cascade-only variants (`installed`, `updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The five list-surface variants (`installed`, `upgradable`, `available`, `unavailable`, `disabled`) all support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+
+### Disabled inventory row with a description (PL-4)
+
+<!-- catalog-state: disabled-inventory-with-description -->
+
+```text
+● official [user] <autoupdate>
+  ◌ foo-plugin v1.2.3 (disabled)
+    Disabled plugin that still surfaces its description.
+```
+
+Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
 
 ______________________________________________________________________
 
@@ -391,7 +402,7 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 <!-- catalog-state: failure-runtime-with-cause -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ⊘ helper v1.0.0 (failed) {permission denied}
@@ -405,7 +416,7 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 <!-- catalog-state: failure-rollback-partial -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ⊘ helper v1.0.0 (failed) {rollback partial}
@@ -420,12 +431,12 @@ The manifest declares Claude features Pi doesn't support; the `unavailable` vari
 
 ### Failure -- marketplace not added (ATTR-01 / ATTR-08)
 
-Triggered when `install <plugin>@<marketplace>` names a marketplace that is NOT added in the target scope and the CMP-3 project-to-user fallback ALSO misses. The failure subject is the MARKETPLACE, not the plugin: the orchestrator emits the standalone Phase 46 `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`, `name` set to the marketplace name) -- NOT `{not in manifest}` on a plugin row. This is the ATTR-08 split: "marketplace absent" reads `{not added}` on the marketplace subject, while "plugin absent from a PRESENT manifest" stays `{not in manifest}` on the plugin row (the `failure-runtime-with-cause` / PI-3 path). install always has a resolved scope (the edge defaults it), so the row always carries the `[scope]` bracket communicating "not added in the scope you asked for" (SCOPE-01). Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
+Triggered when `install <plugin>@<marketplace>` names a marketplace that is NOT added in the target scope and the CMP-3 project-to-user fallback ALSO misses. The failure subject is the MARKETPLACE, not the plugin: the orchestrator emits the standalone Phase 46 `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`, `name` set to the marketplace name) -- NOT `{not in manifest}` on a plugin row. This is the ATTR-08 split: "marketplace absent" reads `{not added}` on the marketplace subject, while "plugin absent from a PRESENT manifest" stays `{not in manifest}` on the plugin row (the `failure-runtime-with-cause` / PI-3 path). install always has a resolved scope (the edge defaults it), so the row always carries the `[scope]` bracket communicating "not added in the scope you asked for" (SCOPE-01). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [project] (failed) {not added}
 ```
@@ -467,7 +478,7 @@ The `uninstalled` variant has no `dependencies` field by construction (D-15-02 /
 <!-- catalog-state: failure-permission-denied -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ⊘ helper v1.0.0 (failed) {permission denied}
@@ -478,14 +489,27 @@ Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed
 
 ### Failure -- marketplace not added (ATTR-04 / SCOPE-01)
 
-Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in the requested scope, OR is present only in the OTHER scope. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the silent PU-5 converge for an already-gone plugin record (a marketplace that IS present but no longer holds the plugin row stays silent -- nothing to report). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
+Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in the requested scope, OR is present only in the OTHER scope. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the PU-5 already-gone path for a plugin record whose marketplace IS present (covered by the `already-gone-not-installed` state below). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
+```
+
+### Failure -- already gone, plugin not installed (D-01 / PU-5)
+
+Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope, but the plugin row is already absent from `state.json` (never installed, or concurrently uninstalled by another process). D-01: the STANDALONE user command names an absent target it cannot operate on, so it now reports an `error` row (`(failed) {not installed}`) instead of the former literal silence -- a `failed` row because uninstall's render map renders `uninstalled` / `failed` only. The ORCHESTRATED reconcile-apply converge stays SILENT (WR-06 / NFR-2: a reconcile racing another process never reports an uninstall it did not perform). No `cause`, so no cause-chain trailer; severity `error`, no reload-hint (nothing changed).
+
+<!-- catalog-state: already-gone-not-installed -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {not installed}
 ```
 
 ______________________________________________________________________
@@ -503,10 +527,12 @@ Multi-plugin cascade. One marketplace header per affected marketplace; plugin ro
   ● alpha v1.0.0 (reinstalled)
   ● beta v0.5.0 (reinstalled)
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-Bare marketplace header (no status, no details). Plugin status `reinstalled` triggers reload-hint per D-16-12.
+Bare marketplace header (no status, no details). Plugin status `reinstalled` triggers reload-hint per D-16-12. OUT-03/D-04: the bulk reinstall is a plural operation, so the trailing tally (`Plugin reinstall: 2 successes`) sits between the body and the reload-hint; the two `reinstalled` plugin rows are the two successes (the bare marketplace header is bookkeeping, not counted).
 
 ### Success with soft-dep markers
 
@@ -516,41 +542,47 @@ Bare marketplace header (no status, no details). Plugin status `reinstalled` tri
 ● official [user]
   ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
 
+Plugin reinstall: 1 success
+
 /reload to pick up changes
 ```
 
-The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded.
+The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded. OUT-03/D-04: the single `reinstalled` row is the one success in the plural-operation tally.
 
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
 <!-- catalog-state: single-mp-mixed-outcomes -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {source missing}
 
+Plugin reinstall: 1 failure, 2 successes
+
 /reload to pick up changes
 ```
 
-Mixed-outcome cascade. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
+Mixed-outcome cascade. OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `reinstalled` + `(skipped) {up-to-date}` (idempotent -> info per D-01) rows as the two successes; zero-count categories (warnings) are omitted. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
 
 ### Single marketplace, all failed (no reload-hint)
 
 <!-- catalog-state: single-mp-all-failed -->
 
 ```text
-2 plugin operations failed.
+Some plugin operations have failed.
 
 ● official [user]
   ⊘ alpha (failed) {source missing}
   ⊘ beta (failed) {invalid manifest}
+
+Plugin reinstall: 2 failures
 ```
 
-Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
+Failed-only cascade. OUT-03/D-04: both `failed` rows are the two failures in the plural tally; the success/warning categories are zero and omitted. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
 
 ### Plugin became unavailable after install (manifest now declares unsupported features)
 
@@ -561,17 +593,19 @@ Failed-only cascade. No reload-hint per D-16-12 (no plugin in the state-changing
   ● alpha v1.0.0 (reinstalled)
   ⊘ delta (unavailable) {unsupported hooks}
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row carries no bracket. Reload-hint fires because `alpha` was reinstalled. Severity: info -- the `unavailable` status is not in the failed/skipped/manual-recovery set, so the severity ladder falls through to info.
+Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row carries no bracket. OUT-03/D-04: both rows carry info severity (the `unavailable` row stamps no severity, defaulting to info per SEV-01), so the plural tally counts two successes. Reload-hint fires because `alpha` was reinstalled. Severity: info -- the `unavailable` status is not in the failed/skipped/manual-recovery set, so the severity ladder falls through to info.
 
 ### Across multiple marketplaces (bare `reinstall` form)
 
 <!-- catalog-state: bare-multi-mp -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● local-mp [project]
   ● helper v0.5.0 (reinstalled)
@@ -582,10 +616,12 @@ Mixed-outcome cascade. `delta`'s `unavailable` variant has no scope field; row c
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {source missing}
 
+Plugin reinstall: 1 failure, 4 successes
+
 /reload to pick up changes
 ```
 
-Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (the failed `delta` row in the second block triggers the first-match ladder).
+Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (the failed `delta` row in the second block triggers the first-match ladder). OUT-03/D-04: the plural tally counts uniformly across both marketplace blocks -- one `failed` row and four info rows (three `reinstalled` + one idempotent `(skipped) {up-to-date}`) yield `1 failure, 4 successes`.
 
 ### Same marketplace name in both scopes (orphan-fold absent; per-scope blocks)
 
@@ -598,19 +634,34 @@ Two marketplace blocks joined by one blank line (D-16-07). Severity: `error` (th
 ● official [user]
   ● beta v1.0.0 (reinstalled)
 
+Plugin reinstall: 2 successes
+
 /reload to pick up changes
 ```
 
-The marketplaces never collapse -- each per-scope header is a distinct marketplace block.
+The marketplaces never collapse -- each per-scope header is a distinct marketplace block. OUT-03/D-04: the plural tally counts the two `reinstalled` rows across the per-scope blocks as two successes.
+
+### Failure -- plugin not installed, standalone form (CR-02 / D-01)
+
+Triggered when `reinstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope but whose plugin record is absent from state (never installed, or concurrently uninstalled). The standalone single-plugin path emits the absent-target row instead of returning silently: `not installed` is an absent-target precondition, so D-01 routes it to `error` ("absent-target -> error across the board") rather than the benign-skip `warning`. The row keeps its `(skipped) {not installed}` per-row grammar (severity is a stamp-only flip). Single cardinality, so no trailing tally. Two-block form: the `A plugin operation has failed.` summary on the host `Error:` label line, then the marketplace header + skipped row block (GRAM-01 / GRAM-02). No reload-hint (nothing changed on disk).
+
+<!-- catalog-state: standalone-not-installed-error -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ hello (skipped) {not installed}
+```
 
 ### Failure -- marketplace not added, explicit scope (ATTR-03 / SCOPE-01)
 
-Triggered when `reinstall <plugin>@<marketplace>` or `reinstall @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-03 makes the attribution form-INDEPENDENT: the explicit-scope-plugin, explicit-scope-marketplace, and bare forms ALL emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former per-form divergence (`(skipped) {not installed}` for the explicit-scope plugin form via a synthesized phantom target; `(failed) {not found}` for the explicit-scope-marketplace and bare forms via a raw throw -> synthetic `(reinstall)` row). The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The legitimate "marketplace present, plugin not installed" case keeps its `(skipped) {not installed}` outcome -- only the marketplace-absent precondition is re-attributed. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
+Triggered when `reinstall <plugin>@<marketplace>` or `reinstall @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-03 makes the attribution form-INDEPENDENT: the explicit-scope-plugin, explicit-scope-marketplace, and bare forms ALL emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former per-form divergence (`(skipped) {not installed}` for the explicit-scope plugin form via a synthesized phantom target; `(failed) {not found}` for the explicit-scope-marketplace and bare forms via a raw throw -> synthetic `(reinstall)` row). The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The legitimate "marketplace present, plugin not installed" case keeps its `(skipped) {not installed}` outcome -- only the marketplace-absent precondition is re-attributed. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [project] (failed) {not added}
 ```
@@ -622,7 +673,7 @@ Triggered when the bare `reinstall @<marketplace>` form (no `--scope`) names a m
 <!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
@@ -638,24 +689,26 @@ Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from
 <!-- catalog-state: single-mp-mixed -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ● alpha v0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
+Plugin update: 1 failure, 2 successes
+
 /reload to pick up changes
 ```
 
-The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `updated` + idempotent `(skipped) {up-to-date}` rows as the two successes. The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
 <!-- catalog-state: failed-with-rollback-partial -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user]
   ⊘ delta v1.0.0 (failed) {rollback partial}
@@ -664,9 +717,11 @@ The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix
       cause: failed to remove staged agent: EACCES
     [phase3b] (rollback failed)
       cause: orphan path: /.../delta.bak
+
+Plugin update: 1 failure
 ```
 
-`failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
+OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
 
 ### All up-to-date (no-op cascade)
 
@@ -676,16 +731,18 @@ The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix
 ● official [user]
   ⊘ alpha (skipped) {up-to-date}
   ⊘ beta (skipped) {up-to-date}
+
+Plugin update: 2 successes
 ```
 
-Skipped-only cascade. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
+Skipped-only cascade. OUT-03/D-04: both `(skipped) {up-to-date}` rows are idempotent (info per D-01), so the plural tally reports two successes even though the operation changed nothing. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
 
 ### Across multiple marketplaces (bare `update` form)
 
 <!-- catalog-state: bare-multi-mp -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● local-mp [project]
   ● helper v0.5.0 → v1.0.0 (updated)
@@ -695,10 +752,12 @@ Skipped-only cascade. No reload-hint (no state-changing status). Severity: every
   ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
+Plugin update: 1 failure, 3 successes
+
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
+Two marketplace blocks. Severity: `error`. OUT-03/D-04: the plural tally counts uniformly across both blocks -- one `failed` row and three info rows (two `updated` + one idempotent `(skipped) {up-to-date}`) yield `1 failure, 3 successes`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
 
 ### Same marketplace name in both scopes
 
@@ -711,10 +770,12 @@ Two marketplace blocks. Severity: `error`. Reload-hint fires (two `updated` plug
 ● official [user]
   ● beta v0.5.0 → v1.0.0 (updated)
 
+Plugin update: 2 successes
+
 /reload to pick up changes
 ```
 
-Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes.
+Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes. OUT-03/D-04: the two `updated` rows across the per-scope blocks are the two successes in the plural tally.
 
 ### Hash-version update arrow (PI-7 short-SHA display, both sides)
 
@@ -724,19 +785,21 @@ Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse a
 ● official [user]
   ● hashed-plugin v#2ea95f8 → v#1c3d9a0 (updated)
 
+Plugin update: 1 success
+
 /reload to pick up changes
 ```
 
-Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
+OUT-03/D-04: the single `updated` row is the one success in the plural tally. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
-Triggered when `update <plugin>@<marketplace>` or `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
+Triggered when `update <plugin>@<marketplace>` or `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
 ```
@@ -748,7 +811,7 @@ Triggered when the bare `update @<marketplace>` form (no `--scope`) names a mark
 <!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
@@ -764,6 +827,8 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 <!-- catalog-state: fresh-mixed-both-scopes -->
 
 ```text
+A plugin operation needs attention.
+
 ● claude-plugins-official [project] (added)
   ● official-plugin (installed)
 
@@ -783,10 +848,12 @@ Multi-marketplace + multi-plugin cascade. Each marketplace header carries its ow
 ● github-marketplace [user] (added)
   ● github-plugin (installed)
 
+Import: 1 warning, 12 successes
+
 /reload to pick up changes
 ```
 
-Six marketplace blocks joined by blank lines (D-16-07). The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: info -- no `failed`, no `skipped/manual-recovery` in the payload; `unavailable` is not in the warning set.
+Six marketplace blocks joined by blank lines (D-16-07). WR-02: the import producer stamps `unavailable` rows `severity: warning` -- they are actionable (the user cannot complete the install without addressing them), so the envelope severity bumps to `warning` and the `A plugin operation needs attention.` summary line is prepended (GRAM-01 / GRAM-02). OUT-03/OUT-06/D-03/D-04: import is a plural mixed-subject operation, so the trailing tally counts all rows uniformly under the `Import` label -- the single `unavailable` row counts as `1 warning` and the six `added` marketplace rows plus six `installed` plugin rows count as `12 successes`. The `directory-marketplace [user]` block surfaces an `unavailable` plugin (`unavailable_plugin`) which has no `scope` field per SNM-11. Reload-hint fires (multiple `added` marketplace statuses + multiple `installed` plugin rows). Severity: warning -- no `failed` in the payload, but the actionable `unavailable` row routes the cascade to `warning`.
 
 ### `import --scope project` (narrows writes to project scope only)
 
@@ -802,10 +869,12 @@ Six marketplace blocks joined by blank lines (D-16-07). The `directory-marketpla
 ● github-marketplace [project] (added)
   ● github-plugin (installed)
 
+Import: 6 successes
+
 /reload to pick up changes
 ```
 
-Three project-scope marketplace blocks. Reload-hint fires. Severity: info.
+Three project-scope marketplace blocks. OUT-03/D-04: three `added` marketplace rows plus three `installed` plugin rows yield `6 successes`. Reload-hint fires. Severity: info.
 
 ### Per-row soft-dep markers on import cascade rows
 
@@ -816,10 +885,12 @@ Three project-scope marketplace blocks. Reload-hint fires. Severity: info.
   ● agent-only-plugin (installed) {requires pi-subagents}
   ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp}
 
+Import: 3 successes
+
 /reload to pick up changes
 ```
 
-Each `installed` row's `dependencies` field drives the marker. The combined-row brace block joins markers with a comma-space separator (the renderer's `composeReasons` helper). Reload-hint fires. Severity: info.
+OUT-03/D-04: one `added` marketplace row plus two `installed` plugin rows yield `3 successes`. Each `installed` row's `dependencies` field drives the marker. The combined-row brace block joins markers with a comma-space separator (the renderer's `composeReasons` helper). Reload-hint fires. Severity: info.
 
 ### Same marketplace name in both scopes
 
@@ -832,10 +903,12 @@ Each `installed` row's `dependencies` field drives the marker. The combined-row 
 ● official [user] (added)
   ● beta (installed)
 
+Import: 4 successes
+
 /reload to pick up changes
 ```
 
-Per-scope marketplace blocks. Reload-hint fires. Severity: info.
+Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
 
 ______________________________________________________________________
 
@@ -928,7 +1001,7 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 <!-- catalog-state: failure-unreachable -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ unreachable-mp [user] (failed)
 ```
@@ -944,7 +1017,7 @@ Triggered when `marketplace add <source>` resolves a manifest whose derived `nam
 <!-- catalog-state: add-duplicate-name -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ claude-plugins-official [user] (failed) {duplicate name}
 ```
@@ -956,7 +1029,7 @@ Triggered when a github `marketplace add` finds a pre-existing non-empty `source
 <!-- catalog-state: add-stale-clone -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ claude-plugins-official [user] (failed) {stale clone}
 ```
@@ -968,7 +1041,7 @@ Triggered when the parsed source kind is `unknown` (e.g. an SSH `git@...` URL) o
 <!-- catalog-state: add-unsupported-source -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ git@github.com:foo/bar.git [user] (failed) {unsupported source}
 ```
@@ -980,7 +1053,7 @@ Triggered when a path `marketplace add` points at a path that does not exist (EN
 <!-- catalog-state: add-source-missing -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ./missing-mp [user] (failed) {source missing}
 ```
@@ -992,7 +1065,7 @@ Triggered when `marketplace add` reads a `marketplace.json` that is malformed JS
 <!-- catalog-state: add-invalid-manifest -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ anthropics/claude-plugins-official [user] (failed) {invalid manifest}
 ```
@@ -1068,12 +1141,12 @@ github: someuser/my-mp
 
 ### Failure -- schema-invalid `marketplace.json` (`{invalid manifest}`)
 
-Triggered when `marketplace info <name> [--scope ...]` reads a present-but-schema-invalid `marketplace.json` (a typed `InvalidMarketplaceManifestError` with NO `SyntaxError` cause -- the JSON parsed but failed validation). The read surface now classifies this as `{invalid manifest}` for parity with the `marketplace add` write path's `classifyAddError` (D-48-B / IN-02 close), instead of the former generic `{unreadable}` fallback -- the same on-disk condition surfaces the same truthful reason across read and write. The orchestrator emits the `buildManifestFailureMessage` `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["invalid manifest"]` + `componentsResolved: false` on the marketplace subject; the renderer composes the marketplace header at column 0 (carrying the `<no autoupdate>` marker for a record with `autoupdate: false`), the failed row at 2-space indent, and the `components: not resolved` marker at 4-space indent (the manifest never parsed, so no component set could be resolved). The failed row carries NO `[scope]` bracket because `plugin.scope` equals the marketplace scope (the renderer's orphan-fold rule suppresses the bracket). A malformed-JSON manifest still reads `{unparseable}` -- that arm is preserved. Two-block form: the `1 plugin operation failed.` summary (the failed row is a PLUGIN subject, GRAM-02) on the host `Error:` label line, then the multi-line detail block (header + failed row + `components: not resolved`) as its own block (GRAM-01). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Triggered when `marketplace info <name> [--scope ...]` reads a present-but-schema-invalid `marketplace.json` (a typed `InvalidMarketplaceManifestError` with NO `SyntaxError` cause -- the JSON parsed but failed validation). The read surface now classifies this as `{invalid manifest}` for parity with the `marketplace add` write path's `classifyAddError` (D-48-B / IN-02 close), instead of the former generic `{unreadable}` fallback -- the same on-disk condition surfaces the same truthful reason across read and write. The orchestrator emits the `buildManifestFailureMessage` `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["invalid manifest"]` + `componentsResolved: false` on the marketplace subject; the renderer composes the marketplace header at column 0 (carrying the `<no autoupdate>` marker for a record with `autoupdate: false`), the failed row at 2-space indent, and the `components: not resolved` marker at 4-space indent (the manifest never parsed, so no component set could be resolved). The failed row carries NO `[scope]` bracket because `plugin.scope` equals the marketplace scope (the renderer's orphan-fold rule suppresses the bracket). A malformed-JSON manifest still reads `{unparseable}` -- that arm is preserved. Two-block form: the `A plugin operation has failed.` summary (the failed row is a PLUGIN subject, GRAM-02) on the host `Error:` label line, then the multi-line detail block (header + failed row + `components: not resolved`) as its own block (GRAM-01). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: manifest-invalid -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● bad-mp [user] <no autoupdate>
   ⊘ bad-mp (failed) {invalid manifest}
@@ -1082,24 +1155,24 @@ Triggered when `marketplace info <name> [--scope ...]` reads a present-but-schem
 
 ### Failure -- absent from both scopes
 
-Triggered when `marketplace info <name>` (no `--scope` filter) is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) with `scope` OMITTED (because the marketplace is in neither scope -- emitting a `[user]` or `[project]` bracket would be misleading). The renderer's bracket short-circuit suppresses the `[scope]` token, leaving the bare `⊘ <name> (failed) {not added}` row at column 0. Distinct from `scope-mismatch-not-added` below: this state has NO scope bracket because the marketplace is in neither scope; the scope-mismatch state DOES have a bracket because the user asked for a specific scope. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
+Triggered when `marketplace info <name>` (no `--scope` filter) is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) with `scope` OMITTED (because the marketplace is in neither scope -- emitting a `[user]` or `[project]` bracket would be misleading). The renderer's bracket short-circuit suppresses the `[scope]` token, leaving the bare `⊘ <name> (failed) {not added}` row at column 0. Distinct from `scope-mismatch-not-added` below: this state has NO scope bracket because the marketplace is in neither scope; the scope-mismatch state DOES have a bracket because the user asked for a specific scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
 
 <!-- catalog-state: absent-from-both -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
 
 ### Failure -- `--scope` mismatch (`{not added}`)
 
-Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket is present because the user explicitly asked for a specific scope; the `absent-from-both` state above omits the bracket to avoid misleading the user when the marketplace is in NEITHER scope. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket is present because the user explicitly asked for a specific scope; the `absent-from-both` state above omits the bracket to avoid misleading the user when the marketplace is in NEITHER scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: scope-mismatch-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ my-mp [user] (failed) {not added}
 ```
@@ -1205,12 +1278,12 @@ Triggered when the plugin entry's `source` field parses as `npm` / `git-subdir` 
 
 ### Failure -- plugin not in manifest
 
-Triggered when the marketplace IS added in the requested scope but its `marketplace.json` does NOT contain a plugin entry with the requested name. The orchestrator emits a `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["not in manifest"]`; the renderer composes the marketplace header at column 0 followed by the failed plugin row at 2-space indent. The `{not in manifest}` REASON is the same closed-set member that `update.ts` uses post-Phase 29 / UXG-08 for the same failure semantics; this catalog state extends its surface to the new `plugin info` command. Two-block form: the `1 plugin operation failed.` summary (the failed row is a PLUGIN subject, GRAM-02) on the host `Error:` label line, then the header + failed row as its own block (GRAM-01). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Triggered when the marketplace IS added in the requested scope but its `marketplace.json` does NOT contain a plugin entry with the requested name. The orchestrator emits a `PluginInfoMessage` with `plugin.status: "failed"` + `reasons: ["not in manifest"]`; the renderer composes the marketplace header at column 0 followed by the failed plugin row at 2-space indent. The `{not in manifest}` REASON is the same closed-set member that `update.ts` uses post-Phase 29 / UXG-08 for the same failure semantics; this catalog state extends its surface to the new `plugin info` command. Two-block form: the `A plugin operation has failed.` summary (the failed row is a PLUGIN subject, GRAM-02) on the host `Error:` label line, then the header + failed row as its own block (GRAM-01). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: missing-plugin-not-in-manifest -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● mp [user] <no autoupdate>
   ⊘ ghost-plugin (failed) {not in manifest}
@@ -1218,24 +1291,24 @@ Triggered when the marketplace IS added in the requested scope but its `marketpl
 
 ### Failure -- missing marketplace (no `--scope` filter)
 
-Triggered when `plugin info <plugin>@<marketplace>` is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) with `name` set to the MARKETPLACE name (not the plugin name -- the user-facing failure is "the marketplace is not added", not "the plugin doesn't exist"); `scope` is OMITTED so the renderer's bracket short-circuit suppresses the `[scope]` token (D-03: absent-from-both states have no scope bracket because the marketplace is in neither scope). The renderer emits the bare row at column 0 with no marketplace header. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
+Triggered when `plugin info <plugin>@<marketplace>` is invoked against a marketplace name that is NOT present in EITHER scope. The orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) with `name` set to the MARKETPLACE name (not the plugin name -- the user-facing failure is "the marketplace is not added", not "the plugin doesn't exist"); `scope` is OMITTED so the renderer's bracket short-circuit suppresses the `[scope]` token (D-03: absent-from-both states have no scope bracket because the marketplace is in neither scope). The renderer emits the bare row at column 0 with no marketplace header. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added-absent-from-both -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
 
 ### Failure -- missing marketplace (`--scope` mismatch)
 
-Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope. The renderer emits the same bare-row form as the absent-from-both variant above, but WITH the `[scope]` bracket because the user explicitly asked for a specific scope. This is the plugin-info-surface mirror of the `scope-mismatch-not-added` state under `marketplace info`; the distinction from `missing-marketplace-not-added-absent-from-both` is the bracket presence (no bracket when neither scope holds the marketplace; bracket present when a specific scope was requested). Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
+Triggered when `plugin info <plugin>@<marketplace> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope. The renderer emits the same bare-row form as the absent-from-both variant above, but WITH the `[scope]` bracket because the user explicitly asked for a specific scope. This is the plugin-info-surface mirror of the `scope-mismatch-not-added` state under `marketplace info`; the distinction from `missing-marketplace-not-added-absent-from-both` is the bracket presence (no bracket when neither scope holds the marketplace; bracket present when a specific scope was requested). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
 
 <!-- catalog-state: missing-marketplace-not-added-scope-mismatch -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
 ```
@@ -1292,12 +1365,12 @@ A marketplace with two plugin children: one newly enabled in config (`will enabl
 
 ### Source mismatch (declared source diverges from recorded source)
 
-A declared marketplace whose recorded source string does not match the declaration byte-for-byte (the apply path cannot honour the declaration without first removing the recording). The row reuses the existing `"source mismatch"` REASONS member (Pitfall 53-7 -- REASONS stays at 29 entries). Severity `error` (a `(failed)` mp row); summary line prepended (GRAM-01 / GRAM-02): `1 marketplace operation failed.`.
+A declared marketplace whose recorded source string does not match the declaration byte-for-byte (the apply path cannot honour the declaration without first removing the recording). The row reuses the existing `"source mismatch"` REASONS member (Pitfall 53-7 -- REASONS stays at 29 entries). Severity `error` (a `(failed)` mp row); summary line prepended (GRAM-01 / GRAM-02): `A marketplace operation has failed.`.
 
 <!-- catalog-state: source-mismatch -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ mp [project] (failed) {source mismatch}
 ```
@@ -1309,7 +1382,7 @@ A `claude-plugins.json` (or `claude-plugins.local.json`) that is malformed, unpa
 <!-- catalog-state: invalid-config-abort -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
 ```
@@ -1318,11 +1391,11 @@ ______________________________________________________________________
 
 ## reconcile-applied-cascade
 
-RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (Pitfall 4 / RECON-04 -- the reconcile already ran ON /reload). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
+RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (RECON-04 -- the reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) is appended as the cascade's FINAL block, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name (the reload-hint slot the apply structurally suppresses). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 
-A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line.
+A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so the trailing tally (`Reconcile: 4 successes`) counts the two `added` marketplace rows + the two `installed` plugin rows uniformly under the operation name; it takes the reload-hint's structural slot (the reconcile already ran ON /reload, so no `/reload` trailer follows).
 
 <!-- catalog-state: success-cascade-mixed -->
 
@@ -1332,6 +1405,8 @@ A reconcile that materialized one new marketplace + one plugin install per scope
 
 ● other-mp [user] (added)
   ● other-plugin (installed)
+
+Reconcile: 4 successes
 ```
 
 ### Soft-fail per-entry -- one (failed) {network unreachable} row, other entries continue
@@ -1341,13 +1416,17 @@ A reconcile where one declared github-source marketplace failed during `addMarke
 <!-- catalog-state: soft-fail-mixed -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ flaky-mp [user] (failed) {network unreachable}
 
 ● ok-mp [user] (added)
   ● ok-plugin (installed)
+
+Reconcile: 1 failure, 2 successes
 ```
+
+OUT-03/D-04: the mixed-subject tally counts the failed marketplace row as one failure and the `added` marketplace + `installed` plugin rows as two successes, all under the `Reconcile` operation name.
 
 ### CFG-03 invalid-config row -- BASENAME only (T-55-02-01)
 
@@ -1356,9 +1435,11 @@ A reconcile where `claude-plugins.json` is unparseable. The read pass surfaces t
 <!-- catalog-state: invalid-config-row -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
+
+Reconcile: 1 failure
 ```
 
 ### CFG-03 invalid-config row -- with cause-chain trailer (I5 / PR #51)
@@ -1368,12 +1449,16 @@ Same CFG-03 surface as above, but the read pass threaded `loadConfig`'s diagnost
 <!-- catalog-state: invalid-config-row-with-cause -->
 
 ```text
-1 plugin operation and 1 marketplace operation failed.
+Some operations have failed.
 
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
   ⊘ claude-plugins.json (failed) {invalid manifest}
     cause: schema validation failed: /marketplaces: Expected object
+
+Reconcile: 2 failures
 ```
+
+OUT-03/D-04: both the mp-level failed row and its synthetic failed child are counted, so the plural tally reports `2 failures`.
 
 ### Partial marketplace remove -- per-plugin children (I1 / PR #51)
 
@@ -1382,13 +1467,17 @@ A reconcile-driven `marketplace remove` whose cascade unstaged a subset of the m
 <!-- catalog-state: partial-marketplace-remove -->
 
 ```text
-2 plugin operations and 1 marketplace operation failed.
+Some operations have failed.
 
 ⊘ acme-mp [user] (failed)
   ○ plugin-ok (uninstalled)
   ⊘ plugin-fail-a (failed) {permission denied}
   ⊘ plugin-fail-b (failed) {source missing}
+
+Reconcile: 3 failures, 1 success
 ```
+
+OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugin rows as three failures and the `uninstalled` plugin row as one success (`uninstalled` stamps info), all under the `Reconcile` operation name.
 
 ______________________________________________________________________
 
@@ -1414,7 +1503,7 @@ Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` gly
 <!-- catalog-state: partial -->
 
 ```text
-1 plugin operation and 1 marketplace operation failed.
+Some operations have failed.
 
 ⊘ local-mp [user] (failed)
   ○ helper (uninstalled)
@@ -1430,24 +1519,24 @@ The v1.0 free-text retry-anchor trailer (a sentence above the reload-hint instru
 
 ### Failure -- missing marketplace (explicit `--scope`)
 
-Triggered when `marketplace remove <name> --scope <scope>` targets a name that is NOT present in the requested scope (ATTR-06 / S3). The orchestrator's pre-guard existence check routes the miss to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) and returns BEFORE entering `withStateGuard` -- no raw `MarketplaceNotFoundError` escapes past the orchestrator (D-48-C Shape 1), and state is left untouched. The variant carries the requested `[scope]` bracket (SCOPE-01). Routed via `isInfoKind` -> `error` severity, no reload-hint. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
+Triggered when `marketplace remove <name> --scope <scope>` targets a name that is NOT present in the requested scope (ATTR-06 / S3). The orchestrator's pre-guard existence check routes the miss to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) and returns BEFORE entering `withStateGuard` -- no raw `MarketplaceNotFoundError` escapes past the orchestrator (D-48-C Shape 1), and state is left untouched. The variant carries the requested `[scope]` bracket (SCOPE-01). Routed via `isInfoKind` -> `error` severity, no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
 
 <!-- catalog-state: remove-missing-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
 ```
 
 ### Failure -- missing marketplace (bare form, absent from both scopes)
 
-Triggered when `marketplace remove <name>` (no `--scope`) targets a name absent from BOTH scopes (ATTR-06 / S4). The bare-form `resolveScopeFromState` `MarketplaceNotFoundError` is caught at the orchestrator entrypoint and routed to the SAME standalone `MarketplaceNotAddedMessage` variant -- but with NO `scope`, so the renderer's bracket short-circuit suppresses the `[scope]` token ("absent from both"). `resolveScopeFromState`'s throw contract is unmodified (it is shared with `update.ts`); the catch lives at the remove entrypoint. Severity `error`; no reload-hint. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
+Triggered when `marketplace remove <name>` (no `--scope`) targets a name absent from BOTH scopes (ATTR-06 / S4). The bare-form `resolveScopeFromState` `MarketplaceNotFoundError` is caught at the orchestrator entrypoint and routed to the SAME standalone `MarketplaceNotAddedMessage` variant -- but with NO `scope`, so the renderer's bracket short-circuit suppresses the `[scope]` token ("absent from both"). `resolveScopeFromState`'s throw contract is unmodified (it is shared with `update.ts`); the catch lives at the remove entrypoint. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
 
 <!-- catalog-state: remove-missing-not-added-bare -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
@@ -1493,7 +1582,7 @@ Manifest-only refresh whose validated `marketplace.json` content actually change
 <!-- catalog-state: mixed-outcomes -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● official [user] (updated)
   ● alpha v0.5.0 → v1.0.0 (updated)
@@ -1510,7 +1599,7 @@ Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fi
 <!-- catalog-state: mp-failure-network -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ official [user] (failed)
 ```
@@ -1524,7 +1613,7 @@ Triggered when `marketplace update <name>` refreshes a PATH-source marketplace w
 <!-- catalog-state: update-path-invalid-manifest -->
 
 ```text
-1 plugin operation and 1 marketplace operation failed.
+Some operations have failed.
 
 ⊘ official [user] (failed)
   ⊘ official (failed) {invalid manifest}
@@ -1532,12 +1621,12 @@ Triggered when `marketplace update <name>` refreshes a PATH-source marketplace w
 
 ### Failure -- marketplace not added, explicit scope (SC#1 / ATTR-06 / D-48-C)
 
-Triggered when `marketplace update <name> --scope <scope>` names a marketplace that is NOT added in the requested scope (or is present only in the OTHER scope). SC#1 cross-op convergence: the marketplace-form update now joins `install` / `uninstall` / `reinstall` / `update` (plugin form) / `marketplace remove` / `autoupdate` in routing the marketplace-absent precondition to the SAME standalone `MarketplaceNotAddedMessage` variant -- replacing the former raw `MarketplaceNotFoundError` escape past the orchestrator boundary (the last residual Class-C instance). A single pre-guard `loadState` existence read (NFR-5: network-free) blocks the miss BEFORE it reaches `snapshotAfterRefresh`'s `withStateGuard` throw; the `[scope]` bracket carries the REQUESTED scope (SCOPE-01). Genuine refresh failures (clone/manifest/lock) are untouched -- only `MarketplaceNotFoundError` reroutes here; everything else keeps its `(failed)` cascade (`mp-failure-network` / `update-path-invalid-manifest`). Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
+Triggered when `marketplace update <name> --scope <scope>` names a marketplace that is NOT added in the requested scope (or is present only in the OTHER scope). SC#1 cross-op convergence: the marketplace-form update now joins `install` / `uninstall` / `reinstall` / `update` (plugin form) / `marketplace remove` / `autoupdate` in routing the marketplace-absent precondition to the SAME standalone `MarketplaceNotAddedMessage` variant -- replacing the former raw `MarketplaceNotFoundError` escape past the orchestrator boundary (the last residual Class-C instance). A single pre-guard `loadState` existence read (NFR-5: network-free) blocks the miss BEFORE it reaches `snapshotAfterRefresh`'s `withStateGuard` throw; the `[scope]` bracket carries the REQUESTED scope (SCOPE-01). Genuine refresh failures (clone/manifest/lock) are untouched -- only `MarketplaceNotFoundError` reroutes here; everything else keeps its `(failed)` cascade (`mp-failure-network` / `update-path-invalid-manifest`). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.
 
 <!-- catalog-state: update-missing-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [project] (failed) {not added}
 ```
@@ -1549,7 +1638,7 @@ Triggered when the bare `marketplace update <name>` form (no `--scope`) names a 
 <!-- catalog-state: update-missing-not-added-absent-from-both -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
 ```
@@ -1589,7 +1678,7 @@ Idempotent no-op -- the plugin is already enabled. Plugin row = `PluginSkippedMe
 <!-- catalog-state: enable-source-missing -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● claude-plugins-official [user]
   ⊘ foo-plugin (failed) {source missing}
@@ -1602,20 +1691,20 @@ Triggered when the cached marketplace clone has been deleted between the recorde
 <!-- catalog-state: enable-not-installed -->
 
 ```text
-1 plugin operation skipped.
+A plugin operation needs attention.
 
 ● claude-plugins-official [user]
   ⊘ foo-plugin (skipped) {not installed}
 ```
 
-Triggered when the marketplace container is recorded in the target scope but the plugin row is absent from state.json (never installed, or concurrently uninstalled). Mirrors the reinstall/update precedent: `{not in manifest}` is reserved for "plugin absent from a PRESENT manifest"; "marketplace present, plugin not installed" is the actionable `(skipped) {not installed}` skip (ATTR-08 taxonomy). `not installed` is NOT in the benign closed set, so the skip routes to `warning` severity with the `1 plugin operation skipped.` summary (D-28-03). No reload-hint. The same arm fires for `disable` (the orchestrator's not-recorded outcome is shared by both verbs).
+Triggered when the marketplace container is recorded in the target scope but the plugin row is absent from state.json (never installed, or concurrently uninstalled). Mirrors the reinstall/update precedent: `{not in manifest}` is reserved for "plugin absent from a PRESENT manifest"; "marketplace present, plugin not installed" is the actionable `(skipped) {not installed}` skip (ATTR-08 taxonomy). `not installed` is NOT in the benign closed set, so the skip routes to `warning` severity with the `A plugin operation needs attention.` summary (D-28-03). No reload-hint. The same arm fires for `disable` (the orchestrator's not-recorded outcome is shared by both verbs).
 
 ### Marketplace not added (ENBL / SCOPE-01)
 
 <!-- catalog-state: enable-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
 ```
@@ -1627,7 +1716,7 @@ Triggered when the requested marketplace is not added in the resolved scope (or 
 <!-- catalog-state: enable-invalid-config -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● claude-plugins-official [user]
   ⊘ foo-plugin (failed) {invalid manifest}
@@ -1670,7 +1759,7 @@ Idempotent no-op -- the plugin is already disabled (state record carries the emp
 <!-- catalog-state: disable-marketplace-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ ghost-mp [user] (failed) {not added}
 ```
@@ -1682,7 +1771,7 @@ Triggered when the requested marketplace is not added in the resolved scope (or 
 <!-- catalog-state: disable-invalid-config -->
 
 ```text
-1 plugin operation failed.
+A plugin operation has failed.
 
 ● claude-plugins-official [user]
   ⊘ foo-plugin (failed) {invalid manifest}
@@ -1738,24 +1827,24 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 
 ### Failure -- missing marketplace (explicit `--scope`)
 
-Triggered when `marketplace autoupdate <name> --scope <scope>` (or `noautoupdate`) targets a name NOT added in the requested scope (ATTR-05 / S1). The explicit-scope `MarketplaceNotFoundError` raised by `applyAutoupdateFlipInPlace` is a missing-marketplace precondition, NOT a flip failure -- the orchestrator routes it to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) carrying the requested `[scope]` bracket (D-48-C Shape 1). This supersedes the former reason-less / synthetic-child `{not found}` byte form: the reason is now the truthful `{not added}`. Routed via `isInfoKind` -> `error` severity, no reload-hint. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). A `StateLockHeldError` is NOT a missing-marketplace and keeps its separate synthetic-child `(failed) {lock held}` routing (unchanged by ATTR-05).
+Triggered when `marketplace autoupdate <name> --scope <scope>` (or `noautoupdate`) targets a name NOT added in the requested scope (ATTR-05 / S1). The explicit-scope `MarketplaceNotFoundError` raised by `applyAutoupdateFlipInPlace` is a missing-marketplace precondition, NOT a flip failure -- the orchestrator routes it to the standalone `MarketplaceNotAddedMessage` `{not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) carrying the requested `[scope]` bracket (D-48-C Shape 1). This supersedes the former reason-less / synthetic-child `{not found}` byte form: the reason is now the truthful `{not added}`. Routed via `isInfoKind` -> `error` severity, no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). A `StateLockHeldError` is NOT a missing-marketplace and keeps its separate synthetic-child `(failed) {lock held}` routing (unchanged by ATTR-05).
 
 <!-- catalog-state: autoupdate-missing-not-added -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ missing-mp [user] (failed) {not added}
 ```
 
 ### Failure -- missing marketplace (bare form, absent from both scopes)
 
-Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2). The former byte form was a reason-LESS bare `(failed)` row; it is superseded by the SAME standalone `MarketplaceNotAddedMessage` `{not added}` variant. The bare form carries `first.scope` -- the scope where the first not-found was observed; SC-6 iterates project-before-user, so the bracket is `[project]`. Severity `error`; no reload-hint. Two-block form: the `1 marketplace operation failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
+Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2). The former byte form was a reason-LESS bare `(failed)` row; it is superseded by the SAME standalone `MarketplaceNotAddedMessage` `{not added}` variant. The bare form carries `first.scope` -- the scope where the first not-found was observed; SC-6 iterates project-before-user, so the bracket is `[project]`. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
 
 <!-- catalog-state: autoupdate-missing-not-added-bare -->
 
 ```text
-1 marketplace operation failed.
+A marketplace operation has failed.
 
 ⊘ missing-mp [project] (failed) {not added}
 ```
@@ -1773,7 +1862,7 @@ In v2, the manual-recovery surface is the per-plugin `PluginManualRecoveryMessag
 <!-- catalog-state: per-plugin-manual-recovery -->
 
 ```text
-1 plugin operation skipped.
+A plugin operation needs attention.
 
 ● official [user]
   ⊘ helper v1.0.0 (manual recovery) {unreadable}
@@ -1842,6 +1931,6 @@ ______________________________________________________________________
 - [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notify.ts`.
 - [`docs/adr/v2-001-structured-notify.md`](adr/v2-001-structured-notify.md) -- design rationale for the v1.4 structured `NotificationMessage` model; landed via Phase 17 -- spec + catalog UAT migration.
 - [`extensions/pi-claude-marketplace/shared/notify.ts`](../extensions/pi-claude-marketplace/shared/notify.ts) -- the v2 renderer (`notify(ctx, pi, message)` + `notifyUsageError(ctx, message)`); SOLE site for v2 grammar emission.
-- [`tests/architecture/notify-types.test.ts`](../tests/architecture/notify-types.test.ts) -- compile-time closed-set membership proof.
+- [`extensions/pi-claude-marketplace/shared/notify-reasons.ts`](../extensions/pi-claude-marketplace/shared/notify-reasons.ts) -- compile-time closed-set membership proof: the `_UncoveredReason` / `_ExtraReason` reason-coverage check, plus the per-command `satisfies CommandContext` checks in the `*.messaging.ts` modules.
 - [`tests/architecture/catalog-uat.test.ts`](../tests/architecture/catalog-uat.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality (rewritten in Plan 17-03; until then the V1 catalog UAT byte-mismatches against the v2 catalog -- Pitfall 2 documented in 17-RESEARCH.md).
 - [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and remain blocked by `tests/architecture/no-legacy-markers.test.ts`.

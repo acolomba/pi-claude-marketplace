@@ -134,7 +134,10 @@ test("importClaudeSettings skips matching existing marketplaces and already-inst
   assert.equal(notifications[0]?.severity, undefined);
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
+    // OUT-03/D-04: import is a plural operation, so the trailing tally counts
+    // the `(updated)` marketplace row + the idempotent `(skipped) {already
+    // installed}` plugin row as two successes.
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\nImport: 2 successes",
   );
 });
 
@@ -324,7 +327,7 @@ test("WR-07: a typed orchestrated add failure is NOT recorded as (added) -- depe
         diagnostics: [],
       }),
       loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
-      // Pre-Phase-55-review defect: a classified precondition failure
+      // Earlier defect: a classified precondition failure
       // (duplicate name / stale clone / invalid manifest / ...) did NOT
       // throw in standalone mode, so the import recorded the marketplace as
       // (added) and never blocked its plugins. The orchestrated typed
@@ -988,7 +991,10 @@ test("importClaudeSettings handles already-installed outcome from installPlugin 
   assert.equal(notifications.length, 1);
   assert.equal(
     notifications[0]?.message,
-    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}",
+    // OUT-03/D-04: import is a plural operation, so the trailing tally counts
+    // the `(updated)` marketplace row + the idempotent `(skipped) {already
+    // installed}` plugin row as two successes.
+    "● mp [user] (updated)\n  ⊘ plugin (skipped) {already installed}\n\nImport: 2 successes",
   );
 });
 

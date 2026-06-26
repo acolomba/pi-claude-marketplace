@@ -97,7 +97,7 @@ function piWithBothLoaded(): MockPi {
 // (every mp.status is undefined; plugin statuses are list-surface inventory
 // discriminators). Exercises the locked minimums for the ladder evidence:
 //   - >=1 marketplace header (column 0);
-//   - an installed/available mix (`present` + `available` rows, 2-space);
+//   - an installed/available mix (`installed` + `available` rows, 2-space);
 //   - a `{...}` reason-brace row (`epsilon (unavailable) {unsupported hooks, lsp}`);
 //   - a `failed`/`cause` row so the 4-space cause-chain trailer is exercised.
 // ---------------------------------------------------------------------------
@@ -109,7 +109,14 @@ const LIST_MESSAGE: NotificationMessage = {
       scope: "user",
       details: { autoupdate: true },
       plugins: [
-        { status: "present", name: "alpha", version: "1.0.0", dependencies: [] },
+        {
+          status: "installed",
+          severity: "info",
+          needsReload: false,
+          name: "alpha",
+          version: "1.0.0",
+          dependencies: [],
+        },
         { status: "unavailable", name: "epsilon", reasons: ["unsupported hooks", "lsp"] },
         { status: "available", name: "gamma", version: "2.0.0" },
         {
@@ -117,13 +124,24 @@ const LIST_MESSAGE: NotificationMessage = {
           name: "zeta",
           reasons: ["permission denied"],
           cause: new Error("disk write blocked"),
+          severity: "error",
+          needsReload: false,
         },
       ],
     },
     {
       name: "community",
       scope: "project",
-      plugins: [{ status: "present", name: "tool", version: "0.5.0", dependencies: [] }],
+      plugins: [
+        {
+          status: "installed",
+          severity: "info",
+          needsReload: false,
+          name: "tool",
+          version: "0.5.0",
+          dependencies: [],
+        },
+      ],
     },
   ],
 };
@@ -211,7 +229,7 @@ test("SNM-38 :: full ladder snapshot matches the catalog 0/2(/4) ladder (D-25-09
   //
   // UXG-07 (D-29-02): the LIST_MESSAGE fixture carries a `failed`
   // plugin row (`zeta`), so notify() computes "error" severity and PREPENDS the
-  // "1 plugin operation failed." summary line + blank line. Those two leading
+  // "A plugin operation has failed." summary line + blank line. Those two leading
   // column-0 lines are the first two `0` entries below; the catalog-conformant
   // 0/2(/4) cascade ladder follows unchanged.
   assert.deepEqual(

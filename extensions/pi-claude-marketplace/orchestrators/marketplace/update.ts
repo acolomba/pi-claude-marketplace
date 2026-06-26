@@ -109,7 +109,14 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
 } from "../../shared/errors.ts";
-import { makeRawNotifyFn, notify } from "../../shared/notify.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+  type Single,
+} from "../../shared/notify-context.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
@@ -119,6 +126,7 @@ import {
   type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
+import { UPDATE_CONTEXT, type UpdateRowMsg } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { ParsedSource } from "../../domain/source.ts";
@@ -127,11 +135,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginNotificationMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -250,7 +254,10 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   // "(no marketplaces)" sentinel when `message.marketplaces` is the empty
   // array; callers MUST NOT compose the sentinel text.
   if (targets.length === 0) {
-    notify(opts.ctx, opts.pi, { marketplaces: [] });
+    // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
+    // `(no marketplaces)` sentinel via the central seam the spine reuses.
+    const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
+    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows);
     return;
   }
 
@@ -450,7 +457,7 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
       // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
       // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
       // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-      // milestone closes). Mirrors remove.ts:235-244's silent-return at the same
+      // change closes). Mirrors remove.ts:235-244's silent-return at the same
       // withStateGuard boundary. withStateGuard still saves the unmodified state
       // (a harmless re-write of the same content).
       return undefined;
@@ -594,7 +601,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
 }
 
 /**
- * Map a `PluginUpdateOutcome` to a discriminated `PluginNotificationMessage`.
+ * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
  * The renderer (`renderPluginRow` in shared/notify.ts) owns the icon
  * dispatch, the version-arrow composition, the reasons-brace composition, and
  * the per-row soft-dep marker injection. The mapper's job is structural --
@@ -621,10 +628,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * (`renderScopeBracket(plugin.scope, mp.scope)`) can suppress the redundant
  * `[<scope>]` bracket when the plugin scope matches the marketplace scope.
  */
-function outcomeToCascadePluginMessage(
-  outcome: PluginUpdateOutcome,
-  scope: Scope,
-): PluginNotificationMessage {
+function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scope): UpdateRowMsg {
   // PluginUpdateOutcome is a discriminated union; the switch exhausts all 4
   // partitions and ends with an `assertNever` so any future variant addition
   // fails at compile time.
@@ -644,23 +648,34 @@ function outcomeToCascadePluginMessage(
           ...(outcome.declaresAgents ? (["agents"] as const) : []),
           ...(outcome.declaresMcp ? (["mcp"] as const) : []),
         ],
+        // D-03/D-06: realized update transition -> info, reloads Pi resources.
+        severity: "info",
+        needsReload: true,
       };
     case "unchanged":
       return {
         status: "skipped",
         name: outcome.name,
         scope,
-        // The renderer routes `skipped` through warning severity ->
-        // ICON_UNINSTALLABLE (⊘).
         reasons: ["up-to-date"],
+        // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
+        severity: "info",
+        needsReload: false,
       };
-    case "skipped":
+    case "skipped": {
+      const reasons = [narrowSkipReason(outcome)];
       return {
         status: "skipped",
         name: outcome.name,
         scope,
-        reasons: [narrowSkipReason(outcome)],
+        reasons,
+        // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
+        // never reloads.
+        severity: skipSeverity(reasons),
+        needsReload: false,
       };
+    }
+
     case "failed":
       return {
         status: "failed",
@@ -672,6 +687,9 @@ function outcomeToCascadePluginMessage(
         // failed outcomes produced by plugin/update.ts (no err in scope) leave
         // this undefined and the renderer simply omits the trailer.
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-03/D-06: a failed update -> error, no reload.
+        severity: "error",
+        needsReload: false,
       };
     default:
       // Exhaustiveness guard. A new partition added to PluginUpdateOutcome
@@ -791,10 +809,18 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       name,
       reasons: typedReasons ?? (["network unreachable"] as const),
       cause: err instanceof Error ? err : new Error(errorMessage(err)),
+      // D-03/D-06: a marketplace-refresh failure -> error, no reload.
+      severity: "error",
+      needsReload: false,
     };
-    notify(ctx, pi, {
-      marketplaces: [{ name, scope, status: "failed", plugins: [failedRow] }],
-    });
+    // OUT-07 / D-12: one marketplace block -> Single. The `(failed)` header
+    // renders via the central seam; the failed child row dispatches through
+    // UPDATE_CONTEXT.
+    const failedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+      // D-03: a failed marketplace update -> error.
+      { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
+    ];
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows);
     return;
   }
 
@@ -849,15 +875,19 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // the reload-hint discipline.
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
     if (!snapshot.changed) {
-      notify(ctx, pi, {
-        marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
-      });
+      // OUT-07 / D-12: one marketplace block, no child rows -> Single.
+      const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+        { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
+      ];
+      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows);
       return;
     }
 
-    notify(ctx, pi, {
-      marketplaces: [{ name, scope, status: "updated", plugins: [] }],
-    });
+    // OUT-07 / D-12: manifest-only refresh, no child rows -> Single.
+    const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+      { name, scope, status: "updated", plugins: [] },
+    ];
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows);
     return;
   }
 
@@ -872,9 +902,12 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // no-op (plugins:[] -> shouldEmitReloadHint stays false, warning severity).
   const cascadeIsNoOp = outcomes.every((o) => o.partition === "unchanged");
   if (!snapshot.changed && cascadeIsNoOp) {
-    notify(ctx, pi, {
-      marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
-    });
+    // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
+    // (plugins:[]) -> Single, one marketplace block.
+    const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+      { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
+    ];
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows);
     return;
   }
 
@@ -886,16 +919,21 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // marketplace status never triggers it), and the per-row soft-dep marker
   // (single probe per notify call, threaded into every renderPluginRow).
   // Caller-supplied plugin order is honored verbatim.
-  notify(ctx, pi, {
-    marketplaces: [
-      {
-        name,
-        scope,
-        status: "updated",
-        plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
-      },
-    ],
-  });
+  // OUT-07 / D-12: one marketplace block carrying the per-plugin cascade child
+  // rows -> Single. The `(updated)` header renders via the central seam; the
+  // updated/skipped/failed child rows dispatch through UPDATE_CONTEXT.
+  const cascadeRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+    {
+      name,
+      scope,
+      status: "updated",
+      // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
+      // construction, so the mapped rows are the narrowed Msg the
+      // UPDATE_CONTEXT requires with no cast.
+      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+    },
+  ];
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows);
 }
 
 /**

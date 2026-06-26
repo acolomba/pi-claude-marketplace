@@ -115,7 +115,7 @@ test('shim :: valid source calls addMarketplace with { ctx, scope: "user", cwd, 
     assert.ok(note);
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n⊘ ./nonexistent-marketplace-dir [user] (failed) {source missing}",
+      "A marketplace operation has failed.\n\n⊘ ./nonexistent-marketplace-dir [user] (failed) {source missing}",
     );
     assert.equal(note.severity, "error");
     // No git operations expected (path source -- NFR-5).
@@ -136,7 +136,7 @@ test("shim :: --scope project propagated to addMarketplace", async () => {
     assert.ok(note);
     assert.equal(
       note.message,
-      "1 marketplace operation failed.\n\n⊘ ./nonexistent-marketplace-dir [project] (failed) {source missing}",
+      "A marketplace operation has failed.\n\n⊘ ./nonexistent-marketplace-dir [project] (failed) {source missing}",
     );
     assert.equal(note.severity, "error");
     assert.equal(gitMock.state.cloneCalls.length, 0);

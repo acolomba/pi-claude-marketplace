@@ -314,9 +314,10 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     // UAT-03: catalog
     // `disable-fresh` byte form -- bare marketplace header + the closed-set
     // `(disabled)` row (same glyph + token as the disabled-inventory row,
-    // version slot kept) + the `/reload` trailer (the orchestrator
-    // dispatches with the `disable-cascade` kind, so the `(disabled)` row
-    // counts as a realized transition per SNM-33).
+    // version slot kept) + the `/reload` trailer. RLD-05 / D-07: the trailer
+    // fires via the fresh `(disabled)` row's `needsReload: true` stamp (RLD-02
+    // OR-reduce), not a cascade kind (the row's artefacts were unstaged --
+    // SNM-33).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
     assert.equal(

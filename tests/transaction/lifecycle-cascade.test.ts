@@ -16,7 +16,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 // LIFE-01 + LIFE-02 end-to-end integration: a hooks-declaring plugin
 // flows through install -> update -> reinstall -> uninstall and at every
 // site the on-disk <hooksDir>/<plugin>/hooks.json file matches the
-// post-step contract. Wave 0 verification dep from 63-VALIDATION.md.
+// post-step contract.
 
 interface NotifyRecord {
   message: string;

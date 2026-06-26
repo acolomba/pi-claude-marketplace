@@ -606,7 +606,7 @@ async function prepareAsyncEnv(
 
 /**
  * Build a snapshot of the persisted PID table from the in-memory
- * registry filtered to the supplied scope/loc. Writes via the Wave-1
+ * registry filtered to the supplied scope/loc. Writes via the
  * `writePidTable` leaf (NFR-1 atomic). Never throws -- the leaf already
  * traps and `hookDebugLog`s its own failures.
  *

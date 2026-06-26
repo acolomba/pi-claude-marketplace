@@ -178,7 +178,7 @@ test("MAU-3 / UXG-04: idempotent -- already-true + enable=true emits V2 `<autoup
     assert.equal(recordAutoupdate(after.marketplaces["mp"]), true);
     assert.equal(notifications[0]!.message, "● mp [project] <autoupdate> {already autoupdate}");
     // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    // `already autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
@@ -198,7 +198,7 @@ test("MAU-3 / UXG-04: idempotent -- already-false + enable=false emits V2 `<no a
       "● mp [project] <no autoupdate> {already no autoupdate}",
     );
     // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already no autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    // `already no autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
@@ -238,7 +238,7 @@ test("MAU-4: missing autoupdate field treated as false; enable=false reports V2 
       "● mp [project] <no autoupdate> {already no autoupdate}",
     );
     // UXG-02 / D-28-06/07 severity ladder: the benign idempotent flip reason
-    // `already no autoupdate` is in BENIGN_REASONS -> info (no severity arg).
+    // `already no autoupdate` is in IDEMPOTENT_REASONS -> info (no severity arg).
     assert.equal(notifications[0]!.severity, undefined);
   });
 });
@@ -293,7 +293,7 @@ test("MAU-2 / CMC-33 (V2): bare form flips every marketplace in scope; one notif
       `expected changed-first ordering (to-flip before already), got: ${message}`,
     );
     // Mixed-outcome multi-marketplace: the only non-success row is the
-    // BENIGN idempotent flip (`already autoupdate` in BENIGN_REASONS) and the
+    // benign idempotent flip (`already autoupdate` in IDEMPOTENT_REASONS) and the
     // other row is a fresh enable (success), so per UXG-02 / D-28-06 the whole
     // cascade computes info (no severity arg). The fresh `<autoupdate>` row is
     // not a skip, so there is no actionable row to poison the routing.
@@ -451,7 +451,7 @@ test("ATTR-05: single-name flip with name absent from BOTH scopes surfaces stand
     // summary prefix.
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-zzz-9999 [project] (failed) {not added}",
     );
     // D-18-05 severity ladder: not-added -> error.
     assert.equal(notifications[0]!.severity, "error");
@@ -478,7 +478,7 @@ test("ATTR-05: explicit-scope flip of a missing marketplace surfaces standalone 
     // bracket -- the former synthetic-child `{not found}` reason is gone.
     assert.equal(
       notifications[0]!.message,
-      "1 marketplace operation failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
+      "A marketplace operation has failed.\n\n⊘ absent-explicit [project] (failed) {not added}",
     );
     assert.doesNotMatch(notifications[0]!.message, /\{not found\}/);
     assert.equal(notifications[0]!.severity, "error");

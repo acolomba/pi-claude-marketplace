@@ -113,11 +113,13 @@ import {
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
+import { INSTALL_CONTEXT, type InstallMsg } from "./install.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
@@ -138,12 +140,11 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
-  Dependency,
   PluginFailedMessage,
   PluginInstalledMessage,
-  PluginNotificationMessage,
   PluginUnavailableMessage,
   StatusToken,
 } from "../../shared/notify.ts";
@@ -1125,15 +1126,13 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return classifyInstallFailure(err, formatOrchestratedCause(err));
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [failureMessage],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failureMessage],
+      },
+    ]);
     // Collapsed failure: `error` is the dispatch surface; `cause` is the
     // formatted text for callers that render it directly.
     const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
@@ -1165,22 +1164,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: invalidErr, cause };
     }
 
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: invalidErr,
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            severity: "error" as const,
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: invalidErr,
+          },
+        ],
+      },
+    ]);
     return { status: "failed", error: invalidErr, cause };
   }
 
@@ -1219,22 +1217,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // the per-row bracket in that case. Matches the IN-04 omit convention
     // used by this file's primary catch path's
     // `composeInstallFailureMessage` recipe.
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: [] as const,
-              cause: internalErr,
-            },
-          ],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            severity: "error" as const,
+            name: plugin,
+            reasons: [] as const,
+            cause: internalErr,
+          },
+        ],
+      },
+    ]);
     return { status: "failed", error: internalErr, cause };
   }
 
@@ -1367,20 +1364,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       dependencies,
       version: installCtx.version,
       ...(reasons.length > 0 && { reasons }),
+      // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      severity: "info",
+      needsReload: true,
     };
     // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
     // "installed" + dependencies[] + per-D-19-03 failure branches
     // (D-19-02 + D-19-03).
-    notify(ctx, pi, {
-      marketplaces: [
-        {
-          name: marketplace,
-          scope,
-          plugins: [installedRow],
-        },
-      ],
-    });
+    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [installedRow],
+      },
+    ]);
   }
 
   return {
@@ -1437,7 +1435,7 @@ function composeInstallFailureMessage(args: {
   rolledBackPartial: boolean;
   rollbackPartials: readonly RollbackPartial[];
   entityErrorRow: EntityErrorRow | undefined;
-}): PluginNotificationMessage {
+}): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
   const cause = err instanceof Error ? err : undefined;
   const isPathContainment = err instanceof PathContainmentError;
@@ -1452,6 +1450,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
     };
     return failed;
   }
@@ -1466,6 +1467,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
       rollbackPartial: rollbackPartials.map((p) => ({
         phase: p.phase,
         ...(p.cause !== undefined && { cause: p.cause }),
@@ -1497,6 +1501,9 @@ function composeInstallFailureMessage(args: {
       ...(version !== undefined && version !== "" && { version }),
       scope,
       ...(cause !== undefined && { cause }),
+      // D-03/D-06: a failed install -> error, no reload (nothing landed).
+      severity: "error",
+      needsReload: false,
     };
     return failed;
   }
@@ -1511,6 +1518,9 @@ function composeInstallFailureMessage(args: {
     ...(version !== undefined && version !== "" && { version }),
     scope,
     ...(cause !== undefined && { cause }),
+    // D-03/D-06: a failed install -> error, no reload (nothing landed).
+    severity: "error",
+    needsReload: false,
   };
   return failed;
 }
