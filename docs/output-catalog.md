@@ -160,6 +160,8 @@ ______________________________________________________________________
 
 Plugin-list surface. Marketplaces render as list-surface headers (`mp.status === undefined`); `mp.details.autoupdate` drives the `<autoupdate>` marker; plugin rows indent two spaces beneath.
 
+The optional filter flags (`--installed`, `--available`, `--unavailable`, `--unsupported`) select buckets by union; with no flag every bucket renders. They partition cleanly (LIST-01 / D-67-01): `--installed` spans the full installed inventory -- `installed`, `upgradable`, `disabled`, and the derived `force-installed` / `force-upgradable` rows; `--available` selects not-installed installable plugins; `--unsupported` selects not-installed plugins that resolve `unsupported` (the force-installable candidates); `--unavailable` selects only structurally-unavailable plugins. Because the list surface collapses both resolver `unsupported` and structural `unavailable` into the same `(unavailable)` row token, the `--unsupported` / `--unavailable` split keys on the internal resolver-state bucket, not the rendered token -- no rendered byte form changes, and there is no `--upgradable` filter.
+
 ### Empty -- no marketplaces configured
 
 <!-- catalog-state: empty -->
