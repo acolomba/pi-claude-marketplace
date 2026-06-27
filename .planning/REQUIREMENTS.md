@@ -84,20 +84,42 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RSTATE-01..05 | TBD | Pending |
-| FORCE-01..05 | TBD | Pending |
-| FSTAT-01..07 | TBD | Pending |
-| LIST-01..02 | TBD | Pending |
-| RINST-01 | TBD | Pending |
-| BFILL-01..02 | TBD | Pending |
-| SEV-01..05 | TBD | Pending |
-| DOC-01..03 | TBD | Pending |
+| RSTATE-01 | Phase 64 | Pending |
+| RSTATE-02 | Phase 64 | Pending |
+| RSTATE-03 | Phase 64 | Pending |
+| RSTATE-04 | Phase 64 | Pending |
+| RSTATE-05 | Phase 64 | Pending |
+| FORCE-01 | Phase 65 | Pending |
+| FORCE-02 | Phase 65 | Pending |
+| FORCE-03 | Phase 65 | Pending |
+| FORCE-04 | Phase 65 | Pending |
+| FORCE-05 | Phase 65 | Pending |
+| FSTAT-01 | Phase 66 | Pending |
+| FSTAT-02 | Phase 66 | Pending |
+| FSTAT-03 | Phase 66 | Pending |
+| FSTAT-04 | Phase 66 | Pending |
+| FSTAT-05 | Phase 66 | Pending |
+| FSTAT-06 | Phase 66 | Pending |
+| FSTAT-07 | Phase 66 | Pending |
+| LIST-01 | Phase 67 | Pending |
+| LIST-02 | Phase 67 | Pending |
+| RINST-01 | Phase 67 | Pending |
+| BFILL-01 | Phase 68 | Pending |
+| BFILL-02 | Phase 68 | Pending |
+| SEV-01 | Phase 69 | Pending |
+| SEV-02 | Phase 69 | Pending |
+| SEV-03 | Phase 69 | Pending |
+| SEV-04 | Phase 69 | Pending |
+| SEV-05 | Phase 69 | Pending |
+| DOC-01 | Phase 70 | Pending |
+| DOC-02 | Phase 70 | Pending |
+| DOC-03 | Phase 70 | Pending |
 
 **Coverage:**
 - Requirements: 30 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 30 ⚠️
+- Mapped to phases: 30 (Phases 64-70) ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-26*
-*Last updated: 2026-06-26 after initial definition*
+*Last updated: 2026-06-27 after roadmap creation (Phases 64-70 mapped; 30/30 coverage)*

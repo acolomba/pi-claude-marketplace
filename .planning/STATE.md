@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: force-install
 status: planning
-last_updated: "2026-06-27T01:27:01.206Z"
+last_updated: "2026-06-27T02:00:00.000Z"
 last_activity: 2026-06-27
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 63 — lifecycle-cascade-user-facing-surface-docs
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 64 — Resolver Three-Way State (RSTATE)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 64 of 70 (Resolver Three-Way State) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-27 — Milestone force-install started
+Status: Roadmap created — ready to plan Phase 64
+Last activity: 2026-06-27 — Roadmap created (Phases 64-70, 30/30 requirements mapped)
 
 ## Performance Metrics
 
@@ -132,6 +132,8 @@ Last activity: 2026-06-27 — Milestone force-install started
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- force-install roadmap (2026-06-27): 7 phases (64-70) created by `gsd-roadmapper`, continuing phase numbering from v1.13 Phase 63 (NOT reset to 1). All 30 requirements mapped exactly once following the brownfield dependency order: RSTATE-01..05 -> Phase 64 (Resolver Three-Way State -- the `installable`/`unsupported`/`unavailable` foundation + `requireInstallable`/`requireForceInstallable` gates + per-kind unsupported reasons; everything downstream depends on this landing first); FORCE-01..05 -> Phase 65 (Force Install & Update -- degrade-not-block on `unsupported`, hard failures still block, no `Warning:` in any force path; depends on the `requireForceInstallable` gate + `unsupported` arm carrying `pluginRoot`); FSTAT-01..07 -> Phase 66 (Derived Force-State, Glyphs & Force-Upgradability -- `force-installed` ◉ / `force-upgradable` ●, will-force preview tokens, info detail; derived, no persisted flag); LIST-01..02 + RINST-01 -> Phase 67 (List Filters, Completion & Reinstall Repair -- `--unsupported` filter + force completion sets, plus reinstall dropping `--force` to always-overwrite; both surface changes grouped as they depend on the FSTAT-derived states); BFILL-01..02 -> Phase 68 (Load-Time Backfill -- re-materialize via reinstall semantics gated on the new `lastReconciledExtensionVersion` state.json stamp; depends on RSTATE + the Phase 67 always-overwrite reinstall path); SEV-01..05 -> Phase 69 (Force-Path Severity -- wires the force-specific severities onto the already-shipped caller-stamped/desired-state notification model, including the unsupported-vs-unavailable error split; depends on FSTAT for the force rows); DOC-01..03 -> Phase 70 (Spec & Documentation Reconcile -- PRD §11 + output-catalog + messaging-style-guide reconciled to the final frozen token set; closing phase). 7 phases sits within standard granularity (5-8). LIST and RINST combined into one surface-changes phase rather than split into two thin phases. Force-state is DERIVED throughout -- the v1.15-era persisted `forceInstalled` sticky flag is out of scope (built and removed; do not rebuild). The byte-level output contract (docs/output-catalog.md, docs/messaging-style-guide.md, PRD §11) is the source of truth for every user-visible-output phase.
 
 - Phase 14.1 inserted after Phase 14: Close gap: CMC-13 -- propagate declaresAgents/Mcp through import cascade rows (URGENT)
 - Phase 14.2 inserted after Phase 14: Address tech debt: CR-01 + retroactive Phase 12 / 14.1 gates (URGENT)
