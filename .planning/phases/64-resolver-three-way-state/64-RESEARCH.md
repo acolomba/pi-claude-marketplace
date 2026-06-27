@@ -335,14 +335,14 @@ if (r.state === "unavailable") {
 | A2 | A hooks supportability/parse failure (`malformed hooks.json:`) routes to `unavailable` (structural), per D-64-07's explicit "malformed hooks.json" listing | Pattern 4, Dirty-Source table | If a *supportability trip* (unmapped event) should instead be force-degradable (`unsupported`), the hooks branch needs to split parse-failure (structural) from supportability-trip (unsupported) — a finer classification than today's single `applyHooksConfig` returns. Affects RSTATE-05 marker family scope |
 | A3 | `requireForceInstallable` has no production callers this phase | Pattern 3, Migration Surface | If a consumer is expected to adopt it now, the phase scope expands toward Phase 65 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`info.ts` `unavailable`-arm component rendering.**
    - What we know: `buildNotInstallablePathRowFields` (info.ts:649) reads `componentPaths`/`mcpServers`/`hooksConfigPath`; the minimal `unavailable` arm lacks them. `info.ts` already re-derives `pluginRoot` itself (info.ts:665), so it does not depend on the arm for that.
    - What's unclear: for a path-source plugin that resolves `unavailable` (e.g. malformed manifest), should `info` (a) re-walk disk to list components leniently (the `260618-qkz` re-derivation), or (b) render `components: not resolved` with the structural reason? The current code enumerates from the arm's fields; the minimal arm forces a choice.
-   - Recommendation: branch info on `r.state` — `unsupported` reuses `buildNotInstallablePathRowFields`; `unavailable` renders the structural reason with `componentsResolved: false` (a structurally broken plugin's component enumeration is unreliable, matching D-64-05's rationale). Confirm against the byte contract in `docs/output-catalog.md` before locking.
+   - RESOLVED: branch info on `r.state` — `unsupported` reuses `buildNotInstallablePathRowFields`; `unavailable` renders the structural reason with `componentsResolved: false` (a structurally broken plugin's component enumeration is unreliable, matching D-64-05's rationale). Confirm against the byte contract in `docs/output-catalog.md` before locking.
 
-2. **Marker family scope for RSTATE-05 (see A2).** Whether `unsupported hooks` is a per-kind marker (from `unsupported[]`) or a structural reason (from `notes` on `unavailable`). Recommendation: structural reason path, since malformed hooks.json is structural per D-64-07; verify the catalog rows for `list`/`info` still emit the same byte form.
+2. **Marker family scope for RSTATE-05 (see A2).** Whether `unsupported hooks` is a per-kind marker (from `unsupported[]`) or a structural reason (from `notes` on `unavailable`). RESOLVED: structural reason path, since malformed hooks.json is structural per D-64-07; verify the catalog rows for `list`/`info` still emit the same byte form.
 
 ## Environment Availability
 

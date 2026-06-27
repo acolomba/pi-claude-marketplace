@@ -199,85 +199,109 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [ ] **Phase 70: Spec & Documentation Reconcile** - PRD §11, output-catalog, messaging-style-guide reconciled to the final token set
 
 #### Phase 64: Resolver Three-Way State
+
 **Goal**: The resolver distinguishes "force can degrade the unsupported parts" from "force cannot help" via a three-way discriminated state, type-enforcing that force degrades components but never hard failures (NFR-7 refined, not weakened).
 **Depends on**: Nothing (first phase of milestone; refactors the existing v1.13 `domain/resolver.ts`)
 **Requirements**: RSTATE-01, RSTATE-02, RSTATE-03, RSTATE-04, RSTATE-05
 **Success Criteria** (what must be TRUE):
+
   1. The resolver returns one of three discriminated states -- `installable` / `unsupported` / `unavailable` -- replacing the binary `installable: true | false`.
   2. A plugin with a structural defect (unreadable/invalid manifest, malformed `hooks.json`, NFR-10 path violation) resolves `unavailable` even when it also has unsupported component kinds (structural precedence).
   3. `unsupported` exposes `pluginRoot` plus the supported and unsupported component lists; `unavailable` exposes `pluginRoot` to no consumer (compile-enforced).
   4. `requireInstallable` narrows to `installable` only (default path) and `requireForceInstallable` narrows to `installable | unsupported` (`--force` path).
-  5. Per-kind unsupported-component reasons render identically across `list` and `info` (including soft-dep markers) and across all force states.
-**Plans**: 2 plans
+  5. Per-kind unsupported-component reasons render identically across `list` and `info` (including soft-dep markers) and across all force states.**Plans**: 2 plans
+
+**Wave 1**
+
 - [ ] 64-01-PLAN.md — Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 64-02-PLAN.md — Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
 
 #### Phase 65: Force Install & Update
+
 **Goal**: `install --force` / `update --force` degrades unsupported components instead of blocking, while hard failures still block regardless of `--force`, and no force path emits a `Warning:` summary.
 **Depends on**: Phase 64 (the `requireForceInstallable` gate and the `unsupported` arm carrying `pluginRoot`)
 **Requirements**: FORCE-01, FORCE-02, FORCE-03, FORCE-04, FORCE-05
 **Success Criteria** (what must be TRUE):
+
   1. `install --force <plugin>@<marketplace>` on an `unsupported` plugin installs the supported components and skips the unsupported ones.
   2. `--force` on a fully-supported plugin is a no-op -- it installs normally as `(installed)`.
   3. `update --force <plugin>` on a plugin whose newer version became `unsupported` updates it by degrading the now-unsupported components instead of failing.
   4. Without `--force`, install/update of an `unsupported` plugin still blocks/fails -- `--force` is the only per-invocation opt-in to degradation.
   5. `--force` never bypasses hard failures (`unavailable`/structural defects, NFR-10 path containment, missing marketplace, unresolvable source) and no `Warning:` summary is emitted in any force path.
+
 **Plans**: TBD
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
+
 **Goal**: Force-installed and force-upgradable states are derived from the resolver state (no persisted flag, no migration) and drive distinct status tokens, glyphs, will-force preview tokens, and `info` detail.
 **Depends on**: Phase 64 (three-way state), Phase 65 (force install/update path)
 **Requirements**: FSTAT-01, FSTAT-02, FSTAT-03, FSTAT-04, FSTAT-05, FSTAT-06, FSTAT-07
 **Success Criteria** (what must be TRUE):
+
   1. A plugin recorded as installed but currently re-resolving to `unsupported` renders `force-installed` with the `◉` glyph on cascade and list surfaces -- derived, with no persisted `forceInstalled` flag and no state migration.
   2. A force-installed plugin whose newer version is fully supported returns to `(installed)` automatically after upgrade -- no lingering force state.
   3. `list` shows `force-upgradable` (wearing the `●` glyph) for a currently-clean installed plugin whose newer cache-resolved candidate would **newly** degrade it; a force-installed plugin is never force-upgradable.
   4. The pending/preview surface renders `will force install` / `will force update` in place of `will install` / `will update` when a force operation is planned.
   5. `/claude:plugin info` reports `force-installed` and surfaces the dropped-component detail; the success notification for a force install/update reads "force-installed".
+
 **Plans**: TBD
 
 #### Phase 67: List Filters, Completion & Reinstall Repair
+
 **Goal**: List and completion surfaces expose the new force states, and `reinstall` becomes an unconditional repair primitive.
 **Depends on**: Phase 66 (the derived `force-installed` / `force-upgradable` states the filters and completion sets read)
 **Requirements**: LIST-01, LIST-02, RINST-01
 **Success Criteria** (what must be TRUE):
+
   1. `list --unsupported` filters to unsupported plugins; `--installed` spans both `installed` and `force-installed`; no `--upgradable` filter is added.
   2. With `--force` preceding the plugin positional, `install` completion offers `available` + `unsupported` plugins and `update` completion offers `upgradable` + `force-upgradable` plugins (`unavailable` excluded); without `--force` completion is unchanged.
   3. `reinstall` no longer accepts `--force` and always overwrites everything (collisions and foreign content) as a repair primitive.
+
 **Plans**: TBD
 
 #### Phase 68: Load-Time Backfill
+
 **Goal**: A force-installed plugin's previously-skipped components are re-materialized at load time once the extension supports them, gated on an extension-version stamp so the scan fires only when the supported-kind boundary could have moved.
 **Depends on**: Phase 64 (three-way state), Phase 67 (the always-overwrite reinstall materialize path)
 **Requirements**: BFILL-01, BFILL-02
 **Success Criteria** (what must be TRUE):
+
   1. On load, a force-installed plugin whose previously-unsupported components are now supported is re-materialized in place (reinstall semantics), promoting it toward `(installed)` -- no upgrade, no manual command.
   2. The backfill scan fires only when `lastReconciledExtensionVersion` in `state.json` differs from the running extension version; an unchanged version skips the scan.
   3. The new `lastReconciledExtensionVersion` stamp is written to and read from `state.json` across loads via a non-destructive schema migration.
+
 **Plans**: TBD
 
 #### Phase 69: Force-Path Severity
+
 **Goal**: Force-path notifications carry the correct desired-state severities, wired onto the caller-stamped notification model delivered by the notification-refactor workstream.
 **Depends on**: Phase 66 (the force rows whose severity is being stamped)
 **Requirements**: SEV-01, SEV-02, SEV-03, SEV-04, SEV-05
 **Success Criteria** (what must be TRUE):
+
   1. A direct `install --force` / `update --force` degrade renders at **info** (no `Warning:`); a `reinstall` manual-recovery and a missing soft-dependency companion on an otherwise-successful install render at **warning**.
   2. Installing an `unsupported` plugin without `--force` renders at **error** with a message pointing at `--force`; installing an `unavailable` (structural) plugin renders at **error** with **no** `--force` suggestion.
   3. Auto-update of a force-upgradable plugin is taken automatically and renders at **warning** only when it **newly** degrades a previously-clean plugin, at **info** when the plugin was already degraded.
   4. A targeted `update <plugin>@<marketplace>` that declines a force-upgradable upgrade renders at **warning**; an untargeted/bulk `update` that skips a force-upgradable plugin renders at **info**.
   5. Any row carries a factual `{reasons}` brace whenever reasons are present, including `installed`, `force-installed`, and `force-upgradable` rows.
+
 **Plans**: TBD
 
 #### Phase 70: Spec & Documentation Reconcile
+
 **Goal**: The byte-level output-contract docs and the PRD reflect the final reconciled token set, derived-state severity, and force-upgradable rules, with the dropped scope items removed.
 **Depends on**: Phase 69 (the final token set + severity model frozen)
 **Requirements**: DOC-01, DOC-02, DOC-03
 **Success Criteria** (what must be TRUE):
+
   1. PRD §11 documents `--force` install/update, the three-way resolver state, the new status tokens, and the force-upgradable rules, and removes the dropped items (global force default, manual `complete` command).
   2. `docs/output-catalog.md` and `docs/messaging-style-guide.md` reflect the reconciled token set (`force-installed`, `unsupported`, `force-upgradable`), the derived-state severity, and the exact byte forms -- catalog-UAT GREEN.
   3. No stale comment claims idempotent autoupdate is "warning"; such cases are documented as info/benign.
-**Plans**: TBD
 
+**Plans**: TBD
 
 ## Progress
 
