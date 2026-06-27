@@ -25,6 +25,13 @@ The structural foundation: distinguish "not installable, but force can drop the 
 - [x] **FORCE-04**: No `Warning:` summary is emitted in any force path (the explicit `--force` is the opt-in; dropped-component detail lives in `info`).
 - [x] **FORCE-05**: `--force` never bypasses hard failures -- `unavailable`/structural defects, NFR-10 path containment, missing marketplace, and unresolvable source fail/block regardless of `--force`.
 
+### Reload-Deferred Will Grammar (WILL)
+
+- [ ] **WILL-01**: The pending/preview surface renders a `will`-prefixed token for a reconciliation action if and only if that action's effect is deferred to the next `/reload`; actions whose effect is immediate render without a bare `will` token.
+- [ ] **WILL-02**: The `will`-grammar is consistent with the per-command reload-hint discipline -- a pending token carries `will` exactly when its corresponding command path emits the `/reload to pick up changes` trailer.
+- [ ] **WILL-03**: Marketplace add (immediately effective) does not render `will add`; marketplace remove renders a `will` token only for its reload-deferred plugin-uninstall cascade, not for the immediate source de-registration. Plugin install / uninstall / enable / disable remain reload-deferred and retain their `will` tokens.
+- [ ] **WILL-04**: `docs/output-catalog.md`, `docs/messaging-style-guide.md`, the status-token closed set, and the byte-exact catalog/notify tests reflect the reconciled grammar.
+
 ### Status, Glyph & Force-Upgradability (FSTAT)
 
 - [ ] **FSTAT-01**: A plugin's force-installed state is **derived** -- recorded as installed and currently re-resolving to `unsupported` -- with no persisted `forceInstalled` flag and no state migration.
@@ -94,6 +101,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 | FORCE-03 | Phase 65 | Complete |
 | FORCE-04 | Phase 65 | Complete |
 | FORCE-05 | Phase 65 | Complete |
+| WILL-01 | Phase 65.1 | Pending |
+| WILL-02 | Phase 65.1 | Pending |
+| WILL-03 | Phase 65.1 | Pending |
+| WILL-04 | Phase 65.1 | Pending |
 | FSTAT-01 | Phase 66 | Pending |
 | FSTAT-02 | Phase 66 | Pending |
 | FSTAT-03 | Phase 66 | Pending |

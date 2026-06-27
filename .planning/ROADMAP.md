@@ -192,6 +192,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 - [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
 - [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
+- [ ] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove
 - [ ] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail
 - [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
 - [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
@@ -242,6 +243,21 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 - [x] 65-02-PLAN.md — Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
 - [x] 65-03-PLAN.md — Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
+
+#### Phase 65.1: Reload-Deferred Will Grammar Consistency (INSERTED)
+
+**Goal**: The `will` prefix in the pending/preview surface marks exactly those reconciliation actions whose effect is deferred to the next `/reload`; actions that take effect immediately render without `will`. This reconciles the pending-tense grammar with the per-command reload-hint discipline before the force-display phases build on it.
+**Depends on**: Phase 65 (lands before Phase 66 so force-preview tokens build on the corrected grammar)
+**Requirements**: WILL-01, WILL-02, WILL-03, WILL-04
+**Success Criteria** (what must be TRUE):
+
+  1. Every `will`-prefixed token in the pending/preview surface corresponds to an action whose effect is deferred to `/reload`; no immediately-effective action renders a bare `will` token.
+  2. The pending grammar is consistent with the per-command reload-hint discipline -- a token carries `will` exactly when its command path emits the `/reload to pick up changes` trailer.
+  3. Marketplace add (immediate) no longer renders `will add`; marketplace remove renders a `will` token only for its reload-deferred plugin-uninstall cascade, not for the immediate source de-registration.
+  4. Plugin install / uninstall / enable / disable remain reload-deferred and retain their `will install` / `will uninstall` / `will enable` / `will disable` tokens.
+  5. `docs/output-catalog.md`, `docs/messaging-style-guide.md`, the status-token closed set, and the byte-exact catalog/notify tests reflect the reconciled grammar; `npm run check` stays green.
+
+**Plans**: TBD
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
