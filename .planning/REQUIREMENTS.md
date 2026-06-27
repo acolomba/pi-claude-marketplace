@@ -45,7 +45,7 @@ The structural foundation: distinguish "not installable, but force can drop the 
 ### List Filters & Completion (LIST)
 
 - [x] **LIST-01**: `list` gains a `--unsupported` filter; `--installed` spans both `installed` and `force-installed`; no `--upgradable` filter is added.
-- [ ] **LIST-02**: When `--force` precedes the plugin positional, `install` completion offers `available` + `unsupported` plugins and `update` completion offers `upgradable` + `force-upgradable` plugins; `unavailable` is excluded in both. Without `--force`, completion is unchanged.
+- [x] **LIST-02**: When `--force` precedes the plugin positional, `install` completion offers `available` + `unsupported` plugins and `update` completion offers `upgradable` + `force-upgradable` plugins; `unavailable` is excluded in both. Without `--force`, completion is unchanged.
 
 ### Reinstall (RINST)
 
@@ -113,7 +113,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | FSTAT-06 | Phase 66 | Complete |
 | FSTAT-07 | Phase 66 | Complete |
 | LIST-01 | Phase 67 | Complete |
-| LIST-02 | Phase 67 | Pending |
+| LIST-02 | Phase 67 | Complete |
 | RINST-01 | Phase 67 | Complete |
 | BFILL-01 | Phase 68 | Pending |
 | BFILL-02 | Phase 68 | Pending |
