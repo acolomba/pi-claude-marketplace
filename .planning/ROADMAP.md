@@ -191,7 +191,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 **Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD §11.
 
 - [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
-- [ ] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block
+- [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
 - [ ] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail
 - [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
 - [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
@@ -240,8 +240,8 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 65-02-PLAN.md — Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
-- [ ] 65-03-PLAN.md — Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
+- [x] 65-02-PLAN.md — Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
+- [x] 65-03-PLAN.md — Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
@@ -378,7 +378,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
-| 65. Force Install & Update                                          | force-install | 1/3 | In Progress|  |
+| 65. Force Install & Update                                          | force-install | 3/3 | Complete   | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 0/TBD | Not started | -          |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
