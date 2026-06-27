@@ -41,7 +41,9 @@ test("plan with no actions -> empty marketplaces array", () => {
   assert.deepEqual(msg.marketplaces, []);
 });
 
-test("one plan with one MarketplaceAdd -> one MarketplaceNotificationMessage", () => {
+test("WILL-01: MarketplaceAdd with no children -> no pending block (add is immediate)", () => {
+  // D-65.1-02: marketplace add is immediate, so an add with no reload-deferred
+  // child work produces nothing pending.
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     marketplacesToAdd: [
@@ -49,26 +51,18 @@ test("one plan with one MarketplaceAdd -> one MarketplaceNotificationMessage", (
     ],
   };
   const msg = buildReconcilePendingNotification([plan]);
-  assert.equal(msg.marketplaces.length, 1);
-  const block = msg.marketplaces[0];
-  assert.ok(block);
-  assert.equal(block.name, "mp");
-  assert.equal(block.scope, "project");
-  assert.equal(block.status, "will add");
-  assert.deepEqual([...block.plugins], []);
+  assert.deepEqual(msg.marketplaces, []);
 });
 
 test("blocks ordered by name-then-scope (alpha before zebra)", () => {
   const userZebra: ReconcilePlan = {
     ...emptyPlan("user"),
-    marketplacesToAdd: [
-      { scope: "user", marketplace: "zebra", source: "acme/z", configSource: "base" },
-    ],
+    pluginsToInstall: [{ scope: "user", plugin: "z1", marketplace: "zebra", configSource: "base" }],
   };
   const projectAlpha: ReconcilePlan = {
     ...emptyPlan("project"),
-    marketplacesToAdd: [
-      { scope: "project", marketplace: "alpha", source: "acme/a", configSource: "base" },
+    pluginsToInstall: [
+      { scope: "project", plugin: "a1", marketplace: "alpha", configSource: "base" },
     ],
   };
   const msg = buildReconcilePendingNotification([userZebra, projectAlpha]);
@@ -84,14 +78,14 @@ test("blocks ordered by name-then-scope (alpha before zebra)", () => {
 test("same-name marketplaces ordered project-before-user", () => {
   const userMp: ReconcilePlan = {
     ...emptyPlan("user"),
-    marketplacesToAdd: [
-      { scope: "user", marketplace: "shared", source: "u/r", configSource: "base" },
+    pluginsToInstall: [
+      { scope: "user", plugin: "u1", marketplace: "shared", configSource: "base" },
     ],
   };
   const projectMp: ReconcilePlan = {
     ...emptyPlan("project"),
-    marketplacesToAdd: [
-      { scope: "project", marketplace: "shared", source: "p/r", configSource: "base" },
+    pluginsToInstall: [
+      { scope: "project", plugin: "p1", marketplace: "shared", configSource: "base" },
     ],
   };
   const msg = buildReconcilePendingNotification([userMp, projectMp]);
@@ -104,7 +98,9 @@ test("same-name marketplaces ordered project-before-user", () => {
   assert.equal(second.scope, "user");
 });
 
-test("one plan with one PluginInstall under one MarketplaceAdd -> plugin nested under marketplace", () => {
+test("WILL-01: PluginInstall under a MarketplaceAdd -> bare-header block with will-install child", () => {
+  // D-65.1-02: the add itself carries no token; the reload-deferred child
+  // install rides a bare list-arm header (status undefined).
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     marketplacesToAdd: [
@@ -117,7 +113,7 @@ test("one plan with one PluginInstall under one MarketplaceAdd -> plugin nested 
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.name, "mp");
-  assert.equal(block.status, "will add");
+  assert.equal(block.status, undefined);
   assert.equal(block.plugins.length, 1);
   const pluginRow = block.plugins[0];
   assert.ok(pluginRow);
@@ -125,17 +121,38 @@ test("one plan with one PluginInstall under one MarketplaceAdd -> plugin nested 
   assert.equal(pluginRow.status, "will install");
 });
 
-test("MarketplaceRemove projection -> block.status='will remove'", () => {
+test("WILL-03: MarketplaceRemove projection -> bare header + per-plugin will-uninstall children", () => {
+  // D-65.1-03: de-registration is immediate (no marketplace-level token); only
+  // the plugin-uninstall cascade is reload-deferred, one will-uninstall row per
+  // recorded plugin under a bare list-arm header.
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
-    marketplacesToRemove: [{ scope: "project", marketplace: "old-mp" }],
+    marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1", "p2"] }],
   };
   const msg = buildReconcilePendingNotification([plan]);
   assert.equal(msg.marketplaces.length, 1);
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.name, "old-mp");
-  assert.equal(block.status, "will remove");
+  assert.equal(block.status, undefined);
+  assert.deepEqual(
+    block.plugins.map((p) => ({ name: p.name, status: p.status })),
+    [
+      { name: "p1", status: "will uninstall" },
+      { name: "p2", status: "will uninstall" },
+    ],
+  );
+});
+
+test("WILL-03: MarketplaceRemove with no recorded plugins -> no pending block", () => {
+  // D-65.1-03: an empty marketplace remove has no reload-deferred cascade, so
+  // nothing is pending.
+  const plan: ReconcilePlan = {
+    ...emptyPlan("project"),
+    marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
+  };
+  const msg = buildReconcilePendingNotification([plan]);
+  assert.deepEqual(msg.marketplaces, []);
 });
 
 test("sourceMismatch projection -> block.status='failed' + reasons=['source mismatch']", () => {

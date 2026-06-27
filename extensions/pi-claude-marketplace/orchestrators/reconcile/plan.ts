@@ -35,8 +35,8 @@
 // the DECLARED map (not the declared+recorded union): a plugin declared
 // under a marketplace that exists only in state (i.e. the marketplace is in
 // `marketplacesToRemove`) is dangling too -- classifying it as an
-// install/disable would emit a self-contradictory plan ("will remove" the
-// marketplace AND "will install" into it) that the apply path would consume
+// install/disable would emit a self-contradictory plan (removing the
+// marketplace AND installing into it) that the apply path would consume
 // verbatim.
 //
 // Malformed-key contract: a declared plugin key `parsePluginKey` rejects
@@ -207,12 +207,17 @@ function diffMarketplaces(
     }
   }
 
-  for (const mpName of Object.keys(recorded)) {
+  for (const [mpName, mpRecord] of Object.entries(recorded)) {
     // CR-01: a recorded name claimed by a declared key via source matching
     // is NOT removed -- removing it would uninstall its plugins as
     // collateral and the next reload would re-add (re-clone) it.
     if (declared[mpName] === undefined && !sourceClaimed.has(mpName)) {
-      remove.push({ scope, marketplace: mpName });
+      // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
+      // projection can synthesize per-plugin `will uninstall` rows. The apply
+      // path cascades these internally; do NOT add them to `pluginsToUninstall`
+      // (buildUninstallBucket skips removed-marketplace plugins to avoid
+      // double-billing).
+      remove.push({ scope, marketplace: mpName, plugins: Object.keys(mpRecord.plugins) });
     }
   }
 

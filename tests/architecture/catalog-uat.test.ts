@@ -2902,6 +2902,9 @@ const FIXTURES: FixtureMap = {
       // body line so the byte form cannot drift from the catalog state.
       message: { kind: "reconcile-pending-empty" },
     },
+    // WILL-01 / D-65.1-02: marketplace add is immediate (no `will add` token);
+    // the child install is the reload-deferred work, rendered under a bare
+    // list-arm header (no marketplace status).
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),
       message: {
@@ -2909,7 +2912,6 @@ const FIXTURES: FixtureMap = {
           {
             name: "new-mp",
             scope: "user",
-            status: "will add",
             plugins: [{ status: "will install", name: "new-plugin" }],
           },
         ],

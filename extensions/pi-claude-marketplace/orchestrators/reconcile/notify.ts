@@ -11,10 +11,16 @@
 // Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
 // `shared/notify.ts` beyond importing the types and the comparator.
 //
-// Token mapping (DIFF-02 pending-tense set):
+// Token mapping (pending-tense set):
 //
-//   marketplacesToAdd     -> block.status = "will add"
-//   marketplacesToRemove  -> block.status = "will remove"
+//   marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
+//                            D-65.1-02). Any child installs still build a
+//                            bare-header block via pluginsToInstall.
+//   marketplacesToRemove  -> per-recorded-plugin child row
+//                            { status: "will uninstall" } under a bare list-arm
+//                            header (status undefined). De-registration is
+//                            immediate; only the plugin-uninstall cascade is
+//                            reload-deferred (WILL-03 / D-65.1-03).
 //   sourceMismatches      -> block.status = "failed", reasons: ["source mismatch"]
 //   pluginsToInstall      -> child row { status: "will install" }
 //   pluginsToUninstall    -> child row { status: "will uninstall" }
@@ -53,18 +59,18 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
- * applied-cascade projections actually assign (`"will add"` / `"will remove"`
- * from the pending list; `"added"` / `"removed"` / `"failed"` from the apply
- * cascade). The `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"`
- * / `"skipped"` members of `MarketplaceStatus` belong to other surfaces
- * (autoupdate flip, marketplace update); the reconcile projection never sets
- * them, so the previous defensive runtime throw at `blockToMarketplaceMessage`
- * is replaced by this type narrowing.
+ * applied-cascade projections actually assign. The pending list no longer
+ * assigns any marketplace-level status (add is immediate -> dropped; remove is
+ * surfaced as per-plugin `will uninstall` child rows under a bare header --
+ * WILL-01 / WILL-03 / D-65.1-02 / D-65.1-03), so only the apply-cascade
+ * transition tokens (`"added"` / `"removed"` / `"failed"`) remain. The
+ * `"updated"` / `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"`
+ * members of `MarketplaceStatus` belong to other surfaces (autoupdate flip,
+ * marketplace update); the reconcile projection never sets them, so the
+ * previous defensive runtime throw at `blockToMarketplaceMessage` is replaced
+ * by this type narrowing.
  */
-type ReconcileBlockStatus = Extract<
-  MarketplaceStatus,
-  "will add" | "will remove" | "added" | "removed" | "failed"
->;
+type ReconcileBlockStatus = Extract<MarketplaceStatus, "added" | "removed" | "failed">;
 
 interface MarketplaceBlock<Msg extends PluginNotificationMessage = PluginNotificationMessage> {
   readonly key: string;
@@ -98,15 +104,15 @@ function ensureMarketplaceBlock<Msg extends PluginNotificationMessage>(
 
 /**
  * Construct the concrete per-status `MarketplaceNotificationMessage` arm for
- * an accumulated block. DIFF-02 token set:
- *  - `"will add"` / `"will remove"` are the new pending-tense marketplace
- *    statuses.
+ * an accumulated block. Token set:
+ *  - `"added"` / `"removed"` are the realized apply-time transition statuses.
  *  - `"failed"` is reused for source-mismatch blocks; its `reasons` is the
  *    existing `"source mismatch"` REASONS member (no new REASONS literal --
  *    the closed set already covers it).
  *  - `undefined` is the list/inventory arm; used when a block carries only
  *    plugin child rows (e.g. a pending-uninstall under an existing
- *    marketplace whose source matches).
+ *    marketplace whose source matches, or a marketplace-remove cascade whose
+ *    per-plugin `will uninstall` rows ride a bare header -- WILL-03).
  */
 function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
   block: MarketplaceBlock<Msg>,
@@ -120,10 +126,6 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
   // `ReconcileBlockStatus` so any attempt to assign one of those tokens here
   // is a compile error caught at edit time instead of a runtime signal.
   switch (block.status) {
-    case "will add":
-      return { name, scope, status: "will add", plugins };
-    case "will remove":
-      return { name, scope, status: "will remove", plugins };
     case "added":
       // RECON-04: realized apply-time transition token.
       return { name, scope, status: "added", plugins };
@@ -180,6 +182,34 @@ function applySourceMismatch(
 }
 
 /**
+ * WILL-03 / D-65.1-03: fold one removed marketplace into its block as a
+ * reload-deferred plugin-uninstall cascade. De-registration is immediate (no
+ * marketplace-level `will` token); synthesize one `will uninstall` child row
+ * per recorded plugin under a bare list-arm header (status left undefined).
+ * The names come from the plan DTO's `plugins` field -- NOT
+ * `plan.pluginsToUninstall`, which the planner deliberately omits removed-
+ * marketplace plugins from to avoid double-billing the apply cascade. A remove
+ * with no recorded plugins has no reload-deferred cascade, so it shows nothing
+ * pending: skip the block entirely rather than emit a bare header.
+ */
+function pushMarketplaceRemoveCascade(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  o: ReconcilePlan["marketplacesToRemove"][number],
+): void {
+  if (o.plugins.length === 0) {
+    return;
+  }
+
+  const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+  for (const pluginName of o.plugins) {
+    block.plugins.push({
+      status: "will uninstall",
+      name: pluginName,
+    });
+  }
+}
+
+/**
  * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
  * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
  * statically pinned to the pending render map's status set -- the consumer
@@ -188,8 +218,18 @@ function applySourceMismatch(
  * Every plan action is folded into its `(scope, marketplace)` block. The
  * mapping is:
  *
- *   - marketplacesToAdd     -> block.status = "will add"
- *   - marketplacesToRemove  -> block.status = "will remove"
+ *   - marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
+ *                              D-65.1-02). Child installs still build a
+ *                              bare-header block via pluginsToInstall.
+ *   - marketplacesToRemove  -> per-recorded-plugin child row
+ *                              { status: "will uninstall" } under a bare
+ *                              list-arm header (status undefined). De-
+ *                              registration is immediate; only the plugin-
+ *                              uninstall cascade is reload-deferred (WILL-03 /
+ *                              D-65.1-03). Names come from the plan DTO's
+ *                              `plugins` field, NOT pluginsToUninstall (which
+ *                              deliberately omits removed-marketplace plugins
+ *                              to avoid double-billing the apply cascade).
  *   - sourceMismatches      -> block.status = "failed", reasons:
  *                              ["source mismatch"] (reuses the existing
  *                              REASONS member; no new literal)
@@ -211,14 +251,12 @@ export function buildReconcilePendingNotification(plans: readonly ReconcilePlan[
   const byMp = new Map<string, MarketplaceBlock<PendingMsg>>();
 
   for (const plan of plans) {
-    for (const o of plan.marketplacesToAdd) {
-      const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      block.status = "will add";
-    }
+    // marketplacesToAdd: no projection. Marketplace add is immediate (WILL-01 /
+    // D-65.1-02), so it carries no pending row; any child installs are still
+    // surfaced through the pluginsToInstall loop below.
 
     for (const o of plan.marketplacesToRemove) {
-      const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      block.status = "will remove";
+      pushMarketplaceRemoveCascade(byMp, o);
     }
 
     for (const o of plan.sourceMismatches) {
@@ -275,17 +313,24 @@ export function buildReconcilePendingNotification(plans: readonly ReconcilePlan[
 }
 
 /**
- * DIFF-01 SC #2 empty-plan helper. Returns `true` iff every action bucket on
- * every plan is empty. Consumed by `orchestrators/reconcile/pending.ts` so
- * the orchestrator can route the empty case to the catalog's
- * `empty-steady-state` advisory body line BEFORE invoking the projection
- * (which would otherwise emit the `(no marketplaces)` sentinel).
+ * DIFF-01 SC #2 empty-plan helper. Returns `true` iff every plan would produce
+ * NO pending row. Consumed by `orchestrators/reconcile/pending.ts` so the
+ * orchestrator can route the empty case to the catalog's `empty-steady-state`
+ * advisory body line BEFORE invoking the projection (which would otherwise emit
+ * the `(no marketplaces)` sentinel).
+ *
+ * WILL-01 / D-65.1-02 / D-65.1-03: marketplace add is immediate and produces no
+ * pending row by itself, so `marketplacesToAdd` is NOT counted -- a change
+ * consisting only of immediate marketplace adds yields the empty advisory. A
+ * `marketplacesToRemove` entry only contributes pending rows when it carries
+ * recorded plugins (its reload-deferred uninstall cascade); a removal with no
+ * recorded plugins is immediate de-registration and contributes nothing. The
+ * surviving plugin-level buckets always map to a pending row.
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
   return plans.every(
     (p) =>
-      p.marketplacesToAdd.length === 0 &&
-      p.marketplacesToRemove.length === 0 &&
+      p.marketplacesToRemove.every((m) => m.plugins.length === 0) &&
       p.pluginsToInstall.length === 0 &&
       p.pluginsToUninstall.length === 0 &&
       p.pluginsToEnable.length === 0 &&

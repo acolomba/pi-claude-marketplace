@@ -211,8 +211,6 @@ export const STATUS_TOKENS = [
   "manual recovery",
   "no marketplaces",
   "no plugins",
-  "will add",
-  "will remove",
   "will install",
   "will uninstall",
   "will enable",
@@ -392,9 +390,12 @@ export const PLUGIN_STATUSES = [
  * Runtime tuple of every marketplace status literal; the derived
  * `MarketplaceStatus` union is the SNM-05 closed set.
  * `"autoupdate enabled"` / `"autoupdate disabled"` / `"skipped"` support the
- * autoupdate-flip surface; the 2 trailing `"will *"` entries are the DIFF-02
- * pending-tense tokens. Order is normative -- the 4 leading entries
- * retain their position to match the `renderMpHeader` switch-arm ordering.
+ * autoupdate-flip surface. Marketplace add/remove are immediate (WILL-01 /
+ * D-65.1-02 / D-65.1-03): de-registration carries no `will` token and the
+ * reload-deferred plugin-uninstall cascade is surfaced as per-plugin
+ * `will uninstall` child rows, so this set carries no marketplace-level
+ * `will *` token. Order is normative -- the 4 leading entries retain their
+ * position to match the `renderMpHeader` switch-arm ordering.
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
@@ -406,8 +407,6 @@ export const MARKETPLACE_STATUSES = [
   "autoupdate enabled",
   "autoupdate disabled",
   "skipped",
-  "will add",
-  "will remove",
 ] as const;
 
 /**
@@ -884,24 +883,6 @@ interface MpSkipped extends MpCommon {
 }
 
 /**
- * `(will add)` marketplace block (DIFF-02). Pending-list row for a marketplace
- * declared in config but not yet recorded. Never carries `reasons` /
- * `details` -- pending-list rows are pre-transition.
- */
-interface MpWillAdd extends MpCommon {
-  readonly status: "will add";
-}
-
-/**
- * `(will remove)` marketplace block (DIFF-02). Pending-list row for a marketplace
- * recorded in state but no longer declared. Never carries `reasons` /
- * `details`.
- */
-interface MpWillRemove extends MpCommon {
-  readonly status: "will remove";
-}
-
-/**
  * List / inventory marketplace block (status omitted). Modeled as
  * `status?: undefined` so the many status-omitted construction sites compile
  * unchanged and the renderer's `case undefined:` narrows to this arm.
@@ -930,8 +911,6 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
-  | MpWillAdd
-  | MpWillRemove
   | MpList;
 
 /**
@@ -1300,8 +1279,8 @@ export const ICON_UNINSTALLABLE = "⊘";
  * (`⊘`), which marks the error / blocked-state rows
  * (`(unavailable)`, `(failed)`, `(skipped) {already disabled}`,
  * `(manual recovery)`). Mirrors the realized + pending-tense precedent
- * already in the grammar (`●` for `(installed)` / `(will add)`,
- * `○` for `(available)` / `(will remove)`).
+ * already in the grammar (`●` for `(installed)` / `(will install)`,
+ * `○` for `(available)` / `(will uninstall)`).
  */
 export const ICON_DISABLED = "◌";
 
@@ -1405,9 +1384,6 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *                           `... <no autoupdate> {already no autoupdate}`
  *                           (marker-as-outcome + idempotence brace, no
  *                           `(skipped)` token).
- *   "will add"           -> `${ICON_INSTALLED} ${name} [${scope}] (will add)`
- *   "will remove"        -> `${ICON_AVAILABLE} ${name} [${scope}] (will remove)`
- *                           (DIFF-02 pending-tense arms.)
  *   undefined (list-surface):
  *     SUB-BRANCH A (mp.details === undefined): `${ICON_INSTALLED} ${name} [${scope}]`
  *     SUB-BRANCH B (mp.details !== undefined): `${ICON_INSTALLED} ${name} [${scope}]`
@@ -1417,10 +1393,12 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *       NOT rendered on the list surface (UXG-01 -- the raw ISO timestamp is
  *       noise and meaningless for path-source marketplaces).
  *
- * The only ICON_AVAILABLE (○) marketplace arm is the pending
- * `"will remove"` (the marketplace-level analog of an uninstall); every
- * other arm is either ok (●) or failure-class (⊘). The other open-circle
- * uses are the available / uninstalled / will-uninstall PLUGIN rows that
+ * No marketplace arm renders ICON_AVAILABLE (○): every arm is either ok (●)
+ * or failure-class (⊘). Marketplace add/remove are immediate (WILL-01 /
+ * D-65.1-02 / D-65.1-03), so they carry no marketplace-level pending token --
+ * a remove's reload-deferred plugin-uninstall cascade renders as ○ PLUGIN
+ * `will uninstall` child rows under a bare (●) header. The open-circle uses
+ * are the available / uninstalled / will-uninstall PLUGIN rows that
  * `renderPluginRow` owns.
  *
  * The `"skipped"` arm reuses the file-private `composeReasons` helper to
@@ -1490,18 +1468,6 @@ function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDepStatus
         ? `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped)`
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
-
-    case "will add":
-      // DIFF-02 / D-53-02: pending-tense row for a marketplace
-      // declared in config but not yet recorded. Reuses ICON_INSTALLED (no
-      // new icon constant).
-      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
-    case "will remove":
-      // DIFF-02: pending-tense row for a marketplace recorded in
-      // state but no longer declared. Reuses ICON_AVAILABLE (`○`) -- the
-      // same glyph the (uninstalled) plugin row carries, because a
-      // `will remove` is the marketplace-level analog of an uninstall.
-      return `${ICON_AVAILABLE} ${mp.name} [${mp.scope}] (will remove)`;
 
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
@@ -1959,8 +1925,8 @@ function renderPluginRow(
       // `enabled: false`. Uses ICON_DISABLED (`◌`) -- the same glyph the
       // realized `(disabled)` inventory row uses; this mirrors the precedent
       // that realized + pending-tense rows for the same row class share a
-      // glyph (`●` for `(installed)` / `(will add)`, `○` for `(available)` /
-      // `(will remove)`).
+      // glyph (`●` for `(installed)` / `(will install)`, `○` for
+      // `(available)` / `(will uninstall)`).
       return joinTokens([
         ICON_DISABLED,
         p.name,

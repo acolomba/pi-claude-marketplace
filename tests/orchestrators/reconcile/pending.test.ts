@@ -251,10 +251,13 @@ test("failure containment (WR-04): corrupt state.json -> (failed) {unparseable} 
 test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks via compareByNameThenScope (MSG-GR-3)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Project scope: invalid config -> (failed) {invalid manifest} block
-    // named "claude-plugins.json". User scope: a pending `will add` block
-    // named "zzz-mp". MSG-GR-3 (name primary, case-insensitive) requires
-    // "claude-plugins.json" BEFORE "zzz-mp" -- appending invalid blocks
-    // after the sorted projection would mis-order them.
+    // named "claude-plugins.json". User scope: a bare-header pending block
+    // named "zzz-mp" carrying a `will install` child (WILL-01 / D-65.1-02: the
+    // marketplace add itself is immediate and carries no token; the child
+    // install is the reload-deferred work that materializes the block). MSG-GR-3
+    // (name primary, case-insensitive) requires "claude-plugins.json" BEFORE
+    // "zzz-mp" -- appending invalid blocks after the sorted projection would
+    // mis-order them.
     const projectScopeRoot = path.join(cwd, ".pi");
     await mkdir(projectScopeRoot, { recursive: true });
     await writeFile(path.join(projectScopeRoot, "claude-plugins.json"), "{", "utf8");
@@ -264,7 +267,11 @@ test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks
     await writeFile(
       path.join(userScopeRoot, "claude-plugins.json"),
       JSON.stringify(
-        { schemaVersion: 1, marketplaces: { "zzz-mp": { source: "acme/z" } }, plugins: {} },
+        {
+          schemaVersion: 1,
+          marketplaces: { "zzz-mp": { source: "acme/z" } },
+          plugins: { "pp@zzz-mp": { enabled: true } },
+        },
         null,
         2,
       ),
@@ -277,11 +284,11 @@ test("mixed output ordering (WR-05): invalid-config block sorts with plan blocks
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
     const failedIdx = emitted.indexOf("claude-plugins.json");
-    const willAddIdx = emitted.indexOf("zzz-mp");
+    const mpIdx = emitted.indexOf("zzz-mp");
     assert.ok(failedIdx >= 0, `expected the invalid-config row; got:\n${emitted}`);
-    assert.ok(willAddIdx >= 0, `expected the will-add row; got:\n${emitted}`);
+    assert.ok(mpIdx >= 0, `expected the zzz-mp pending block; got:\n${emitted}`);
     assert.ok(
-      failedIdx < willAddIdx,
+      failedIdx < mpIdx,
       `MSG-GR-3: "claude-plugins.json" must sort before "zzz-mp"; got:\n${emitted}`,
     );
   });
@@ -363,8 +370,9 @@ test("MIG-01 pre-migration window: absent config + populated state -> EMPTY advi
     // pre-first-/reload window. The apply path migrates FIRST (the next
     // load's reconcile is a no-op), so the pending must converge on the
     // same answer -- planning against the absent-as-empty merged view would
-    // render `(will uninstall)` / `(will remove)` rows for everything in
-    // state (the DIFF-01 'exactly what the next load would do' violation).
+    // tear down every recorded marketplace and render its per-plugin
+    // `(will uninstall)` cascade rows for everything in state (the DIFF-01
+    // 'exactly what the next load would do' violation).
     await writePopulatedProjectState(cwd);
 
     const ctx = makeCtx(cwd);
@@ -422,12 +430,17 @@ test("MIG-01 pre-migration window: idempotent + READ-ONLY -- run twice, byte-ide
   });
 });
 
-test("MIG-01 pre-migration window: local arm still merges over the projection (will-add for local-only entry, no uninstalls)", async () => {
+test("MIG-01 pre-migration window: local arm merges over the projection (immediate local-only add, no uninstalls)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Populated state + absent BASE config + a local config declaring one
-    // EXTRA marketplace: the post-migration merged view is
-    // projection + local, so the pending must show exactly the local-only
-    // addition -- and must NOT plan uninstalls for the recorded entries.
+    // EXTRA marketplace with no plugins: the post-migration merged view is
+    // projection + local, so the planner must NOT plan uninstalls for the
+    // recorded entries. WILL-01 / D-65.1-02: the local-only marketplace add is
+    // immediate and has no reload-deferred child work, so it produces no
+    // pending row -- a change consisting only of immediate actions yields the
+    // empty advisory. The regression this guards against (absent base treated
+    // as empty desired state) would instead surface `will uninstall` rows for
+    // every recorded entry, so the empty advisory is the discriminating signal.
     await writePopulatedProjectState(cwd);
     await writeFile(
       path.join(cwd, ".pi", "claude-plugins.local.json"),
@@ -449,14 +462,7 @@ test("MIG-01 pre-migration window: local arm still merges over the projection (w
 
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
-    assert.ok(
-      emitted.includes("zzz-extra") && emitted.includes("(will add)"),
-      `expected a (will add) row for the local-only marketplace; got:\n${emitted}`,
-    );
-    assert.ok(
-      !emitted.includes("will uninstall") && !emitted.includes("will remove"),
-      `recorded entries must NOT plan as uninstalls in the pre-migration window; got:\n${emitted}`,
-    );
+    assert.equal(emitted, "Pending: next reload will apply 0 actions.");
   });
 });
 
