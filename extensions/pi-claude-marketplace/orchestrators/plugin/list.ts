@@ -57,7 +57,7 @@ import { resolveStrict } from "../../domain/resolver.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { assertNever, errorMessage } from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -351,30 +351,42 @@ async function availableRowMessage(
     // D-64-01: only the `installable` arm is `(available)`; both
     // `unsupported` and `unavailable` render the `(unavailable)` row this
     // phase (distinct glyphs/states are a later phase).
-    if (resolved.state === "installable") {
-      return {
-        status: "available",
-        name: manifestEntry.name,
-        ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-        ...descriptionField,
-      };
+    //
+    // WR-03: discriminate the three-way union with an exhaustive
+    // `switch (resolved.state)` + `assertNever` so a future fourth
+    // `ResolvedPlugin` arm becomes a compile-time error here rather than
+    // silently falling through into the `unavailable`/`notes` path.
+    switch (resolved.state) {
+      case "installable":
+        return {
+          status: "available",
+          name: manifestEntry.name,
+          ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+          ...descriptionField,
+        };
+      case "unsupported":
+      case "unavailable": {
+        // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the
+        // typed `unsupported[]` component-kind list via the shared render
+        // helper; the structural `unavailable` arm's reasons stay on the
+        // `notes` path.
+        const reasons =
+          resolved.state === "unsupported"
+            ? narrowUnsupportedKinds(resolved.unsupported)
+            : sharedNarrowResolverNotes(resolved.notes);
+
+        return {
+          status: "unavailable",
+          name: manifestEntry.name,
+          reasons,
+          ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+          ...descriptionField,
+        };
+      }
+
+      default:
+        return assertNever(resolved);
     }
-
-    // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the typed
-    // `unsupported[]` component-kind list via the shared render helper; the
-    // structural `unavailable` arm's reasons stay on the `notes` path.
-    const reasons =
-      resolved.state === "unsupported"
-        ? narrowUnsupportedKinds(resolved.unsupported)
-        : sharedNarrowResolverNotes(resolved.notes);
-
-    return {
-      status: "unavailable",
-      name: manifestEntry.name,
-      reasons,
-      ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-      ...descriptionField,
-    };
   } catch (probeErr) {
     // TR-08 / D-19-01: per-row probe-failure narrowing. Probe failures
     // during list are diagnostic noise, NOT actionable user errors --

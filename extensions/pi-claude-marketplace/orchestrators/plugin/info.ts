@@ -759,24 +759,31 @@ function buildNonInstallableRowFields(
   marketplaceRoot: string,
   parsedSource: ParsedSource,
 ): ReturnType<typeof buildNotInstallablePathRowFields> {
-  if (resolved.state === "unsupported") {
-    return buildNotInstallablePathRowFields(
-      resolved,
-      narrowUnsupportedKinds(resolved.unsupported),
-      marketplaceRoot,
-      parsedSource,
-    );
+  // WR-03: discriminate the union with an exhaustive `switch (resolved.state)`
+  // + `assertNever` so a future fourth `ResolvedPlugin` arm becomes a
+  // compile-time error here rather than silently falling through to the
+  // `unavailable`/`notes` path.
+  switch (resolved.state) {
+    case "unsupported":
+      return buildNotInstallablePathRowFields(
+        resolved,
+        narrowUnsupportedKinds(resolved.unsupported),
+        marketplaceRoot,
+        parsedSource,
+      );
+    case "unavailable":
+      return buildNotInstallablePathRowFields(
+        {
+          componentPaths: deriveLenientComponentPaths(entry),
+          mcpServers: {},
+        },
+        narrowResolverNotes(resolved.notes),
+        marketplaceRoot,
+        parsedSource,
+      );
+    default:
+      return assertNever(resolved);
   }
-
-  return buildNotInstallablePathRowFields(
-    {
-      componentPaths: deriveLenientComponentPaths(entry),
-      mcpServers: {},
-    },
-    narrowResolverNotes(resolved.notes),
-    marketplaceRoot,
-    parsedSource,
-  );
 }
 
 /**
