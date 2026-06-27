@@ -27,14 +27,14 @@ export interface DiscoveredGeneratedNames {
 
 export async function discoverGeneratedNames(
   plugin: string,
-  installable: MaterializablePlugin,
+  resolved: MaterializablePlugin,
 ): Promise<DiscoveredGeneratedNames> {
-  const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved: installable });
+  const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved });
   const commandsDiscovery = await discoverPluginCommands({
     pluginName: plugin,
-    resolved: installable,
+    resolved,
   });
-  const agentsSourceDir = pickAgentsSourceDir(installable);
+  const agentsSourceDir = pickAgentsSourceDir(resolved);
   const agentsDiscovery =
     agentsSourceDir === null
       ? { discovered: [] as readonly { readonly generatedName: string }[] }

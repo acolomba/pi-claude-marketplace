@@ -301,7 +301,7 @@ async function seedUnsupportedCandidate(cwd: string): Promise<void> {
 
   await mkdir(locations.extensionRoot, { recursive: true });
   await saveState(locations.extensionRoot, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     marketplaces: {
       mp: {
         name: "mp",
