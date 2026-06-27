@@ -1575,13 +1575,17 @@ function outcomeToCascadePluginMessage(
       // record. A clean candidate keeps `(updated)` (FSTAT-03 -- no lingering
       // force state). force-installed is a realized transition
       // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload
-      // as the updated row.
+      // as the updated row. WR-03: thread `dependencies` (the same
+      // declared-kinds gate the `(updated)` row uses) so the soft-dep
+      // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a
+      // degraded update exactly as on a clean one.
       if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
         return {
           status: "force-installed",
           name: outcome.name,
           scope: target.scope,
           version: outcome.toVersion,
+          dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
           reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
           severity: "info",
           needsReload: true,

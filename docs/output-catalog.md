@@ -406,6 +406,19 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 
 The closed-set REASONS token and the soft-dep marker share ONE brace block per MSG-GR-4. The `composeReasons` helper appends the soft-dep markers AFTER the typed `reasons[]` so the orphan-rewake token leads.
 
+### Force-install success with a soft-dep marker (WR-03)
+
+<!-- catalog-state: success-force-installed-with-soft-dep -->
+
+```text
+● official [user]
+  ◉ helper v1.0.0 (force-installed) {lsp, requires pi-subagents}
+
+/reload to pick up changes
+```
+
+A `--force` install that succeeds with one or more components dropped (the resolver's `unsupported` arm) renders the `(force-installed)` row with the dedicated `◉` glyph. The force-degradable arm still stages the SUPPORTED components, so a `(force-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. force-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`).
+
 ### Failure -- unsupported features in manifest
 
 <!-- catalog-state: failure-unsupported-features -->

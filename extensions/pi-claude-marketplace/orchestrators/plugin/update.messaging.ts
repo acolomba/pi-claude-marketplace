@@ -1,8 +1,8 @@
 import {
-  ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeVersionArrow,
+  forceInstalledRow,
   installedLikeRow,
   pluginRow,
   type PluginFailedMessage,
@@ -61,10 +61,10 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       probe,
     ),
   // FSTAT-07 / D-66-04: a force update whose candidate re-resolved `unsupported`
-  // reports (force-installed) with the dropped-component detail. Arm body lifted
-  // verbatim from the central `renderPluginRow` switch.
-  "force-installed": (p, probe, mpScope) =>
-    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
+  // reports (force-installed) with the dropped-component detail. WR-03: the
+  // shared `forceInstalledRow` threads `dependencies` so the soft-dep markers
+  // fire on a degraded update exactly as on a clean `(updated)` row.
+  "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

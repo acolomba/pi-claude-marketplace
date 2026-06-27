@@ -462,6 +462,69 @@ test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from �
   assert.ok(!(args[0] as string).includes("● degraded-plugin"));
 });
 
+test("WR-03: force-installed success row threads dependencies -> soft-dep marker fires in the SAME brace as the dropped-component reason", () => {
+  const ctx = makeCtx();
+  // Only mcp loaded -> the `agents` companion is unloaded, so the
+  // `{requires pi-subagents}` marker fires on a row declaring `agents`.
+  const pi = piWithMcpLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-installed",
+            name: "helper",
+            version: "1.0.0",
+            // The force-degradable `unsupported` arm still staged agents.
+            dependencies: ["agents"],
+            reasons: ["lsp"],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // MSG-GR-4: composeReasons appends the soft-dep marker AFTER the typed
+  // `reasons[]`, so the dropped-component token leads the shared brace.
+  assert.equal(
+    args[0],
+    `● official [user]\n  ◉ helper v1.0.0 (force-installed) {lsp, requires pi-subagents}\n\n/reload to pick up changes`,
+  );
+});
+
+test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep marker even when a companion is unloaded", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-installed",
+            name: "degraded-plugin",
+            version: "1.0.0",
+            // List/info inventory force rows OMIT `dependencies`.
+            reasons: ["lsp"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // No `dependencies` field -> the soft-dep markers never fire; the brace
+  // carries only the dropped-component reason (unchanged from before WR-03).
+  assert.equal(args[0], `● official [user]\n  ◉ degraded-plugin v1.0.0 (force-installed) {lsp}`);
+});
+
 test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgradable arm", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();

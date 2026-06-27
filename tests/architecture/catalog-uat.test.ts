@@ -795,6 +795,36 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-03: a `--force` install succeeds with one or more components dropped
+    // (the resolver's `unsupported` arm) -- the success row is
+    // `(force-installed)`. The force-degradable arm still stages the SUPPORTED
+    // components, so the row carries `dependencies`; with the `agents` companion
+    // extension unloaded the soft-dep marker fires in the SAME brace AFTER the
+    // dropped-component reason (MSG-GR-4), rendering `{lsp, requires
+    // pi-subagents}`. Probe with only `mcp` loaded so the `agents` marker fires.
+    "success-force-installed-with-soft-dep": {
+      pi: piWithMcpLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "force-installed",
+                severity: "info",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents"],
+                reasons: ["lsp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
       message: {

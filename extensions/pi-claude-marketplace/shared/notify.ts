@@ -694,14 +694,25 @@ export interface PluginUpgradableMessage extends MessageBase {
  * that currently re-resolves `unsupported` (installed with components dropped).
  * Surfaces on the list inventory surface AND the install/update success cascade.
  * Modeled on `PluginUpgradableMessage`: carries REQUIRED `reasons` (the dropped-
- * component / degradation detail), no `dependencies`. Uses the dedicated
- * `ICON_FORCE_INSTALLED` (`◉`) glyph. PL-4: optional `description` on the list
- * surface, truncated at column 66.
+ * component / degradation detail). Uses the dedicated `ICON_FORCE_INSTALLED`
+ * (`◉`) glyph. PL-4: optional `description` on the list surface, truncated at
+ * column 66.
+ *
+ * WR-03: optional `dependencies?: readonly Dependency[]`. The force-degradable
+ * `unsupported` resolver arm still materializes the SUPPORTED components, so a
+ * force-installed plugin can legitimately stage agents / mcp servers. When the
+ * install/update success cascade builds this row it threads the staged
+ * dependencies so the `{requires pi-subagents}` / `{requires pi-mcp}` soft-dep
+ * markers fire on a degraded install exactly as on a clean `(installed)` row --
+ * the signal is most relevant precisely on a degraded install. The
+ * list/info INVENTORY force rows OMIT `dependencies` (the inventory surface
+ * carries no soft-dep markers), so they render unchanged.
  */
 export interface PluginForceInstalledMessage extends MessageBase {
   readonly status: "force-installed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
+  readonly dependencies?: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -1822,6 +1833,47 @@ export function pluginRow(
 }
 
 /**
+ * WR-03: SOLE composition site for the `(force-installed)` row -- shared by the
+ * central `renderPluginRow` switch AND the install / update command-local
+ * render maps, so the bytes stay identical across surfaces (D-11 "call, never
+ * duplicate"). Uses the dedicated `ICON_FORCE_INSTALLED` (`◉`) glyph; the
+ * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
+ * threads the optional `dependencies` so the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` soft-dep markers compose into the SAME brace AFTER the
+ * dropped-component reasons (MSG-GR-4) -- exactly like the `installed` arm. The
+ * force-degradable `unsupported` arm still stages the SUPPORTED components, so a
+ * force-install/update success row legitimately carries `dependencies` and the
+ * marker is most relevant precisely there. The list/info INVENTORY force rows
+ * omit `dependencies`, so the markers never fire (the row renders
+ * byte-identically to a bare `(force-installed)` row).
+ */
+export function forceInstalledRow(
+  p: {
+    readonly name: string;
+    readonly scope?: Scope;
+    readonly version?: string;
+    readonly reasons: readonly ContentReason[];
+    readonly dependencies?: readonly Dependency[];
+  },
+  mpScope: Scope,
+  probe: SoftDepStatus,
+): string {
+  return joinTokens([
+    ICON_FORCE_INSTALLED,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    renderVersion(p.version),
+    "(force-installed)",
+    composeReasons(
+      p.reasons,
+      p.dependencies?.includes("agents") ?? false,
+      p.dependencies?.includes("mcp") ?? false,
+      probe,
+    ),
+  ]);
+}
+
+/**
  * WR-03: SOLE composition site for the soft-dep-bearing
  * `installed` / `updated` / `reinstalled` plugin rows. Folds the
  * 7 command-arm copies that each repeated the same
@@ -1959,11 +2011,7 @@ function renderPluginRow(
     case "upgradable":
       return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
     case "force-installed":
-      // FSTAT-02 / D-66-03: recorded-installed plugin currently re-resolving
-      // `unsupported`. Uses the dedicated ICON_FORCE_INSTALLED (`◉`) glyph,
-      // distinct from the clean `(installed)` row; reasons brace carries the
-      // degradation detail (mirrors the `upgradable` composition).
-      return pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe);
+      return forceInstalledRow(p, mpScope, probe);
     case "force-upgradable":
       // FSTAT-04 / D-66-02 / D-66-03: currently-clean installed plugin whose
       // newer candidate would newly degrade. REUSES ICON_INSTALLED (`●`) -- the

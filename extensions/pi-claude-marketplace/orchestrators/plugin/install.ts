@@ -1397,12 +1397,16 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // A fully-supported install stays `(installed)` (FSTAT-03 -- no lingering
     // force state). force-installed is a realized transition
     // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload as
-    // installed.
+    // installed. WR-03: the force-degradable `unsupported` arm still stages the
+    // SUPPORTED components, so the row threads `dependencies` -- the soft-dep
+    // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a degraded
+    // install exactly as on a clean one (where the signal is most relevant).
     const installedRow: InstallMsg =
       installCtx.resolved.state === "unsupported"
         ? {
             status: "force-installed",
             name: plugin,
+            dependencies,
             version: installCtx.version,
             reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
             severity: "info",

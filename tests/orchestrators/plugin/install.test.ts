@@ -3147,6 +3147,57 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
   });
 });
 
+test("WR-03: a (force-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        // The force-degradable `unsupported` arm still stages the SUPPORTED
+        // components, so the staged agent populates `dependencies: ["agents"]`.
+        skills: [{ sourceName: "tool" }],
+        agents: [{ sourceName: "bot" }],
+        // D-64-06: experimental unsupported kinds drive the force-degradable
+        // `unsupported` arm -> the row is (force-installed) {unsupported source}.
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      // Default probe: getAllTools() returns [] -> pi-subagents is NOT loaded,
+      // so the staged agent's `{requires pi-subagents}` soft-dep marker fires.
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      // WR-03: the soft-dep marker shares the brace with the dropped-component
+      // reason -- composeReasons appends `{requires pi-subagents}` AFTER the
+      // typed reason (MSG-GR-4), so `unsupported source` leads.
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ◉ p1 v1.0.0 (force-installed) {unsupported source, requires pi-subagents}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("FORCE-03: without force an unsupported plugin still blocks and writes no state record", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force03-"));

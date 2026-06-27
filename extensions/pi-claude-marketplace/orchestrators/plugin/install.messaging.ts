@@ -1,8 +1,8 @@
 import {
-  ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
+  forceInstalledRow,
   installedLikeRow,
   joinTokens,
   pluginRow,
@@ -78,10 +78,10 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       probe,
     ),
   // FSTAT-07 / D-66-04: a force install that re-resolves `unsupported` reports
-  // (force-installed) with the dropped-component detail. Arm body lifted
-  // verbatim from the central `renderPluginRow` switch.
-  "force-installed": (p, probe, mpScope) =>
-    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
+  // (force-installed) with the dropped-component detail. WR-03: the shared
+  // `forceInstalledRow` threads `dependencies` so the soft-dep markers fire on a
+  // degraded install exactly as on a clean `(installed)` row.
+  "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
   unavailable: (p, probe, mpScope) =>
     joinTokens([
       ICON_UNINSTALLABLE,
