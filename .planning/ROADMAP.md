@@ -232,7 +232,16 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. Without `--force`, install/update of an `unsupported` plugin still blocks/fails -- `--force` is the only per-invocation opt-in to degradation.
   5. `--force` never bypasses hard failures (`unavailable`/structural defects, NFR-10 path containment, missing marketplace, unresolvable source) and no `Warning:` summary is emitted in any force path.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 65-01-PLAN.md — Foundation: `MaterializablePlugin` union alias (NFR-7-safe), shared bridge/adapter type widening, `--force` recognition in the shared edge parser (FORCE-01/02/05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 65-02-PLAN.md — Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
+- [ ] 65-03-PLAN.md — Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
