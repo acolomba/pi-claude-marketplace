@@ -79,6 +79,8 @@ import type {
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
+  PluginForceInstalledMessage,
+  PluginForceUpgradableMessage,
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginUnavailableMessage,
@@ -98,7 +100,19 @@ import type { Scope } from "../../shared/types.ts";
  * `disabled-inventory` state sits under the installed inventory; D-54-01 /
  * ENBL-04).
  */
-type PluginRenderStatus = "installed" | "upgradable" | "available" | "unavailable" | "disabled";
+type PluginRenderStatus =
+  | "installed"
+  | "upgradable"
+  | "available"
+  | "unavailable"
+  | "disabled"
+  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
+  // rows. They RENDER on the list surface this phase; the `--installed` filter
+  // spanning them is LIST-01 (a later phase), so `shouldShow` does NOT admit
+  // them under an active `--installed` filter -- Phase boundary keeps this to
+  // derivation + render, not filter.
+  | "force-installed"
+  | "force-upgradable";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -229,13 +243,20 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * The installed state record does not carry description; if the manifest is
  * unavailable (load failure), description is simply absent from the row.
  */
-function installedRowMessage(
+async function installedRowMessage(
   pluginName: string,
   pluginScope: Scope,
   marketplaceScope: Scope,
+  marketplaceRoot: string,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-): PluginInstalledMessage | PluginUpgradableMessage | PluginDisabledMessage {
+): Promise<
+  | PluginInstalledMessage
+  | PluginUpgradableMessage
+  | PluginDisabledMessage
+  | PluginForceInstalledMessage
+  | PluginForceUpgradableMessage
+> {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -271,7 +292,51 @@ function installedRowMessage(
     };
   }
 
+  // D-66-01 / FSTAT-01: force-installed is DERIVED read-only from the persisted
+  // install-time `compatibility` record -- a recorded-installed plugin whose
+  // resolution dropped one or more components (`unsupported` non-empty) renders
+  // `(force-installed)`. NO new persisted flag, NO migration: this is a pure
+  // read of the existing record. Checked BEFORE the upgradable branch so a
+  // degraded record is never mis-split into force-upgradable (A4:
+  // force-installed wins). FSTAT-03 falls out for free -- a fully-supported
+  // upgrade rewrites `compatibility` with an empty `unsupported`, so the same
+  // read then yields `installed`/`upgradable` with no lingering force state.
+  // The dropped-component detail uses the shared `narrowUnsupportedKinds`
+  // render helper (D-64-02) for cross-surface marker parity.
+  if (record.compatibility.unsupported.length > 0) {
+    return {
+      status: "force-installed",
+      name: pluginName,
+      reasons: narrowUnsupportedKinds(record.compatibility.unsupported),
+      version: record.version,
+      ...scopeField,
+      ...descriptionField,
+    };
+  }
+
   if (upgradable) {
+    // D-66-02 / FSTAT-04 / FSTAT-05: split the clean-record upgradable branch on
+    // a NO-NETWORK `resolveStrict` of the CANDIDATE manifest entry. When the
+    // newer candidate resolves `unsupported` it would NEWLY degrade a
+    // currently-clean plugin -> `(force-upgradable)`; otherwise the existing
+    // `(upgradable)` row. `resolveStrict` is the cache/no-network resolver
+    // (NFR-5), guarded by the no-orchestrator-network architecture test. This is
+    // reached ONLY for a clean record (force-installed returned above), so it
+    // never re-resolves the OLD installed version -- the candidate IS HEAD on
+    // disk. `upgradable === true` already narrows `manifestEntry` to defined
+    // (its `?.version !== undefined` conjunct), so no extra guard is needed.
+    const candidate = await resolveStrict(manifestEntry, { marketplaceRoot });
+    if (candidate.state === "unsupported") {
+      return {
+        status: "force-upgradable",
+        name: pluginName,
+        reasons: narrowUnsupportedKinds(candidate.unsupported),
+        version: record.version,
+        ...scopeField,
+        ...descriptionField,
+      };
+    }
+
     // The PluginUpgradableMessage type structurally requires `reasons`
     // per D-15-01. Use the empty-array sentinel -- the renderer's
     // composeReasons helper returns "" for an empty reasons array, so the
@@ -452,10 +517,11 @@ async function enumerateMarketplacePlugins(
   // Installed bucket.
   for (const [pluginName, record] of Object.entries(installedRecords)) {
     const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
-    const row = installedRowMessage(
+    const row = await installedRowMessage(
       pluginName,
       pluginScope,
       marketplaceScope,
+      mpRecord.marketplaceRoot,
       record,
       manifestEntry,
     );
@@ -703,13 +769,22 @@ export async function loadPluginListPayload(
       // `"upgradable"` and ENBL-04 `"disabled"` arms) so orphan-folded rows
       // survive (CR-01). A disabled record IS an installed record -- dropping
       // it here would both hide the row and let the user-side enumeration
-      // re-emit the plugin as a duplicate `(available)`. The integration
-      // regression for this fold lives at
-      // tests/integration/fold-adoption.test.ts; the orchestrator-level
-      // reproduction is in tests/orchestrators/plugin/list.test.ts
+      // re-emit the plugin as a duplicate `(available)`. FSTAT-02 / FSTAT-04 /
+      // D-66-01 / D-66-02: the derived `force-installed` / `force-upgradable`
+      // rows are likewise recorded-installed inventory and join the carry-over
+      // set for the same reason (a force-installed orphan would otherwise vanish
+      // AND duplicate as `(available)`). The integration regression for this
+      // fold lives at tests/integration/fold-adoption.test.ts; the
+      // orchestrator-level reproduction is in
+      // tests/orchestrators/plugin/list.test.ts
       // ("CR-01 / G-21-01 fold-carryover...").
       folded = projectSideRows.filter(
-        (r) => r.status === "installed" || r.status === "upgradable" || r.status === "disabled",
+        (r) =>
+          r.status === "installed" ||
+          r.status === "upgradable" ||
+          r.status === "disabled" ||
+          r.status === "force-installed" ||
+          r.status === "force-upgradable",
       );
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog

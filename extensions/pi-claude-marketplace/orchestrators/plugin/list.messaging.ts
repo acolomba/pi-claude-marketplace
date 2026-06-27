@@ -1,6 +1,7 @@
 import {
   ICON_AVAILABLE,
   ICON_DISABLED,
+  ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
@@ -12,6 +13,8 @@ import {
   type PluginAvailableMessage,
   type PluginDisabledMessage,
   type PluginFailedMessage,
+  type PluginForceInstalledMessage,
+  type PluginForceUpgradableMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
   type PluginUpgradableMessage,
@@ -47,6 +50,12 @@ export const LIST_STATUSES = [
   "upgradable",
   "disabled",
   "failed",
+  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
+  // rows. `force-installed` is a recorded-installed plugin currently resolving
+  // `unsupported`; `force-upgradable` is a currently-clean plugin whose newer
+  // candidate would newly degrade it.
+  "force-installed",
+  "force-upgradable",
 ] as const;
 export type ListStatus = (typeof LIST_STATUSES)[number];
 
@@ -57,7 +66,9 @@ export type ListMsg =
   | PluginUnavailableMessage
   | PluginUpgradableMessage
   | PluginDisabledMessage
-  | PluginFailedMessage;
+  | PluginFailedMessage
+  | PluginForceInstalledMessage
+  | PluginForceUpgradableMessage;
 
 /**
  * Render map total over the list surface's OWN statuses (D-10): a missing arm
@@ -102,6 +113,15 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       composeReasons(p.reasons, false, false, probe),
     ]),
   upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),
+  // FSTAT-02 / D-66-03: dedicated ICON_FORCE_INSTALLED (`◉`) glyph; the reasons
+  // brace carries the dropped-component detail (mirrors the `upgradable`
+  // composition). Body lifted verbatim from the central renderPluginRow arm.
+  "force-installed": (p, probe, mpScope) =>
+    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
+  // FSTAT-04 / D-66-02 / D-66-03: REUSES ICON_INSTALLED (`●`) -- the row is
+  // clean today -- exactly like the `upgradable` arm above.
+  "force-upgradable": (p, probe, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe),
   disabled: (p, probe, mpScope) =>
     joinTokens([
       ICON_DISABLED,
