@@ -116,6 +116,7 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
@@ -1633,20 +1634,21 @@ function classifyEntityShapeError(
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 
-// SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
-// camelCase (matches the resolver note derived from the JSON manifest key);
-// the EMITTED closed-set Reason is the user-rendered value. `lspServers`
-// detects but renders as `lsp`.
-const MANIFEST_FIELD_TO_REASON: Readonly<Record<string, ContentReason>> = {
-  lspServers: "lsp",
-};
-
 /**
  * Extract the bare manifest-field token from a resolver `"contains <kind>"`
  * note and map it to the emitted closed-set `Reason`. Returns `undefined`
- * when the note does not start with the prefix or the token has no mapping.
- * Detection token (camelCase) and emitted Reason can differ -- see the
- * SNM-36 / D-24-04 seam note above.
+ * when the note does not start with the prefix or the token is not a
+ * recognized per-kind unsupported marker.
+ *
+ * SNM-36 / D-24-04 detection-vs-emission seam: the DETECTION token stays
+ * camelCase (matches the resolver note derived from the JSON manifest key);
+ * the EMITTED closed-set Reason is the user-rendered value. `lspServers`
+ * detects but renders as `lsp`.
+ *
+ * D-64-02 / RSTATE-05: the token -> Reason mapping is the single shared
+ * render helper `narrowUnsupportedKinds`, so the install error surface emits
+ * the same per-kind marker `list` and `info` do (SURF-01 cross-surface
+ * parity); install no longer carries its own per-kind mapping table.
  */
 function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
   if (!note.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
@@ -1660,9 +1662,10 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
     return undefined;
   }
 
-  // EMIT: map the detected camelCase token to its closed-set Reason.
-  // Typed lookup -- no cast needed (D-24-04 / D-24-05 seam).
-  return MANIFEST_FIELD_TO_REASON[token];
+  // EMIT: map the detected camelCase token to its closed-set Reason via the
+  // shared render helper (D-64-02). The detection gate above admits only
+  // `lspServers`, so this always resolves to `lsp`.
+  return narrowUnsupportedKinds([token])[0];
 }
 
 /**

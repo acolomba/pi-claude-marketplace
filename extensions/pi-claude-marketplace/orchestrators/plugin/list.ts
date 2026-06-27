@@ -67,6 +67,7 @@ import {
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
+  narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
@@ -359,10 +360,18 @@ async function availableRowMessage(
       };
     }
 
+    // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the typed
+    // `unsupported[]` component-kind list via the shared render helper; the
+    // structural `unavailable` arm's reasons stay on the `notes` path.
+    const reasons =
+      resolved.state === "unsupported"
+        ? narrowUnsupportedKinds(resolved.unsupported)
+        : sharedNarrowResolverNotes(resolved.notes);
+
     return {
       status: "unavailable",
       name: manifestEntry.name,
-      reasons: sharedNarrowResolverNotes(resolved.notes),
+      reasons,
       ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
       ...descriptionField,
     };

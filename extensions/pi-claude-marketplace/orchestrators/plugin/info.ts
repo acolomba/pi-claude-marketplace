@@ -46,7 +46,11 @@ import {
 } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
-import { narrowProbeError, narrowResolverNotes } from "../../shared/probe-classifiers.ts";
+import {
+  narrowProbeError,
+  narrowResolverNotes,
+  narrowUnsupportedKinds,
+} from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
@@ -651,7 +655,8 @@ function wrapBlock(
  *     source with unsupported manifest fields / unsupported hooks).
  */
 async function buildNotInstallablePathRowFields(
-  resolved: { readonly notes: readonly string[] } & Parameters<typeof composeResolvedComponents>[1],
+  resolved: Parameters<typeof composeResolvedComponents>[1],
+  resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: ParsedSource,
 ): Promise<
@@ -665,7 +670,6 @@ async function buildNotInstallablePathRowFields(
       readonly componentsResolved: false;
     }
 > {
-  const resolverReasons = narrowResolverNotes(resolved.notes);
   const pluginRoot = await derivePluginRootForInfo(marketplaceRoot, parsedSource);
   // NFR-7 / INFO-05: only `composeResolvedComponents` failures
   // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
@@ -740,6 +744,11 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  * `unsupported` carries the full component payload (read directly);
  * `unavailable` is minimal, so its component paths are re-derived
  * independently via `deriveLenientComponentPaths` (D-64-05).
+ *
+ * D-64-02 / RSTATE-05: the per-kind unsupported markers for the `unsupported`
+ * arm derive from the typed `unsupported[]` component-kind list via the shared
+ * render helper; the structural `unavailable` arm's reasons stay on the `notes`
+ * path via `narrowResolverNotes`.
  */
 function buildNonInstallableRowFields(
   resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
@@ -748,15 +757,20 @@ function buildNonInstallableRowFields(
   parsedSource: ParsedSource,
 ): ReturnType<typeof buildNotInstallablePathRowFields> {
   if (resolved.state === "unsupported") {
-    return buildNotInstallablePathRowFields(resolved, marketplaceRoot, parsedSource);
+    return buildNotInstallablePathRowFields(
+      resolved,
+      narrowUnsupportedKinds(resolved.unsupported),
+      marketplaceRoot,
+      parsedSource,
+    );
   }
 
   return buildNotInstallablePathRowFields(
     {
-      notes: resolved.notes,
       componentPaths: deriveLenientComponentPaths(entry),
       mcpServers: {},
     },
+    narrowResolverNotes(resolved.notes),
     marketplaceRoot,
     parsedSource,
   );

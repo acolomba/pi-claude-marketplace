@@ -121,3 +121,40 @@ export function narrowResolverNotes(
 
   return out;
 }
+
+/**
+ * D-64-02 / RSTATE-05: derive per-kind unsupported markers from the resolver's
+ * typed `unsupported: string[]` component-kind list (NOT the free-form `notes`).
+ *
+ * This is the single shared render-time helper for the per-kind marker family
+ * carried on the `unsupported` resolver arm. `list`, `info`, and the `install`
+ * error surface all route through it so a given unsupported plugin renders
+ * byte-identical per-kind markers across every surface (SURF-01 cross-surface
+ * parity), by construction rather than by three drift-prone copies.
+ *
+ * Mapping (HOOK-04 / D-58-02): `lspServers` is the sole non-generic kind and
+ * renders as `lsp`; every other unsupported component kind renders the generic
+ * `unsupported source` marker. First-wins dedup matches `narrowResolverNotes`
+ * semantics (WR-01) so a multi-kind list never emits a duplicate token.
+ *
+ * Structural reasons (malformed/unsupported `hooks.json`, NFR-10 source escape)
+ * are NOT in this family: a structural defect routes to the `unavailable` arm
+ * (D-64-07) and its reason stays on the `notes`/structural path via
+ * `narrowResolverNotes`. This helper covers only the force-degradable per-kind
+ * markers on the `unsupported` arm.
+ */
+export function narrowUnsupportedKinds(
+  unsupported: readonly string[],
+): readonly ("lsp" | "unsupported source")[] {
+  const out: ("lsp" | "unsupported source")[] = [];
+  const seen = new Set<string>();
+  for (const kind of unsupported) {
+    const reason = kind === "lspServers" ? "lsp" : "unsupported source";
+    if (!seen.has(reason)) {
+      out.push(reason);
+      seen.add(reason);
+    }
+  }
+
+  return out;
+}
