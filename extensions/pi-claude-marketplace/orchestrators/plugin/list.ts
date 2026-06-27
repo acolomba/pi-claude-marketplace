@@ -72,6 +72,7 @@ import {
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
+import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-classifier.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -344,18 +345,51 @@ async function installedRowMessage(
     };
   }
 
-  // D-66-01 / FSTAT-01: force-installed is DERIVED read-only from the persisted
-  // install-time `compatibility` record -- a recorded-installed plugin whose
-  // resolution dropped one or more components (`unsupported` non-empty) renders
-  // `(force-installed)`. NO new persisted flag, NO migration: this is a pure
-  // read of the existing record. Checked BEFORE the upgradable branch so a
-  // degraded record is never mis-split into force-upgradable (A4:
-  // force-installed wins). FSTAT-03 falls out for free -- a fully-supported
-  // upgrade rewrites `compatibility` with an empty `unsupported`, so the same
-  // read then yields `installed`/`upgradable` with no lingering force state.
-  // The dropped-component detail uses the shared `narrowUnsupportedKinds`
-  // render helper (D-64-02) for cross-surface marker parity.
-  if (record.compatibility.unsupported.length > 0) {
+  // D-67-02 / LIST-02: the finer installed-inventory state is derived by the
+  // SHARED `classifyInstalledRecord` (the same classifier the completion
+  // bucketizer consumes) -- this surface holds no second classifier. The
+  // caller still owns the NO-NETWORK candidate probe so the classifier stays
+  // pure; the precedence (A4 force-installed wins over upgradable) and the
+  // CR-01 degrade live inside the classifier.
+  //
+  // D-66-02 / FSTAT-04 / FSTAT-05: an upgradable clean record's `(upgradable)`
+  // vs `(force-upgradable)` split turns on a NO-NETWORK `resolveStrict` of the
+  // CANDIDATE manifest entry. `resolveStrict` is the cache/no-network resolver
+  // (NFR-5), guarded by the no-orchestrator-network architecture test. The
+  // probe runs only when `upgradable` (no force-installed/installed wasted
+  // resolve); `upgradable === true` already narrows `manifestEntry` to defined
+  // (its `?.version !== undefined` conjunct), so no extra guard is needed.
+  //
+  // CR-01: the candidate resolve MUST be wrapped. `resolveStrict` propagates
+  // disk-I/O failures (EACCES/EIO/ENOTDIR, malformed plugin.json the lenient
+  // path rethrows) rather than folding them into a not-installable variant. A
+  // probe failure on the CANDIDATE of a SINGLE upgradable plugin must never
+  // escape this row builder -- unguarded it bubbles to the top-level
+  // `listPlugins` catch, which blanks the ENTIRE list into one synthetic
+  // `(list) (failed)` row, hiding every other plugin. Pass `undefined` to the
+  // classifier (degrade to the plain `(upgradable)` row -- the truthful
+  // "could not assert a degrade" default), at parity with every sibling
+  // force-resolve site (`availableRowMessage`, `info.ts`,
+  // `resolvePendingForceInstalls`).
+  let candidateResolved: Awaited<ReturnType<typeof resolveStrict>> | undefined;
+  if (upgradable) {
+    try {
+      candidateResolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+    } catch {
+      candidateResolved = undefined;
+    }
+  }
+
+  const status = classifyInstalledRecord(
+    record,
+    upgradable ? { upgradable: true, resolved: candidateResolved } : { upgradable: false },
+  );
+
+  // D-66-01 / FSTAT-01 / FSTAT-03: force-installed reads the persisted
+  // install-time `compatibility.unsupported` (no new flag, no migration). The
+  // dropped-component detail uses the shared `narrowUnsupportedKinds` render
+  // helper (D-64-02) for cross-surface marker parity.
+  if (status === "force-installed") {
     return {
       status: "force-installed",
       name: pluginName,
@@ -366,46 +400,24 @@ async function installedRowMessage(
     };
   }
 
-  if (upgradable) {
-    // D-66-02 / FSTAT-04 / FSTAT-05: split the clean-record upgradable branch on
-    // a NO-NETWORK `resolveStrict` of the CANDIDATE manifest entry. When the
-    // newer candidate resolves `unsupported` it would NEWLY degrade a
-    // currently-clean plugin -> `(force-upgradable)`; otherwise the existing
-    // `(upgradable)` row. `resolveStrict` is the cache/no-network resolver
-    // (NFR-5), guarded by the no-orchestrator-network architecture test. This is
-    // reached ONLY for a clean record (force-installed returned above), so it
-    // never re-resolves the OLD installed version -- the candidate IS HEAD on
-    // disk. `upgradable === true` already narrows `manifestEntry` to defined
-    // (its `?.version !== undefined` conjunct), so no extra guard is needed.
-    //
-    // CR-01: the candidate resolve MUST be wrapped. `resolveStrict` propagates
-    // disk-I/O failures (EACCES/EIO/ENOTDIR, malformed plugin.json the lenient
-    // path rethrows) rather than folding them into a not-installable variant. A
-    // probe failure on the CANDIDATE of a SINGLE upgradable plugin must never
-    // escape this row builder -- unguarded it bubbles to the top-level
-    // `listPlugins` catch, which blanks the ENTIRE list into one synthetic
-    // `(list) (failed)` row, hiding every other plugin. Degrade to the plain
-    // `(upgradable)` row instead (the truthful "could not assert a degrade"
-    // default), at parity with every sibling force-resolve site:
-    // `availableRowMessage`, `info.ts`, and `resolvePendingForceInstalls`.
-    let candidate: Awaited<ReturnType<typeof resolveStrict>> | undefined;
-    try {
-      candidate = await resolveStrict(manifestEntry, { marketplaceRoot });
-    } catch {
-      candidate = undefined;
-    }
+  if (status === "force-upgradable") {
+    // The classifier returns `force-upgradable` ONLY when the candidate
+    // resolved `unsupported`; narrow on the same condition to read its
+    // dropped-component kinds for the row reasons.
+    return {
+      status: "force-upgradable",
+      name: pluginName,
+      reasons:
+        candidateResolved?.state === "unsupported"
+          ? narrowUnsupportedKinds(candidateResolved.unsupported)
+          : [],
+      version: record.version,
+      ...scopeField,
+      ...descriptionField,
+    };
+  }
 
-    if (candidate?.state === "unsupported") {
-      return {
-        status: "force-upgradable",
-        name: pluginName,
-        reasons: narrowUnsupportedKinds(candidate.unsupported),
-        version: record.version,
-        ...scopeField,
-        ...descriptionField,
-      };
-    }
-
+  if (status === "upgradable") {
     // The PluginUpgradableMessage type structurally requires `reasons`
     // per D-15-01. Use the empty-array sentinel -- the renderer's
     // composeReasons helper returns "" for an empty reasons array, so the
@@ -485,12 +497,18 @@ async function availableRowMessage(
 
   try {
     const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
-    // D-64-01: only the `installable` arm is `(available)`; both
-    // `unsupported` and `unavailable` render the `(unavailable)` row this
-    // phase (distinct glyphs/states are a later phase). LIST-01 / D-67-01:
-    // the resolver state is captured as the internal filter BUCKET so the
-    // `--unsupported` / `--unavailable` partition keys on the pre-collapse
-    // classification without changing the returned row's render status.
+    // D-67-02 / LIST-02: the filter BUCKET is derived by the SHARED
+    // `classifyManifestEntry` (the same classifier the completion bucketizer
+    // consumes) -- the `available | unsupported | unavailable` member maps
+    // 1:1 onto a {@link FilterBucket}, so the `--unsupported` / `--unavailable`
+    // partition keys on the pre-collapse classification without a second
+    // classifier on this surface.
+    const bucket = classifyManifestEntry(resolved);
+
+    // D-64-01: only the `installable` arm is `(available)`; both `unsupported`
+    // and `unavailable` render the `(unavailable)` row this phase (distinct
+    // glyphs/states are a later phase). The render collapse stays a caller
+    // concern -- the classifier keeps the buckets distinct.
     //
     // WR-03: discriminate the three-way union with an exhaustive
     // `switch (resolved.state)` + `assertNever` so a future fourth
@@ -505,7 +523,7 @@ async function availableRowMessage(
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
           },
-          bucket: "available",
+          bucket,
         };
       case "unsupported":
       case "unavailable": {
@@ -528,7 +546,7 @@ async function availableRowMessage(
           },
           // D-67-01: `unsupported` -> the force-installable candidate bucket;
           // the structural `unavailable` resolver arm -> the structural bucket.
-          bucket: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+          bucket,
         };
       }
 
