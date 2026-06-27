@@ -127,12 +127,15 @@ function isLocallyResolvable(src: ParsedSource): boolean {
  * mutate between install and info-render (manifest edit, symlink swap),
  * so a fresh check here prevents `composeResolvedComponents` from
  * walking a directory outside the marketplace root. A containment
- * failure throws `PathContainmentError`; the row builder's outer catch
- * does NOT see it (Finding #6 narrows that try to wrap
- * `composeResolvedComponents` only) -- it propagates to the caller and
- * surfaces via `narrowProbeError`'s generic-Error arm (`unreadable`).
+ * failure throws `PathContainmentError`. This throw is raised BEFORE
+ * `buildNotInstallablePathRowFields`'s inner try (which wraps
+ * `composeResolvedComponents` only), so it propagates past that helper to
+ * the ROW builder. Both row callers -- `buildInstalledRow` and
+ * `buildNotInstalledRow` (WR-02) -- wrap their `buildNonInstallableRowFields`
+ * call in an outer try/catch, so the error surfaces via `narrowProbeError`'s
+ * generic-Error arm (`unreadable`) rather than escaping `getPluginInfo`.
  * The programmer-bug `throw new Error(...)` on the non-path source kind
- * likewise propagates unmasked.
+ * likewise propagates to and is classified by those same outer catches.
  */
 async function derivePluginRootForInfo(
   marketplaceRoot: string,
@@ -907,19 +910,38 @@ async function buildNotInstalledRow(
     // Path source whose resolver returned a non-installable arm: enumerate
     // components from disk. `unsupported` reads its component payload
     // directly; `unavailable` re-derives independently (D-64-05).
-    const fields = await buildNonInstallableRowFields(
-      resolved,
-      entry,
-      mpRecord.marketplaceRoot,
-      parsedSource,
-    );
-    return {
-      status: "unavailable",
-      name: pluginName,
-      ...(version !== undefined && { version }),
-      ...(description !== undefined && { description }),
-      ...fields,
-    };
+    //
+    // WR-02: `buildNonInstallableRowFields` -> `derivePluginRootForInfo` can
+    // throw `PathContainmentError` (NFR-10) for a not-installed path source
+    // whose `source` escapes the marketplace root -- BEFORE the inner try that
+    // wraps `composeResolvedComponents` only. Mirror `buildInstalledRow`'s
+    // outer catch so the unreadable case renders an `(unavailable)` row via
+    // `narrowProbeError` instead of throwing uncaught out of `getPluginInfo`.
+    try {
+      const fields = await buildNonInstallableRowFields(
+        resolved,
+        entry,
+        mpRecord.marketplaceRoot,
+        parsedSource,
+      );
+      return {
+        status: "unavailable",
+        name: pluginName,
+        ...(version !== undefined && { version }),
+        ...(description !== undefined && { description }),
+        ...fields,
+      };
+    } catch (err) {
+      const reasons: readonly ContentReason[] = [narrowProbeError(err)];
+      return {
+        status: "unavailable",
+        name: pluginName,
+        ...(version !== undefined && { version }),
+        ...(description !== undefined && { description }),
+        reasons,
+        componentsResolved: false,
+      };
+    }
   }
 
   // Non-path sources reach the `(unavailable)` arm above because
