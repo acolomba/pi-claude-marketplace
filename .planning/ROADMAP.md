@@ -311,7 +311,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1: shared provider.test.ts / router.test.ts / docs surfaces)*
 
-- [ ] 67-02-PLAN.md — list filters: resolver-state bucket threaded to `shouldShow`; `--unsupported` arm; widened `--installed` (force-installed/force-upgradable); narrowed `--unavailable`; handler flag + USAGE; docs prose (LIST-01)
+- [x] 67-02-PLAN.md — list filters: resolver-state bucket threaded to `shouldShow`; `--unsupported` arm; widened `--installed` (force-installed/force-upgradable); narrowed `--unavailable`; handler flag + USAGE; docs prose (LIST-01)
 
 **Wave 3** *(blocked on Wave 2: shares orchestrators/plugin/list.ts)*
 
@@ -430,7 +430,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
-| 67. List Filters, Completion & Reinstall Repair                     | force-install | 1/4 | In Progress|  |
+| 67. List Filters, Completion & Reinstall Repair                     | force-install | 2/4 | In Progress|  |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
