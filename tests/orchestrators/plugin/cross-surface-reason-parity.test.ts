@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { __test_narrowResolverReasons } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import { narrowResolverNotes } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import {
+  narrowResolverNotes,
+  narrowUnsupportedKinds,
+} from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 // Cross-surface parity (HOOK-03 / LIFE-01 / SURF-01): the install cascade
 // classifier `narrowResolverReasons` and the read-only probe classifier
@@ -48,3 +51,70 @@ for (const { note, expected } of PARITY_CASES) {
     );
   });
 }
+
+// D-64-02 / RSTATE-05 / SURF-01: per-kind unsupported markers must render
+// byte-identically across `list`, `info`, and the `install` error surface for
+// the same unsupported plugin. `list` and `info` derive the marker from the
+// resolver's typed `unsupported[]` component-kind list via the single shared
+// helper `narrowUnsupportedKinds`; the `install` error surface derives it from
+// the thrown PluginShapeError's `r.notes` (`contains <kind>`) via
+// `narrowResolverReasons`. Both MUST agree for the same kind, so a force-
+// degradable component never surfaces a different `(unavailable) {<reason>}`
+// token depending on which command the user runs. Each case pairs the typed
+// kind token (list/info input) with its matching resolver note (install input).
+const PER_KIND_PARITY_CASES = [
+  // HOOK-04 / D-58-02: `lspServers` is the sole non-generic (soft-degradable)
+  // per-kind marker and renders as `lsp`.
+  { kind: "lspServers", note: "contains lspServers", expected: "lsp" },
+  // Every other unsupported component kind renders the generic marker.
+  { kind: "monitors", note: "contains monitors", expected: "unsupported source" },
+  { kind: "themes", note: "contains themes", expected: "unsupported source" },
+] as const;
+
+for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
+  test(`RSTATE-05 / SURF-01 per-kind unsupported marker parity: "${kind}" -> "${expected}" on list, info, and install`, () => {
+    // list + info derive markers from the typed `unsupported[]` list via the
+    // shared helper (both orchestrators import `narrowUnsupportedKinds`).
+    const listInfoOut = narrowUnsupportedKinds([kind]);
+    // install error surface derives the marker from the resolver `contains
+    // <kind>` note threaded onto the thrown PluginShapeError's `reasons`.
+    const installOut = __test_narrowResolverReasons([note]);
+    assert.deepEqual(
+      listInfoOut,
+      [expected],
+      `list/info surface emitted ${JSON.stringify(listInfoOut)}`,
+    );
+    assert.deepEqual(
+      installOut,
+      [expected],
+      `install surface emitted ${JSON.stringify(installOut)}`,
+    );
+    assert.deepEqual(
+      listInfoOut,
+      installOut,
+      "list/info and install per-kind markers must be byte-identical",
+    );
+  });
+}
+
+// RSTATE-05 / D-64-07 regression guard: structural reasons stay on the `notes`
+// path and are NOT re-routed through the per-kind list helper. The `unsupported`
+// arm's `unsupported[]` list never carries a `hooks` kind (a malformed/unsupported
+// hooks.json is structural and routes to the `unavailable` arm), so the list
+// helper can never emit the structural `unsupported hooks` marker -- that marker
+// is reachable only via `narrowResolverNotes` over the structural notes.
+test("RSTATE-05 / D-64-07 structural hooks reason stays on the notes path, never the per-kind list helper", () => {
+  const structuralNote =
+    "malformed hooks.json: hooks.json failed schema validation: /description: expected array";
+  // notes path (unavailable arm) classifies the structural reason ...
+  assert.deepEqual(narrowResolverNotes([structuralNote]), ["unsupported hooks"]);
+  assert.deepEqual(__test_narrowResolverReasons([structuralNote]), ["unsupported hooks"]);
+  // ... but the per-kind list helper (unsupported arm) cannot produce it: even a
+  // mixed kind list only yields the closed `lsp` / `unsupported source` family.
+  const listOut = narrowUnsupportedKinds(["lspServers", "monitors"]);
+  assert.deepEqual(listOut, ["lsp", "unsupported source"]);
+  assert.ok(
+    !listOut.includes("unsupported hooks" as never),
+    "per-kind list helper must never emit the structural `unsupported hooks` marker",
+  );
+});
