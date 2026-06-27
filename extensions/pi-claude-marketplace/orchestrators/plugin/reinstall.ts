@@ -146,7 +146,6 @@ export interface ReinstallPluginOptions {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
-  readonly force?: boolean;
   readonly render?: "default" | "none";
   /**
    * WB-01 / WB-02: when true, target
@@ -177,7 +176,6 @@ export interface ReinstallPluginsOptions {
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
-  readonly force?: boolean;
   /**
    * WB-01 / WB-02: when true, target
    * `claude-plugins.local.json` instead of `claude-plugins.json` for
@@ -455,7 +453,6 @@ export async function reinstallPlugins(
           marketplace: target.marketplace,
           plugin: target.plugin,
           render: "none",
-          ...(opts.force === undefined ? {} : { force: opts.force }),
           ...(opts.local === true && { local: true }),
         }),
       );
@@ -1121,7 +1118,7 @@ async function runLockedReinstall(
   locations: ScopedLocations,
   opts: ReinstallPluginOptions,
 ): Promise<LockedSuccess> {
-  const { scope, cwd, marketplace, plugin, force } = opts;
+  const { scope, cwd, marketplace, plugin } = opts;
   const mp = tx.state.marketplaces[marketplace];
   const oldRecord = mp?.plugins[plugin];
   if (mp === undefined || oldRecord === undefined) {
@@ -1152,7 +1149,7 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsSourceDir: generated.agentsSourceDir,
   });
-  const replacements = await replaceAll(handles, force, {
+  const replacements = await replaceAll(handles, {
     locations,
     cwd,
     plugin,
@@ -1328,7 +1325,6 @@ async function prepareAllHandles(input: {
 
 async function replaceAll(
   handles: PreparedHandles,
-  force: boolean | undefined,
   hooks: HooksReplaceArgs,
 ): Promise<readonly ReplacementEntry[]> {
   const replacements: ReplacementEntry[] = [];
@@ -1337,10 +1333,12 @@ async function replaceAll(
     replacements.push({ phase: "skills", handle: skills });
     const commands = await replacePreparedCommands(handles.commands);
     replacements.push({ phase: "commands", handle: commands });
-    const agents = await replacePreparedAgents(
-      handles.agents,
-      force === undefined ? {} : { force },
-    );
+    // RINST-01 / D-67-03: reinstall is a pure repair primitive -- overwrite of
+    // collisions and foreign content is UNCONDITIONAL. The agents bridge's
+    // `{ force: true }` gate is always set; there is no command-local `--force`
+    // option to relay. Containment is unchanged (NFR-10): the overwrite is
+    // scoped to this plugin's own staged agent handles.
+    const agents = await replacePreparedAgents(handles.agents, { force: true });
     replacements.push({ phase: "agents", handle: agents });
     // LIFE-01 / D-63-01: 5th cascade slot between agents and mcp. The hooks
     // bridge has no staging dir per D-63-02; writeHookConfig IS the atomic

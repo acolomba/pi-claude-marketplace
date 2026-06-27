@@ -377,9 +377,9 @@ test("PRL-10: missing cached manifest entry fails and preserves old state, resou
   });
 });
 
-test("PRL-10: replacement failure rolls back earlier bridges and leaves old data intact", async () => {
+test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent content across all bridges", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-replace-fail-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-overwrite-"));
     try {
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
@@ -388,12 +388,6 @@ test("PRL-10: replacement failure rolls back earlier bridges and leaves old data
         resources: { skill: "old skill", command: "old command", agent: "old agent" },
         install: true,
       });
-      const dataDir = await locations.pluginDataDir("mp", "hello");
-      await mkdir(dataDir, { recursive: true });
-      await writeFile(path.join(dataDir, "state.txt"), "plugin data");
-      const beforeState = await readFile(locations.stateJsonPath, "utf8");
-      const beforeSkill = await readSkill(cwd);
-      const beforeCommand = await readCommand(cwd);
       const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
       await writeFile(agentPath, "manual foreign bytes", "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", {
@@ -403,14 +397,16 @@ test("PRL-10: replacement failure rolls back earlier bridges and leaves old data
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // RINST-01 / D-67-03: a bare reinstall (no `--force`) overwrites the
+      // agent that holds foreign bytes and refreshes every bridge -- overwrite
+      // is unconditional.
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
-      assert.equal(outcome.partition, "failed");
-      assert.match(notifications[0]?.message ?? "", /foreign previous content/);
-      assert.equal(await readFile(locations.stateJsonPath, "utf8"), beforeState);
-      assert.equal(await readSkill(cwd), beforeSkill);
-      assert.equal(await readCommand(cwd), beforeCommand);
-      assert.equal(await readFile(path.join(dataDir, "state.txt"), "utf8"), "plugin data");
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(errorNotifications(notifications).length, 0);
+      assert.match(await readFile(agentPath, "utf8"), /new agent/);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -466,7 +462,7 @@ test("PRL-10: saveState failure rolls back physical replacements and preserves d
   });
 });
 
-test("PRL-10: force overwrites foreign previous agent content and rollback restores it on save failure", async () => {
+test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent content rolls back on save failure", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-force-rollback-"));
     try {
@@ -490,10 +486,9 @@ test("PRL-10: force overwrites foreign previous agent content and rollback resto
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        force: true,
         __deps: {
           stateTransaction: {
-            saveState: () => Promise.reject(new Error("save failure after force")),
+            saveState: () => Promise.reject(new Error("save failure after overwrite")),
           },
         },
       });
@@ -1942,10 +1937,10 @@ test("GAP-10: reinstallPlugin render=none success with no warnings returns bare 
   });
 });
 
-test("GAP-11: reinstallPlugin force=true succeeds and overwrites agent foreign content", async () => {
-  // force=true exercises the force branch in replaceAll (replacePreparedAgents
-  // called with { force: true }) -- the success path verifies that the outer
-  // render='default' success notification includes the reload hint.
+test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreign content", async () => {
+  // RINST-01 / D-67-03: overwrite is unconditional -- replaceAll always calls
+  // replacePreparedAgents with { force: true }. The success path verifies that
+  // the outer render='default' success notification includes the reload hint.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-force-success-"));
     try {
@@ -1968,7 +1963,6 @@ test("GAP-11: reinstallPlugin force=true succeeds and overwrites agent foreign c
         cwd,
         marketplace: "mp",
         plugin: "hello",
-        force: true,
       });
 
       assert.equal(outcome.partition, "reinstalled");

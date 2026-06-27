@@ -6,9 +6,9 @@
 //   - `@<marketplace>`           -> target = { kind: "marketplace", marketplace }
 //   - `<plugin>@<marketplace>`   -> target = { kind: "plugin", plugin, marketplace }
 //
-// Reinstall additionally accepts a command-specific `--force` flag. It is
-// parsed here, not in the shared args schema, so install/update/uninstall
-// semantics remain unchanged.
+// RINST-01 / D-67-03: reinstall is a pure repair primitive whose overwrite of
+// collisions and foreign content is unconditional. There is no command-local
+// `--force` flag; passing `--force` errors as an UNKNOWN flag.
 
 import { reinstallPlugins } from "../../../orchestrators/plugin/reinstall.ts";
 import { errorMessage } from "../../../shared/errors.ts";
@@ -22,15 +22,16 @@ import type { ReinstallPluginsTarget } from "../../../orchestrators/plugin/reins
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force] [--local]";
+  "Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--local]";
 
 export function makeReinstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // Shared scanner; see edge/handlers/shared.ts. `--force` is
-    // downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--force"]);
+    // Shared scanner; see edge/handlers/shared.ts. No command-local long flags
+    // are passed through (RINST-01 / D-67-03: `--force` is retired), so any
+    // unrecognized `--` token is rejected here as an UNKNOWN flag.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, []);
     if (localFlag === undefined) {
       return;
     }
@@ -43,12 +44,9 @@ export function makeReinstallHandler(
       return;
     }
 
-    let force = false;
     const refs: string[] = [];
     for (const token of parsed.positional) {
-      if (token === "--force") {
-        force = true;
-      } else if (token.startsWith("--")) {
+      if (token.startsWith("--")) {
         notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
         return;
       } else {
@@ -72,7 +70,6 @@ export function makeReinstallHandler(
       cwd: ctx.cwd,
       target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
-      ...(force && { force: true }),
       ...(localFlag.local && { local: true }),
     });
   };

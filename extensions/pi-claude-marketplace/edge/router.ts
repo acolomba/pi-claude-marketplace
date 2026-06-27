@@ -90,7 +90,7 @@ export const TOP_LEVEL_USAGE =
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +

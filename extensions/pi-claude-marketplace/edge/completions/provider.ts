@@ -90,13 +90,8 @@ function flagCompletions(
   const flags: { name: string; description?: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
-  if (positionalHead === "reinstall") {
-    flags.push({
-      name: "--force",
-      description:
-        "Allow overwriting agents that previously had foreign content from this plugin's own install",
-    });
-  }
+  // RINST-01 / D-67-03: reinstall offers no `--force` completion -- the flag is
+  // retired and overwrite is unconditional.
 
   if (positionalHead === "list" || positionalHead === "ls") {
     flags.push(
@@ -257,8 +252,10 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  const rawHead = extractPositionals(tokens)[0] ?? "";
-  const positionals = extractPositionals(tokens, rawHead === "reinstall" ? ["--force"] : []);
+  // RINST-01 / D-67-03: no reinstall `--force` positional strip -- the flag is
+  // retired, so positional extraction needs no command-specific boolean-flag
+  // allow-list.
+  const positionals = extractPositionals(tokens);
   const positionalHead = positionals[0] ?? "";
   const explicitScope = extractScope(tokens);
 
