@@ -37,6 +37,7 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
+import { resolveStrict } from "../../domain/resolver.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 
@@ -45,7 +46,8 @@ import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
-import type { ReconcilePlan } from "./types.ts";
+import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
+import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
 import type {
   ContentReason,
@@ -245,7 +247,90 @@ function pushMarketplaceRemoveCascade(
  * block preserve insertion order per their owning bucket -- the apply path
  * will re-order at execution time if needed.
  */
-export function buildReconcilePendingNotification(plans: readonly ReconcilePlan[]): {
+/**
+ * FSTAT-06 / D-66-04: the no-network resolve inputs for a planned install
+ * candidate -- the candidate manifest entry plus the marketplace clone root it
+ * resolves against. Located by the caller (`pendingReconcile`) from the
+ * recorded marketplace's on-disk manifest; `resolveStrict` reads the cache
+ * only (NFR-5).
+ */
+export interface PendingInstallCandidate {
+  readonly marketplaceRoot: string;
+  readonly manifestEntry: MarketplaceManifest["plugins"][number];
+}
+
+/**
+ * Locate the no-network resolve inputs for a planned install. Returns
+ * `undefined` when the candidate cannot be resolved offline -- e.g. the
+ * marketplace is being added in the same run (not yet cloned) or its manifest
+ * lacks the plugin entry -- in which case the row stays a plain
+ * `(will install)` (the preview cannot truthfully claim a degrade).
+ */
+export type PendingInstallCandidateLocator = (
+  install: PlannedPluginInstall,
+) => Promise<PendingInstallCandidate | undefined>;
+
+/**
+ * Canonical force-install key over the `(scope, marketplace, plugin)` tuple
+ * shared between the async resolver (`resolvePendingForceInstalls`) and the
+ * pure projection (`buildReconcilePendingNotification`). NUL-delimited so a
+ * name carrying a delimiter character cannot collide two distinct installs.
+ */
+function forceInstallKey(scope: Scope, marketplace: string, plugin: string): string {
+  return `${scope}\u0000${marketplace}\u0000${plugin}`;
+}
+
+/**
+ * FSTAT-06 / D-66-04 / NFR-5: resolve every planned install candidate
+ * no-network via `resolveStrict` and collect the `(scope, marketplace, plugin)`
+ * keys whose candidate resolves `state === "unsupported"` -- the planned
+ * install would degrade and proceed under the force path, so its pending row
+ * renders `(will force install)`. The resolve is the cache/no-network resolver
+ * (guarded by the `no-orchestrator-network` architecture test); a probe throw
+ * or an unlocatable candidate degrades to NO force (the safe, truthful preview
+ * default), never a crash on this read-only surface (IL-2).
+ *
+ * D-66-05: there is deliberately NO `will force update` analog. The
+ * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable +
+ * marketplace add/remove + sourceMismatches only), so only `pluginsToInstall`
+ * is resolved here -- the will-force-update token is vacuous.
+ */
+export async function resolvePendingForceInstalls(
+  plans: readonly ReconcilePlan[],
+  locate: PendingInstallCandidateLocator,
+): Promise<ReadonlySet<string>> {
+  const keys = new Set<string>();
+  for (const plan of plans) {
+    for (const install of plan.pluginsToInstall) {
+      let candidate: PendingInstallCandidate | undefined;
+      try {
+        candidate = await locate(install);
+        if (candidate === undefined) {
+          continue;
+        }
+
+        const resolved = await resolveStrict(candidate.manifestEntry, {
+          marketplaceRoot: candidate.marketplaceRoot,
+        });
+        if (resolved.state === "unsupported") {
+          keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));
+        }
+      } catch {
+        // A manifest-load / probe failure leaves the row a plain
+        // `(will install)`: the offline preview cannot assert a degrade it
+        // could not resolve, and a throw must never escape the read-only
+        // pending surface (IL-2 single-notify discipline).
+      }
+    }
+  }
+
+  return keys;
+}
+
+export function buildReconcilePendingNotification(
+  plans: readonly ReconcilePlan[],
+  forceInstallKeys: ReadonlySet<string> = new Set<string>(),
+): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
   const byMp = new Map<string, MarketplaceBlock<PendingMsg>>();
@@ -268,9 +353,19 @@ export function buildReconcilePendingNotification(plans: readonly ReconcilePlan[
 
     for (const o of plan.pluginsToInstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
+      // FSTAT-06 / D-66-04: stamp the force modifier when the planned install
+      // candidate resolved `unsupported` (no-network resolveStrict, computed
+      // ahead of time by resolvePendingForceInstalls). The modifier renders
+      // `(will force install)` in place of `(will install)`. D-66-05: there is
+      // deliberately NO `will force update` analog -- the ReconcilePlan has no
+      // update bucket (only install/uninstall/enable/disable + marketplace
+      // add/remove + sourceMismatches), so no force-update row is ever
+      // constructed here; the will-force-update token is vacuous.
+      const force = forceInstallKeys.has(forceInstallKey(o.scope, o.marketplace, o.plugin));
       block.plugins.push({
         status: "will install",
         name: o.plugin,
+        ...(force && { force: true }),
       });
     }
 

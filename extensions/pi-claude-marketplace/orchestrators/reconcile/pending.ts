@@ -32,6 +32,7 @@
 
 import path from "node:path";
 
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
@@ -44,11 +45,16 @@ import {
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { buildReconcilePendingNotification, isReconcilePlanListEmpty } from "./notify.ts";
+import {
+  buildReconcilePendingNotification,
+  isReconcilePlanListEmpty,
+  resolvePendingForceInstalls,
+  type PendingInstallCandidate,
+} from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
 
-import type { ReconcilePlan } from "./types.ts";
+import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -129,6 +135,15 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
 
   const plans: ReconcilePlan[] = [];
   const invalidBlocks: MarketplaceRows<PendingMsg>[] = [];
+  // FSTAT-06: the recorded marketplace clone roots + manifest paths, keyed by
+  // `(scope, marketplace)`, so the will-force-install preview can locate a
+  // planned install candidate's on-disk manifest entry and resolve it
+  // no-network. Only RECORDED marketplaces are reachable -- a same-run
+  // marketplace add is not yet cloned, so its installs stay `(will install)`.
+  const recordedMarketplaces = new Map<
+    string,
+    { readonly marketplaceRoot: string; readonly manifestPath: string }
+  >();
 
   for (const scope of scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -174,6 +189,17 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
       continue;
     }
 
+    // FSTAT-06: record this scope's marketplace clone roots + manifest paths so
+    // the will-force-install preview can resolve a planned install candidate
+    // no-network (NFR-5). Keyed by `(scope, marketplace)` to disambiguate the
+    // same marketplace name across scopes.
+    for (const [mpName, record] of Object.entries(state.marketplaces)) {
+      recordedMarketplaces.set(`${scope} ${mpName}`, {
+        marketplaceRoot: record.marketplaceRoot,
+        manifestPath: record.manifestPath,
+      });
+    }
+
     // MIG-01 pre-migration window (DIFF-01): plan against what the next
     // load's reconcile would actually see (the apply path migrates first),
     // not against an absent-as-empty merged view -- see mergedViewForPlanning.
@@ -199,7 +225,32 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // collide on a key because the invalid path skips planReconcile for that
   // scope -- a scope can be EITHER in `plans` OR in `invalidBlocks`, never
   // both.
-  const projection = buildReconcilePendingNotification(plans);
+  // FSTAT-06 / D-66-04 / NFR-5: resolve each planned install candidate
+  // no-network so the pending row renders `(will force install)` when the
+  // install would degrade (candidate resolves `unsupported`). The locator reads
+  // only the recorded marketplace's on-disk manifest (cache; no network sync) +
+  // delegates the resolve to resolvePendingForceInstalls (which owns the
+  // resolveStrict call). An unrecorded marketplace or a missing manifest entry
+  // yields no candidate, leaving the row a plain `(will install)`.
+  const locateCandidate = async (
+    install: PlannedPluginInstall,
+  ): Promise<PendingInstallCandidate | undefined> => {
+    const record = recordedMarketplaces.get(`${install.scope} ${install.marketplace}`);
+    if (record === undefined) {
+      return undefined;
+    }
+
+    const manifest = await loadMarketplaceManifest(record.manifestPath);
+    const manifestEntry = manifest.plugins.find((p) => p.name === install.plugin);
+    if (manifestEntry === undefined) {
+      return undefined;
+    }
+
+    return { marketplaceRoot: record.marketplaceRoot, manifestEntry };
+  };
+
+  const forceInstallKeys = await resolvePendingForceInstalls(plans, locateCandidate);
+  const projection = buildReconcilePendingNotification(plans, forceInstallKeys);
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
   // pending-tense rows render through reconcile's own render map (MOD-03), never

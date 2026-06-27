@@ -79,9 +79,20 @@ export type PendingMsg =
   | PluginWillDisableMessage
   | PluginFailedMessage;
 
-/** `(will install)` -- lifted verbatim from the central `renderPluginRow` arm. */
+/**
+ * `(will install)` -- lifted verbatim from the central `renderPluginRow` arm.
+ * FSTAT-06 / D-66-04: the `force` modifier renders `(will force install)` in
+ * place of `(will install)` when the planned install would degrade (candidate
+ * resolves `unsupported`). D-66-05: there is no `will force update` analog --
+ * the reconcile plan has no update bucket.
+ */
 const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, _probe, mpScope) =>
-  joinTokens([ICON_INSTALLED, p.name, renderScopeBracket(p.scope, mpScope), "(will install)"]);
+  joinTokens([
+    ICON_INSTALLED,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    p.force === true ? "(will force install)" : "(will install)",
+  ]);
 
 /** `(will uninstall)` -- lifted verbatim; reuses ICON_AVAILABLE (`○`). */
 const renderWillUninstall: RenderFn<PluginWillUninstallMessage> = (p, _probe, mpScope) =>
