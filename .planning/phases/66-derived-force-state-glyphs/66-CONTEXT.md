@@ -66,11 +66,25 @@ ROADMAP — discussion below is HOW, not WHAT.
   - Success notification: the force install/update success row reads
     "force-installed" (not "installed").
 
+### Grammar dependency (post-insert, Phase 65.1)
+- **D-66-05:** This phase was RE-PLANNED after Phase 65.1 corrected the
+  `will`-grammar. Consequences for D-66-03/04:
+  - The closed-set baseline is now `STATUS_TOKENS = 20` and
+    `MARKETPLACE_STATUSES = 7` (65.1 retired marketplace `will add`/`will
+    remove`). Adding `force-installed` + `force-upgradable` moves
+    `STATUS_TOKENS` 20→22 and `PLUGIN_STATUSES` 15→17 — recompute the tripwire
+    bumps against the CURRENT code, not the pre-65.1 values.
+  - FSTAT-06's `will force install` builds on the surviving plugin `will
+    install` token. `will force update` is VACUOUS — the pending/reconcile
+    surface has no update action (confirmed in 65.1), so there is nothing to
+    replace; implement only `will force install` and document the absence. The
+    byte-exact `will force update` reconcile is not pursued.
+
 ### Claude's Discretion
 - Exact deriver helper name/location, the shape of the recorded-state record it
   consumes, and where the candidate-supportability comparison slots into the
   existing list/upgradable path — left to planning, provided behavior matches
-  D-66-01..04.
+  D-66-01..05.
 - Byte-exact preview/info/notification wording is finalized against the catalog
   in Phase 70 (DOC); this phase implements the tokens and the glyph values.
 
