@@ -35,11 +35,11 @@ The structural foundation: distinguish "not installable, but force can drop the 
 ### Status, Glyph & Force-Upgradability (FSTAT)
 
 - [ ] **FSTAT-01**: A plugin's force-installed state is **derived** -- recorded as installed and currently re-resolving to `unsupported` -- with no persisted `forceInstalled` flag and no state migration.
-- [ ] **FSTAT-02**: Force-installed plugins render with a `force-installed` realized status and the `◉` glyph (distinct from `●` installed) on cascade and list surfaces, driven by the derived state.
+- [x] **FSTAT-02**: Force-installed plugins render with a `force-installed` realized status and the `◉` glyph (distinct from `●` installed) on cascade and list surfaces, driven by the derived state.
 - [ ] **FSTAT-03**: A force-installed plugin whose newer version is fully supported returns to `(installed)` automatically after upgrade -- no lingering force state.
-- [ ] **FSTAT-04**: `list` shows `force-upgradable` for an installed plugin whose newer candidate would **newly** degrade a currently-clean plugin; a force-installed plugin is never force-upgradable; a `force-upgradable` row wears the `●` glyph (it is currently clean).
+- [x] **FSTAT-04**: `list` shows `force-upgradable` for an installed plugin whose newer candidate would **newly** degrade a currently-clean plugin; a force-installed plugin is never force-upgradable; a `force-upgradable` row wears the `●` glyph (it is currently clean).
 - [ ] **FSTAT-05**: The candidate (newer) version that drives `upgradable` / `force-upgradable` is resolved without network access (from cache).
-- [ ] **FSTAT-06**: The pending/preview surface renders `will force install` / `will force update` in place of `will install` / `will update` when a force operation is planned.
+- [x] **FSTAT-06**: The pending/preview surface renders `will force install` / `will force update` in place of `will install` / `will update` when a force operation is planned.
 - [ ] **FSTAT-07**: `/claude:plugin info` reports `force-installed` and surfaces the dropped-component detail; the success notification for a force install/update reads "force-installed".
 
 ### List Filters & Completion (LIST)
@@ -106,11 +106,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 | WILL-03 | Phase 65.1 | Complete |
 | WILL-04 | Phase 65.1 | Complete |
 | FSTAT-01 | Phase 66 | Pending |
-| FSTAT-02 | Phase 66 | Pending |
+| FSTAT-02 | Phase 66 | Complete |
 | FSTAT-03 | Phase 66 | Pending |
-| FSTAT-04 | Phase 66 | Pending |
+| FSTAT-04 | Phase 66 | Complete |
 | FSTAT-05 | Phase 66 | Pending |
-| FSTAT-06 | Phase 66 | Pending |
+| FSTAT-06 | Phase 66 | Complete |
 | FSTAT-07 | Phase 66 | Pending |
 | LIST-01 | Phase 67 | Pending |
 | LIST-02 | Phase 67 | Pending |

@@ -284,7 +284,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 66-01-PLAN.md — Notify status vocabulary foundation: `force-installed`/`force-upgradable` union arms + `◉` glyph + render switch + `will install` force modifier + info-row status/glyph + tools projection; closed-set tripwire bump (20->22 / 15->17) + grammar-invariant widen + stamp-coverage + catalog rows/fixtures in one lockstep commit (FSTAT-02/04/06)
+- [x] 66-01-PLAN.md — Notify status vocabulary foundation: `force-installed`/`force-upgradable` union arms + `◉` glyph + render switch + `will install` force modifier + info-row status/glyph + tools projection; closed-set tripwire bump (20->22 / 15->17) + grammar-invariant widen + stamp-coverage + catalog rows/fixtures in one lockstep commit (FSTAT-02/04/06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -413,7 +413,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
-| 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 0/TBD | Not started | -          |
+| 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 1/4 | In Progress|  |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |

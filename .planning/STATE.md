@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
 status: executing
-last_updated: "2026-06-27T17:39:18.087Z"
-last_activity: 2026-06-27 -- Phase 66 planning complete
+last_updated: "2026-06-27T18:03:35.807Z"
+last_activity: 2026-06-27
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
   percent: 38
 ---
 
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 65.1 — reload-deferred-will-grammar-consistency
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 66 — derived-force-state-glyphs
 
 ## Current Position
 
-Phase: 66
-Plan: Not started
+Phase: 66 (derived-force-state-glyphs) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-27 -- Phase 66 planning complete
+Last activity: 2026-06-27
 
 ## Performance Metrics
 
@@ -130,6 +130,7 @@ Last activity: 2026-06-27 -- Phase 66 planning complete
 | Phase 63 P08 | ~35m | 2 tasks | 3 files |
 | Phase 64 P64-01 | 32 | 3 tasks | 18 files |
 | Phase 64 P64-02 | ~20m | 2 tasks | 5 files |
+| Phase 66 P01 | ~30m | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -270,6 +271,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-64-04: requireForceInstallable gate admits installable|unsupported, throws on unavailable; no production caller until Phase 65
 - [Phase ?]: D-64-07: structural precedence -- structural defect resolves unavailable over any unsupported-component signal
 - [Phase ?]: D-64-02 realized: single shared render-time helper narrowUnsupportedKinds derives per-kind unsupported markers from the typed unsupported[] list across list/info/install; structural reasons stay on the notes path (D-64-07). RSTATE-05 closed; Phase 64 complete.
+- [Phase ?]: 66-01: force-installed wears the dedicated glyph; force-upgradable reuses the installed glyph (D-66-03)
+- [Phase ?]: 66-01: will-force-install is a render modifier on will-install, not a closed-set token; no will-force-update surface (D-66-05)
 
 ### Pending Todos
 
@@ -332,9 +335,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T15:06:04.468Z
+Last session: 2026-06-27T18:03:11.427Z
 Stopped At: Phase 65.1 context gathered
-Resume File: .planning/phases/65.1-reload-deferred-will-grammar-consistency/65.1-CONTEXT.md
+Resume File: None
 
 ## Operator Next Steps
 
