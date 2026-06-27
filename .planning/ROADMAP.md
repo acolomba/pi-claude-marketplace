@@ -208,7 +208,9 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   3. `unsupported` exposes `pluginRoot` plus the supported and unsupported component lists; `unavailable` exposes `pluginRoot` to no consumer (compile-enforced).
   4. `requireInstallable` narrows to `installable` only (default path) and `requireForceInstallable` narrows to `installable | unsupported` (`--force` path).
   5. Per-kind unsupported-component reasons render identically across `list` and `info` (including soft-dep markers) and across all force states.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 64-01-PLAN.md — Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
+- [ ] 64-02-PLAN.md — Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
 
 #### Phase 65: Force Install & Update
 **Goal**: `install --force` / `update --force` degrades unsupported components instead of blocking, while hard failures still block regardless of `--force`, and no force path emits a `Warning:` summary.
