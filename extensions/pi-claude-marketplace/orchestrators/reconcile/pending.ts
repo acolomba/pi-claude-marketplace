@@ -194,7 +194,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     // no-network (NFR-5). Keyed by `(scope, marketplace)` to disambiguate the
     // same marketplace name across scopes.
     for (const [mpName, record] of Object.entries(state.marketplaces)) {
-      recordedMarketplaces.set(`${scope} ${mpName}`, {
+      recordedMarketplaces.set(`${scope} ${mpName}`, {
         marketplaceRoot: record.marketplaceRoot,
         manifestPath: record.manifestPath,
       });
