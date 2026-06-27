@@ -19,11 +19,11 @@ The structural foundation: distinguish "not installable, but force can drop the 
 
 ### Force Install & Update (FORCE)
 
-- [ ] **FORCE-01**: `install --force <plugin>@<marketplace>` on an `unsupported` plugin installs the supported components and skips the unsupported ones; `--force` on a fully-supported plugin is a no-op and installs normally as `(installed)`.
-- [ ] **FORCE-02**: `update --force <plugin>` on a plugin whose newer version became `unsupported` updates it by degrading the now-unsupported components instead of failing.
-- [ ] **FORCE-03**: Without `--force`, install/update of an `unsupported` plugin still blocks/fails -- `--force` is the only per-invocation opt-in to component degradation.
-- [ ] **FORCE-04**: No `Warning:` summary is emitted in any force path (the explicit `--force` is the opt-in; dropped-component detail lives in `info`).
-- [ ] **FORCE-05**: `--force` never bypasses hard failures -- `unavailable`/structural defects, NFR-10 path containment, missing marketplace, and unresolvable source fail/block regardless of `--force`.
+- [x] **FORCE-01**: `install --force <plugin>@<marketplace>` on an `unsupported` plugin installs the supported components and skips the unsupported ones; `--force` on a fully-supported plugin is a no-op and installs normally as `(installed)`.
+- [x] **FORCE-02**: `update --force <plugin>` on a plugin whose newer version became `unsupported` updates it by degrading the now-unsupported components instead of failing.
+- [x] **FORCE-03**: Without `--force`, install/update of an `unsupported` plugin still blocks/fails -- `--force` is the only per-invocation opt-in to component degradation.
+- [x] **FORCE-04**: No `Warning:` summary is emitted in any force path (the explicit `--force` is the opt-in; dropped-component detail lives in `info`).
+- [x] **FORCE-05**: `--force` never bypasses hard failures -- `unavailable`/structural defects, NFR-10 path containment, missing marketplace, and unresolvable source fail/block regardless of `--force`.
 
 ### Status, Glyph & Force-Upgradability (FSTAT)
 
@@ -89,11 +89,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RSTATE-03 | Phase 64 | Complete |
 | RSTATE-04 | Phase 64 | Complete |
 | RSTATE-05 | Phase 64 | Complete |
-| FORCE-01 | Phase 65 | Pending |
-| FORCE-02 | Phase 65 | Pending |
-| FORCE-03 | Phase 65 | Pending |
-| FORCE-04 | Phase 65 | Pending |
-| FORCE-05 | Phase 65 | Pending |
+| FORCE-01 | Phase 65 | Complete |
+| FORCE-02 | Phase 65 | Complete |
+| FORCE-03 | Phase 65 | Complete |
+| FORCE-04 | Phase 65 | Complete |
+| FORCE-05 | Phase 65 | Complete |
 | FSTAT-01 | Phase 66 | Pending |
 | FSTAT-02 | Phase 66 | Pending |
 | FSTAT-03 | Phase 66 | Pending |
@@ -116,6 +116,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | DOC-03 | Phase 70 | Pending |
 
 **Coverage:**
+
 - Requirements: 30 total
 - Mapped to phases: 30 (Phases 64-70) ✓
 - Unmapped: 0
