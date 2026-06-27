@@ -16,7 +16,7 @@
 // orchestrators the per-command (sourcePath, targetPath) records needed to
 // populate `state.json` without re-discovering after commit.
 
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A single command discovered under `componentPaths.commands`. */
@@ -36,7 +36,7 @@ export interface StageCommandsInput {
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly pluginDataDir: string;
-  readonly resolved: ResolvedPluginInstallable;
+  readonly resolved: MaterializablePlugin;
   /** Names previously staged for this (mp, plugin) -- read from state.json on re-stage. */
   readonly previousCommandNames?: readonly string[];
 }

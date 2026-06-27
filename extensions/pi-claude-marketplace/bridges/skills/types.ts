@@ -10,7 +10,7 @@
 // W-05: StageSkillsCommitResult exposes `recorded: StagedSkillRecord[]`
 // so orchestrators can populate state.json without re-discovering skills.
 
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
@@ -30,7 +30,7 @@ export interface StageSkillsInput {
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly pluginDataDir: string;
-  readonly resolved: ResolvedPluginInstallable;
+  readonly resolved: MaterializablePlugin;
   /**
    * Names from a previous install of this plugin -- their target dirs are
    * deleted before commit-time renames so re-stages cleanly replace prior
