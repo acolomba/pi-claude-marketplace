@@ -303,7 +303,23 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   2. With `--force` preceding the plugin positional, `install` completion offers `available` + `unsupported` plugins and `update` completion offers `upgradable` + `force-upgradable` plugins (`unavailable` excluded); without `--force` completion is unchanged.
   3. `reinstall` no longer accepts `--force` and always overwrites everything (collisions and foreign content) as a repair primitive.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 67-01-PLAN.md — reinstall `--force` retirement: unconditional overwrite-everything; handler/router/completion-provider/usage strip; coupled tests + docs lockstep (RINST-01)
+
+**Wave 2** *(blocked on Wave 1: shared provider.test.ts / router.test.ts / docs surfaces)*
+
+- [ ] 67-02-PLAN.md — list filters: resolver-state bucket threaded to `shouldShow`; `--unsupported` arm; widened `--installed` (force-installed/force-upgradable); narrowed `--unavailable`; handler flag + USAGE; docs prose (LIST-01)
+
+**Wave 3** *(blocked on Wave 2: shares orchestrators/plugin/list.ts)*
+
+- [ ] 67-03-PLAN.md — shared per-entry plugin-state classifier consumed by list + completion bucketizer; completion-cache schema bump (v1->2) + finer status set; no-network parity (LIST-02 foundation)
+
+**Wave 4** *(blocked on Waves 1-3: shares completions/provider.ts + the finer cache statuses)*
+
+- [ ] 67-04-PLAN.md — `--force`-gated install/update completion candidate sets over the finer statuses; `--force` flag completion + presence detection; no-force byte-identical regression; `npm run check` gate (LIST-02)
 
 #### Phase 68: Load-Time Backfill
 
@@ -414,7 +430,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
-| 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
+| 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/4 | Not started | -          |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
