@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: force-install
-status: ready_to_plan
-last_updated: 2026-06-27T04:42:08.096Z
+status: planning
+last_updated: "2026-06-27T11:21:31.096Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 7
@@ -11,7 +11,6 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 14
-stopped_at: Phase 64 complete (2/2) — ready to discuss Phase 65
 ---
 
 # Project State
@@ -332,9 +331,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T03:59:02.752Z
-Stopped At: Phase 64 context gathered
-Resume File: None
+Last session: 2026-06-27T11:21:31.089Z
+Stopped At: Phase 65 context gathered
+Resume File: .planning/phases/65-force-install-update/65-CONTEXT.md
 
 ## Operator Next Steps
 
