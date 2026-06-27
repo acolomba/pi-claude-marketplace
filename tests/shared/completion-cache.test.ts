@@ -47,10 +47,12 @@ test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion ===
   assert.equal(properties.schemaVersion.const, 2);
 });
 
-test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 1", () => {
+test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 2", () => {
   __resetCacheForTests();
   const properties = PLUGIN_INDEX_CACHE_SCHEMA.properties;
-  assert.equal(properties.schemaVersion.const, 1);
+  // LIST-02 / D-67-02: bumped 1 -> 2 in lockstep with the widened finer-status
+  // union; stale v1 caches drop+rebuild via the existing mismatch path.
+  assert.equal(properties.schemaVersion.const, 2);
 });
 
 // ---------------------------------------------------------------------------
@@ -233,7 +235,7 @@ test("D-03-TTL :: getPluginIndex re-reads file after 10-min TTL via injected clo
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [{ name: "after", status: "installed" }],
       }),
@@ -270,7 +272,7 @@ test("D-03-TTL :: stale plugin-index file rebuilds instead of serving old status
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         lastRefreshedAt: new Date(clock - 10 * 60 * 1000 - 1).toISOString(),
         plugins: [{ name: "before", status: "available" }],
       }),
@@ -316,7 +318,7 @@ test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () =
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [{ name: "external-change", status: "installed" }],
       }),
@@ -462,7 +464,7 @@ test("TC-8 :: rebuild that throws manifest error caches { plugins: [], _loadErro
       plugins: unknown[];
       _loadError?: string;
     };
-    assert.equal(parsed.schemaVersion, 1);
+    assert.equal(parsed.schemaVersion, 2);
     assert.deepEqual(parsed.plugins, []);
     assert.match(parsed._loadError ?? "", /missing manifest/);
   });
@@ -477,7 +479,7 @@ test("TC-8 :: subsequent reads of TC-8-poisoned cache return [] (no throw)", asy
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [],
         _loadError: "stale failure",

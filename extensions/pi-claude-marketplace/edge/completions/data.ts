@@ -35,6 +35,19 @@ import type { PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
+/**
+ * D-67-02 / LIST-02: the installed-inventory cache statuses. A plugin present
+ * in state derives one of these finer statuses (the cache no longer flattens
+ * them to `installed`); the no-`--force` installed-modes completion candidate
+ * set spans the whole group so its output stays byte-identical to today.
+ */
+const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
+  "installed",
+  "upgradable",
+  "force-installed",
+  "force-upgradable",
+]);
+
 type PluginRefCompletionMode =
   | "install"
   | "uninstall"
@@ -334,7 +347,14 @@ async function getInstalledPluginToMarketplacesMap(
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
-        if (row.status !== "installed") {
+        // D-67-02: the no-`--force` installed-modes candidate set spans the
+        // full installed inventory. The cache now carries the finer derived
+        // states (`upgradable` / `force-installed` / `force-upgradable`) where
+        // it previously flattened every state-present plugin to `installed`;
+        // admitting them here keeps the no-`--force` completion BYTE-IDENTICAL
+        // to today. The `--force`-gated narrowing (update = upgradable +
+        // force-upgradable) is layered on top of this set elsewhere.
+        if (!INSTALLED_INVENTORY_STATUSES.has(row.status)) {
           continue;
         }
 

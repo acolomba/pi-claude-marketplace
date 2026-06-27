@@ -68,8 +68,15 @@ export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
 });
 const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 
+// LIST-02 / D-67-02: the plugin-index cache carries the FINER derived status
+// set (installed | upgradable | force-installed | force-upgradable | available
+// | unsupported | unavailable) so the completion bucketizer can offer the
+// `--force`-gated candidate sets without a second classifier. The schemaVersion
+// bump (1 -> 2) makes every stale 3-status cache drop+rebuild on next read via
+// the existing mismatch path -- no manual migration (T-67-07: the plugin-index
+// cache is an ephemeral optimization cache, NOT the persisted state model).
 export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(1),
+  schemaVersion: Type.Literal(2),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
   plugins: Type.Array(
@@ -77,7 +84,11 @@ export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
       name: Type.String(),
       status: Type.Union([
         Type.Literal("installed"),
+        Type.Literal("upgradable"),
+        Type.Literal("force-installed"),
+        Type.Literal("force-upgradable"),
         Type.Literal("available"),
+        Type.Literal("unsupported"),
         Type.Literal("unavailable"),
       ]),
       version: Type.Optional(Type.String()),
@@ -93,7 +104,15 @@ const PLUGIN_INDEX_VALIDATOR = Compile(PLUGIN_INDEX_CACHE_SCHEMA);
 
 export interface PluginIndexRow {
   readonly name: string;
-  readonly status: "installed" | "available" | "unavailable";
+  // LIST-02 / D-67-02: widened in lockstep with the schema literal union.
+  readonly status:
+    | "installed"
+    | "upgradable"
+    | "force-installed"
+    | "force-upgradable"
+    | "available"
+    | "unsupported"
+    | "unavailable";
   readonly version?: string;
 }
 
@@ -307,7 +326,7 @@ export async function getPluginIndex(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [] as PluginIndexRow[],
         _loadError: errorMessage(err.cause),
@@ -322,7 +341,7 @@ export async function getPluginIndex(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     lastRefreshedAt: new Date().toISOString(),
     plugins: rows.map((r) => {
       // Strip undefined version fields so the on-disk shape matches the

@@ -34,6 +34,13 @@ import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
 
+import {
+  classifyInstalledRecord,
+  classifyManifestEntry,
+} from "./plugin/plugin-state-classifier.ts";
+
+import type { MarketplaceManifest } from "../domain/manifest.ts";
+import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
 
@@ -61,6 +68,68 @@ export interface LocationsResolverLike {
     marketplaces: Record<string, MarketplaceStateRecordLike>;
   }>;
   loadManifestForMarketplace(scope: Scope, marketplace: string): Promise<readonly PluginIndexRow[]>;
+}
+
+/**
+ * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
+ * shared `classifyInstalledRecord`. The upgrade-candidate resolve stays
+ * NO-NETWORK (`resolveStrict`, NFR-5) and runs only when the manifest carries
+ * a newer version (PL-5 string compare; `upgradable === true` narrows
+ * `manifestEntry` to defined). CR-01: a candidate probe failure degrades to
+ * plain `upgradable` (the classifier reads `undefined` as "could not assert").
+ */
+async function classifyInstalledPluginRow(
+  pluginName: string,
+  installed: ExtensionState["marketplaces"][string]["plugins"][string],
+  manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
+  marketplaceRoot: string,
+): Promise<PluginIndexRow> {
+  const upgradable =
+    manifestEntry?.version !== undefined && manifestEntry.version !== installed.version;
+
+  let candidateResolved: Awaited<ReturnType<typeof resolveStrict>> | undefined;
+  if (upgradable) {
+    try {
+      candidateResolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+    } catch {
+      candidateResolved = undefined;
+    }
+  }
+
+  return {
+    name: pluginName,
+    status: classifyInstalledRecord(
+      installed,
+      upgradable ? { upgradable: true, resolved: candidateResolved } : { upgradable: false },
+    ),
+    version: installed.version,
+  };
+}
+
+/**
+ * LIST-02 / D-67-02: build the cache row for ONE not-installed manifest entry
+ * via the shared `classifyManifestEntry`. `unsupported` is emitted DISTINCTLY
+ * from structural `unavailable` (the old `installable ? available : unavailable`
+ * collapse is gone) so the `--force`-gated candidate sets can offer
+ * `available + unsupported`. A probe failure is structural unavailability; the
+ * cache row carries no diagnostic notes (the `list` surface renders detail).
+ */
+async function classifyNotInstalledPluginRow(
+  entry: MarketplaceManifest["plugins"][number],
+  marketplaceRoot: string,
+): Promise<PluginIndexRow> {
+  let status: PluginIndexRow["status"];
+  try {
+    status = classifyManifestEntry(await resolveStrict(entry, { marketplaceRoot }));
+  } catch {
+    status = "unavailable";
+  }
+
+  return {
+    name: entry.name,
+    status,
+    ...(entry.version !== undefined && { version: entry.version }),
+  };
 }
 
 /**
@@ -126,46 +195,29 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         const installedNames = new Set(Object.keys(mp.plugins));
         const rows: PluginIndexRow[] = [];
 
-        // Installed entries first (status derived from state; presence in
-        // mp.plugins === installed per D-09).
+        // Installed entries first. LIST-02 / D-67-02: the finer state
+        // (installed | upgradable | force-installed | force-upgradable) is
+        // derived by the SHARED classifier -- the same one the `list`
+        // orchestrator consumes -- so the completion cache never diverges from
+        // `list` (no provider-local reclassification).
         for (const [pluginName, installed] of Object.entries(mp.plugins)) {
-          rows.push({
-            name: pluginName,
-            status: "installed",
-            version: installed.version,
-          });
+          rows.push(
+            await classifyInstalledPluginRow(
+              pluginName,
+              installed,
+              parsed.plugins.find((p) => p.name === pluginName),
+              mp.marketplaceRoot,
+            ),
+          );
         }
 
-        // Available/unavailable entries: walk the manifest, skip
-        // already-installed names, and ask the resolver whether the
-        // not-yet-installed entry is installable on this system.
+        // Not-installed manifest entries (skip already-installed names).
         for (const entry of parsed.plugins) {
           if (installedNames.has(entry.name)) {
             continue;
           }
 
-          let installable = false;
-          try {
-            const resolved = await resolveStrict(entry, {
-              marketplaceRoot: mp.marketplaceRoot,
-            });
-            // D-64-01: both `unsupported` and `unavailable` map to the
-            // `unavailable` completion bucket; only `installable` is available.
-            installable = resolved.state === "installable";
-          } catch {
-            // Per-entry probe failure -> unavailable bucket. The cache row
-            // shape carries no diagnostic notes; the slash-command `list`
-            // surface (orchestrators/plugin/list.ts) is where the failure
-            // detail is rendered.
-            installable = false;
-          }
-
-          const row: PluginIndexRow = {
-            name: entry.name,
-            status: installable ? "available" : "unavailable",
-            ...(entry.version !== undefined && { version: entry.version }),
-          };
-          rows.push(row);
+          rows.push(await classifyNotInstalledPluginRow(entry, mp.marketplaceRoot));
         }
 
         return rows;

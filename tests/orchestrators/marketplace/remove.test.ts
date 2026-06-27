@@ -585,7 +585,7 @@ test("D-03-INV :: remove unlinks the plugin cache file and invalidates marketpla
       // succeed; the test does NOT depend on the content surviving.
       const pluginCachePath = await locations.pluginCacheFile("to-go");
       await atomicWriteJson(pluginCachePath, {
-        schemaVersion: 1,
+        schemaVersion: 2,
         lastRefreshedAt: "2026-01-01T00:00:00.000Z",
         plugins: [],
       });
