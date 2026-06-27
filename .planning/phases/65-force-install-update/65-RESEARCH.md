@@ -529,10 +529,13 @@ to guard this.
 in this session. The only open judgment is a Claude's-Discretion design choice
 (shared union-alias widening vs. local re-tag), surfaced in Pattern 2.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where exactly the `force` boolean enters `parsePositionalsWithFlags`'s
    return shape.**
+   - RESOLVED: Plan 65-01 Task 2 extends the shared helper
+     (`ParsedPositionalsResult` gains `force`), threading it through
+     `parseMapModelArgs` — the recommended lower-divergence option.
    - What we know: install/update use the shared `parseMapModelArgs` path, not
      reinstall's inline loop; the shared helper must learn `--force`.
    - What's unclear: whether to extend the shared helper (one definition, both
@@ -544,6 +547,8 @@ in this session. The only open judgment is a Claude's-Discretion design choice
 
 2. **Whether the bridge `resolved` param types are widened or a single
    orchestrator-local re-tag is used.**
+   - RESOLVED: Plan 65-01 Task 1 widens to the shared `MaterializablePlugin`
+     union alias (excludes `unavailable`, keeping NFR-7 compile-enforced).
    - What we know: bridges read only `pluginRoot`/`componentPaths`/`mcpServers`,
      never `state`.
    - Recommendation: widen to the shared `MaterializablePlugin` union alias
