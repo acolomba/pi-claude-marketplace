@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
 status: executing
-last_updated: "2026-06-27T18:18:58.558Z"
+last_updated: "2026-06-27T18:48:22.681Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 10
   percent: 38
 ---
 
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 66 (derived-force-state-glyphs) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-27
 
@@ -132,6 +132,7 @@ Last activity: 2026-06-27
 | Phase 64 P64-02 | ~20m | 2 tasks | 5 files |
 | Phase 66 P01 | ~30m | 2 tasks | 9 files |
 | Phase 66 P02 | 25m | 2 tasks | 3 files |
+| Phase 66 P03 | 45m | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-64-02 realized: single shared render-time helper narrowUnsupportedKinds derives per-kind unsupported markers from the typed unsupported[] list across list/info/install; structural reasons stay on the notes path (D-64-07). RSTATE-05 closed; Phase 64 complete.
 - [Phase ?]: 66-01: force-installed wears the dedicated glyph; force-upgradable reuses the installed glyph (D-66-03)
 - [Phase ?]: 66-01: will-force-install is a render modifier on will-install, not a closed-set token; no will-force-update surface (D-66-05)
+- [Phase ?]: 66-03: info reports (force-installed) + narrowUnsupportedKinds detail for installed+unsupported; unavailable/installable stay (installed) per D-64-05; info never emits force-upgradable
+- [Phase ?]: 66-03: install/update force success rows read (force-installed) on unsupported (info, needsReload via TRANSITION_STATUS_LIST), installed/updated otherwise; no Warning: in any force path (FORCE-04)
 
 ### Pending Todos
 
@@ -336,7 +339,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T18:18:07.409Z
+Last session: 2026-06-27T18:47:52.791Z
 Stopped At: Phase 65.1 context gathered
 Resume File: None
 
