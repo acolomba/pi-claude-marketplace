@@ -256,7 +256,17 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. The pending/preview surface renders `will force install` / `will force update` in place of `will install` / `will update` when a force operation is planned.
   5. `/claude:plugin info` reports `force-installed` and surfaces the dropped-component detail; the success notification for a force install/update reads "force-installed".
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 66-01-PLAN.md — Status vocabulary, `◉` glyph, force-installed/force-upgradable union arms + render switch, info mapper, tools projection, closed-set tripwire bump, will-install force modifier (FSTAT-02/04/06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 66-02-PLAN.md — list deriver: no-network `resolveStrict` + four-way force-installed/force-upgradable/upgradable/installed predicate (FSTAT-01/03/04/05)
+- [ ] 66-03-PLAN.md — info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-07)
+- [ ] 66-04-PLAN.md — reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
 
 #### Phase 67: List Filters, Completion & Reinstall Repair
 
