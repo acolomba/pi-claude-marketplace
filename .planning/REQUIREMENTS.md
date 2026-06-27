@@ -49,7 +49,7 @@ The structural foundation: distinguish "not installable, but force can drop the 
 
 ### Reinstall (RINST)
 
-- [ ] **RINST-01**: `reinstall` no longer accepts `--force`; it always overwrites everything (collisions and foreign content) as a repair primitive.
+- [x] **RINST-01**: `reinstall` no longer accepts `--force`; it always overwrites everything (collisions and foreign content) as a repair primitive.
 
 ### Load-Time Backfill (BFILL)
 
@@ -114,7 +114,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | FSTAT-07 | Phase 66 | Complete |
 | LIST-01 | Phase 67 | Pending |
 | LIST-02 | Phase 67 | Pending |
-| RINST-01 | Phase 67 | Pending |
+| RINST-01 | Phase 67 | Complete |
 | BFILL-01 | Phase 68 | Pending |
 | BFILL-02 | Phase 68 | Pending |
 | SEV-01 | Phase 69 | Pending |
