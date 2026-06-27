@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.13
-milestone_name: Claude Hook Bridge
-status: Awaiting next milestone
-stopped_at: Completed 63-05-PLAN.md (SURF-01)
-last_updated: "2026-06-19T15:05:39.561Z"
-last_activity: 2026-06-19 — Milestone v1.13 completed and archived
+milestone: force-install
+milestone_name: force-install
+status: planning
+last_updated: "2026-06-27T01:27:01.206Z"
+last_activity: 2026-06-27
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 32
-  completed_plans: 32
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: Milestone v1.13 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-19 — Milestone v1.13 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-27 — Milestone force-install started
 
 ## Performance Metrics
 
