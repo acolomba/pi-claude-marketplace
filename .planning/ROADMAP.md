@@ -257,7 +257,15 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. Plugin install / uninstall / enable / disable remain reload-deferred and retain their `will install` / `will uninstall` / `will enable` / `will disable` tokens.
   5. `docs/output-catalog.md`, `docs/messaging-style-guide.md`, the status-token closed set, and the byte-exact catalog/notify tests reflect the reconciled grammar; `npm run check` stays green.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+**Wave 1**
+
+- [ ] 65.1-01-PLAN.md — WILL-02 reload-hint agreement test (new isolated file) + additive marketplace-remove-with-installed-plugins catalog-uat byte state; both green on the current tree (WILL-02, WILL-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 65.1-02-PLAN.md — Atomic lockstep retirement of `will add` / `will remove`: closed-set tuples (22->20, 9->7), union arms, renderMpHeader, pending projection (add dropped, remove -> per-plugin will-uninstall cascade), PlannedMarketplaceRemove.plugins seam, all coupled tests, and docs/output-catalog + messaging-style-guide; single `npm run check`-green commit (WILL-01, WILL-02, WILL-03, WILL-04)
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
