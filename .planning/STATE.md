@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: force-install
-status: verifying
-last_updated: "2026-06-27T04:00:07.196Z"
+status: ready_to_plan
+last_updated: 2026-06-27T04:42:08.096Z
 last_activity: 2026-06-27
 progress:
   total_phases: 7
@@ -11,6 +11,7 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 14
+stopped_at: Phase 64 complete (2/2) — ready to discuss Phase 65
 ---
 
 # Project State
@@ -19,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 64 — resolver-three-way-state
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 65 — force install & update
 
 ## Current Position
 
-Phase: 64 (resolver-three-way-state) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 65
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-27
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 217 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 219 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 
