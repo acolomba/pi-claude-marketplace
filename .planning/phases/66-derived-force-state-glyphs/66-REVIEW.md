@@ -23,7 +23,7 @@ findings:
   warning: 2
   info: 2
   total: 4
-  resolved: 2
+  resolved: 4
 status: issues_found
 ---
 
@@ -180,6 +180,18 @@ documented byte form is one the deriver can actually emit.
 
 ### WR-02: `force-installed` is derived from two divergent sources — `list` (persisted) vs `info`/`install`/`update` (live resolve)
 
+**Status:** RESOLVED (commit `82cb9d8c`) — `info.ts::buildInstalledRow`'s
+non-path branch now derives `force-installed` from the SAME persisted
+`record.compatibility.unsupported` that the `list` deriver reads (the
+D-66-01 single deriver), instead of returning `(installed)` before resolving.
+A github/non-path force-installed plugin therefore renders `◉ (force-installed)`
+consistently on both `list` and `info`; `componentsResolved: false` is
+preserved (NFR-5: no fetch). Path sources keep their live resolve (not
+regressed). The inaccurate "same derived signal the list deriver reads"
+comments in `install.ts`/`update.ts` are corrected to state those rows read
+the LIVE resolved state. Cross-surface parity regression tests were added on
+both `list` and `info`.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts:306` and `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:851`
 **Issue:**
 `list.ts` derives force-installed from the PERSISTED record:
@@ -211,6 +223,18 @@ behaviour on `info` is intentional, correct the install.ts/update.ts comments to
 stop claiming parity with the list deriver and document the divergence explicitly.
 
 ### WR-03: `force-installed` install row silently drops soft-dep markers
+
+**Status:** RESOLVED (commit `cc8818e5`) — `PluginForceInstalledMessage` gained
+an optional `dependencies?: readonly Dependency[]` field, and a shared
+`forceInstalledRow` composer (in `shared/notify.ts`) threads it through
+`composeReasons` so the `{requires pi-subagents}` / `{requires pi-mcp}` markers
+compose into the SAME brace AFTER the dropped-component reasons (MSG-GR-4),
+exactly like the `installed` arm. The central `renderPluginRow` switch and the
+`install`/`update` command-local render maps all call the one composer, so the
+bytes stay identical across surfaces. The install/update success rows now pass
+`dependencies`; the list/info inventory rows omit it and render unchanged. A
+catalog state + fixture and renderer/orchestrator regression tests were added;
+the closed-set counts are unchanged (no new reason token).
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1398`
 **Issue:**
