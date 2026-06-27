@@ -15,7 +15,7 @@ The structural foundation: distinguish "not installable, but force can drop the 
 - [x] **RSTATE-02**: A structural defect (unreadable/invalid manifest, malformed `hooks.json`, path/NFR-10 containment violation) yields `unavailable` and takes precedence over unsupported component kinds -- a plugin that is both broken and partial resolves `unavailable`.
 - [x] **RSTATE-03**: `unsupported` carries `pluginRoot` plus the supported and unsupported component lists; `unavailable` exposes `pluginRoot` to no consumer (type-enforced, NFR-7 refined not weakened).
 - [x] **RSTATE-04**: Two narrowing gates exist -- `requireInstallable` (→ `installable` only; default path) and `requireForceInstallable` (→ `installable | unsupported`; `--force` path).
-- [ ] **RSTATE-05**: Unsupported-component reasons are derived per-kind from the component list as a marker family distinct from structural reasons, and are identical across `list` and `info` (including soft-dep markers) and across all force states.
+- [x] **RSTATE-05**: Unsupported-component reasons are derived per-kind from the component list as a marker family distinct from structural reasons, and are identical across `list` and `info` (including soft-dep markers) and across all force states.
 
 ### Force Install & Update (FORCE)
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RSTATE-02 | Phase 64 | Complete |
 | RSTATE-03 | Phase 64 | Complete |
 | RSTATE-04 | Phase 64 | Complete |
-| RSTATE-05 | Phase 64 | Pending |
+| RSTATE-05 | Phase 64 | Complete |
 | FORCE-01 | Phase 65 | Pending |
 | FORCE-02 | Phase 65 | Pending |
 | FORCE-03 | Phase 65 | Pending |

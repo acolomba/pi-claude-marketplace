@@ -190,7 +190,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD §11.
 
-- [ ] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons
+- [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
 - [ ] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block
 - [ ] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail
 - [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
@@ -217,7 +217,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 64-02-PLAN.md — Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
+- [x] 64-02-PLAN.md — Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
 
 #### Phase 65: Force Install & Update
 
@@ -368,7 +368,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
-| 64. Resolver Three-Way State                                        | force-install | 1/2 | In Progress|  |
+| 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete   | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 0/TBD | Not started | -          |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 0/TBD | Not started | -          |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |

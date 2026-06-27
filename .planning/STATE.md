@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: force-install
-status: executing
-last_updated: "2026-06-27T03:42:02.329Z"
+status: verifying
+last_updated: "2026-06-27T04:00:07.196Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 14
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 64 (resolver-three-way-state) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-27
 
 ## Performance Metrics
@@ -129,6 +129,7 @@ Last activity: 2026-06-27
 | Phase 63 P04 | 55min | 4 tasks | 13 files |
 | Phase 63 P08 | ~35m | 2 tasks | 3 files |
 | Phase 64 P64-01 | 32 | 3 tasks | 18 files |
+| Phase 64 P64-02 | ~20m | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -267,6 +268,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: D-64-05/06: unsupported arm keeps pluginRoot + full payload (force-degradable); unavailable arm minimal, compile-strips pluginRoot (NFR-7)
 - [Phase ?]: D-64-04: requireForceInstallable gate admits installable|unsupported, throws on unavailable; no production caller until Phase 65
 - [Phase ?]: D-64-07: structural precedence -- structural defect resolves unavailable over any unsupported-component signal
+- [Phase ?]: D-64-02 realized: single shared render-time helper narrowUnsupportedKinds derives per-kind unsupported markers from the typed unsupported[] list across list/info/install; structural reasons stay on the notes path (D-64-07). RSTATE-05 closed; Phase 64 complete.
 
 ### Pending Todos
 
@@ -329,7 +331,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T03:40:47.022Z
+Last session: 2026-06-27T03:59:02.752Z
 Stopped At: Phase 64 context gathered
 Resume File: None
 
