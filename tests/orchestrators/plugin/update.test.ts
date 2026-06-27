@@ -159,12 +159,6 @@ async function seedPathMarketplace(opts: {
       hasMcp?: boolean;
       /** WR-03: seed `<pluginRoot>/hooks/hooks.json` with this payload. */
       hooksJson?: object;
-      /**
-       * D-64-06: declare experimental unsupported kinds in the candidate's own
-       * plugin.json so `resolveStrict` returns the force-degradable
-       * `unsupported` arm (e.g. `{ themes: "./themes" }`).
-       */
-      experimental?: object;
     }
   >;
   /** Map of plugin name -> existing state record version. Absent -> no prior install. */
@@ -181,13 +175,7 @@ async function seedPathMarketplace(opts: {
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({
-        name: pluginName,
-        version: spec.version,
-        // D-64-06: experimental kinds drive the force-degradable `unsupported`
-        // arm without a structural defect.
-        ...(spec.experimental !== undefined && { experimental: spec.experimental }),
-      }),
+      JSON.stringify({ name: pluginName, version: spec.version }),
     );
 
     if (spec.hasSkill !== false) {
@@ -524,67 +512,6 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
 
       // Ensure we referenced the seeded marketplaceRoot (compile-time use of `seeded`).
       assert.ok(seeded.marketplaceRoot.length > 0);
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-// ─── FSTAT-07 / D-66-04: force update of a newly-degrading candidate ──────────
-
-test("FSTAT-07 / D-66-04: force update whose candidate became unsupported emits a (force-installed) success row", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-force-installed-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: {
-          // The newer candidate (v1.0.1) declares experimental unsupported
-          // kinds, so the no-network candidate resolveStrict returns the
-          // force-degradable `unsupported` arm.
-          hello: {
-            version: "1.0.1",
-            hasSkill: true,
-            experimental: { themes: "./themes", monitors: "./monitors.json" },
-          },
-        },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
-      });
-
-      // The supported skill still materialized; the degraded kinds are
-      // captured in the record's compatibility but not as resources.
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces["mp"]?.plugins["hello"];
-      assert.ok(record !== undefined);
-      assert.equal(record.version, "1.0.1");
-      assert.ok(record.compatibility.unsupported.includes("themes"));
-
-      // FSTAT-07 / D-66-04: the force-update success row reads (force-installed)
-      // with the ◉ glyph + dropped-component detail, not (updated).
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
-      assert.equal(
-        notifications[0]?.message,
-        "● mp [project]\n" +
-          "  ◉ hello v1.0.1 (force-installed) {unsupported source}\n" +
-          "\n" +
-          "/reload to pick up changes",
-      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3006,10 +2933,20 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
         "supported skill must materialize",
       );
 
-      // The realized update renders the `(updated)` row.
+      // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
+      // `unsupported` reports `(force-installed)` with the ◉ glyph + the
+      // dropped-component detail (the same derived signal the list deriver
+      // reads), not `(updated)`. force-installed is a realized transition --
+      // info severity + reload-hint.
       assert.equal(notifications.length, 1);
-      const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(updated\)/);
+      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ◉ hello v1.1.0 (force-installed) {unsupported source}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

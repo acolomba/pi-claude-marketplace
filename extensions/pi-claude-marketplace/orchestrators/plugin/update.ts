@@ -111,6 +111,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
@@ -1505,6 +1506,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     stagedMcpServers,
     declaresAgents: stagedAgents.length > 0,
     declaresMcp: stagedMcpServers.length > 0,
+    // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
+    // `unsupported` degraded it -- carry the dropped kinds so the cascade
+    // renders `(force-installed)` instead of `(updated)`. Empty for a clean
+    // candidate (FSTAT-03 -- no lingering force state).
+    ...(installable.state === "unsupported" && {
+      unsupportedKinds: [...installable.unsupported],
+    }),
   };
 }
 
@@ -1558,6 +1566,25 @@ function outcomeToCascadePluginMessage(
 ): UpdateMsg {
   switch (outcome.partition) {
     case "updated":
+      // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
+      // `unsupported` degraded it -- report `(force-installed)` with the
+      // dropped-component detail (the same derived signal the list deriver
+      // reads) instead of `(updated)`. A clean candidate keeps `(updated)`
+      // (FSTAT-03 -- no lingering force state). force-installed is a realized
+      // transition (TRANSITION_STATUS_LIST), so it stamps the same
+      // info-severity + reload as the updated row.
+      if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
+        return {
+          status: "force-installed",
+          name: outcome.name,
+          scope: target.scope,
+          version: outcome.toVersion,
+          reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
+          severity: "info",
+          needsReload: true,
+        };
+      }
+
       return {
         status: "updated",
         name: outcome.name,

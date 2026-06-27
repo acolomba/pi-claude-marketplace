@@ -149,7 +149,6 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
-  PluginInstalledMessage,
   PluginUnavailableMessage,
   StatusToken,
 } from "../../shared/notify.ts";
@@ -1388,16 +1387,34 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       reasons.push("orphan rewake");
     }
 
-    const installedRow: PluginInstalledMessage = {
-      status: "installed",
-      name: plugin,
-      dependencies,
-      version: installCtx.version,
-      ...(reasons.length > 0 && { reasons }),
-      // D-03/D-06: realized install transition -> info, reloads Pi resources.
-      severity: "info",
-      needsReload: true,
-    };
+    // FSTAT-07 / D-66-04: when the live resolved state is `unsupported`, the
+    // install was force-completed with one or more components dropped -- the
+    // success row reports `(force-installed)` (the same derived signal the list
+    // deriver reads) carrying the dropped-component detail via the shared
+    // `narrowUnsupportedKinds` helper. A fully-supported install stays
+    // `(installed)` (FSTAT-03 -- no lingering force state). force-installed is a
+    // realized transition (TRANSITION_STATUS_LIST), so it stamps the same
+    // info-severity + reload as installed.
+    const installedRow: InstallMsg =
+      installCtx.resolved.state === "unsupported"
+        ? {
+            status: "force-installed",
+            name: plugin,
+            version: installCtx.version,
+            reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
+            severity: "info",
+            needsReload: true,
+          }
+        : {
+            status: "installed",
+            name: plugin,
+            dependencies,
+            version: installCtx.version,
+            ...(reasons.length > 0 && { reasons }),
+            // D-03/D-06: realized install transition -> info, reloads Pi resources.
+            severity: "info",
+            needsReload: true,
+          };
     // notify() call mirrors the recipe at
     // orchestrators/plugin/uninstall.ts; install.ts substitutes
     // "installed" + dependencies[] + per-D-19-03 failure branches

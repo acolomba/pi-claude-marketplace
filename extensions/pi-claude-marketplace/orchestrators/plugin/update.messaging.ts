@@ -1,10 +1,12 @@
 import {
+  ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeVersionArrow,
   installedLikeRow,
   pluginRow,
   type PluginFailedMessage,
+  type PluginForceInstalledMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notify.ts";
@@ -25,7 +27,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * (carrying the `v<from> → v<to>` arrow), `skipped` rows (up-to-date / benign
  * no-ops), and `failed` rows.
  */
-export const UPDATE_STATUSES = ["updated", "skipped", "failed"] as const;
+export const UPDATE_STATUSES = ["updated", "force-installed", "skipped", "failed"] as const;
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
 
 /**
@@ -33,7 +35,11 @@ export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
  * status update emits. `dependencies` stays REQUIRED on the `updated` arm so
  * the soft-dep marker injection fires for exactly that arm (D-06 / TYPE-04).
  */
-export type UpdateMsg = PluginUpdatedMessage | PluginSkippedMessage | PluginFailedMessage;
+export type UpdateMsg =
+  | PluginUpdatedMessage
+  | PluginForceInstalledMessage
+  | PluginSkippedMessage
+  | PluginFailedMessage;
 
 /**
  * Render map total over update's OWN statuses (D-10): a missing arm is a TS2741
@@ -54,6 +60,11 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       undefined,
       probe,
     ),
+  // FSTAT-07 / D-66-04: a force update whose candidate re-resolved `unsupported`
+  // reports (force-installed) with the dropped-component detail. Arm body lifted
+  // verbatim from the central `renderPluginRow` switch.
+  "force-installed": (p, probe, mpScope) =>
+    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

@@ -138,6 +138,16 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
   readonly toVersion: string;
   readonly stagedAgents: readonly string[];
   readonly stagedMcpServers: readonly string[];
+  /**
+   * FSTAT-07 / D-66-04: the unsupported component kinds carried on the
+   * candidate's `unsupported` resolver arm when a `--force` update degraded it.
+   * Empty (or absent) when the candidate resolved fully `installable` -- the
+   * cascade then renders the normal `(updated)` row. Non-empty flips the
+   * success row to `(force-installed)` with the dropped-component detail (the
+   * same derived signal the list deriver reads), so a force update reports its
+   * true realized state.
+   */
+  readonly unsupportedKinds?: readonly string[];
 }
 
 /**

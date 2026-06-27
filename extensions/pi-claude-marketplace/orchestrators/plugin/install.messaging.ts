@@ -1,4 +1,5 @@
 import {
+  ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
@@ -8,6 +9,7 @@ import {
   renderScopeBracket,
   renderVersion,
   type PluginFailedMessage,
+  type PluginForceInstalledMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
 } from "../../shared/notify.ts";
@@ -34,7 +36,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * entity-shape classifier narrows an unsupported-feature error -- an
  * `unavailable` row.
  */
-export const INSTALL_STATUSES = ["installed", "failed", "unavailable"] as const;
+export const INSTALL_STATUSES = ["installed", "force-installed", "failed", "unavailable"] as const;
 export type InstallStatus = (typeof INSTALL_STATUSES)[number];
 
 /**
@@ -43,7 +45,11 @@ export type InstallStatus = (typeof INSTALL_STATUSES)[number];
  * the `installed` arm so the soft-dep marker injection in `composeReasons`
  * fires for exactly that arm (D-06 / TYPE-04 gating).
  */
-export type InstallMsg = PluginInstalledMessage | PluginFailedMessage | PluginUnavailableMessage;
+export type InstallMsg =
+  | PluginInstalledMessage
+  | PluginForceInstalledMessage
+  | PluginFailedMessage
+  | PluginUnavailableMessage;
 
 /**
  * install's command-private reason. `orphan rewake` surfaces a hook-config bug
@@ -71,6 +77,11 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       p.reasons,
       probe,
     ),
+  // FSTAT-07 / D-66-04: a force install that re-resolves `unsupported` reports
+  // (force-installed) with the dropped-component detail. Arm body lifted
+  // verbatim from the central `renderPluginRow` switch.
+  "force-installed": (p, probe, mpScope) =>
+    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
   unavailable: (p, probe, mpScope) =>
     joinTokens([
       ICON_UNINSTALLABLE,
