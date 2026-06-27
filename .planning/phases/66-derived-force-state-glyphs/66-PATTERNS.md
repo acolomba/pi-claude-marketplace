@@ -23,6 +23,10 @@ GSD phase/plan/wave/task numbers (`.claude/rules/typescript-comments.md`).
 | `orchestrators/plugin/install.ts` — success row | orchestrator (transition stamp) | event-driven (post-install notify) | `installedRow` literal (l.1391-1400) | exact |
 | `orchestrators/plugin/update.ts` — success row | orchestrator (transition stamp) | event-driven | `outcomeToCascadePluginMessage` updated arm (l.1560-1574) | role-match (see Q3/Q2) |
 | `edge/handlers/tools.ts` — `projectRowStatus` | edge (projection) | transform (status→tool tag) | `installed`/`upgradable` cases (l.164-166) | exact |
+| `orchestrators/reconcile/reconcile.messaging.ts` — `renderWillInstall` force modifier | view (preview renderer) | transform (action→bytes) | `renderWillInstall` `will install` renderer (l.82-83) | exact (add force branch) |
+| `orchestrators/reconcile/notify.ts` — `buildReconcilePendingNotification` force flag | orchestrator (preview compose) | request-response (diff→preview) | existing `buildReconcilePendingNotification` will-install path | role-match (thread force flag) |
+| `orchestrators/reconcile/pending.ts` — no-network candidate resolve | orchestrator (non-pure preview) | request-response | `resolveStrict` cache call from `list.ts availableRowMessage` (l.350) | exact (same cache pattern) |
+| `tests/orchestrators/reconcile/pending.test.ts` — will-force-install case | test (preview row) | — | existing will-install pending-row cases | role-match (template) |
 | `tests/architecture/notify-closed-set-locks.test.ts` | test (arch tripwire) | — | the 15/22 length asserts (l.33-39) | exact (edit counts) |
 | `tests/shared/notify-v2.test.ts` | test (renderer byte) | — | upgradable byte test (l.404-429) | exact (template) |
 | `tests/orchestrators/plugin/list.test.ts` | test (deriver) | — | existing upgradable/installed deriver cases | role-match |

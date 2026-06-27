@@ -542,7 +542,24 @@ preserved because the phase reuses `resolveStrict` (cache) and adds no FS writes
 | A4 | Phase 66 leaves `docs/output-catalog.md` and `docs/messaging-style-guide.md` untouched (Phase 70 owns byte reconciliation) | Validation Architecture | If the catalog-uat gate is expected to cover force rows in Phase 66, a fixture+catalog pair would be needed now. CONTEXT D-66 + ROADMAP explicitly defer byte reconciliation to Phase 70, so untouched-catalog is correct. Low risk. |
 | A5 | `will force update` preview has no current home (no `will update` token exists) | Open Questions Q3 | If a `will update` surface exists that I did not find, the threading is simpler. Grep confirms only `will install`/`will uninstall`/`will enable`/`will disable` tokens exist. Medium risk — needs planner confirmation. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three questions were locked during planning (FSTAT-NN / D-66-NN). The
+> plan files are authoritative; resolutions recorded inline below.
+>
+> - RESOLVED Q1 (66-02): version-differs split locked. force-installed =
+>   record-installed AND state===unsupported AND NOT version-differs;
+>   force-upgradable = record-installed AND state===unsupported AND
+>   version-differs; mutually exclusive; FSTAT-03 falls out (D-66-01/02).
+> - RESOLVED Q2 (66-03): build PluginForceInstalledMessage when
+>   resolved.state==="unsupported", stamped severity:"info" + needsReload:true
+>   (no Warning), per D-66-04 / Phase 65 D-65-01.
+> - RESOLVED Q3 (66-04): `will force install` is threaded via a force modifier
+>   on the reconcile `will install` renderer. `will force update` has NO
+>   preview surface in the current architecture (no `will update` token exists;
+>   reconcile models no update action) and adding one would breach the locked
+>   +2 token bump (D-66-03); recorded as a documented architectural gap, not
+>   implemented in this phase.
 
 1. **The exact force-installed vs force-upgradable derivation predicate in `list`.**
    - What we know: The marketplace cache holds exactly ONE source tree per plugin
