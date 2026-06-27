@@ -194,7 +194,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
 - [x] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove (completed 2026-06-27)
 - [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail (completed 2026-06-27)
-- [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
+- [x] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites (completed 2026-06-27)
 - [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
 - [ ] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split
 - [ ] **Phase 70: Spec & Documentation Reconcile** - PRD §11, output-catalog, messaging-style-guide reconciled to the final token set
@@ -319,7 +319,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 4** *(blocked on Waves 1-3: shares completions/provider.ts + the finer cache statuses)*
 
-- [ ] 67-04-PLAN.md — `--force`-gated install/update completion candidate sets over the finer statuses; `--force` flag completion + presence detection; no-force byte-identical regression; `npm run check` gate (LIST-02)
+- [x] 67-04-PLAN.md — `--force`-gated install/update completion candidate sets over the finer statuses; `--force` flag completion + presence detection; no-force byte-identical regression; `npm run check` gate (LIST-02)
 
 #### Phase 68: Load-Time Backfill
 
@@ -430,7 +430,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
-| 67. List Filters, Completion & Reinstall Repair                     | force-install | 3/4 | In Progress|  |
+| 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete   | 2026-06-27 |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
