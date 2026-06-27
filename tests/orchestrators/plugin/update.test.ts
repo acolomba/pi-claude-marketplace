@@ -2864,3 +2864,227 @@ test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes th
     }
   });
 });
+
+// ─── FORCE-02/03/04/05: --force degrades an unsupported CANDIDATE ──────────────
+//
+// D-65-04: `update --force` is gated on the RESOLVED CANDIDATE (the synced
+// clone's current entry), not the installed version. An `experimental
+// themes/monitors` declaration on the candidate plugin.json resolves the
+// force-degradable `unsupported` arm (no structural defect) while the
+// supported `skills/` component still materializes.
+
+/**
+ * Overwrite the candidate plugin.json so the resolver resolves the
+ * force-degradable `unsupported` arm: an `experimental` themes/monitors
+ * declaration is an unsupported component kind with no structural defect.
+ * The supported `skills/` dir is left intact so the degraded update still
+ * materializes the skill.
+ */
+async function makeCandidateUnsupported(
+  marketplaceRoot: string,
+  plugin: string,
+  version: string,
+): Promise<void> {
+  const pluginRoot = path.join(marketplaceRoot, "plugins", plugin);
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: plugin,
+      version,
+      experimental: { themes: "./themes", monitors: "./monitors.json" },
+    }),
+  );
+}
+
+test("FORCE-02: --force on a candidate that became unsupported degrades (skill materializes, version bumps)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-force02-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        force: true,
+      });
+
+      // The degraded update committed: state reflects the new version and the
+      // supported skill materialized; the unsupported kinds are simply absent.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, "1.1.0");
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
+      assert.ok(
+        (await readFile(skillTarget, "utf8")).length > 0,
+        "supported skill must materialize",
+      );
+
+      // The realized update renders the `(updated)` row.
+      assert.equal(notifications.length, 1);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /\(updated\)/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-03: without --force the same unsupported candidate still blocks `(skipped) {no longer installable}`", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-force03-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        // No `force` -> the candidate gate stays `requireInstallable`.
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /\(skipped\) \{no longer installable\}/);
+      assert.equal(notifications[0]?.severity, "warning");
+
+      // State untouched -- the block left the installed version in place.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-04: the force-degrade update path emits no warning severity and no `Warning:` summary", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-force04-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        force: true,
+      });
+
+      const warnings = notifications.filter((n) => n.severity === "warning");
+      assert.equal(warnings.length, 0, `unexpected warning rows: ${JSON.stringify(warnings)}`);
+      for (const n of notifications) {
+        assert.equal(
+          n.message.startsWith("Warning:"),
+          false,
+          `unexpected Warning: summary: ${n.message}`,
+        );
+      }
+
+      // The success row stays info-level (severity unset == info).
+      assert.equal(notifications[0]?.severity, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-unavail-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        // A github-flavored source resolves `unavailable` (non-path source),
+        // which `requireForceInstallable` still rejects.
+        manifestPlugins: {
+          hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        force: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /\(skipped\) \{no longer installable\}/);
+      assert.equal(notifications[0]?.severity, "warning");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-nomp-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
+        force: true,
+      });
+
+      // The missing-marketplace short-circuit fires BEFORE the candidate gate,
+      // so `--force` is inert here.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.equal(
+        notifications[0]?.message,
+        "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {not added}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
