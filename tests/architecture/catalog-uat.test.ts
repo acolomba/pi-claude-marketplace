@@ -2927,6 +2927,27 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+    // WILL-03 / D-65.1-03: removing a marketplace that still has installed
+    // plugins is reload-deferred ONLY for its plugin-uninstall cascade --
+    // de-registration itself is immediate (no `will remove` marketplace token).
+    // The pending preview renders the bare list-arm header (no marketplace
+    // status) plus one `(will uninstall)` row per recorded plugin, byte-identical
+    // to the surviving `plugin-pending-uninstall` form above.
+    "marketplace-remove-with-installed-plugins": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "old-mp",
+            scope: "user",
+            plugins: [
+              { status: "will uninstall", name: "p1" },
+              { status: "will uninstall", name: "p2" },
+            ],
+          },
+        ],
+      },
+    },
     "enable-disable-transitions": {
       // The will-enable bucket is populated only by the
       // recorded-but-disabled marker; the catalog fixture is hand-constructed

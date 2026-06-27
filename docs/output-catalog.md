@@ -1351,6 +1351,18 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
   ○ old-plugin (will uninstall)
 ```
 
+### Marketplace remove with installed plugins
+
+A marketplace recorded in `state.json` but no longer declared in `claude-plugins.json`, still carrying installed plugins. WILL-03 / D-65.1-03: de-registering the marketplace record is immediate (no `will remove` marketplace token), so its header renders status-less (list-arm bare header); the reload-deferred work is the plugin-uninstall cascade, surfaced as one `(will uninstall)` row per recorded plugin (`○` glyph). Severity `info`; no reload-hint.
+
+<!-- catalog-state: marketplace-remove-with-installed-plugins -->
+
+```text
+● old-mp [user]
+  ○ p1 (will uninstall)
+  ○ p2 (will uninstall)
+```
+
 ### Enable / disable transitions
 
 A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◌` glyph). Severity `info`; no reload-hint.
