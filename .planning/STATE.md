@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
-status: ready_to_plan
-last_updated: 2026-06-27T19:47:47.149Z
+status: planning
+last_updated: "2026-06-27T20:32:30.534Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 8
@@ -11,7 +11,6 @@ progress:
   total_plans: 11
   completed_plans: 11
   percent: 50
-stopped_at: Phase 66 complete (4/4) — ready to discuss Phase 67
 ---
 
 # Project State
@@ -343,9 +342,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T19:15:08.246Z
-Stopped At: Phase 65.1 context gathered
-Resume File: None
+Last session: 2026-06-27T20:32:30.525Z
+Stopped At: Phase 67 context gathered
+Resume File: .planning/phases/67-list-filters-completion-reinstall-repair/67-CONTEXT.md
 
 ## Operator Next Steps
 
