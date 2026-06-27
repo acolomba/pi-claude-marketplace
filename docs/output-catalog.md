@@ -332,7 +332,7 @@ Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 s
 
 ```text
 ● official [user] <autoupdate>
-  ◉ degraded-plugin v1.0.0 (force-installed) {unsupported hooks}
+  ◉ degraded-plugin v1.0.0 (force-installed) {lsp}
 ```
 
 A recorded-installed plugin that currently re-resolves `unsupported` (installed with one or more components dropped) is DERIVED as `force-installed` -- no persisted flag, no migration (FSTAT-01 / D-66-01). The row uses the dedicated `◉` glyph (`ICON_FORCE_INSTALLED`), DISTINCT from the clean `(installed)` row's `●` so the degraded install is visually separable (FSTAT-02). The reasons brace carries the degradation detail, composed exactly like the `upgradable` row. Severity `info`; no reload-hint (inventory row). Once a fully-supported upgrade rewrites the recorded resolution the same deriver yields `(installed)` with no lingering state (FSTAT-03).
@@ -343,7 +343,7 @@ A recorded-installed plugin that currently re-resolves `unsupported` (installed 
 
 ```text
 ● official [user] <autoupdate>
-  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}
+  ● clean-plugin v1.0.0 (force-upgradable) {unsupported source}
 ```
 
 A currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it is DERIVED as `force-upgradable` (FSTAT-04 / D-66-02). The candidate is resolved without network (FSTAT-05). The row REUSES the `●` glyph (`ICON_INSTALLED`) because it is clean today -- only its candidate would degrade -- mirroring the `upgradable` precedent. A plugin already `force-installed` is never `force-upgradable` (already degraded). This is a list-inventory-only row; severity `info`, no reload-hint.
