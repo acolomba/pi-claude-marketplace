@@ -1568,11 +1568,14 @@ function outcomeToCascadePluginMessage(
     case "updated":
       // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
       // `unsupported` degraded it -- report `(force-installed)` with the
-      // dropped-component detail (the same derived signal the list deriver
-      // reads) instead of `(updated)`. A clean candidate keeps `(updated)`
-      // (FSTAT-03 -- no lingering force state). force-installed is a realized
-      // transition (TRANSITION_STATUS_LIST), so it stamps the same
-      // info-severity + reload as the updated row.
+      // dropped-component detail instead of `(updated)`. This reads the LIVE
+      // candidate resolution of the just-completed update -- NOT the persisted
+      // `compatibility.unsupported` record the `list` / non-path `info`
+      // derivers read; they agree here only because the update just wrote that
+      // record. A clean candidate keeps `(updated)` (FSTAT-03 -- no lingering
+      // force state). force-installed is a realized transition
+      // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload
+      // as the updated row.
       if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
         return {
           status: "force-installed",

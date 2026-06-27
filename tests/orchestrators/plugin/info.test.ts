@@ -104,7 +104,20 @@ interface SeedPathMarketplaceOpts {
    * >= 1 populated array (the empty-resources + installable:true
    * intersection IS the disabled marker, D-54-01 / ENBL-04).
    */
-  readonly installed?: Record<string, { version: string; disabled?: boolean }>;
+  readonly installed?: Record<
+    string,
+    {
+      version: string;
+      disabled?: boolean;
+      /**
+       * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
+       * component-kind list. A non-empty value reproduces a recorded-installed
+       * plugin that resolved `unsupported` at install time -- the force-installed
+       * signal the deriver reads (with `installable: false`).
+       */
+      unsupported?: readonly string[];
+    }
+  >;
   readonly autoupdate?: boolean;
   /** Plugin source dirs to create under <mpRoot> so resolveStrict probes succeed. */
   readonly installablePluginDirs?: readonly string[];
@@ -151,10 +164,20 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
+    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
+    // resolution dropped components persists `unsupported` (and
+    // `installable: false`). The deriver reads this to render
+    // `(force-installed)` -- no separate persisted flag.
+    const unsupported = info.unsupported ?? [];
     plugins[name] = {
       version: info.version,
       resolvedSource: "./placeholder",
-      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      compatibility: {
+        installable: unsupported.length === 0,
+        notes: [],
+        supported: [],
+        unsupported: [...unsupported],
+      },
       resources:
         info.disabled === true
           ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
@@ -781,6 +804,58 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
     assert.equal(
       notifications[0]!.message,
       ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (force-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-02 / D-66-01: cross-surface force-installed parity for NON-PATH sources.
+// INFO-05 defers LIVE component resolution for non-path (npm/github/...)
+// sources to preserve NFR-5, but the install-time `compatibility.unsupported`
+// record is read OFFLINE -- the SAME single deriver `list` reads. A
+// recorded-installed non-path plugin whose install dropped components must
+// therefore render `◉ ... (force-installed)` on `info`, exactly as on `list`,
+// never `● ... (installed)`. `componentsResolved: false` is preserved (the
+// external plugin.json is still not fetched).
+// ---------------------------------------------------------------------------
+
+test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported renders `◉ ... (force-installed)` on info (parity with list)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            // Non-path source: INFO-05 never resolves it live (NFR-5).
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+          },
+        ],
+      },
+      // Recorded-installed AND the install-time resolution dropped `lspServers`
+      // -- the persisted force-installed signal the deriver reads.
+      installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        // ◉ (force-installed), NOT ● (installed) -- the WR-02 regression.
+        "  ◉ remote v1.0.0 (force-installed) {lsp}",
+        // NFR-5: the external plugin.json is still not fetched.
+        "    components: not resolved",
+      ].join("\n"),
     );
   });
 });

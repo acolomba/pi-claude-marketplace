@@ -1389,12 +1389,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
     // FSTAT-07 / D-66-04: when the live resolved state is `unsupported`, the
     // install was force-completed with one or more components dropped -- the
-    // success row reports `(force-installed)` (the same derived signal the list
-    // deriver reads) carrying the dropped-component detail via the shared
-    // `narrowUnsupportedKinds` helper. A fully-supported install stays
-    // `(installed)` (FSTAT-03 -- no lingering force state). force-installed is a
-    // realized transition (TRANSITION_STATUS_LIST), so it stamps the same
-    // info-severity + reload as installed.
+    // success row reports `(force-installed)` carrying the dropped-component
+    // detail via the shared `narrowUnsupportedKinds` helper. This reads the
+    // LIVE resolved state of the just-completed install -- NOT the persisted
+    // `compatibility.unsupported` record the `list` / non-path `info` derivers
+    // read; the two agree here only because the install just wrote that record.
+    // A fully-supported install stays `(installed)` (FSTAT-03 -- no lingering
+    // force state). force-installed is a realized transition
+    // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload as
+    // installed.
     const installedRow: InstallMsg =
       installCtx.resolved.state === "unsupported"
         ? {

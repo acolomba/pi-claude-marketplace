@@ -920,6 +920,40 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
   });
 });
 
+test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported derives `(force-installed)` on list (parity with info)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "remote",
+            // Non-path source -- list derives force state purely from the
+            // persisted record, identically to the non-path `info` surface.
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+          },
+        ],
+      },
+      installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(
+      notifications[0]!.message,
+      // Byte-identical to the non-path `info` row (sans the info-only
+      // `components: not resolved` line) -- the WR-02 cross-surface parity.
+      ["● mp1 [user]", "  ◉ remote v1.0.0 (force-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
 test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives `(force-installed)`, NEVER `(force-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

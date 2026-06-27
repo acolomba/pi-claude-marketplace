@@ -605,6 +605,7 @@ async function buildBlock(
       dependencies,
       entry,
       mpRecord,
+      installed,
       parsedSource,
     );
     return wrapBlock(marketplace, scope, marketplaceDetails, row);
@@ -787,11 +788,44 @@ function buildNonInstallableRowFields(
 }
 
 /**
+ * WR-02 / D-66-01: build the `(installed)` / `(force-installed)` row for a
+ * NON-PATH source (github / npm / url / git-subdir). INFO-05 defers LIVE
+ * component resolution for these sources to preserve NFR-5 (never fetch), so
+ * `componentsResolved: false` is always emitted. The install-time
+ * `compatibility.unsupported` record, however, was persisted AT INSTALL and is
+ * read OFFLINE here -- the SAME single deriver `list` reads (list.ts
+ * force-installed branch). A recorded-installed non-path plugin whose install
+ * dropped one or more components therefore reports `(force-installed)` here too,
+ * so `info` and `list` never diverge on the derived force state for non-path
+ * sources.
+ */
+function buildNonPathInstalledRow(
+  pluginName: string,
+  version: string | undefined,
+  description: string | undefined,
+  installedRecord: MarketplaceRecord["plugins"][string],
+): PluginInfoRow {
+  const status =
+    installedRecord.compatibility.unsupported.length > 0 ? "force-installed" : "installed";
+  return {
+    status,
+    name: pluginName,
+    ...(version !== undefined && { version }),
+    ...(description !== undefined && { description }),
+    ...(status === "force-installed" && {
+      reasons: narrowUnsupportedKinds(installedRecord.compatibility.unsupported),
+    }),
+    componentsResolved: false,
+  };
+}
+
+/**
  * Build an `(installed)` row. When the source kind is `"path"` (the
  * only locally resolvable kind), run `resolveStrict` to compute the
  * per-kind component arrays + sort them. For all other source kinds,
- * emit `componentsResolved: false` (INFO-05 marker). When `resolveStrict`
- * returns the not-installable variant for a path source,
+ * emit `componentsResolved: false` (INFO-05 marker) via
+ * `buildNonPathInstalledRow`. When `resolveStrict` returns the
+ * not-installable variant for a path source,
  * `buildNotInstallablePathRowFields` still enumerates components from
  * disk so the row exposes the `{<reason>}` brace alongside the per-kind
  * component lines instead of `not resolved`.
@@ -803,16 +837,11 @@ async function buildInstalledRow(
   dependencies: readonly string[] | undefined,
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
+  installedRecord: MarketplaceRecord["plugins"][string],
   parsedSource: ParsedSource,
 ): Promise<PluginInfoRow> {
   if (!isLocallyResolvable(parsedSource)) {
-    return {
-      status: "installed",
-      name: pluginName,
-      ...(version !== undefined && { version }),
-      ...(description !== undefined && { description }),
-      componentsResolved: false,
-    };
+    return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
   }
 
   try {
