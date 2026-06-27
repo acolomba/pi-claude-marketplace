@@ -132,6 +132,14 @@ async function seedPathMarketplaceWithPlugin(opts: {
    *    tier-1 read finds no version and falls through.
    */
   pluginJsonVersion?: string | null;
+  /**
+   * D-64-06: declare unsupported component kinds in the plugin's own
+   * plugin.json so `resolveStrict` returns `state: "unsupported"` with NO
+   * structural defect (force-degradable). E.g.
+   * `{ themes: "./themes", monitors: "./monitors.json" }`. The referenced paths
+   * need not exist -- the declaration alone drives the `unsupported` arm.
+   */
+  experimental?: object;
   /** Skills to seed -- each `{ sourceName, body? }` becomes <pluginRoot>/skills/<sourceName>/SKILL.md. */
   skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
   /** Commands -- each becomes <pluginRoot>/commands/<sourceName>.md. */
@@ -177,6 +185,12 @@ async function seedPathMarketplaceWithPlugin(opts: {
     pluginManifest.version = "0.0.1";
   } else if (opts.pluginJsonVersion !== null) {
     pluginManifest.version = opts.pluginJsonVersion;
+  }
+
+  // D-64-06: declaring experimental kinds drives `resolveStrict` to the
+  // `unsupported` (force-degradable) arm without a structural defect.
+  if (opts.experimental !== undefined) {
+    pluginManifest.experimental = opts.experimental;
   }
 
   await writeFile(
@@ -2975,6 +2989,258 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
         message.includes("(installed)"),
         `expected clean (installed) row; got:\n${message}`,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// FORCE-01/03/04/05 -- `--force` degrade gate selection
+// ───────────────────────────────────────────────────────────────────────────
+
+test("FORCE-01: force on an unsupported plugin installs the supported components and skips the unsupported ones", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        // Supported component (a skill) alongside experimental unsupported
+        // kinds -> the resolver returns the force-degradable `unsupported` arm.
+        skills: [{ sourceName: "tool" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      // No error notifications: the degrade install succeeded.
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      // The supported skill materialized on disk.
+      const skillTarget = path.join(locations.skillsTargetDir, "p1-tool", "SKILL.md");
+      assert.ok(
+        (await readFile(skillTarget, "utf8")).length > 0,
+        "supported skill must materialize",
+      );
+
+      // State record written; supported skill recorded, unsupported kinds
+      // captured in compatibility but NOT materialized as resources.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["p1"];
+      assert.ok(record !== undefined, "state record must be written on force-degrade");
+      assert.deepEqual([...record.resources.skills], ["p1-tool"]);
+      assert.ok(
+        record.compatibility.unsupported.includes("themes"),
+        `unsupported should include themes: ${record.compatibility.unsupported.join(" / ")}`,
+      );
+      assert.ok(
+        record.compatibility.unsupported.includes("monitors"),
+        `unsupported should include monitors: ${record.compatibility.unsupported.join(" / ")}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-01: force on a fully-supported plugin is inert and installs as (installed)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force01noop-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["p1"];
+      assert.ok(record !== undefined, "fully-supported plugin installs under force");
+      assert.deepEqual([...record.resources.skills], ["p1-tool"]);
+      // Inert: no unsupported kinds, identical to a non-force install.
+      assert.deepEqual([...record.compatibility.unsupported], []);
+
+      // `(installed)` row, no `(unavailable)` / `(skipped)` token.
+      const message = notifications.map((n) => n.message).join("\n");
+      assert.ok(message.includes("(installed)"), `expected (installed) row; got:\n${message}`);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-03: without force an unsupported plugin still blocks and writes no state record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force03-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        skills: [{ sourceName: "tool" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      // No `force` -> the default `requireInstallable` gate still blocks the
+      // `unsupported` arm.
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+      });
+
+      // A row surfaced (the plugin did not silently install) ...
+      assert.ok(notifications.length >= 1, "a notification must surface on block");
+      // ... and no state record was written.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["p1"];
+      assert.equal(record, undefined, "unsupported plugin must not be recorded without --force");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-04: the force-degrade path emits no warning-severity notification and no Warning: summary", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force04-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        skills: [{ sourceName: "tool" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      // FORCE-04: no row stamps `warning` severity, so the MAX-reduce summary
+      // never renders a `Warning:` line.
+      const warnings = notifications.filter((n) => n.severity === "warning");
+      assert.equal(warnings.length, 0, `unexpected warnings: ${JSON.stringify(warnings)}`);
+      for (const n of notifications) {
+        assert.ok(
+          !n.message.startsWith("Warning:"),
+          `no summary line may begin with "Warning:": ${n.message}`,
+        );
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force05a-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        // Non-path source -> resolver returns the `unavailable` arm, which
+        // `requireForceInstallable` still rejects (FORCE-05).
+        rawSourceOverride: "github:anthropics/some-repo",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      // Still blocks: an `(unavailable)` row surfaced and no record was written.
+      const message = notifications.map((n) => n.message).join("\n");
+      assert.ok(message.includes("(unavailable)"), `expected (unavailable) row; got:\n${message}`);
+      const warnings = notifications.filter((n) => n.severity === "warning");
+      assert.equal(warnings.length, 0, `force on unavailable must emit no warning`);
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["p1"], undefined, "no record on unavailable");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FORCE-05: force cannot bypass a missing marketplace", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force05b-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      const { ctx, pi, notifications } = makeCtx();
+      // No marketplace seeded -> the marketplace-absent precondition
+      // short-circuits BEFORE the gate; `--force` cannot conjure a source.
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "ghost-mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      assert.ok(notifications.length >= 1, "a notification must surface on missing marketplace");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["ghost-mp"], undefined, "no marketplace record conjured");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
