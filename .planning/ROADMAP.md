@@ -284,12 +284,12 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 66-01-PLAN.md — Status vocabulary, `◉` glyph, force-installed/force-upgradable union arms + render switch, info mapper, tools projection, closed-set tripwire bump, will-install force modifier (FSTAT-02/04/06)
+- [ ] 66-01-PLAN.md — Notify status vocabulary foundation: `force-installed`/`force-upgradable` union arms + `◉` glyph + render switch + `will install` force modifier + info-row status/glyph + tools projection; closed-set tripwire bump (20->22 / 15->17) + grammar-invariant widen + stamp-coverage + catalog rows/fixtures in one lockstep commit (FSTAT-02/04/06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [ ] 66-02-PLAN.md — list deriver: no-network `resolveStrict` + four-way force-installed/force-upgradable/upgradable/installed predicate (FSTAT-01/03/04/05)
-- [ ] 66-03-PLAN.md — info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-07)
+- [ ] 66-03-PLAN.md — info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-02/03/07)
 - [ ] 66-04-PLAN.md — reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
 
 #### Phase 67: List Filters, Completion & Reinstall Repair
