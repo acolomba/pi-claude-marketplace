@@ -832,9 +832,15 @@ async function buildInstalledRow(
     // resolveStrict returned a non-installable arm but the state record says
     // installed -- the marketplace clone changed, OR the manifest now
     // declares an unsupported field (`lspServers`) or a structural defect
-    // (malformed hooks/manifest). Status stays `installed` because the state
-    // record confirms the install. `unsupported` reads its component payload
-    // directly; `unavailable` re-derives independently (D-64-05).
+    // (malformed hooks/manifest). FSTAT-07 / D-66-04: an `unsupported`
+    // re-resolve of a recorded-installed plugin is the derived
+    // `force-installed` state -- the install was force-completed with one or
+    // more components dropped, so it reports `(force-installed)` with the
+    // dropped-component detail. `unavailable` keeps `(installed)` (D-64-05:
+    // only `unsupported` maps to force-installed); info never emits
+    // `force-upgradable` (that is a list-inventory-only concept).
+    // `unsupported` reads its component payload directly; `unavailable`
+    // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
       resolved,
       entry,
@@ -842,7 +848,7 @@ async function buildInstalledRow(
       parsedSource,
     );
     return {
-      status: "installed",
+      status: resolved.state === "unsupported" ? "force-installed" : "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
