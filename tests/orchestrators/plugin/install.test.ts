@@ -3100,6 +3100,53 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
   });
 });
 
+test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-installed) success row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-force-installed-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        skills: [{ sourceName: "tool" }],
+        // D-64-06: experimental unsupported kinds drive the force-degradable
+        // `unsupported` arm; the success row reports (force-installed) with the
+        // dropped-component detail rather than (installed).
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        force: true,
+      });
+
+      // FSTAT-07 / D-66-04: force-installed is a realized install transition --
+      // info severity, reload-hint (TRANSITION_STATUS_LIST membership), and the
+      // ◉ glyph distinct from the clean (installed) row.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" +
+          "  ◉ p1 v1.0.0 (force-installed) {unsupported source}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("FORCE-03: without force an unsupported plugin still blocks and writes no state record", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force03-"));
