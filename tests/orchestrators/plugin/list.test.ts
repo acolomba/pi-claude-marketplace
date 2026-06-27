@@ -1001,6 +1001,51 @@ test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` deri
   });
 });
 
+test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(upgradable)`, never blanks the whole list", async () => {
+  // Regression guard for the force-upgradable candidate resolve. A plugin name
+  // with a path separator passes the manifest's `Type.String()` name field but
+  // makes `resolveStrict` throw via `assertSafeName`. Before the guard, that
+  // throw escaped the row builder and the top-level `listPlugins` catch
+  // replaced the ENTIRE list with one synthetic `(list) (failed)` row, hiding
+  // every sibling plugin. The guard must degrade ONLY the offending row to a
+  // plain `(upgradable)` and keep the rest of the list intact.
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // Upgradable (manifest 2.0.0 vs installed 1.0.0) AND a "/" in the
+          // name -> the candidate `resolveStrict` throws.
+          { name: "bad/name", source: "./badname", version: "2.0.0" },
+          // A clean, non-upgradable sibling that must survive the throw.
+          { name: "good", source: "./good", version: "1.0.0" },
+        ],
+      },
+      installed: {
+        "bad/name": { version: "1.0.0" },
+        good: { version: "1.0.0" },
+      },
+      installablePluginDirs: ["good"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The throwing candidate degrades to a plain `(upgradable)` row...
+    assert.match(out, /bad\/name v1\.0\.0 \(upgradable\)/, out);
+    // ...the sibling row is intact...
+    assert.match(out, /good v1\.0\.0 \(installed\)/, out);
+    // ...and the whole list was NOT replaced by the synthetic failure row.
+    assert.equal(out.includes("(failed)"), false, out);
+    assert.equal(out.includes("(list)"), false, out);
+  });
+});
+
 test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-return, no lingering force state)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

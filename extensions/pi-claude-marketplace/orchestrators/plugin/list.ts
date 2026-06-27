@@ -325,8 +325,25 @@ async function installedRowMessage(
     // never re-resolves the OLD installed version -- the candidate IS HEAD on
     // disk. `upgradable === true` already narrows `manifestEntry` to defined
     // (its `?.version !== undefined` conjunct), so no extra guard is needed.
-    const candidate = await resolveStrict(manifestEntry, { marketplaceRoot });
-    if (candidate.state === "unsupported") {
+    //
+    // CR-01: the candidate resolve MUST be wrapped. `resolveStrict` propagates
+    // disk-I/O failures (EACCES/EIO/ENOTDIR, malformed plugin.json the lenient
+    // path rethrows) rather than folding them into a not-installable variant. A
+    // probe failure on the CANDIDATE of a SINGLE upgradable plugin must never
+    // escape this row builder -- unguarded it bubbles to the top-level
+    // `listPlugins` catch, which blanks the ENTIRE list into one synthetic
+    // `(list) (failed)` row, hiding every other plugin. Degrade to the plain
+    // `(upgradable)` row instead (the truthful "could not assert a degrade"
+    // default), at parity with every sibling force-resolve site:
+    // `availableRowMessage`, `info.ts`, and `resolvePendingForceInstalls`.
+    let candidate: Awaited<ReturnType<typeof resolveStrict>> | undefined;
+    try {
+      candidate = await resolveStrict(manifestEntry, { marketplaceRoot });
+    } catch {
+      candidate = undefined;
+    }
+
+    if (candidate?.state === "unsupported") {
       return {
         status: "force-upgradable",
         name: pluginName,
