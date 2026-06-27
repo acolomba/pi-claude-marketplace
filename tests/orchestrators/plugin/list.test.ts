@@ -457,23 +457,24 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
           // unsup: declares lspServers with an on-disk dir -> resolveStrict
           // yields `unsupported` (force-installable candidate, not installed).
           { name: "unsup", source: "./unsup", version: "1.0.0", lspServers: { ls: {} } },
-          // avail: on-disk dir, no unsupported kinds -> `available`.
-          { name: "avail", source: "./avail", version: "2.0.0" },
+          // clean: on-disk dir, no unsupported kinds -> `available`. (Named to
+          // avoid colliding with the `unavailable` substring in assertions.)
+          { name: "clean", source: "./clean", version: "2.0.0" },
           // gone: no on-disk dir -> structural `unavailable`.
           { name: "gone", source: "./gone", version: "3.0.0" },
         ],
       },
-      installablePluginDirs: ["unsup", "avail"],
+      installablePluginDirs: ["unsup", "clean"],
     });
 
     // --unsupported: the unsupported row appears, rendered with the UNCHANGED
-    // `(unavailable)` token (no new render status). avail/gone are excluded.
+    // `(unavailable)` token (no new render status). clean/gone are excluded.
     {
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ unsup v1\.0\.0 \(unavailable\) \{lsp\}/, out);
-      assert.equal(out.includes("avail"), false, out);
+      assert.equal(out.includes("clean"), false, out);
       assert.equal(out.includes("gone"), false, out);
     }
 
@@ -483,17 +484,19 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
       await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
-      assert.equal(out.includes("unsup"), false, out);
-      assert.equal(out.includes("avail"), false, out);
+      // Match the row token (the `{unsupported source}` reason contains the
+      // `unsup` substring, so the bare name would false-positive).
+      assert.equal(out.includes("unsup v1.0.0"), false, out);
+      assert.equal(out.includes("clean"), false, out);
     }
 
-    // --available: only the clean `avail` row.
+    // --available: only the clean row.
     {
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
       const out = notifications[0]!.message;
-      assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
-      assert.equal(out.includes("unsup"), false, out);
+      assert.match(out, /○ clean v2\.0\.0 \(available\)/, out);
+      assert.equal(out.includes("unsup v1.0.0"), false, out);
       assert.equal(out.includes("gone"), false, out);
     }
   });

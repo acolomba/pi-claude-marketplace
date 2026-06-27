@@ -107,12 +107,25 @@ type PluginRenderStatus =
   | "unavailable"
   | "disabled"
   // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
-  // rows. They RENDER on the list surface this phase; the `--installed` filter
-  // spanning them is LIST-01 (a later phase), so `shouldShow` does NOT admit
-  // them under an active `--installed` filter -- Phase boundary keeps this to
-  // derivation + render, not filter.
+  // rows. LIST-01 / D-67-01 / A1: the `--installed` filter now spans them --
+  // both are installed-inventory rows, so `shouldShow` admits them under an
+  // active `--installed` filter (precedent: the fold-carryover filter below).
   | "force-installed"
   | "force-upgradable";
+
+/**
+ * LIST-01 / D-67-01: the internal resolver-state bucket the filter predicate
+ * keys on. It is DISTINCT from {@link PluginRenderStatus} because
+ * `availableRowMessage` collapses BOTH resolver `unsupported` and `unavailable`
+ * into the SAME `(unavailable)` render token (D-64-01). The filter needs the
+ * pre-collapse bucket so `--unsupported` (not-installed plugins resolving
+ * `unsupported` -- the force-installable candidates) partitions cleanly from
+ * `--unavailable` (structural-unavailable only, A2). Installed-inventory rows
+ * (installed / upgradable / disabled / force-installed / force-upgradable) are
+ * not resolver-classified here -- they carry the `installed-inventory` bucket
+ * and the filter keys on their render status instead.
+ */
+type FilterBucket = "installed-inventory" | "available" | "unsupported" | "unavailable";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -138,26 +151,56 @@ export interface ListPluginsOptions {
   readonly installed?: boolean;
   /** PL-1 union filter: include available (not-yet-installed installable) plugins. */
   readonly available?: boolean;
-  /** PL-1 union filter: include uninstallable (⊘) plugins. */
+  /** PL-1 union filter: include STRUCTURALLY-uninstallable (⊘) plugins. A2:
+   *  narrowed to the resolver `unavailable` bucket -- it no longer admits the
+   *  not-installed `unsupported` rows (those are reached by `unsupported`). */
   readonly unavailable?: boolean;
+  /** LIST-01 / D-67-01 union filter: include NOT-installed plugins that resolve
+   *  `unsupported` (the force-installable candidates). Keys on the internal
+   *  resolver bucket, not the `(unavailable)` render token. */
+  readonly unsupported?: boolean;
 }
 
 /**
- * PL-1: when ALL three filter flags are absent or false, show every bucket.
+ * PL-1 / LIST-01: when ALL filter flags are absent or false, show every bucket.
  * When any one is true, show UNION of the selected buckets.
  */
 function filtersPassive(opts: ListPluginsOptions): boolean {
-  return opts.installed !== true && opts.available !== true && opts.unavailable !== true;
+  return (
+    opts.installed !== true &&
+    opts.available !== true &&
+    opts.unavailable !== true &&
+    opts.unsupported !== true
+  );
 }
 
-function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boolean {
+/**
+ * PL-1 / LIST-01 / D-67-01 filter predicate. `status` is the render status;
+ * `bucket` is the internal resolver-state bucket (only meaningful for
+ * not-installed rows, where the render `(unavailable)` token is ambiguous
+ * between `unsupported` and structural `unavailable`). Installed-inventory rows
+ * pass `installed-inventory` and are matched on `status`.
+ */
+function shouldShow(
+  opts: ListPluginsOptions,
+  status: PluginRenderStatus,
+  bucket: FilterBucket,
+): boolean {
   if (filtersPassive(opts)) {
     return true;
   }
 
+  // A1: `--installed` spans the full installed inventory -- the steady-state
+  // `installed`/`upgradable`/`disabled` rows PLUS the derived force states
+  // (force-installed reached here, NOT via `--unsupported`, per D-67-01). This
+  // mirrors the fold-carryover filter's installed-inventory set.
   if (
     opts.installed === true &&
-    (status === "installed" || status === "upgradable" || status === "disabled")
+    (status === "installed" ||
+      status === "upgradable" ||
+      status === "disabled" ||
+      status === "force-installed" ||
+      status === "force-upgradable")
   ) {
     return true;
   }
@@ -166,7 +209,16 @@ function shouldShow(opts: ListPluginsOptions, status: PluginRenderStatus): boole
     return true;
   }
 
-  if (opts.unavailable === true && status === "unavailable") {
+  // D-67-01: `--unsupported` selects not-installed plugins that resolve
+  // `unsupported`, keyed on the pre-collapse resolver bucket (the row still
+  // renders the `(unavailable)` token).
+  if (opts.unsupported === true && bucket === "unsupported") {
+    return true;
+  }
+
+  // A2: `--unavailable` narrows to the structural `unavailable` bucket only --
+  // the not-installed `unsupported` rows (same render token) are excluded.
+  if (opts.unavailable === true && bucket === "unavailable") {
     return true;
   }
 
@@ -422,7 +474,10 @@ function narrowProbeError(err: unknown): ListReason {
 async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
-): Promise<PluginAvailableMessage | PluginUnavailableMessage> {
+): Promise<{
+  message: PluginAvailableMessage | PluginUnavailableMessage;
+  bucket: FilterBucket;
+}> {
   // PL-4: description flows from the manifest entry onto the row for both
   // available and unavailable variants.
   const descriptionField: { readonly description?: string } =
@@ -432,7 +487,10 @@ async function availableRowMessage(
     const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
     // D-64-01: only the `installable` arm is `(available)`; both
     // `unsupported` and `unavailable` render the `(unavailable)` row this
-    // phase (distinct glyphs/states are a later phase).
+    // phase (distinct glyphs/states are a later phase). LIST-01 / D-67-01:
+    // the resolver state is captured as the internal filter BUCKET so the
+    // `--unsupported` / `--unavailable` partition keys on the pre-collapse
+    // classification without changing the returned row's render status.
     //
     // WR-03: discriminate the three-way union with an exhaustive
     // `switch (resolved.state)` + `assertNever` so a future fourth
@@ -441,10 +499,13 @@ async function availableRowMessage(
     switch (resolved.state) {
       case "installable":
         return {
-          status: "available",
-          name: manifestEntry.name,
-          ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-          ...descriptionField,
+          message: {
+            status: "available",
+            name: manifestEntry.name,
+            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+            ...descriptionField,
+          },
+          bucket: "available",
         };
       case "unsupported":
       case "unavailable": {
@@ -458,11 +519,16 @@ async function availableRowMessage(
             : sharedNarrowResolverNotes(resolved.notes);
 
         return {
-          status: "unavailable",
-          name: manifestEntry.name,
-          reasons,
-          ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-          ...descriptionField,
+          message: {
+            status: "unavailable",
+            name: manifestEntry.name,
+            reasons,
+            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+            ...descriptionField,
+          },
+          // D-67-01: `unsupported` -> the force-installable candidate bucket;
+          // the structural `unavailable` resolver arm -> the structural bucket.
+          bucket: resolved.state === "unsupported" ? "unsupported" : "unavailable",
         };
       }
 
@@ -487,11 +553,17 @@ async function availableRowMessage(
     // asserts no module-level `PROBE_FAILURES`-style state may reappear.
     const reason = narrowProbeError(probeErr);
     return {
-      status: "unavailable",
-      name: manifestEntry.name,
-      reasons: [reason],
-      ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
-      ...descriptionField,
+      message: {
+        status: "unavailable",
+        name: manifestEntry.name,
+        reasons: [reason],
+        ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+        ...descriptionField,
+      },
+      // D-67-01 / A2: a probe failure is STRUCTURAL unavailability (could not
+      // read/resolve the source), not an `unsupported` classification -- the
+      // `--unavailable` filter owns it.
+      bucket: "unavailable",
     };
   }
 }
@@ -542,7 +614,9 @@ async function enumerateMarketplacePlugins(
       record,
       manifestEntry,
     );
-    if (shouldShow(opts, row.status)) {
+    // Installed-inventory rows are matched on render status; the resolver
+    // bucket is not consulted for them (D-67-01).
+    if (shouldShow(opts, row.status, "installed-inventory")) {
       rows.push(row);
     }
   }
@@ -566,8 +640,11 @@ async function enumerateMarketplacePlugins(
       continue;
     }
 
-    const row = await availableRowMessage(manifestEntry, mpRecord.marketplaceRoot);
-    if (shouldShow(opts, row.status)) {
+    const { message: row, bucket } = await availableRowMessage(
+      manifestEntry,
+      mpRecord.marketplaceRoot,
+    );
+    if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
     }
   }

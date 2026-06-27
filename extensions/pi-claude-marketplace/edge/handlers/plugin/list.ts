@@ -19,9 +19,9 @@ import { parseArgs } from "../../args.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--scope user|project]";
+  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--unsupported] [--scope user|project]";
 
-const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable"]);
+const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable", "--unsupported"]);
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -41,17 +41,16 @@ export function makeListHandler(
       return;
     }
 
-    let installed = false;
-    let available = false;
-    let unavailable = false;
+    // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
+    // any other `--` token is an unknown long flag; everything else is a
+    // positional. Driving the recognized set from BOOLEAN_FLAGS keeps each new
+    // filter (e.g. LIST-01's `--unsupported`) a one-line set + spread change
+    // instead of another parse-loop branch.
+    const filterFlags = new Set<string>();
     const nonFlagPositionals: string[] = [];
     for (const token of parsed.positional) {
-      if (token === "--installed") {
-        installed = true;
-      } else if (token === "--available") {
-        available = true;
-      } else if (token === "--unavailable") {
-        unavailable = true;
+      if (BOOLEAN_FLAGS.has(token)) {
+        filterFlags.add(token);
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
         notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
@@ -72,9 +71,10 @@ export function makeListHandler(
       cwd: ctx.cwd,
       ...(nonFlagPositionals[0] !== undefined && { marketplace: nonFlagPositionals[0] }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
-      ...(installed && { installed: true }),
-      ...(available && { available: true }),
-      ...(unavailable && { unavailable: true }),
+      ...(filterFlags.has("--installed") && { installed: true }),
+      ...(filterFlags.has("--available") && { available: true }),
+      ...(filterFlags.has("--unavailable") && { unavailable: true }),
+      ...(filterFlags.has("--unsupported") && { unsupported: true }),
     });
   };
 }

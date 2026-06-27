@@ -95,9 +95,12 @@ function flagCompletions(
 
   if (positionalHead === "list" || positionalHead === "ls") {
     flags.push(
+      // LIST-01 / D-67-01: `--installed` spans installed + force-installed;
+      // `--unsupported` selects not-installed plugins that resolve unsupported.
       { name: "--installed", description: "Show installed plugins" },
       { name: "--available", description: "Show available plugins" },
       { name: "--unavailable", description: "Show unavailable plugins" },
+      { name: "--unsupported", description: "Show unsupported (not-installed) plugins" },
     );
   }
 
