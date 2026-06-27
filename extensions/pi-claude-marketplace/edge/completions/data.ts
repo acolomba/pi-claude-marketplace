@@ -18,12 +18,19 @@
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
 //
-// Status filtering per mode:
-//   - install   -> target/source-scope visibility, keep only `available`,
-//                  exclude plugins already installed in the target scope.
-//   - uninstall -> keep `installed`.
-//   - update    -> keep `installed`.
-//   - reinstall -> keep `installed`.
+// Status filtering per (mode, --force) -- LIST-02 / D-67-02:
+//   - install,  no force -> keep only `available` (exclude plugins already
+//                           installed in the target scope).
+//   - install,  force    -> admit `available` + `unsupported` (the
+//                           force-installable candidates; `unavailable`
+//                           excluded -- FORCE-05).
+//   - update,   no force -> keep the full installed inventory
+//                           (`installed` | `upgradable` | `force-installed` |
+//                           `force-upgradable`).
+//   - update,   force    -> narrow to `upgradable` + `force-upgradable` (the
+//                           force-upgrade candidates).
+//   - uninstall/reinstall/enable/disable -> keep the full installed inventory
+//                           (these never carry `--force`).
 //   - info      -> union of every plugin row across BOTH scopes, NO
 //                  install-state exclusion. The info surface accepts any
 //                  known plugin.
@@ -45,6 +52,33 @@ const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new 
   "installed",
   "upgradable",
   "force-installed",
+  "force-upgradable",
+]);
+
+/**
+ * D-67-02 / LIST-02: without `--force`, install offers only `available` plugins
+ * (byte-identical to today).
+ */
+const INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set(["available"]);
+
+/**
+ * D-67-02 / LIST-02: with `--force`, install offers the force-INSTALLABLE
+ * candidates -- plugins not yet installed that resolve `available` or
+ * `unsupported`. `unavailable` stays excluded (FORCE-05).
+ */
+const FORCE_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
+  "available",
+  "unsupported",
+]);
+
+/**
+ * D-67-02 / LIST-02: with `--force`, update offers the force-UPGRADE
+ * candidates -- installed plugins whose newest candidate would re-resolve to a
+ * meaningful change (`upgradable`) or a force-upgrade (`force-upgradable`).
+ * Plain `installed` / `force-installed` are excluded (nothing to upgrade).
+ */
+const FORCE_UPDATE_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
+  "upgradable",
   "force-upgradable",
 ]);
 
@@ -260,6 +294,11 @@ export async function getMarketplaceNamesAcrossScopes(
 interface PluginMapOptions {
   /** Install target scope, or explicit uninstall/update scope. */
   readonly targetScope?: Scope;
+  /**
+   * LIST-02 / D-67-02: `--force` preceded the plugin positional. Narrows the
+   * candidate set per (mode, force). Only ever true for install/update.
+   */
+  readonly force?: boolean;
 }
 
 function addMapping(result: Map<string, string[]>, plugin: string, marketplace: string): void {
@@ -310,7 +349,13 @@ async function installedNamesInTarget(
 async function getInstallPluginToMarketplacesMap(
   resolver: LocationsResolver,
   targetScope: Scope,
+  force: boolean,
 ): Promise<Map<string, string[]>> {
+  // LIST-02 / D-67-02: `--force` widens the install candidate set to the
+  // force-installable statuses (`available` + `unsupported`); the no-`--force`
+  // set stays `available`-only (byte-identical to today). `unavailable` is
+  // never admitted (FORCE-05).
+  const allowed = force ? FORCE_INSTALL_STATUSES : INSTALL_STATUSES;
   const result = new Map<string, string[]>();
   for (const source of await sourceMarketplacesForInstall(resolver, targetScope)) {
     const targetInstalled = await installedNamesInTarget(resolver, targetScope, source.marketplace);
@@ -320,7 +365,7 @@ async function getInstallPluginToMarketplacesMap(
     );
 
     for (const row of rows) {
-      if (row.status !== "available" || targetInstalled.has(row.name)) {
+      if (!allowed.has(row.status) || targetInstalled.has(row.name)) {
         continue;
       }
 
@@ -335,7 +380,17 @@ async function getInstalledPluginToMarketplacesMap(
   _mode: Exclude<PluginRefCompletionMode, "install" | "info">,
   resolver: LocationsResolver,
   explicitScope: Scope | undefined,
+  force: boolean,
 ): Promise<Map<string, string[]>> {
+  // D-67-02: the no-`--force` installed-modes candidate set spans the full
+  // installed inventory. The cache carries the finer derived states
+  // (`upgradable` / `force-installed` / `force-upgradable`) where it once
+  // flattened every state-present plugin to `installed`; admitting them all
+  // keeps the no-`--force` completion BYTE-IDENTICAL to today. With `--force`
+  // (only ever reached via `update`), narrow to the force-upgrade candidates
+  // (`upgradable` + `force-upgradable`) -- plain `installed` / `force-installed`
+  // have nothing to upgrade.
+  const allowed = force ? FORCE_UPDATE_STATUSES : INSTALLED_INVENTORY_STATUSES;
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
@@ -347,14 +402,7 @@ async function getInstalledPluginToMarketplacesMap(
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
-        // D-67-02: the no-`--force` installed-modes candidate set spans the
-        // full installed inventory. The cache now carries the finer derived
-        // states (`upgradable` / `force-installed` / `force-upgradable`) where
-        // it previously flattened every state-present plugin to `installed`;
-        // admitting them here keeps the no-`--force` completion BYTE-IDENTICAL
-        // to today. The `--force`-gated narrowing (update = upgradable +
-        // force-upgradable) is layered on top of this set elsewhere.
-        if (!INSTALLED_INVENTORY_STATUSES.has(row.status)) {
+        if (!allowed.has(row.status)) {
           continue;
         }
 
@@ -410,10 +458,19 @@ export async function getPluginToMarketplacesMap(
   }
 
   if (mode === "install") {
-    return getInstallPluginToMarketplacesMap(resolver, options.targetScope ?? "user");
+    return getInstallPluginToMarketplacesMap(
+      resolver,
+      options.targetScope ?? "user",
+      options.force ?? false,
+    );
   }
 
-  return getInstalledPluginToMarketplacesMap(mode, resolver, options.targetScope);
+  return getInstalledPluginToMarketplacesMap(
+    mode,
+    resolver,
+    options.targetScope,
+    options.force ?? false,
+  );
 }
 
 async function getPluginHalfCompletions(
@@ -478,7 +535,7 @@ export async function getPluginRefCompletions(
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
-  options: { allowMarketplaceOnly: boolean; targetScope?: Scope },
+  options: { allowMarketplaceOnly: boolean; targetScope?: Scope; force?: boolean },
 ): Promise<AutocompleteItem[]> {
   const at = currentPrefix.indexOf("@");
 

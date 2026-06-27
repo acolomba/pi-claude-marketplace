@@ -365,7 +365,10 @@ test("PRL-16 / RINST-01 :: reinstall flag completion excludes --force; --scope s
     );
     assert.ok(reinstallItems.some((i) => i.label === "--scope"));
 
-    for (const head of ["install", "uninstall", "update", "list", "ls", "marketplace"]) {
+    // LIST-02 / D-67-02: `--force` is now a completion flag for install/update
+    // (the force-gated candidate sets), so those heads are NOT in this
+    // exclusion list. uninstall/list/ls/marketplace never carry `--force`.
+    for (const head of ["uninstall", "list", "ls", "marketplace"]) {
       const items = await getArgumentCompletions(`${head} -`, f.resolver);
       assert.ok(items !== null, head);
       assert.equal(

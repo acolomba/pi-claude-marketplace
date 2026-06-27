@@ -112,6 +112,13 @@ function flagCompletions(
       name: "--map-model",
       description: "Enable model field mapping in generated agents (default: omit)",
     });
+    // LIST-02 / D-67-02: `--force` widens the install/update candidate set
+    // (install -> available + unsupported; update -> upgradable +
+    // force-upgradable). FORCE-05: never admits `unavailable`.
+    flags.push({
+      name: "--force",
+      description: "Force over collisions and unsupported components (not unavailable)",
+    });
   }
 
   return flags
@@ -182,15 +189,27 @@ interface PluginRefBranchConfig {
   readonly mode: PluginRefMode;
   readonly allowMarketplaceOnly: boolean;
   readonly targetScope?: Scope;
+  /**
+   * LIST-02 / D-67-02: `--force` preceded the plugin positional. Narrows the
+   * candidate set (install -> available + unsupported; update -> upgradable +
+   * force-upgradable). Only ever set for the install/update heads.
+   */
+  readonly force?: boolean;
 }
 
 function pluginRefBranchConfig(
   positionalHead: string,
   explicitScope: Scope | undefined,
+  force: boolean,
 ): PluginRefBranchConfig | null {
   switch (positionalHead) {
     case "install":
-      return { mode: "install", allowMarketplaceOnly: false, targetScope: explicitScope ?? "user" };
+      return {
+        mode: "install",
+        allowMarketplaceOnly: false,
+        targetScope: explicitScope ?? "user",
+        force,
+      };
     case "uninstall":
       return {
         mode: "uninstall",
@@ -201,6 +220,7 @@ function pluginRefBranchConfig(
       return {
         mode: "update",
         allowMarketplaceOnly: true,
+        force,
         ...(explicitScope !== undefined && { targetScope: explicitScope }),
       };
     case "reinstall":
@@ -256,11 +276,18 @@ export async function getArgumentCompletions(
   }
 
   // RINST-01 / D-67-03: no reinstall `--force` positional strip -- the flag is
-  // retired, so positional extraction needs no command-specific boolean-flag
-  // allow-list.
-  const positionals = extractPositionals(tokens);
+  // retired there. LIST-02 / D-67-02: `--force` IS a recognized boolean flag for
+  // install/update, so it must be skipped during positional extraction (else
+  // `install --force <TAB>` mis-parses `--force` as the plugin positional and
+  // returns null). The head is the first positional regardless of boolean flags
+  // (the subcommand token is never a flag), so a flag-free first pass recovers
+  // it before deciding which boolean flags apply.
+  const head = extractPositionals(tokens)[0] ?? "";
+  const booleanFlags = head === "install" || head === "update" ? ["--force"] : [];
+  const positionals = extractPositionals(tokens, booleanFlags);
   const positionalHead = positionals[0] ?? "";
   const explicitScope = extractScope(tokens);
+  const force = booleanFlags.length > 0 && tokens.includes("--force");
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens.at(-1);
@@ -288,7 +315,7 @@ export async function getArgumentCompletions(
   // plugins, with project precedence when --scope is omitted. `allowMarketplaceOnly`
   // is true for update and reinstall (bare `@<marketplace>` operates on every
   // installed plugin in that marketplace).
-  const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope);
+  const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope, force);
   if (pluginRefConfig !== null && positionals.length === 1) {
     const { mode, ...options } = pluginRefConfig;
     return getPluginRefCompletions(mode, current, argumentTextPrefix, resolver, options);
