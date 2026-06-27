@@ -1,10 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: force-install
-milestone_name: milestone
+milestone_name: Claude Hook Bridge
 status: executing
-stopped_at: Phase 65 context gathered
-last_updated: "2026-06-27T12:57:57.620Z"
+last_updated: "2026-06-27T13:15:23.500Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 7
@@ -332,9 +331,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T11:21:31.089Z
-Stopped At: Phase 65 context gathered
-Resume File: .planning/phases/65-force-install-update/65-CONTEXT.md
+Last session: 2026-06-27T13:15:23.490Z
+Stopped At: Phase 66 context gathered
+Resume File: .planning/phases/66-derived-force-state-glyphs/66-CONTEXT.md
 
 ## Operator Next Steps
 
