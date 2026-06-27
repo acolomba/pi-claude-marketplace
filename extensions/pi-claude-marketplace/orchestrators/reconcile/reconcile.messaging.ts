@@ -37,7 +37,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *     `uninstalled` / `disabled`) plus a per-plugin `failed` row.
  *
  * Each render map renders only the per-PLUGIN-ROW body. The marketplace header
- * (`will add` / `will remove` for pending; `added` / `removed` for applied;
+ * (a bare untokened header for pending; `added` / `removed` for applied;
  * `failed` for both), the cause-chain / rollback trailers, the
  * `(no marketplaces)` sentinel, and the severity/summary surface all stay
  * central in `notify.ts` and route byte-identically: the pending cascade through

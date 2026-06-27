@@ -185,7 +185,7 @@ export function redactAbsolutePaths(text: string): string {
  * tuple; the bare-token render shape (no icon, no scope brackets) is a
  * renderer concern that branches at emission time.
  *
- * DIFF-02 (D-53-02): the 6 `"will *"` entries are the pending-tense tokens
+ * DIFF-02 (D-53-02): the 4 `"will *"` entries are the pending-tense tokens
  * emitted by `/claude:plugin pending` rows. They are STRUCTURALLY EXCLUDED
  * from `shouldEmitReloadHint`'s trigger set (pending rows are
  * pre-transition; `/reload to pick up changes` is grammatically false for
