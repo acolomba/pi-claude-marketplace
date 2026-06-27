@@ -457,10 +457,13 @@ is NFR-5 (no network on `list`/`info`/pending), enforced by the existing
 | A3 | The `--installed` filter spanning `force-installed` (LIST-01) is Phase 67, so Phase 66's `shouldShow`/filter changes are limited to making the new statuses RENDER, not FILTER | Component table | If the planner pulls LIST-01 forward, scope grows. Keep Phase 66 to derivation + render per the phase boundary. |
 | A4 | `force-upgradable` exclusion-of-force-installed is achieved by checking `record.compatibility` FIRST (force-installed wins), before the candidate-resolve branch | Deriver | If ordering is reversed, a force-installed plugin with a degrading candidate could mis-render force-upgradable. Order is load-bearing. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the deriver also re-resolve to catch an EXTENSION-support-boundary
    change (vs. reading stale `compatibility`)?**
+   - RESOLVED: Leave it to Phase 68 (load-time backfill). Phase 66 reads
+     `compatibility` for steady-state display; FSTAT-03's in-scope auto-return is
+     a plugin VERSION upgrade that rewrites `compatibility` and works correctly.
    - What we know: `compatibility` is written at install/upgrade time. If the
      EXTENSION later gains support for a previously-unsupported kind, the stale
      `compatibility` would still show force-installed until re-materialized.
@@ -476,17 +479,15 @@ is NFR-5 (no network on `list`/`info`/pending), enforced by the existing
    - What we know: FORCE-03 says non-`--force` install of `unsupported` blocks;
      reconcile installs declared+enabled plugins. The PENDING surface only needs
      to PREVIEW `will force install` when the planned install would degrade.
-   - What's unclear: whether load-time reconcile auto-forces (a config/Phase-68
-     concern) — out of scope here.
-   - Recommendation: Phase 66 implements the pending TOKEN derivation (resolve
-     the install candidate no-network; `force: true` when `unsupported`). Whether
+   - RESOLVED: Phase 66 implements the pending TOKEN derivation only (resolve the
+     install candidate no-network; `force: true` when `unsupported`). Whether
      reconcile-apply actually degrades is a separate concern; do not expand scope.
 
 3. **info surface: add `force-installed` to `PluginInfoRowBase.status` or map it
    at render?**
    - What we know: the info row status is an inlined `Extract<PluginStatus,...>`
      (notify.ts:1043), deliberately NOT the full set.
-   - Recommendation: Widen the Extract to include `"force-installed"` and add the
+   - RESOLVED: Widen the Extract to include `"force-installed"` and add the
      `pluginInfoStatusGlyph` arm. `force-upgradable` is a LIST-only concept (an
      installed plugin's info is force-installed or installed, never
      force-upgradable), so info needs only `force-installed`.
