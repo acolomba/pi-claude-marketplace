@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: force-install
 status: executing
-last_updated: "2026-06-27T02:57:50.742Z"
-last_activity: 2026-06-27 -- Phase 64 planning complete
+last_updated: "2026-06-27T03:42:02.329Z"
+last_activity: 2026-06-27
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 64 — Resolver Three-Way State (RSTATE)
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 64 — resolver-three-way-state
 
 ## Current Position
 
-Phase: 64 of 70 (Resolver Three-Way State) — ready to plan
-Plan: —
+Phase: 64 (resolver-three-way-state) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-27 -- Phase 64 planning complete
+Last activity: 2026-06-27
 
 ## Performance Metrics
 
@@ -128,6 +128,7 @@ Last activity: 2026-06-27 -- Phase 64 planning complete
 | Phase 63 PP05 | 25min | 2 tasks | 2 files |
 | Phase 63 P04 | 55min | 4 tasks | 13 files |
 | Phase 63 P08 | ~35m | 2 tasks | 3 files |
+| Phase 64 P64-01 | 32 | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [Phase 63] info <plugin> surfaces multi-line hooks: block end-to-end by re-parsing pluginRoot/hooks/hooks.json via composeResolvedComponents. Resolver discards parsed value; info.ts re-opens at message-construction time (Plan 63-05, SURF-01).
 - [Phase ?]: [Phase 63] Plan 04: 5th cascade slot landed at all FOUR sites (install / update / reinstall / cascadeUnstagePlugin) in lockstep + integration test pins the end-to-end install->update->reinstall->uninstall lifecycle. LIFE-01 / LIFE-02 closed. Install row composition now reads resolved.orphanRewake and pushes 'orphan rewake' into PluginInstalledMessage.reasons (SURF-05 wiring complete on the consumer side). Update/reinstall orphan-rewake wiring deferred (PluginUpdatedMessage/PluginReinstalledMessage carry no reasons by design; SURF-05 catalog only documents (installed) byte forms).
 - [Phase ?]: [Phase 63] Plan 04: Reinstall hooks slot is NOT pushed onto replacements[]: hooks bridge has no replace primitive (D-63-02), so writeHookConfig STAYS IN PLACE on a later-step failure. Recovery is via the existing reinstall hint, mirroring update.ts D-03 fail-continue semantics. Mirrors the truthful 'we did not complete the swap' view.
+- [Phase ?]: D-64-01: resolver uses three-way state discriminant (installable/unsupported/unavailable)
+- [Phase ?]: D-64-05/06: unsupported arm keeps pluginRoot + full payload (force-degradable); unavailable arm minimal, compile-strips pluginRoot (NFR-7)
+- [Phase ?]: D-64-04: requireForceInstallable gate admits installable|unsupported, throws on unavailable; no production caller until Phase 65
+- [Phase ?]: D-64-07: structural precedence -- structural defect resolves unavailable over any unsupported-component signal
 
 ### Pending Todos
 
@@ -324,9 +329,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-27T02:14:25.622Z
+Last session: 2026-06-27T03:40:47.022Z
 Stopped At: Phase 64 context gathered
-Resume File: .planning/phases/64-resolver-three-way-state/64-CONTEXT.md
+Resume File: None
 
 ## Operator Next Steps
 

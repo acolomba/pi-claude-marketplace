@@ -213,7 +213,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 64-01-PLAN.md — Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
+- [x] 64-01-PLAN.md — Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -368,7 +368,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 61. `if` Field Permission-Rule Matcher                              | v1.13     | 3/3 | Complete    | 2026-06-15 |
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
-| 64. Resolver Three-Way State                                        | force-install | 0/TBD | Not started | -          |
+| 64. Resolver Three-Way State                                        | force-install | 1/2 | In Progress|  |
 | 65. Force Install & Update                                          | force-install | 0/TBD | Not started | -          |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 0/TBD | Not started | -          |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
