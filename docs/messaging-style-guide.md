@@ -24,7 +24,7 @@ export type NotificationMessage; // { marketplaces: readonly MarketplaceNotifica
 export type MarketplaceNotificationMessage; // { name; scope; status?; details?; plugins }
 export type PluginNotificationMessage; // 16-variant discriminated union on `status`
 export type PluginStatus; // 16 literal strings, derived from PLUGIN_STATUSES tuple
-export type MarketplaceStatus; // 9 literal strings, derived from MARKETPLACE_STATUSES tuple
+export type MarketplaceStatus; // 7 literal strings, derived from MARKETPLACE_STATUSES tuple
 export type Dependency; // "agents" | "mcp", derived from DEPENDENCIES tuple
 export interface MarketplaceDetails; // { autoupdate: boolean; lastUpdatedAt?: string }
 export interface UsageErrorMessage; // { message: string; usage: string }
@@ -55,7 +55,7 @@ type PluginNotificationMessage =
 The closed sets are encoded as runtime tuples and their literal-union types are derived via indexed access (SNM-04 / SNM-05 / SNM-06 / D-15-11):
 
 - `PLUGIN_STATUSES` -- the closed set of 16 plugin status discriminators. The literal-union type `PluginStatus` is derived as `(typeof PLUGIN_STATUSES)[number]`. Read `extensions/pi-claude-marketplace/shared/notify.ts` for the canonical membership and ordering; do not re-enumerate the values in prose. Fixture iterators (per-variant unit tests, catalog UAT drivers) consume the runtime tuple. The 4 pending-tense `will *` pending statuses are the DIFF-02 read-only pending tokens; `present` (G-21-01) and `disabled` (ENBL-04) are the list-surface inventory tokens -- `disabled` additionally doubles as the `/claude:plugin disable` command's realized cascade-row token (v1.12 UAT-03 decision; the reload-hint distinction is carried by the cascade's `disable-cascade` kind, not by the token).
-- `MARKETPLACE_STATUSES` -- the closed set of 9 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. The 3 autoupdate-surface statuses (`autoupdate enabled`, `autoupdate disabled`, `skipped`) were added in Phase 17.1 per D-17.1-01 to support the user-locked surface design in D-18-05; the 2 pending-tense statuses (`will add`, `will remove`) are the DIFF-02 pending tokens.
+- `MARKETPLACE_STATUSES` -- the closed set of 7 marketplace status discriminators. `MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number]`. Same rule. The 3 autoupdate-surface statuses (`autoupdate enabled`, `autoupdate disabled`, `skipped`) were added in Phase 17.1 per D-17.1-01 to support the user-locked surface design in D-18-05. WILL-01 / D-65.1-02 / D-65.1-03: the marketplace level carries no pending-tense `will *` status -- add is immediate, and a remove surfaces its reload-deferred plugin-uninstall cascade as per-plugin `will uninstall` child rows under a bare header.
 - `DEPENDENCIES` -- the closed set of 2 soft-dependency probe targets. `Dependency = (typeof DEPENDENCIES)[number]`. Same rule. Drives the render-time probe path; `agents` → `pi-subagents`, `mcp` → `pi-mcp-adapter`.
 - `REASONS` (closed-set reason tokens used inside `{<reason>}` braces on the 5 reason-bearing plugin variants) -- defined in `extensions/pi-claude-marketplace/shared/notify.ts::REASONS`. The reason set survives v2.0 unchanged in spirit; the 3 v1.3 reasons structurally absorbed by the type model (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field -- they are emitted by the renderer from the `rollbackPartial` field and the soft-dep probe, respectively.
 

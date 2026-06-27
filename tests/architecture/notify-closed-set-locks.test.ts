@@ -30,14 +30,14 @@ test("OUT-08: REASONS is the closed 32-entry reason set", () => {
   assert.equal(REASONS.length, 32);
 });
 
-test("SNM-02: STATUS_TOKENS is the closed 22-entry token set", () => {
-  assert.equal(STATUS_TOKENS.length, 22);
+test("SNM-02: STATUS_TOKENS is the closed 20-entry token set", () => {
+  assert.equal(STATUS_TOKENS.length, 20);
 });
 
 test("SNM-02: PLUGIN_STATUSES is the closed 15-entry plugin-status set", () => {
   assert.equal(PLUGIN_STATUSES.length, 15);
 });
 
-test("SNM-02: MARKETPLACE_STATUSES is the closed 9-entry marketplace-status set", () => {
-  assert.equal(MARKETPLACE_STATUSES.length, 9);
+test("SNM-02: MARKETPLACE_STATUSES is the closed 7-entry marketplace-status set", () => {
+  assert.equal(MARKETPLACE_STATUSES.length, 7);
 });

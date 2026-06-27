@@ -1115,12 +1115,16 @@ test("Y3 / PR #51: a recorded-but-disabled plugin declared enabled in config dri
   });
 });
 
-test("S8 / PR #51: MarketplaceBlock.status is narrowed to the closed 5-status union and the defensive runtime throw is deleted", async () => {
+test("S8 / PR #51: MarketplaceBlock.status is narrowed to the closed 3-status union and the defensive runtime throw is deleted", async () => {
   // MarketplaceBlock is module-internal so the pin is source-shape oriented:
-  // the new `ReconcileBlockStatus` alias must exist and list exactly the 5
-  // statuses the preview / applied projections assign, and the previous
-  // defensive `throw new Error("unexpected reconcile marketplace status: ...")`
-  // arm at `blockToMarketplaceMessage` must be gone (the narrowed type is the
+  // the new `ReconcileBlockStatus` alias must exist and list exactly the 3
+  // statuses the preview / applied projections assign. WILL-01 / WILL-03 /
+  // D-65.1-02 / D-65.1-03: the pending list no longer assigns any marketplace-
+  // level status (add is immediate; remove surfaces as per-plugin will-uninstall
+  // child rows under a bare header), so only the apply-cascade transition tokens
+  // remain. The previous defensive
+  // `throw new Error("unexpected reconcile marketplace status: ...")` arm at
+  // `blockToMarketplaceMessage` must be gone (the narrowed type is the
   // structural gate now).
   const { readFile } = await import("node:fs/promises");
   const src = await readFile(
@@ -1129,8 +1133,8 @@ test("S8 / PR #51: MarketplaceBlock.status is narrowed to the closed 5-status un
   );
   assert.match(
     src,
-    /type ReconcileBlockStatus = Extract<[\s\S]*?"will add"[\s\S]*?"will remove"[\s\S]*?"added"[\s\S]*?"removed"[\s\S]*?"failed"[\s\S]*?>/,
-    "S8: ReconcileBlockStatus must narrow to exactly the 5 statuses the projection assigns",
+    /type ReconcileBlockStatus = Extract<[\s\S]*?"added"[\s\S]*?"removed"[\s\S]*?"failed"[\s\S]*?>/,
+    "S8: ReconcileBlockStatus must narrow to exactly the 3 statuses the projection assigns",
   );
   assert.ok(
     src.includes("status?: ReconcileBlockStatus"),

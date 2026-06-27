@@ -187,9 +187,13 @@ test("MP cell (not declared, recorded): 1 PlannedMarketplaceRemove", () => {
   const merged = mergeScopeConfigs({}, {});
   const plan = planReconcile(merged, state, "project");
   assert.equal(plan.marketplacesToRemove.length, 1);
+  // WILL-03 / D-65.1-03: PlannedMarketplaceRemove carries the recorded plugin
+  // names so the PENDING projection can synthesize per-plugin will-uninstall
+  // rows; this marketplace records no plugins, so `plugins` is empty.
   assert.deepEqual(plan.marketplacesToRemove[0], {
     scope: "project",
     marketplace: "mp",
+    plugins: [],
   });
 });
 
@@ -532,9 +536,9 @@ test("Edge: declared plugin under a recorded-but-undeclared marketplace -> dangl
   // The realistic "user deleted the marketplace entry but forgot the plugin
   // entry" config: mp exists only in state (-> marketplacesToRemove) while
   // cr@mp is still declared. Classifying cr as an install would produce a
-  // self-contradictory plan ("will remove" mp AND "will install" cr into
-  // it) that the apply path would consume verbatim. The entry must
-  // surface as a dangling diagnostic instead.
+  // self-contradictory plan (removing mp AND installing cr into it) that the
+  // apply path would consume verbatim. The entry must surface as a dangling
+  // diagnostic instead.
   const state = stateWithOneGithubMarketplace("mp", "acme/tools");
   const merged = mergeScopeConfigs(configWith({}, { "cr@mp": { enabled: true } }), {});
   const plan = planReconcile(merged, state, "project");

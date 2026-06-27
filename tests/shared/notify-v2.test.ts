@@ -3969,13 +3969,16 @@ test('Migration Strategy #2: cascade payload WITHOUT `kind` field byte-equals pa
 // ===========================================================================
 // DIFF-02 -- pending-tense `(will *)` pending rows.
 //
-// Six new tokens (4 plugin + 2 marketplace) emitted by `/claude:plugin pending`.
-// All are info-severity (no failure / skipped / manual-recovery semantics) so
-// the 2nd `ctx.ui.notify` arg is omitted. None are in shouldEmitReloadHint's
-// trigger set, so no `/reload to pick up changes` trailer is appended.
+// Four pending-tense plugin-level tokens emitted by `/claude:plugin pending`.
+// WILL-01 / D-65.1-02 / D-65.1-03: the marketplace level carries no pending
+// token -- add is immediate, remove surfaces as per-plugin `will uninstall`
+// child rows under a bare header. All four are info-severity (no failure /
+// skipped / manual-recovery semantics) so the 2nd `ctx.ui.notify` arg is
+// omitted. None are in shouldEmitReloadHint's trigger set, so no
+// `/reload to pick up changes` trailer is appended.
 // ===========================================================================
 
-test("DIFF-02: will-add marketplace header + will-install plugin child (orphan-fold suppresses [scope])", () => {
+test("WILL-01: marketplace add renders a bare header + will-install plugin child (orphan-fold suppresses [scope])", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -3983,7 +3986,6 @@ test("DIFF-02: will-add marketplace header + will-install plugin child (orphan-f
       {
         name: "new-mp",
         scope: "user",
-        status: "will add",
         plugins: [{ status: "will install", name: "alpha" }],
       },
     ],
@@ -3993,26 +3995,7 @@ test("DIFF-02: will-add marketplace header + will-install plugin child (orphan-f
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● new-mp [user] (will add)\n  ● alpha (will install)`);
-});
-
-test("DIFF-02: will-remove marketplace header (open circle, no plugin children)", () => {
-  const ctx = makeCtx();
-  const pi = piWithBothLoaded();
-  const msg: NotificationMessage = {
-    marketplaces: [
-      {
-        name: "old-mp",
-        scope: "project",
-        status: "will remove",
-        plugins: [],
-      },
-    ],
-  };
-  notify(ctx as never, pi as never, msg);
-  const args = ctx.ui.notify.mock.calls[0]!.arguments;
-  assert.equal(args.length, 1);
-  assert.equal(args[0], `○ old-mp [project] (will remove)`);
+  assert.equal(args[0], `● new-mp [user]\n  ● alpha (will install)`);
 });
 
 test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace block", () => {
@@ -4062,7 +4045,6 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
       {
         name: "shared",
         scope: "project",
-        status: "will add",
         plugins: [
           // Plugin's scope explicitly differs from marketplace -> bracket emits.
           { status: "will install", name: "alpha", scope: "user" },
@@ -4073,7 +4055,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● shared [project] (will add)\n  ● alpha [user] (will install)`);
+  assert.equal(args[0], `● shared [project]\n  ● alpha [user] (will install)`);
 });
 
 test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pending rows are pre-transition)", () => {
@@ -4084,7 +4066,6 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
       {
         name: "mp",
         scope: "user",
-        status: "will add",
         plugins: [
           { status: "will install", name: "a" },
           { status: "will uninstall", name: "b" },
@@ -4108,7 +4089,6 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
       {
         name: "mp",
         scope: "user",
-        status: "will remove",
         plugins: [{ status: "will uninstall", name: "p" }],
       },
     ],
