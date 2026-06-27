@@ -401,9 +401,14 @@ The catalog gate matters here only to confirm NO render bytes changed (they don'
 | A3 | Bumping `PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion` is within "no state-model changes" (the completion cache is an ephemeral optimization cache, not `state.json`) | Slice C | LOW — the cache has an explicit drop+rebuild-on-mismatch contract; it is not the persisted state model. |
 | A4 | Extending the `edge-deps.ts` bucketizer (which already calls `resolveStrict`) satisfies D-67-02's "same classification, no provider-local classifier" | Pattern 2 | LOW-MEDIUM — strict reading of "the SAME classification list uses" favors extracting a shared helper consumed by both list + bucketizer. Recommend the shared-helper extraction to be safe. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `--unavailable` narrow (exclude not-installed `unsupported`)?**
+   - RESOLVED: YES, partition. `--unavailable` = bucket `unavailable` only.
+     Resolved by Plan 67-02 Task 2; the MEDIUM-risk A2 assumption is guarded by
+     the plan's RED-first TDD task running `tests/{edge,orchestrators}/**/list*`
+     early to catch any prior assumption that `--unavailable` showed unsupported
+     rows.
    - Known: D-67-01 says each filter targets one realized state cleanly; passive
      (no-filter) shows everything.
    - Unclear: whether existing `--unavailable` tests assume unsupported rows appear.
@@ -411,6 +416,11 @@ The catalog gate matters here only to confirm NO render bytes changed (they don'
      run `tests/{edge,orchestrators}/**/list*` early to catch any assumption.
 
 2. **Shared classifier extraction vs. parallel bucketizer extension (A4).**
+   - RESOLVED: EXTRACT one shared helper. Plan 67-03 creates
+     `orchestrators/plugin/plugin-state-classifier.ts` consumed by both
+     `orchestrators/plugin/list.ts` and the `orchestrators/edge-deps.ts`
+     bucketizer, with a parity test as the drift guard (the mirror-with-parity
+     fallback is NOT taken).
    - Known: two classifiers exist today; D-67-02 wants one.
    - Recommendation: extract the per-entry derivation into one helper consumed by
      both `orchestrators/plugin/list.ts` and `orchestrators/edge-deps.ts`. If the
@@ -420,8 +430,10 @@ The catalog gate matters here only to confirm NO render bytes changed (they don'
 
 3. **Does no-`--force` `update` completion semantics actually change?** Today it
    offers all installed plugins. After the cache split it must still offer all
-   installed-family statuses. Confirm with an explicit byte-identical regression
-   case before the cache bump lands.
+   installed-family statuses.
+   - RESOLVED: NO change. No-`--force` completion stays byte-identical. Pinned by
+     Plan 67-04 Task 1, which adds explicit byte-identical no-force regression
+     cases for install and update before the cache schema bump lands.
 
 ## Project Constraints (from CLAUDE.md / project skills)
 
