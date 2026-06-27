@@ -247,7 +247,13 @@ test("TC-3 :: - prefix on list head also surfaces --installed/--available/--unav
     const items = await getArgumentCompletions("list -", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    for (const expected of ["--scope", "--installed", "--available", "--unavailable"]) {
+    for (const expected of [
+      "--scope",
+      "--installed",
+      "--available",
+      "--unavailable",
+      "--unsupported",
+    ]) {
       assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
     }
   } finally {
@@ -262,7 +268,13 @@ test("TC-3 :: - prefix on ls alias also surfaces --installed/--available/--unava
     const items = await getArgumentCompletions("ls -", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    for (const expected of ["--scope", "--installed", "--available", "--unavailable"]) {
+    for (const expected of [
+      "--scope",
+      "--installed",
+      "--available",
+      "--unavailable",
+      "--unsupported",
+    ]) {
       assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
     }
   } finally {
@@ -282,7 +294,7 @@ test("TC-3 :: - prefix on install head surfaces --map-model (260516-08j)", async
     }
 
     // list-only flags MUST NOT leak into install completions.
-    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
+    for (const unexpected of ["--installed", "--available", "--unavailable", "--unsupported"]) {
       assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
     }
   } finally {
@@ -302,7 +314,7 @@ test("TC-3 :: - prefix on update head surfaces --map-model (260516-08j)", async 
     }
 
     // list-only flags MUST NOT leak into update completions.
-    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
+    for (const unexpected of ["--installed", "--available", "--unavailable", "--unsupported"]) {
       assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
     }
   } finally {

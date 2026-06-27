@@ -430,6 +430,198 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// LIST-01 / D-67-01: the four list filters partition cleanly.
+//   --unsupported  -> NOT-installed plugins that resolve `unsupported`
+//                     (the force-installable candidates); keyed on the internal
+//                     resolver bucket, NOT the render token (availableRowMessage
+//                     collapses `unsupported` -> `(unavailable)` at render).
+//   --installed    -> installed + force-installed + force-upgradable (all
+//                     installed-inventory render statuses) (A1).
+//   --unavailable  -> structural-unavailable ONLY; it no longer admits the
+//                     not-installed `unsupported` rows (A2 partition).
+// No rendered byte changes: a not-installed unsupported plugin still emits the
+// `(unavailable)` row token under every filter that shows it.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows under --unsupported (still the `(unavailable)` row token) and is ABSENT under --unavailable and --available", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // unsup: declares lspServers with an on-disk dir -> resolveStrict
+          // yields `unsupported` (force-installable candidate, not installed).
+          { name: "unsup", source: "./unsup", version: "1.0.0", lspServers: { ls: {} } },
+          // avail: on-disk dir, no unsupported kinds -> `available`.
+          { name: "avail", source: "./avail", version: "2.0.0" },
+          // gone: no on-disk dir -> structural `unavailable`.
+          { name: "gone", source: "./gone", version: "3.0.0" },
+        ],
+      },
+      installablePluginDirs: ["unsup", "avail"],
+    });
+
+    // --unsupported: the unsupported row appears, rendered with the UNCHANGED
+    // `(unavailable)` token (no new render status). avail/gone are excluded.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /⊘ unsup v1\.0\.0 \(unavailable\) \{lsp\}/, out);
+      assert.equal(out.includes("avail"), false, out);
+      assert.equal(out.includes("gone"), false, out);
+    }
+
+    // --unavailable: structural `gone` only; the unsupported `unsup` is NOT here.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
+      assert.equal(out.includes("unsup"), false, out);
+      assert.equal(out.includes("avail"), false, out);
+    }
+
+    // --available: only the clean `avail` row.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
+      assert.equal(out.includes("unsup"), false, out);
+      assert.equal(out.includes("gone"), false, out);
+    }
+  });
+});
+
+test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavailable and is ABSENT under --unsupported", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        // No on-disk dir -> resolveStrict returns `unavailable` (structural).
+        plugins: [{ name: "gone", source: "./gone", version: "3.0.0" }],
+      },
+    });
+
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
+    }
+
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      const out = notifications[0]!.message;
+      assert.equal(out.includes("gone"), false, out);
+    }
+  });
+});
+
+test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) and is ABSENT under --unsupported", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "forced", source: "./forced", version: "1.0.0" }],
+      },
+      // Recorded-installed with persisted unsupported -> derives force-installed.
+      installed: { forced: { version: "1.0.0", unsupported: ["lspServers"] } },
+      installablePluginDirs: ["forced"],
+    });
+
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /◉ forced v1\.0\.0 \(force-installed\)/, out);
+    }
+
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      const out = notifications[0]!.message;
+      assert.equal(out.includes("forced"), false, out);
+    }
+  });
+});
+
+test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        // Newer candidate that resolves `unsupported` -> clean record derives
+        // force-upgradable (an installed-inventory render status).
+        name: "mp1",
+        plugins: [{ name: "fup", source: "./fup", version: "1.0.1", lspServers: { ls: {} } }],
+      },
+      installed: { fup: { version: "1.0.0" } },
+      installablePluginDirs: ["fup"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    const out = notifications[0]!.message;
+    assert.match(out, /● fup v1\.0\.0 \(force-upgradable\)/, out);
+  });
+});
+
+test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row keeps its `(unavailable)` byte form", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "inst", source: "./inst", version: "1.0.0" },
+          { name: "avail", source: "./avail", version: "2.0.0" },
+          { name: "unsup", source: "./unsup", version: "4.0.0", lspServers: { ls: {} } },
+          { name: "gone", source: "./gone", version: "3.0.0" },
+        ],
+      },
+      installed: { inst: { version: "1.0.0" } },
+      installablePluginDirs: ["inst", "avail", "unsup"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /● inst v1\.0\.0 \(installed\)/, out);
+    assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
+    assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
+    // Byte form unchanged: not-installed unsupported still renders the
+    // `(unavailable)` row token (no new render status was introduced).
+    assert.match(out, /⊘ unsup v4\.0\.0 \(unavailable\) \{lsp\}/, out);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // D-54-01 / ENBL-04: recorded-but-disabled inventory row (CR-02 producer)
 // ──────────────────────────────────────────────────────────────────────────
 

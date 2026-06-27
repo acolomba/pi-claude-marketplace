@@ -124,3 +124,29 @@ test("shim :: --installed --available union flags both propagated", async () => 
     assert.equal(notifications[0]!.message, "(no marketplaces)");
   });
 });
+
+test("LIST-01 / D-67-01 :: --unsupported flag calls listPlugins with unsupported: true", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeListHandler(STUB_PI);
+    await handler("--unsupported", ctx);
+    // The flag is accepted (not an unknown-flag usage error) and reaches the
+    // orchestrator, which renders the empty-state sentinel against empty state.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("LIST-01 / D-67-01 :: an unknown flag still errors and USAGE carries [--unsupported]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeListHandler(STUB_PI);
+    await handler("--xyz", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown option: "--xyz"\./);
+    // notifyUsageError appends the USAGE string; it advertises the new filter.
+    assert.match(notifications[0]!.message, /\[--unsupported\]/);
+  });
+});
