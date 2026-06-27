@@ -192,7 +192,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 - [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
 - [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
-- [ ] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove
+- [x] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove (completed 2026-06-27)
 - [ ] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail
 - [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
 - [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
@@ -265,7 +265,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 65.1-02-PLAN.md — Atomic lockstep retirement of `will add` / `will remove`: closed-set tuples (22->20, 9->7), union arms, renderMpHeader, pending projection (add dropped, remove -> per-plugin will-uninstall cascade), PlannedMarketplaceRemove.plugins seam, all coupled tests, and docs/output-catalog + messaging-style-guide; single `npm run check`-green commit (WILL-01, WILL-02, WILL-03, WILL-04)
+- [x] 65.1-02-PLAN.md — Atomic lockstep retirement of `will add` / `will remove`: closed-set tuples (22->20, 9->7), union arms, renderMpHeader, pending projection (add dropped, remove -> per-plugin will-uninstall cascade), PlannedMarketplaceRemove.plugins seam, all coupled tests, and docs/output-catalog + messaging-style-guide; single `npm run check`-green commit (WILL-01, WILL-02, WILL-03, WILL-04)
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
