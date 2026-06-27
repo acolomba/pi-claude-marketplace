@@ -357,8 +357,10 @@ test("shim :: --force is accepted on the bare form; control reaches updatePlugin
 
 test("shim :: --force threads force:true into updatePlugins (degrades an unsupported candidate)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    // Only the handler is under test, so an `(updated)` degrade row can ONLY
-    // render if the handler forwarded `force: true` to updatePlugins.
+    // Only the handler is under test, so a `(force-installed)` degrade row can
+    // ONLY render if the handler forwarded `force: true` to updatePlugins.
+    // FSTAT-07 / D-66-04: a force update whose candidate re-resolved
+    // `unsupported` reports `(force-installed)`, not `(updated)`.
     await seedUnsupportedCandidate(cwd);
     const locations = locationsFor("project", cwd);
 
@@ -367,7 +369,7 @@ test("shim :: --force threads force:true into updatePlugins (degrades an unsuppo
     await handler("hello@mp --force", ctx);
 
     const body = notifications.map((n) => n.message).join("\n");
-    assert.match(body, /\(updated\)/, `expected degrade via threaded force; got: ${body}`);
+    assert.match(body, /\(force-installed\)/, `expected degrade via threaded force; got: ${body}`);
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.1.0");
   });
