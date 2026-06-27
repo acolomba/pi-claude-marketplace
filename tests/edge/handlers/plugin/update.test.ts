@@ -14,12 +14,18 @@
 // fall into the shim's own USAGE path.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts";
+import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
@@ -252,5 +258,133 @@ test("Unknown long flag -> USAGE error", async () => {
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /Unknown flag: "--frobnicate"\./);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// FORCE-02 (D-65-05): --force is parsed at the edge and threaded into
+// updatePlugins.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Seed a path marketplace whose candidate plugin.json declares
+ * `experimental themes/monitors` (the force-degradable `unsupported` arm)
+ * over an already-installed older version, plus a supported `skills/` tree.
+ */
+async function seedUnsupportedCandidate(cwd: string): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\n\nBody.\n",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "hello",
+      version: "1.1.0",
+      experimental: { themes: "./themes", monitors: "./monitors.json" },
+    }),
+  );
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.1.0" }],
+    }),
+  );
+
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: "/tmp",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
+}
+
+test("USAGE string contains [--force]", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--frobnicate", ctx);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\[--force\]/);
+  });
+});
+
+test("shim :: --force is accepted on the bare form; control reaches updatePlugins", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("--force", ctx);
+    // No USAGE error -- `--force` is in the allow-list and the shared scanner
+    // recognizes it; control reaches updatePlugins (empty state).
+    assert.equal(notifications.length, 1);
+    assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("shim :: --force threads force:true into updatePlugins (degrades an unsupported candidate)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Only the handler is under test, so an `(updated)` degrade row can ONLY
+    // render if the handler forwarded `force: true` to updatePlugins.
+    await seedUnsupportedCandidate(cwd);
+    const locations = locationsFor("project", cwd);
+
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("hello@mp --force", ctx);
+
+    const body = notifications.map((n) => n.message).join("\n");
+    assert.match(body, /\(updated\)/, `expected degrade via threaded force; got: ${body}`);
+    const after = await loadState(locations.extensionRoot);
+    assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.1.0");
+  });
+});
+
+test("shim :: without --force the same unsupported candidate blocks", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedUnsupportedCandidate(cwd);
+    const locations = locationsFor("project", cwd);
+
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeUpdateHandler(makePi());
+    await handler("hello@mp", ctx);
+
+    const body = notifications.map((n) => n.message).join("\n");
+    assert.match(body, /\(skipped\) \{no longer installable\}/);
+    const after = await loadState(locations.extensionRoot);
+    assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
   });
 });

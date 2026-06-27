@@ -86,7 +86,11 @@ import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import {
+  requireForceInstallable,
+  requireInstallable,
+  resolveStrict,
+} from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -125,7 +129,7 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -181,6 +185,15 @@ export interface UpdatePluginsOptions {
    * write-back on the direct path.
    */
   readonly local?: boolean;
+  /**
+   * FORCE-02 opt-in. When true, the candidate resolve admits the
+   * force-degradable `unsupported` arm (D-65-04): an `unsupported` target
+   * updates by degrading instead of blocking. Default false keeps the
+   * existing `requireInstallable` block. Never bypasses an `unavailable`/
+   * structural candidate (FORCE-05). The cascade entrypoint
+   * (`updateSinglePlugin`) does NOT accept this flag.
+   */
+  readonly force?: boolean;
 }
 
 /**
@@ -302,6 +315,11 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
+        // FORCE-02: thread `--force` from the user-facing options bag into
+        // the per-plugin candidate gate (D-65-04). The cascade entrypoint
+        // (`updateSinglePlugin`) never sets this, so cascade re-installs
+        // resolve to false and keep the `requireInstallable` block.
+        force: opts.force ?? false,
         // WB-01: thread `--local` for the direct-path
         // write-back target selection.
         ...(opts.local === true && { local: true }),
@@ -597,6 +615,14 @@ interface ThreePhaseArgs {
    * own config writes (mirrors WR-09 orchestrated-mode semantics).
    */
   readonly local?: boolean;
+  /**
+   * FORCE-02 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.force`
+   * (which the edge handler populates from `--force`). Gates the candidate
+   * resolve in `preflightUpdate` (D-65-04). The cascade entrypoint
+   * `updateSinglePlugin` intentionally NEVER sets this; cascade-driven
+   * re-installs resolve to false at the gate.
+   */
+  readonly force?: boolean;
 }
 
 interface PrepHandles {
@@ -610,7 +636,7 @@ interface PluginPreflight {
   readonly state: ExtensionState;
   readonly record: ExtensionState["marketplaces"][string]["plugins"][string];
   readonly entry: PluginEntry;
-  readonly installable: ResolvedPluginInstallable;
+  readonly installable: MaterializablePlugin;
   readonly fromVersion: string;
   readonly toVersion: string;
 }
@@ -704,10 +730,21 @@ async function preflightUpdate(
   }
 
   const entry: PluginEntry = entryRaw;
-  let installable: ResolvedPluginInstallable;
+  let installable: MaterializablePlugin;
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
-    requireInstallable(resolved, "update");
+    // FORCE-02/FORCE-05 (D-65-04): `--force` widens the gate at the CANDIDATE
+    // resolve so an `unsupported` target degrades (supported components
+    // materialize, unsupported kinds skip) instead of blocking. Without
+    // `--force` the candidate still blocks via `requireInstallable` (the catch
+    // arm below renders `(skipped) {no longer installable}`). Both gates still
+    // reject an `unavailable`/structural candidate (FORCE-05).
+    if (args.force === true) {
+      requireForceInstallable(resolved, "update");
+    } else {
+      requireInstallable(resolved, "update");
+    }
+
     installable = resolved;
   } catch (err) {
     // `requireInstallable` throws `PluginShapeError` with
