@@ -639,6 +639,56 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // FSTAT-02 / D-66-03: list-surface inventory row for a recorded-installed
+    // plugin currently re-resolving `unsupported`. The derived `force-installed`
+    // token wears the dedicated `◉` glyph, distinct from the clean `●`
+    // `(installed)` row. Severity `info` (the row omits `severity`).
+    "force-installed-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "force-installed",
+                name: "degraded-plugin",
+                version: "1.0.0",
+                reasons: ["unsupported hooks"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // FSTAT-04 / D-66-02 / D-66-03: list-surface inventory row for a
+    // currently-clean installed plugin whose newer no-network candidate would
+    // newly degrade it. The derived `force-upgradable` token REUSES the `●`
+    // glyph (the row is clean today), mirroring the `upgradable` precedent.
+    "force-upgradable-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "force-upgradable",
+                name: "clean-plugin",
+                version: "1.0.0",
+                reasons: ["unsupported hooks"],
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -2913,6 +2963,22 @@ const FIXTURES: FixtureMap = {
             name: "new-mp",
             scope: "user",
             plugins: [{ status: "will install", name: "new-plugin" }],
+          },
+        ],
+      },
+    },
+    // FSTAT-06 / D-66-04: a pending child install whose no-network candidate
+    // resolves `unsupported` carries the `force` modifier, rendering
+    // `(will force install)` in place of `(will install)`. A render modifier,
+    // not a new token; no `will force update` analog exists (D-66-05).
+    "mp-add-plugin-force-install": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "user",
+            plugins: [{ status: "will install", name: "degraded-plugin", force: true }],
           },
         ],
       },

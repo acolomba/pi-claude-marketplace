@@ -181,6 +181,19 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
     },
   },
   {
+    label: "FSTAT-06 / will force install plugin row (force modifier set)",
+    pi: piWithBothLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "will install", name: "p", force: true }],
+        },
+      ],
+    },
+  },
+  {
     label: "DIFF-02 / will uninstall plugin row",
     pi: piWithBothLoaded(),
     message: {
@@ -216,8 +229,13 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 // -- this is the catalog's `plugin-pending-uninstall` / `enable-disable-
 // transitions` shape. The load-bearing invariant is that the status token,
 // when present, ALWAYS follows the subject -- never precedes it.
+// FSTAT-06 / D-66-04: the `will install` token also admits the `will force
+// install` form when the planned install would degrade (resolves
+// `unsupported`). It is a render modifier, not a new closed-set token; there is
+// deliberately no `will force update` analog (the reconcile plan has no update
+// bucket -- D-66-05).
 const WILL_TOKEN_RE =
-  /^(?:[●○⊘◌]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|uninstall|enable|disable)\))?$/;
+  /^(?:[●○⊘◌]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|force install|uninstall|enable|disable)\))?$/;
 
 // D-54-01 / ENBL-04: subject-first row grammar for the new
 // `(disabled)` inventory token. Each row matches

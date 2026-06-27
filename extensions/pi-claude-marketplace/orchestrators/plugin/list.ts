@@ -798,9 +798,13 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
   // overwriting it with `marketplaceScope`.
   const scopeOf = (p: PluginNotificationMessage): Scope => {
     switch (p.status) {
+      // FSTAT-02 / FSTAT-04 / D-66-03: the derived force states are
+      // scope-bearing list-surface variants and join the orphan-fold arm.
       case "upgradable":
       case "installed":
       case "disabled":
+      case "force-installed":
+      case "force-upgradable":
         // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` and
         // join the scope-bearing list-surface variants. The SNM-11 carve-out
         // applies only to `available` / `unavailable`.

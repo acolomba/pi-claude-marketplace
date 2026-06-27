@@ -429,6 +429,104 @@ test("notify renders upgradable plugin with version and reasons brace", () => {
   ]);
 });
 
+test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from ● installed", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-installed",
+            name: "degraded-plugin",
+            version: "1.0.0",
+            reasons: ["unsupported hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> single-arg notify (the row omits `severity`).
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● demo [user]\n  ◉ degraded-plugin v1.0.0 (force-installed) {unsupported hooks}`,
+  );
+  // The force-installed glyph ◉ is byte-distinct from the ● installed glyph.
+  assert.ok((args[0] as string).includes("◉ degraded-plugin"));
+  assert.ok(!(args[0] as string).includes("● degraded-plugin"));
+});
+
+test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgradable arm", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-upgradable",
+            name: "clean-plugin",
+            version: "1.0.0",
+            reasons: ["unsupported hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}`,
+  );
+});
+
+test("FSTAT-06 / D-66-04: will-install force modifier renders (will force install)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        plugins: [{ status: "will install", name: "degraded-plugin", force: true }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● new-mp [user]\n  ● degraded-plugin (will force install)`);
+});
+
+test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will install)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        plugins: [{ status: "will install", name: "plain-plugin", force: false }],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args[0], `● new-mp [user]\n  ● plain-plugin (will install)`);
+});
+
 test("notify renders benign skipped plugin with up-to-date reason (info severity, UXG-02 / D-28-06)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();

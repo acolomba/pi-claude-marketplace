@@ -326,6 +326,28 @@ PL-4: when the manifest entry carries a non-empty `description` field, the rende
 
 Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
 
+### Force-installed inventory row (FSTAT-02 / D-66-03)
+
+<!-- catalog-state: force-installed-inventory -->
+
+```text
+● official [user] <autoupdate>
+  ◉ degraded-plugin v1.0.0 (force-installed) {unsupported hooks}
+```
+
+A recorded-installed plugin that currently re-resolves `unsupported` (installed with one or more components dropped) is DERIVED as `force-installed` -- no persisted flag, no migration (FSTAT-01 / D-66-01). The row uses the dedicated `◉` glyph (`ICON_FORCE_INSTALLED`), DISTINCT from the clean `(installed)` row's `●` so the degraded install is visually separable (FSTAT-02). The reasons brace carries the degradation detail, composed exactly like the `upgradable` row. Severity `info`; no reload-hint (inventory row). Once a fully-supported upgrade rewrites the recorded resolution the same deriver yields `(installed)` with no lingering state (FSTAT-03).
+
+### Force-upgradable inventory row (FSTAT-04 / D-66-02 / D-66-03)
+
+<!-- catalog-state: force-upgradable-inventory -->
+
+```text
+● official [user] <autoupdate>
+  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}
+```
+
+A currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it is DERIVED as `force-upgradable` (FSTAT-04 / D-66-02). The candidate is resolved without network (FSTAT-05). The row REUSES the `●` glyph (`ICON_INSTALLED`) because it is clean today -- only its candidate would degrade -- mirroring the `upgradable` precedent. A plugin already `force-installed` is never `force-upgradable` (already degraded). This is a list-inventory-only row; severity `info`, no reload-hint.
+
 ______________________________________________________________________
 
 ## `/claude:plugin install <plugin>@<marketplace>`
@@ -1336,6 +1358,17 @@ A new marketplace declared in `claude-plugins.json` carries one child plugin row
 ```text
 ● new-mp [user]
   ● new-plugin (will install)
+```
+
+### Marketplace add with child plugin force-install (FSTAT-06 / D-66-04)
+
+A new marketplace whose child plugin would resolve `unsupported` when installed: the no-network candidate resolve degrades, so the pending row carries the `force` modifier and renders `(will force install)` in place of `(will install)`. The token is a render MODIFIER on the existing `will install` discriminator, NOT a new closed-set token; there is deliberately no `will force update` analog (the reconcile plan has no update bucket -- D-66-05). Severity `info`; no reload-hint.
+
+<!-- catalog-state: mp-add-plugin-force-install -->
+
+```text
+● new-mp [user]
+  ● degraded-plugin (will force install)
 ```
 
 ### Plugin pending uninstall under existing marketplace

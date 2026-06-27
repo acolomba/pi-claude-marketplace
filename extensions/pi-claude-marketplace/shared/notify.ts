@@ -216,6 +216,15 @@ export const STATUS_TOKENS = [
   "will enable",
   "will disable",
   "disabled",
+  // FSTAT-02 / FSTAT-04 / D-66-03: derived force-state realized tokens. Both
+  // are appended LAST (below the reload-hint trigger window, like "disabled"):
+  // `force-installed` (◉) is a recorded-installed plugin currently re-resolving
+  // `unsupported`; `force-upgradable` (●) is a currently-clean installed plugin
+  // whose newer cache candidate would NEWLY degrade. The `will force install`
+  // pending case is a render MODIFIER on `will install`, NOT a token, so the set
+  // grows by exactly 2 (D-66-05).
+  "force-installed",
+  "force-upgradable",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -384,6 +393,13 @@ export const PLUGIN_STATUSES = [
   "will enable",
   "will disable",
   "disabled",
+  // FSTAT-02 / FSTAT-04 / D-66-03: derived force-state realized tokens,
+  // appended last (mirrors the STATUS_TOKENS ordering). `force-installed`
+  // stamps `needsReload: true` on the install/update success cascade (a
+  // realized transition like `installed`); `force-upgradable` is a
+  // list-inventory-only row (`needsReload: false`).
+  "force-installed",
+  "force-upgradable",
 ] as const;
 
 /**
@@ -674,6 +690,42 @@ export interface PluginUpgradableMessage extends MessageBase {
 }
 
 /**
+ * `(force-installed)` -- FSTAT-02 / D-66-03 row for a recorded-installed plugin
+ * that currently re-resolves `unsupported` (installed with components dropped).
+ * Surfaces on the list inventory surface AND the install/update success cascade.
+ * Modeled on `PluginUpgradableMessage`: carries REQUIRED `reasons` (the dropped-
+ * component / degradation detail), no `dependencies`. Uses the dedicated
+ * `ICON_FORCE_INSTALLED` (`◉`) glyph. PL-4: optional `description` on the list
+ * surface, truncated at column 66.
+ */
+export interface PluginForceInstalledMessage extends MessageBase {
+  readonly status: "force-installed";
+  readonly name: string;
+  readonly reasons: readonly ContentReason[];
+  readonly version?: string;
+  readonly scope?: Scope;
+  readonly description?: string;
+}
+
+/**
+ * `(force-upgradable)` -- FSTAT-04 / D-66-02 / D-66-03 list-surface row for a
+ * currently-clean installed plugin whose newer no-network cache candidate would
+ * NEWLY degrade it. STRUCTURALLY list-only (an installed plugin is force-
+ * installed or installed on every other surface, never force-upgradable).
+ * REUSES `ICON_INSTALLED` (`●`) because the row is currently clean, mirroring
+ * the `upgradable` arm. Carries REQUIRED `reasons`; no `dependencies`. PL-4:
+ * optional `description`, truncated at column 66.
+ */
+export interface PluginForceUpgradableMessage extends MessageBase {
+  readonly status: "force-upgradable";
+  readonly name: string;
+  readonly reasons: readonly ContentReason[];
+  readonly version?: string;
+  readonly scope?: Scope;
+  readonly description?: string;
+}
+
+/**
  * `(failed)` -- failure row across single-shot and cascade surfaces.
  * Carries REQUIRED `reasons`; optional `cause?: Error` (SNM-10)
  * feeds the depth-5 cause-chain trailer; optional
@@ -741,6 +793,13 @@ export interface PluginWillInstallMessage extends MessageBase {
   readonly status: "will install";
   readonly name: string;
   readonly scope?: Scope;
+  // FSTAT-06 / D-66-04: render-time modifier. When `true`, the row renders
+  // `(will force install)` -- the planned install would degrade (resolves
+  // `unsupported`) and proceed under the force path -- instead of
+  // `(will install)`. A modifier, NOT a new closed-set token (D-66-05): the
+  // `will force update` analog is VACUOUS (the reconcile plan has no update
+  // bucket), so no force-update render path exists.
+  readonly force?: boolean;
 }
 
 /**
@@ -802,7 +861,9 @@ export type PluginNotificationMessage =
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
   | PluginWillDisableMessage
-  | PluginDisabledMessage;
+  | PluginDisabledMessage
+  | PluginForceInstalledMessage
+  | PluginForceUpgradableMessage;
 
 /**
  * Common fields shared by every arm of the per-status
@@ -1040,7 +1101,15 @@ export type PluginInfoRow =
  * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
 interface PluginInfoRowBase {
-  readonly status: Extract<PluginStatus, "installed" | "available" | "unavailable" | "failed">;
+  // FSTAT-07 / D-66-04: `force-installed` widens the info row status set so an
+  // installed plugin re-resolving `unsupported` reports `(force-installed)` on
+  // the info surface. `force-upgradable` is deliberately omitted -- it is a
+  // list-inventory-only concept (an installed plugin's info is force-installed
+  // or installed, never force-upgradable).
+  readonly status: Extract<
+    PluginStatus,
+    "installed" | "available" | "unavailable" | "failed" | "force-installed"
+  >;
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
@@ -1283,6 +1352,17 @@ export const ICON_UNINSTALLABLE = "⊘";
  * `○` for `(available)` / `(will uninstall)`).
  */
 export const ICON_DISABLED = "◌";
+
+/**
+ * FSTAT-02 / D-66-03: dedicated glyph for a `force-installed` row -- a
+ * recorded-installed plugin that currently re-resolves `unsupported` (installed
+ * with one or more components dropped). DISTINCT from `ICON_INSTALLED` (`●`) so
+ * the degraded install is visually separable from a clean `(installed)` row.
+ * `force-upgradable` deliberately REUSES `ICON_INSTALLED` (the row is currently
+ * clean -- only its candidate would degrade), mirroring the `upgradable`
+ * precedent.
+ */
+export const ICON_FORCE_INSTALLED = "◉";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1878,6 +1958,17 @@ function renderPluginRow(
       ]);
     case "upgradable":
       return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
+    case "force-installed":
+      // FSTAT-02 / D-66-03: recorded-installed plugin currently re-resolving
+      // `unsupported`. Uses the dedicated ICON_FORCE_INSTALLED (`◉`) glyph,
+      // distinct from the clean `(installed)` row; reasons brace carries the
+      // degradation detail (mirrors the `upgradable` composition).
+      return pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe);
+    case "force-upgradable":
+      // FSTAT-04 / D-66-02 / D-66-03: currently-clean installed plugin whose
+      // newer candidate would newly degrade. REUSES ICON_INSTALLED (`●`) -- the
+      // row is clean today -- exactly like the `upgradable` arm above.
+      return pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe);
     case "skipped":
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe);
     case "failed":
@@ -1889,12 +1980,15 @@ function renderPluginRow(
       // DIFF-02 / D-53-02: pending-tense row for a plugin declared in
       // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
       // slot (the install hasn't happened yet); no reasons (pending rows are
-      // pre-transition).
+      // pre-transition). FSTAT-06 / D-66-04: the `force` modifier renders
+      // `(will force install)` when the planned install would degrade
+      // (resolves `unsupported`); there is deliberately NO `will force update`
+      // analog -- the reconcile plan has no update bucket (D-66-05).
       return joinTokens([
         ICON_INSTALLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
-        "(will install)",
+        p.force === true ? "(will force install)" : "(will install)",
       ]);
     case "will uninstall":
       // DIFF-02: pending-tense row for a plugin recorded in state but
@@ -2705,6 +2799,10 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
   switch (status) {
     case "installed":
       return ICON_INSTALLED;
+    case "force-installed":
+      // FSTAT-02 / FSTAT-07 / D-66-03: info row for an installed plugin
+      // re-resolving `unsupported` -- the dedicated `◉` glyph.
+      return ICON_FORCE_INSTALLED;
     case "available":
       return ICON_AVAILABLE;
     case "unavailable":
@@ -3166,15 +3264,17 @@ function composePluginLinesWith(
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
   // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
-  // / `available` / `unavailable` / `disabled`) carry the manifest description;
-  // cascade `installed` rows never set `description`, so the guard keeps them
-  // single-line.
+  // / `available` / `unavailable` / `disabled` / `force-installed` /
+  // `force-upgradable`) carry the manifest description; cascade `installed` rows
+  // never set `description`, so the guard keeps them single-line.
   if (
     (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
       p.status === "unavailable" ||
-      p.status === "disabled") &&
+      p.status === "disabled" ||
+      p.status === "force-installed" ||
+      p.status === "force-upgradable") &&
     p.description !== undefined &&
     p.description.length > 0
   ) {

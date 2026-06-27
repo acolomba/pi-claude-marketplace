@@ -161,8 +161,14 @@ function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPlug
     // RLD-04 / D-08: the list orchestrator emits the steady-state inventory
     // row as `installed`; it projects to the same `installed` tool surface as
     // the cascade transition and the `upgradable` list row.
+    // FSTAT-02 / FSTAT-04 / D-66-03: both derived force states flatten to the
+    // `installed` tool surface -- a force-installed plugin is recorded-installed
+    // (degraded, but present), and a force-upgradable plugin is currently a
+    // clean install, so the LLM-tool projection treats both as installed.
     case "installed":
     case "upgradable":
+    case "force-installed":
+    case "force-upgradable":
       return "installed";
     case "available":
       return "available";
@@ -310,9 +316,14 @@ function pluginScopeOrFallback(
   switch (p.status) {
     // RLD-04 / D-08: the `installed` inventory row joins `upgradable` as a
     // scope-bearing list-surface variant.
+    // FSTAT-02 / FSTAT-04 / D-66-03: the derived force states are scope-bearing
+    // list-surface variants (each carries the optional `scope?`), so they join
+    // the orphan-fold scope arm.
     case "installed":
     case "upgradable":
     case "disabled":
+    case "force-installed":
+    case "force-upgradable":
       // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` (the
       // SNM-11 carve-out applies only to `available` / `unavailable`).
       return p.scope ?? marketplaceScope;
@@ -369,8 +380,12 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "skipped":
     case "manual recovery":
     case "disabled":
+    case "force-installed":
+    case "force-upgradable":
       // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
-      // recorded state record preserves the pinned version (ENBL-02).
+      // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
+      // FSTAT-04 / D-66-03: the derived force states carry the same optional
+      // `version?` slot as the other list-surface inventory variants.
       return p.version;
     case "updated":
       // The updated variant has `from`/`to` instead of a single `version`;
