@@ -100,7 +100,11 @@ import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import {
+  requireForceInstallable,
+  requireInstallable,
+  resolveStrict,
+} from "../../domain/resolver.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -136,7 +140,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -256,6 +260,14 @@ export interface InstallPluginOptions {
    */
   readonly mapModel?: boolean;
   /**
+   * D-65-03: when true, the install preflight selects `requireForceInstallable`
+   * instead of `requireInstallable`, widening the gate to admit the
+   * `unsupported` arm so its supported components materialize (the unsupported
+   * ones are skipped naturally; FORCE-01). The edge handler sets this when the
+   * user supplies `--force`. Both gates still reject `unavailable` (FORCE-05).
+   */
+  readonly force?: boolean;
+  /**
    * D-54-01 / ENBL-02: when set, bypasses `resolvePluginVersion` and pins
    * the install ledger to this exact version string. Used ONLY by
    * `setPluginEnabled` (the enable branch) to preserve the recorded state
@@ -289,7 +301,10 @@ interface InstallCtx {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
-  readonly resolved: ResolvedPluginInstallable;
+  // NFR-7 / D-65-03: widened to the force-materializable union so the
+  // `unsupported` arm (admitted under --force) flows through the same
+  // materialize phases. Excludes `unavailable` (no pluginRoot).
+  readonly resolved: MaterializablePlugin;
   readonly version: string;
   readonly pluginDataDir: string;
   // Prep handles populated by each phase.do before that phase's commit.
@@ -343,6 +358,8 @@ export interface InstallLedgerOptions {
   readonly plugin: string;
   /** AG-7 opt-in `--map-model` flag (see InstallPluginOptions.mapModel). */
   readonly mapModel?: boolean;
+  /** D-65-03 `--force` gate-selection flag (see InstallPluginOptions.force). */
+  readonly force?: boolean;
   /** ENBL-02 version pin (see InstallPluginOptions.pinVersionOverride). */
   readonly pinVersionOverride?: string;
   /**
@@ -472,10 +489,21 @@ export async function runInstallLedger(
   // disqualification notes. requireInstallable narrows the discriminated
   // union and throws on the not-installable variant.
   const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
-  requireInstallable(resolved, "install");
-  // After requireInstallable, `resolved` is narrowed to the installable
-  // variant; pluginRoot etc. are reachable.
-  const installable: ResolvedPluginInstallable = resolved;
+  // D-65-03 / FORCE-01/03/05: `--force` widens the gate to admit the
+  // force-degradable `unsupported` arm; the default gate still blocks it. Both
+  // gates reject `unavailable` (FORCE-05), so `--force` never bypasses a hard
+  // structural failure.
+  if (opts.force === true) {
+    requireForceInstallable(resolved, "install");
+  } else {
+    requireInstallable(resolved, "install");
+  }
+
+  // After the gate, `resolved` is narrowed to the force-materializable union
+  // (`installable | unsupported`); pluginRoot etc. are reachable. The
+  // `unsupported` arm carries only supported kinds in componentPaths, so the
+  // shared materialize phases degrade it naturally (D-65-02, no force branch).
+  const installable: MaterializablePlugin = resolved;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
   // to enumerate source artefacts under componentPaths, then applies the
@@ -947,6 +975,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           marketplace,
           plugin,
           ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
+          ...(opts.force !== undefined && { force: opts.force }),
           ...(opts.pinVersionOverride !== undefined && {
             pinVersionOverride: opts.pinVersionOverride,
           }),
