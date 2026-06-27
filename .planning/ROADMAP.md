@@ -236,7 +236,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 65-01-PLAN.md — Foundation: `MaterializablePlugin` union alias (NFR-7-safe), shared bridge/adapter type widening, `--force` recognition in the shared edge parser (FORCE-01/02/05)
+- [x] 65-01-PLAN.md — Foundation: `MaterializablePlugin` union alias (NFR-7-safe), shared bridge/adapter type widening, `--force` recognition in the shared edge parser (FORCE-01/02/05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -378,7 +378,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 62. `asyncRewake` Registry & Background-Spawn                       | v1.13     | 3/3 | Complete    | 2026-06-16 |
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
-| 65. Force Install & Update                                          | force-install | 0/TBD | Not started | -          |
+| 65. Force Install & Update                                          | force-install | 1/3 | In Progress|  |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 0/TBD | Not started | -          |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
