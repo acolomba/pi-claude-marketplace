@@ -149,7 +149,9 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
             const resolved = await resolveStrict(entry, {
               marketplaceRoot: mp.marketplaceRoot,
             });
-            installable = resolved.installable;
+            // D-64-01: both `unsupported` and `unavailable` map to the
+            // `unavailable` completion bucket; only `installable` is available.
+            installable = resolved.state === "installable";
           } catch {
             // Per-entry probe failure -> unavailable bucket. The cache row
             // shape carries no diagnostic notes; the slash-command `list`

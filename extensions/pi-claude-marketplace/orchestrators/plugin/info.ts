@@ -29,7 +29,11 @@ import {
 } from "../../domain/components/hook-events.ts";
 import { parseHooksConfig, type HooksConfig } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
+import {
+  resolveStrict,
+  type ResolvedPluginUnavailable,
+  type ResolvedPluginUnsupported,
+} from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -687,6 +691,78 @@ async function buildNotInstallablePathRowFields(
 }
 
 /**
+ * D-64-05: re-derive the component-path map for the MINIMAL `unavailable`
+ * arm, which (unlike `installable` / `unsupported`) does not carry
+ * `componentPaths`. The info surface re-resolves independently from the
+ * marketplace entry's declared component paths plus the conventional
+ * `<pluginRoot>/{skills,commands,agents}` locations; `composeResolvedComponents`
+ * tolerates missing directories (ENOENT -> empty), so a declared-but-absent
+ * or convention-absent directory contributes nothing. This keeps the
+ * `(unavailable)`/`(installed)` path-source rows enumerating on-disk
+ * components without reading the arm's stripped fields (NFR-7).
+ */
+function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][number]): {
+  skills: string[];
+  commands: string[];
+  agents: string[];
+} {
+  const out = {
+    skills: ["skills"],
+    commands: ["commands"],
+    agents: ["agents"],
+  };
+  for (const kind of ["skills", "commands", "agents"] as const) {
+    for (const d of asDeclaredList((entry as Record<string, unknown>)[kind])) {
+      if (typeof d === "string" && !out[kind].includes(d)) {
+        out[kind].push(d);
+      }
+    }
+  }
+
+  return out;
+}
+
+/** Normalize a raw entry component field to a flat list (undefined/null -> []). */
+function asDeclaredList(raw: unknown): readonly unknown[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+
+  return [raw];
+}
+
+/**
+ * Build the not-installable row fields for either non-installable arm.
+ * `unsupported` carries the full component payload (read directly);
+ * `unavailable` is minimal, so its component paths are re-derived
+ * independently via `deriveLenientComponentPaths` (D-64-05).
+ */
+function buildNonInstallableRowFields(
+  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  entry: MarketplaceManifest["plugins"][number],
+  marketplaceRoot: string,
+  parsedSource: ParsedSource,
+): ReturnType<typeof buildNotInstallablePathRowFields> {
+  if (resolved.state === "unsupported") {
+    return buildNotInstallablePathRowFields(resolved, marketplaceRoot, parsedSource);
+  }
+
+  return buildNotInstallablePathRowFields(
+    {
+      notes: resolved.notes,
+      componentPaths: deriveLenientComponentPaths(entry),
+      mcpServers: {},
+    },
+    marketplaceRoot,
+    parsedSource,
+  );
+}
+
+/**
  * Build an `(installed)` row. When the source kind is `"path"` (the
  * only locally resolvable kind), run `resolveStrict` to compute the
  * per-kind component arrays + sort them. For all other source kinds,
@@ -717,7 +793,7 @@ async function buildInstalledRow(
 
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
-    if (resolved.installable) {
+    if (resolved.state === "installable") {
       return {
         status: "installed",
         name: pluginName,
@@ -729,12 +805,15 @@ async function buildInstalledRow(
       };
     }
 
-    // resolveStrict returned NotInstallable but the state record says
+    // resolveStrict returned a non-installable arm but the state record says
     // installed -- the marketplace clone changed, OR the manifest now
-    // declares an unsupported field (`hooks` / `lspServers`). Status
-    // stays `installed` because the state record confirms the install.
-    const fields = await buildNotInstallablePathRowFields(
+    // declares an unsupported field (`lspServers`) or a structural defect
+    // (malformed hooks/manifest). Status stays `installed` because the state
+    // record confirms the install. `unsupported` reads its component payload
+    // directly; `unavailable` re-derives independently (D-64-05).
+    const fields = await buildNonInstallableRowFields(
       resolved,
+      entry,
       mpRecord.marketplaceRoot,
       parsedSource,
     );
@@ -798,7 +877,7 @@ async function buildNotInstalledRow(
     };
   }
 
-  if (!resolved.installable) {
+  if (resolved.state !== "installable") {
     if (!isLocallyResolvable(parsedSource)) {
       const resolverReasons = narrowResolverNotes(resolved.notes);
       return {
@@ -811,10 +890,12 @@ async function buildNotInstalledRow(
       };
     }
 
-    // Path source whose resolver returned not-installable: enumerate
-    // components from disk against the not-installable variant.
-    const fields = await buildNotInstallablePathRowFields(
+    // Path source whose resolver returned a non-installable arm: enumerate
+    // components from disk. `unsupported` reads its component payload
+    // directly; `unavailable` re-derives independently (D-64-05).
+    const fields = await buildNonInstallableRowFields(
       resolved,
+      entry,
       mpRecord.marketplaceRoot,
       parsedSource,
     );
@@ -828,7 +909,7 @@ async function buildNotInstalledRow(
   }
 
   // Non-path sources reach the `(unavailable)` arm above because
-  // `resolveStrict` returns `installable: false` for them -- so by the
+  // `resolveStrict` returns a structural `unavailable` for them -- so by the
   // time control gets here the source is path-resolvable and
   // `composeResolvedComponents` is safe to call without an external-
   // source short-circuit.

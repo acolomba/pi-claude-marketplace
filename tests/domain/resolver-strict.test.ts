@@ -10,6 +10,7 @@ import test from "node:test";
 import {
   type ResolveContext,
   type ResolvedPlugin,
+  requireForceInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
@@ -76,7 +77,7 @@ function basicEntry(over: LooseEntry = {}): PluginEntry {
 test("PR-2(1) non-path source kind (github) -> notInstallable", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "owner/repo" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("unsupported source kind")),
     `notes: ${r.notes.join(" / ")}`,
@@ -89,14 +90,14 @@ test("PR-2(1) upstream object source kind (url) -> notInstallable", async () => 
     basicEntry({ source: { source: "url", url: "https://github.com/obra/superpowers.git" } }),
     ctx,
   );
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(r.notes.includes("unsupported source kind: url"), `notes: ${r.notes.join(" / ")}`);
 });
 
 test("PR-2(2) source path escape -> notInstallable", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "../escape" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("escapes marketplace root")),
     `notes: ${r.notes.join(" / ")}`,
@@ -106,7 +107,7 @@ test("PR-2(2) source path escape -> notInstallable", async () => {
 test("PR-2(3) source dir does not exist -> notInstallable", async () => {
   const ctx = mockCtx(MP, {}); // no entries -> statKind returns null
   const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("source dir does not exist")),
     `notes: ${r.notes.join(" / ")}`,
@@ -119,7 +120,7 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
     [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: { contents: "{ not json" },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed plugin.json")),
     `notes: ${r.notes.join(" / ")}`,
@@ -134,9 +135,9 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
 test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", hooks: { onLoad: "x" } }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(!r.supported.includes("hooks"));
     assert.ok(
       !r.notes.some((n) => n.includes("contains hooks")),
@@ -159,9 +160,9 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(r.supported.includes("hooks"));
     assert.ok(
       !r.notes.some((n) => n.includes("contains hooks")),
@@ -179,7 +180,7 @@ test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-
     [path.join(localRoot, "hooks", "hooks.json")]: { contents: "not-valid-json" },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed hooks.json") || n.includes("hooks.json")),
     `notes must mention hooks.json parse failure: ${r.notes.join(" / ")}`,
@@ -198,7 +199,7 @@ test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("hooks.json")),
     `notes must mention hooks.json: ${r.notes.join(" / ")}`,
@@ -270,8 +271,8 @@ test("SURF-05 / D-63-08: rewakeMessage without asyncRewake -> orphanRewake === t
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.equal(r.orphanRewake, true);
   }
 });
@@ -302,8 +303,8 @@ test("SURF-05 / D-63-08: rewakeMessage WITH asyncRewake: true -> orphanRewake ab
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.equal(r.orphanRewake, undefined);
   }
 });
@@ -327,8 +328,8 @@ test("SURF-05 / D-63-08: rewakeSummary without asyncRewake -> orphanRewake === t
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.equal(r.orphanRewake, true);
   }
 });
@@ -370,8 +371,8 @@ test("SURF-05 / D-63-08: multi-event / multi-group config with ONE orphan -> orp
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     // boolean flag -- no count of N orphan handlers, just the single bit.
     assert.equal(r.orphanRewake, true);
   }
@@ -391,8 +392,8 @@ test("SURF-05 / D-63-08: hooks.json without any rewake fields -> orphanRewake ab
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.equal(r.orphanRewake, undefined);
   }
 });
@@ -404,9 +405,9 @@ test("SURF-05 / D-63-08: hooks.json without any rewake fields -> orphanRewake ab
 test("HOOK-01: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true);
+  assert.equal(r.state, "installable");
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(!r.supported.includes("hooks"));
   }
 });
@@ -436,9 +437,13 @@ test("PR-4 discovers unsupported default component locations", async () => {
       [path.join(localRoot, c.relativePath)]: c.stat,
     });
     const r = await resolveStrict(basicEntry({ source: `./local-${c.kind}` }), ctx);
-    assert.equal(r.installable, false, `${c.kind} should be unavailable`);
+    // D-64-06: an unsupported component kind with no structural defect
+    // resolves the `unsupported` (force-degradable) arm.
+    assert.equal(r.state, "unsupported", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
-    assert.ok(r.unsupported.includes(c.kind), `unsupported: ${r.unsupported.join(" / ")}`);
+    if (r.state === "unsupported") {
+      assert.ok(r.unsupported.includes(c.kind), `unsupported: ${r.unsupported.join(" / ")}`);
+    }
   }
 });
 
@@ -455,7 +460,8 @@ test("PR-3 experimental themes/monitors declarations are unsupported", async () 
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  // D-64-06: unsupported component kinds, no structural defect -> unsupported.
+  assert.equal(r.state, "unsupported");
   assert.ok(r.notes.includes("contains themes"), `notes: ${r.notes.join(" / ")}`);
   assert.ok(r.notes.includes("contains monitors"), `notes: ${r.notes.join(" / ")}`);
 });
@@ -463,7 +469,7 @@ test("PR-3 experimental themes/monitors declarations are unsupported", async () 
 test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: [1, 2, 3] }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed mcpServers")),
     `notes: ${r.notes.join(" / ")}`,
@@ -473,7 +479,7 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
 test("PR-2(7) non-string component path (skills: 42) -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: 42 }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("is not a string")),
     `notes: ${r.notes.join(" / ")}`,
@@ -483,7 +489,7 @@ test("PR-2(7) non-string component path (skills: 42) -> notInstallable", async (
 test("PR-2(8) escaping component path (skills: '../outside') -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: "../outside" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("escapes plugin root")),
     `notes: ${r.notes.join(" / ")}`,
@@ -497,7 +503,7 @@ test("PR-2(8) escaping component path (skills: '../outside') -> notInstallable",
 test("PR-2(9) [D-07 narrowed] array containing non-string element -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: [42] }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("is not a string")),
     `notes: ${r.notes.join(" / ")}`,
@@ -507,7 +513,7 @@ test("PR-2(9) [D-07 narrowed] array containing non-string element -> notInstalla
 test("PR-2(9) [D-07 narrowed] nested array element -> notInstallable with descriptive note", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: [["skills"]] }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("nested array element")),
     `notes: ${r.notes.join(" / ")}`,
@@ -524,7 +530,8 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
     basicEntry({ source: "./local", themes: { dark: {} }, bin: { tool: "x" } }),
     ctx,
   );
-  assert.equal(r.installable, false);
+  // D-64-06: multiple unsupported kinds, no structural defect -> unsupported.
+  assert.equal(r.state, "unsupported");
   assert.ok(
     r.notes.includes("contains themes"),
     `themes note missing; got: ${r.notes.join(" / ")}`,
@@ -544,9 +551,9 @@ test("PR-4 implicit-by-convention populates componentPaths.skills when neither e
     [path.join(ROOT("./local"), "skills")]: "dir",
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.ok(r.supported.includes("skills"));
   }
@@ -561,9 +568,9 @@ test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 sho
     [path.join(ROOT("./local"), "custom")]: "dir",
   });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: "custom" }), ctx);
-  assert.equal(r.installable, true);
+  assert.equal(r.state, "installable");
 
-  if (r.installable) {
+  if (r.state === "installable") {
     // Declared first, implicit-by-convention appended after.
     assert.deepEqual(r.componentPaths.skills, ["custom", "skills"]);
   }
@@ -579,7 +586,7 @@ test("PR-5 entry.dependencies present -> installable: true with manual-install n
     basicEntry({ source: "./local", dependencies: { other: "1.0" } }),
     ctx,
   );
-  assert.equal(r.installable, true);
+  assert.equal(r.state, "installable");
   assert.ok(
     r.notes.some((n) => n.includes("must be installed manually")),
     `notes: ${r.notes.join(" / ")}`,
@@ -636,13 +643,89 @@ test("MM-5 happy path: valid entry + manifest with skills -> installable with sk
     [path.join(localRoot, "skills")]: "dir",
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.equal(r.pluginRoot, localRoot);
     assert.ok(r.supported.includes("skills"));
     // D-07: manifest declares "skills" AND implicit "skills/" exists; UNION
     // applies first-wins dedup so the result is a single-element ["skills"].
     assert.deepEqual(r.componentPaths.skills, ["skills"]);
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RSTATE-02 / D-64-07: structural precedence
+// ──────────────────────────────────────────────────────────────────────────
+
+// A plugin that is BOTH structurally broken (malformed mcpServers) AND
+// declares an unsupported component kind (themes) resolves `unavailable` --
+// the structural defect wins, so `pluginRoot` never leaks through the
+// `unsupported` arm. Both reasons are still present in `notes`.
+test("RSTATE-02: structural defect + unsupported kind -> unavailable (structural precedence)", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: [1, 2, 3], themes: { dark: {} } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `structural note missing; got: ${r.notes.join(" / ")}`,
+  );
+  assert.ok(
+    r.notes.includes("contains themes"),
+    `unsupported note missing; got: ${r.notes.join(" / ")}`,
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RSTATE-04 / D-64-04: requireForceInstallable gate
+// ──────────────────────────────────────────────────────────────────────────
+
+test("RSTATE-04 requireForceInstallable admits installable and exposes pluginRoot", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r: ResolvedPlugin = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable");
+  requireForceInstallable(r);
+  // After the assertion r is ResolvedPluginInstallable | ResolvedPluginUnsupported.
+  assert.equal(typeof r.pluginRoot, "string");
+});
+
+test("RSTATE-04 requireForceInstallable admits unsupported and exposes pluginRoot", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r: ResolvedPlugin = await resolveStrict(
+    basicEntry({ source: "./local", themes: { dark: {} } }),
+    ctx,
+  );
+  assert.equal(r.state, "unsupported");
+  requireForceInstallable(r);
+  // D-64-06: the unsupported arm keeps pluginRoot, so force can degrade it.
+  assert.equal(typeof r.pluginRoot, "string");
+});
+
+test("RSTATE-04 requireForceInstallable throws on unavailable with 'is not installable'", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.throws(
+    () => {
+      requireForceInstallable(r);
+    },
+    (err: unknown) =>
+      err instanceof Error &&
+      err.message.includes('Plugin "p1" is not installable') &&
+      err.message.includes("source dir does not exist"),
+  );
+});
+
+test("RSTATE-04 requireForceInstallable(r, 'update') throws with 'is no longer installable'", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
+  assert.throws(
+    () => {
+      requireForceInstallable(r, "update");
+    },
+    (err: unknown) => err instanceof Error && err.message.includes("is no longer installable"),
+  );
 });

@@ -17,6 +17,8 @@ import test from "node:test";
 
 import {
   type ResolveContext,
+  type ResolvedPlugin,
+  requireForceInstallable,
   resolveLoose,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
@@ -73,9 +75,9 @@ test("MM-6 entry.skills declared -> installable with skills", async () => {
     [path.join(localRoot, "skills")]: "dir",
   });
   const r = await resolveLoose(basicEntry({ source: "./local", skills: "skills" }), ctx);
-  assert.equal(r.installable, true, `notes if not: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     // D-07 array shape (loose mode is entry-only with no convention probe).
     assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.ok(r.supported.includes("skills"));
@@ -91,7 +93,7 @@ test("MM-6 entry.skills absent but manifest declares skills -> conflict notInsta
     [path.join(localRoot, "skills")]: "dir",
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("component declarations conflict") && n.includes("skills")),
     `notes: ${r.notes.join(" / ")}`,
@@ -105,9 +107,9 @@ test("MM-6 entry + manifest both absent + <pluginRoot>/skills exists -> installa
     [path.join(localRoot, "skills")]: "dir",
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     // D-07 array shape: empty array (no implicit-by-convention in loose mode).
     assert.deepEqual(r.componentPaths.skills, [], "no implicit-by-convention in loose mode");
     assert.ok(!r.supported.includes("skills"));
@@ -128,7 +130,7 @@ test("MM-7 entry.mcpServers absent + manifest.mcpServers present -> conflict not
     },
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
     `notes: ${r.notes.join(" / ")}`,
@@ -142,7 +144,7 @@ test("MM-7 entry.mcpServers absent + standalone .mcp.json present -> conflict no
     [path.join(localRoot, ".mcp.json")]: { contents: JSON.stringify({ srv: {} }) },
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
     `notes: ${r.notes.join(" / ")}`,
@@ -156,9 +158,9 @@ test("MM-7 entry.mcpServers present + valid -> installable with mcpServers popul
     basicEntry({ source: "./local", mcpServers: { srv1: { command: "node" } } }),
     ctx,
   );
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.deepEqual(Object.keys(r.mcpServers), ["srv1"]);
   }
 });
@@ -170,7 +172,8 @@ test("MM-7 entry.mcpServers present + valid -> installable with mcpServers popul
 test("PR-3 loose: entry declares unsupported component -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveLoose(basicEntry({ source: "./local", themes: ["dark"] }), ctx);
-  assert.equal(r.installable, false);
+  // D-64-06: unsupported component kind, no structural defect -> unsupported.
+  assert.equal(r.state, "unsupported");
   assert.ok(r.notes.some((n) => n === "contains themes"));
 });
 
@@ -189,9 +192,9 @@ test("HOOK-01 loose: hooks/hooks.json present + parseable -> installable WITH ho
     },
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(r.supported.includes("hooks"));
     assert.ok(!r.notes.some((n) => n.includes("contains hooks")));
   }
@@ -206,7 +209,7 @@ test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + 
     [path.join(localRoot, "hooks", "hooks.json")]: { contents: "not-valid-json" },
   });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, false);
+  assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("hooks.json")),
     `notes must mention hooks.json: ${r.notes.join(" / ")}`,
@@ -218,9 +221,9 @@ test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + 
 test("HOOK-01 loose: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true);
+  assert.equal(r.state, "installable");
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(!r.supported.includes("hooks"));
   }
 });
@@ -250,7 +253,8 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
       [path.join(localRoot, c.relativePath)]: c.stat,
     });
     const r = await resolveLoose(basicEntry({ source: `./local-${c.kind}` }), ctx);
-    assert.equal(r.installable, false, `${c.kind} should be unavailable`);
+    // D-64-06: unsupported component kind, no structural defect -> unsupported.
+    assert.equal(r.state, "unsupported", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
   }
 });
@@ -261,7 +265,7 @@ test("PR-5 loose: entry.dependencies -> installable with manual-install note", a
     basicEntry({ source: "./local", dependencies: { other: "1.0" } }),
     ctx,
   );
-  assert.equal(r.installable, true);
+  assert.equal(r.state, "installable");
   assert.ok(r.notes.some((n) => n.includes("must be installed manually")));
 });
 
@@ -280,9 +284,9 @@ test("MM-6 loose happy path: entry declares skills and commands -> installable w
     basicEntry({ source: "./local", skills: "skills", commands: "commands" }),
     ctx,
   );
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     // D-07 array shape.
     assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.deepEqual(r.componentPaths.commands, ["commands"]);
@@ -303,10 +307,74 @@ test("D-07 loose: entry.skills as multi-element array preserves declared order w
     [path.join(localRoot, "b")]: "dir",
   });
   const r = await resolveLoose(basicEntry({ source: "./local", skills: ["a", "b", "a"] }), ctx);
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     // First-wins dedup; declared order preserved.
     assert.deepEqual(r.componentPaths.skills, ["a", "b"]);
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RSTATE-02 / D-64-07: structural precedence (loose mode)
+// ──────────────────────────────────────────────────────────────────────────
+
+// Loose mode: a manifest/standalone mcpServers conflict (structural) plus an
+// entry-declared unsupported kind (themes) resolves `unavailable` -- the
+// structural defect wins over the unsupported-component signal.
+test("RSTATE-02 loose: structural conflict + unsupported kind -> unavailable (structural precedence)", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: {
+      contents: JSON.stringify({ name: "p1", mcpServers: { srv: { command: "x" } } }),
+    },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", themes: ["dark"] }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
+    `structural note missing; got: ${r.notes.join(" / ")}`,
+  );
+  assert.ok(
+    r.notes.includes("contains themes"),
+    `unsupported note missing; got: ${r.notes.join(" / ")}`,
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RSTATE-04 / D-64-04: requireForceInstallable gate (loose mode)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("RSTATE-04 loose: requireForceInstallable admits installable and exposes pluginRoot", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r: ResolvedPlugin = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable");
+  requireForceInstallable(r);
+  assert.equal(typeof r.pluginRoot, "string");
+});
+
+test("RSTATE-04 loose: requireForceInstallable admits unsupported and exposes pluginRoot", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r: ResolvedPlugin = await resolveLoose(
+    basicEntry({ source: "./local", themes: ["dark"] }),
+    ctx,
+  );
+  assert.equal(r.state, "unsupported");
+  requireForceInstallable(r);
+  assert.equal(typeof r.pluginRoot, "string");
+});
+
+test("RSTATE-04 loose: requireForceInstallable throws on unavailable", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveLoose(basicEntry({ source: "./missing" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.throws(
+    () => {
+      requireForceInstallable(r);
+    },
+    (err: unknown) =>
+      err instanceof Error && err.message.includes('Plugin "p1" is not installable'),
+  );
 });

@@ -21,7 +21,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import {
   type ResolveContext,
-  type ResolvedPluginNotInstallable,
+  type ResolvedPluginUnavailable,
   SUPPORTED_COMPONENT_KINDS,
   UNSUPPORTED_COMPONENT_KINDS,
   resolveLoose,
@@ -260,9 +260,9 @@ test("NFR-7 + HOOK-01: resolveStrict admits a hook-only plugin (installable: tru
 
   const r = await resolveStrict(entry, ctx);
 
-  assert.equal(r.installable, true, `resolveStrict must admit: notes=${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `resolveStrict must admit: notes=${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(r.supported.includes("hooks"), "supported must contain 'hooks'");
     assert.equal(typeof r.pluginRoot, "string");
     assert.ok(r.pluginRoot.length > 0);
@@ -275,9 +275,9 @@ test("NFR-7 + HOOK-01: resolveLoose admits a hook-only plugin (installable: true
 
   const r = await resolveLoose(entry, ctx);
 
-  assert.equal(r.installable, true, `resolveLoose must admit: notes=${r.notes.join(" / ")}`);
+  assert.equal(r.state, "installable", `resolveLoose must admit: notes=${r.notes.join(" / ")}`);
 
-  if (r.installable) {
+  if (r.state === "installable") {
     assert.ok(r.supported.includes("hooks"), "supported must contain 'hooks'");
     assert.equal(typeof r.pluginRoot, "string");
     assert.ok(r.pluginRoot.length > 0);
@@ -286,11 +286,11 @@ test("NFR-7 + HOOK-01: resolveLoose admits a hook-only plugin (installable: true
 
 // NFR-7 type-level check. The load-bearing assertion is the
 // `@ts-expect-error` directive: TypeScript MUST refuse to compile a read of
-// `pluginRoot` from the not-installable arm. If the discriminated contract
-// regresses (e.g. someone adds `pluginRoot` to the not-installable variant),
+// `pluginRoot` from the `unavailable` arm. If the discriminated contract
+// regresses (e.g. someone adds `pluginRoot` to the `unavailable` variant),
 // the @ts-expect-error becomes "Unused" and `npm run typecheck` fails.
-function nfr7TypeLevelGuard(notInst: ResolvedPluginNotInstallable): void {
-  // @ts-expect-error -- NFR-7: pluginRoot must NOT be accessible on the not-installable variant.
+function nfr7TypeLevelGuard(notInst: ResolvedPluginUnavailable): void {
+  // @ts-expect-error -- NFR-7: pluginRoot must NOT be accessible on the unavailable variant.
   void notInst.pluginRoot;
 }
 

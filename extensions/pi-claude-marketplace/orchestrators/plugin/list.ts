@@ -347,7 +347,10 @@ async function availableRowMessage(
 
   try {
     const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
-    if (resolved.installable) {
+    // D-64-01: only the `installable` arm is `(available)`; both
+    // `unsupported` and `unavailable` render the `(unavailable)` row this
+    // phase (distinct glyphs/states are a later phase).
+    if (resolved.state === "installable") {
       return {
         status: "available",
         name: manifestEntry.name,

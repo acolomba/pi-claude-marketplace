@@ -43,7 +43,7 @@ const MARKETPLACE_NAME = "test-mp";
 
 function makeResolved(): ResolvedPluginInstallable {
   return {
-    installable: true,
+    state: "installable",
     name: PLUGIN_NAME,
     pluginRoot: FIXTURE_PLUGIN,
     supported: ["agents"],

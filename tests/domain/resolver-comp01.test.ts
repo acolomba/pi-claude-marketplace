@@ -78,8 +78,8 @@ test("COMP-01 (a) default skills/ only, no manifest field -> ['skills']", async 
     [path.join(localRoot, "skills")]: "dir",
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.deepEqual(r.componentPaths.skills, ["skills"]);
     assert.ok(r.supported.includes("skills"));
   }
@@ -99,8 +99,8 @@ test("COMP-01 (b) manifest declares ['custom/skills']; default skills/ absent ->
     // NOTE: /local/skills is intentionally absent.
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     assert.deepEqual(r.componentPaths.skills, ["custom/skills"]);
     assert.ok(r.supported.includes("skills"));
   }
@@ -121,8 +121,8 @@ test("COMP-01 (c) BOTH manifest ['custom/skills'] AND default skills/ -> UNION [
     [path.join(localRoot, "skills")]: "dir", // default ALSO exists
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     // Declared first, implicit appended after, deduplicated.
     assert.deepEqual(r.componentPaths.skills, ["custom/skills", "skills"]);
   }
@@ -150,8 +150,8 @@ test("COMP-01 entry > manifest declared order; first-wins dedup across both", as
     basicEntry({ source: "./local", skills: ["entry-only", "shared"] }),
     ctx,
   );
-  assert.equal(r.installable, true, `notes: ${r.notes.join(" / ")}`);
-  if (r.installable) {
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
     // Order: entry first ("entry-only", "shared"), then manifest's unique
     // contribution ("manifest-only"); "shared" deduped on second occurrence.
     // Implicit-by-convention "skills" is NOT present here because the conventional

@@ -22,7 +22,7 @@ function makeResolved(
   // absolute fixture dir directly (verbatim element); the bridge accepts
   // both absolute and relative-to-pluginRoot elements.
   return {
-    installable: true,
+    state: "installable",
     name: "acme",
     pluginRoot,
     supported: [],
@@ -178,7 +178,7 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
     await writeFile(path.join(b, "two", "SKILL.md"), "---\nname: two\n---\nbody");
 
     const resolved: ResolvedPluginInstallable = {
-      installable: true,
+      state: "installable",
       name: "acme",
       pluginRoot: tmp,
       supported: ["skills"],
@@ -213,7 +213,7 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     await writeFile(path.join(b, "shared", "SKILL.md"), "---\nname: shared\n---\nfrom-b");
 
     const resolved: ResolvedPluginInstallable = {
-      installable: true,
+      state: "installable",
       name: "acme",
       pluginRoot: tmp,
       supported: ["skills"],

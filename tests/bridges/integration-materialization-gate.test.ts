@@ -95,7 +95,7 @@ describe("integration: materialization gate", () => {
     try {
       const locations = locationsFor("project", scopeRoot);
       const resolved: ResolvedPluginInstallable = {
-        installable: true,
+        state: "installable",
         name: "empty-agents",
         pluginRoot: FIXTURE_EMPTY_AGENTS,
         supported: ["agents"],

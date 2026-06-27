@@ -33,7 +33,7 @@ const FIXTURES = path.resolve(HERE, "..", "_fixtures");
 
 function makeResolved(name: string, pluginRoot: string): ResolvedPluginInstallable {
   return {
-    installable: true,
+    state: "installable",
     name,
     pluginRoot,
     supported: ["agents"],

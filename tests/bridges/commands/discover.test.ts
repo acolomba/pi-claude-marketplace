@@ -17,7 +17,7 @@ function makeResolved(
 ): ResolvedPluginInstallable {
   // D-07: componentPaths.commands is `readonly string[]`.
   return {
-    installable: true,
+    state: "installable",
     name: "acme",
     pluginRoot,
     supported: commandsRel === undefined ? [] : ["commands"],
@@ -212,7 +212,7 @@ test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands
     await writeFile(path.join(b, "two.md"), "body-b");
 
     const resolved: ResolvedPluginInstallable = {
-      installable: true,
+      state: "installable",
       name: "acme",
       pluginRoot: tmp,
       supported: ["commands"],
@@ -248,7 +248,7 @@ test("D-07 discoverPluginCommands first-wins dedup across array elements (collis
     await writeFile(path.join(b, "shared.md"), "from-b");
 
     const resolved: ResolvedPluginInstallable = {
-      installable: true,
+      state: "installable",
       name: "acme",
       pluginRoot: tmp,
       supported: ["commands"],

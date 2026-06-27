@@ -31,7 +31,7 @@ function makeResolved(
 ): ResolvedPluginInstallable {
   // D-07: componentPaths.skills is `readonly string[]`.
   return {
-    installable: true,
+    state: "installable",
     name,
     pluginRoot,
     supported: [],
