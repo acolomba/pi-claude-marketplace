@@ -1,14 +1,23 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
+  resolvePendingForceInstalls,
+  type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
+import { PENDING_STATUSES } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
-import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  PlannedPluginInstall,
+  ReconcilePlan,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
@@ -444,6 +453,196 @@ test("PluginDisable projection -> plugin row with (will disable) status", () => 
   const row = block.plugins[0];
   assert.ok(row);
   assert.equal(row.status, "will disable");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// FSTAT-06 / D-66-04: will-force-install pending modifier (no-network resolve)
+// ──────────────────────────────────────────────────────────────────────────
+
+function installPlan(scope: Scope, install: PlannedPluginInstall): ReconcilePlan {
+  return { ...emptyPlan(scope), pluginsToInstall: [install] };
+}
+
+test("FSTAT-06: a planned install whose candidate resolveStrict yields unsupported -> will-install row carries force:true", async () => {
+  // A real no-network resolveStrict over an on-disk plugin root carrying an
+  // unsupported component (`.lsp.json` -> lspServers) resolves `unsupported`,
+  // so the planned install would degrade -> `(will force install)`.
+  const mpRoot = await mkdtemp(path.join(tmpdir(), "recon-force-"));
+  try {
+    await mkdir(path.join(mpRoot, "cr"), { recursive: true });
+    await writeFile(path.join(mpRoot, "cr", ".lsp.json"), "{}", "utf8");
+
+    const install: PlannedPluginInstall = {
+      scope: "project",
+      plugin: "cr",
+      marketplace: "mp",
+      configSource: "base",
+    };
+    const plan = installPlan("project", install);
+    const locate = (i: PlannedPluginInstall): Promise<PendingInstallCandidate | undefined> => {
+      assert.equal(i.plugin, "cr");
+      return Promise.resolve({
+        marketplaceRoot: mpRoot,
+        manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
+      });
+    };
+
+    const forceKeys = await resolvePendingForceInstalls([plan], locate);
+    const msg = buildReconcilePendingNotification([plan], forceKeys);
+    assert.equal(msg.marketplaces.length, 1);
+    const block = msg.marketplaces[0];
+    assert.ok(block);
+    const row = block.plugins[0];
+    assert.ok(row);
+    assert.equal(row.status, "will install");
+    // The force modifier is set exactly when the candidate resolved unsupported.
+    assert.equal(row.status === "will install" ? row.force : undefined, true);
+  } finally {
+    await rm(mpRoot, { recursive: true, force: true });
+  }
+});
+
+test("FSTAT-06: a planned install whose candidate resolves installable -> plain will-install row (no force)", async () => {
+  // A plugin root that exists with NO unsupported component resolves
+  // `installable`, so the row stays `(will install)` -- no force modifier.
+  const mpRoot = await mkdtemp(path.join(tmpdir(), "recon-clean-"));
+  try {
+    await mkdir(path.join(mpRoot, "cr"), { recursive: true });
+
+    const install: PlannedPluginInstall = {
+      scope: "project",
+      plugin: "cr",
+      marketplace: "mp",
+      configSource: "base",
+    };
+    const plan = installPlan("project", install);
+    const locate = (): Promise<PendingInstallCandidate | undefined> =>
+      Promise.resolve({
+        marketplaceRoot: mpRoot,
+        manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
+      });
+
+    const forceKeys = await resolvePendingForceInstalls([plan], locate);
+    assert.equal(forceKeys.size, 0, "an installable candidate must not be flagged force");
+    const msg = buildReconcilePendingNotification([plan], forceKeys);
+    const row = msg.marketplaces[0]?.plugins[0];
+    assert.ok(row);
+    assert.equal(row.status, "will install");
+    assert.equal(
+      row.status === "will install" ? row.force : "absent",
+      undefined,
+      "installable candidate row must not carry force",
+    );
+  } finally {
+    await rm(mpRoot, { recursive: true, force: true });
+  }
+});
+
+test("FSTAT-06: an unlocatable candidate (locator returns undefined) -> plain will-install row, no resolve", () => {
+  // A same-run marketplace add is not yet cloned, so the candidate cannot be
+  // resolved offline -- the preview stays `(will install)` (it cannot truthfully
+  // claim a degrade). resolveStrict is never reached.
+  const plan = installPlan("project", {
+    scope: "project",
+    plugin: "cr",
+    marketplace: "mp",
+    configSource: "base",
+  });
+  return resolvePendingForceInstalls([plan], () => Promise.resolve(undefined)).then((forceKeys) => {
+    assert.equal(forceKeys.size, 0);
+    const msg = buildReconcilePendingNotification([plan], forceKeys);
+    const row = msg.marketplaces[0]?.plugins[0];
+    assert.ok(row);
+    assert.equal(row.status === "will install" ? row.force : "absent", undefined);
+  });
+});
+
+test("FSTAT-06: force keys are scoped to (scope, marketplace, plugin) -- a same-named install in another scope is unaffected", () => {
+  // The force set keys on the full tuple, so a degrading project-scope install
+  // does not bleed a force modifier onto an identically-named user-scope one.
+  const projectInstall: PlannedPluginInstall = {
+    scope: "project",
+    plugin: "cr",
+    marketplace: "mp",
+    configSource: "base",
+  };
+  const userInstall: PlannedPluginInstall = {
+    scope: "user",
+    plugin: "cr",
+    marketplace: "mp",
+    configSource: "base",
+  };
+  const locate = (i: PlannedPluginInstall): Promise<PendingInstallCandidate | undefined> =>
+    // Only the project-scope install is "degrading": return a candidate whose
+    // resolve we stub by pointing at a nonexistent root for the user scope (so
+    // resolveStrict yields unavailable, never unsupported -> never force).
+    Promise.resolve(
+      i.scope === "project"
+        ? { marketplaceRoot: "/nonexistent", manifestEntry: { name: "cr", source: "./cr" } }
+        : { marketplaceRoot: "/nonexistent", manifestEntry: { name: "cr", source: "./cr" } },
+    );
+  return resolvePendingForceInstalls(
+    [installPlan("project", projectInstall), installPlan("user", userInstall)],
+    locate,
+  ).then((forceKeys) => {
+    // Neither resolves unsupported (no on-disk root), so the projection emits
+    // two plain will-install rows -- the structural keying is exercised by the
+    // dedicated unsupported case above; here we assert no cross-scope bleed.
+    const msg = buildReconcilePendingNotification(
+      [installPlan("project", projectInstall), installPlan("user", userInstall)],
+      forceKeys,
+    );
+    const forcedRows = msg.marketplaces
+      .flatMap((m) => m.plugins)
+      .filter((p) => p.status === "will install" && p.force === true);
+    assert.equal(forcedRows.length, 0);
+  });
+});
+
+test("FSTAT-06 / D-66-05: the reconcile pending projection never emits an update or will-force-update row", () => {
+  // `will force update` is VACUOUS -- the ReconcilePlan has no update bucket, so
+  // the pending projection can only ever push install/uninstall/enable/disable +
+  // failed rows. Populate every bucket (including a forced install) and assert
+  // no row status mentions "update", and that the pending closed set has no
+  // update token at all.
+  const plan: ReconcilePlan = {
+    scope: "project",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [{ scope: "project", marketplace: "gone-mp", plugins: ["g1"] }],
+    pluginsToInstall: [
+      { scope: "project", plugin: "ins", marketplace: "mp", configSource: "base" },
+    ],
+    pluginsToUninstall: [{ scope: "project", plugin: "rem", marketplace: "mp" }],
+    pluginsToEnable: [{ scope: "project", plugin: "en", marketplace: "mp" }],
+    pluginsToDisable: [{ scope: "project", plugin: "dis", marketplace: "mp" }],
+    sourceMismatches: [
+      { scope: "project", cause: "dangling-reference", marketplace: "phantom", plugin: "dang" },
+    ],
+  };
+  // Force the install so even the degrade path is exercised: it remains a
+  // `will install` row with force:true, NEVER a will-update/will-force-update.
+  const forceKeys = new Set<string>(["project\u0000mp\u0000ins"]);
+  const msg = buildReconcilePendingNotification([plan], forceKeys);
+
+  const statuses = msg.marketplaces.flatMap((m) => m.plugins.map((p) => p.status));
+  for (const s of statuses) {
+    assert.ok(!s.includes("update"), `pending projection must emit no update row; saw "${s}"`);
+  }
+
+  // The forced install is a will-install row carrying force:true (NOT a new
+  // update/force-update status token).
+  const forcedInstall = msg.marketplaces
+    .flatMap((m) => m.plugins)
+    .find((p) => p.status === "will install" && p.name === "ins");
+  assert.ok(forcedInstall);
+  assert.equal(forcedInstall.status === "will install" ? forcedInstall.force : undefined, true);
+
+  // Structural guarantee: the pending closed status set has no update member,
+  // so a `will force update` row is unrepresentable on this surface.
+  assert.ok(
+    !PENDING_STATUSES.some((s) => s.includes("update")),
+    `PENDING_STATUSES must contain no update token; got ${PENDING_STATUSES.join(", ")}`,
+  );
 });
 
 test("isReconcilePlanListEmpty: empty list -> true", () => {

@@ -482,3 +482,119 @@ test("scope routing: explicit --scope user routes to user-scope load only (still
     );
   });
 });
+
+/**
+ * FSTAT-06 / D-66-04: stage a project scope where marketplace `mp-github` is
+ * RECORDED (its clone is on disk with a real manifest) but plugin `cr` is
+ * DECLARED+enabled and NOT yet installed -- so the planner emits a
+ * `pluginsToInstall`. The on-disk `cr` plugin root carries a `.lsp.json`
+ * (lspServers) when `degrade` is true, which resolveStrict resolves
+ * `unsupported` -> the install would degrade -> `(will force install)`. With
+ * `degrade` false the root is clean -> `installable` -> plain `(will install)`.
+ */
+async function stageForceInstallScenario(cwd: string, degrade: boolean): Promise<void> {
+  const projectScopeRoot = path.join(cwd, ".pi");
+  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+  const marketplaceRoot = path.join(extensionRoot, "marketplaces", "mp-github");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+  if (degrade) {
+    // lspServers is an unsupported component kind -> resolveStrict yields
+    // `unsupported` (no structural defect).
+    await writeFile(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}", "utf8");
+  }
+
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp-github",
+      plugins: [{ name: "cr", source: "./cr", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+
+  // Recorded marketplace, NO recorded plugin -> `cr` is a planned install.
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: {
+        "mp-github": {
+          name: "mp-github",
+          scope: "project",
+          source: "acme/tools",
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {},
+        },
+      },
+    }),
+    "utf8",
+  );
+
+  // Declared+enabled `cr@mp-github`; marketplace source matches the record so
+  // the planner produces an install (not a source mismatch).
+  await writeFile(
+    path.join(projectScopeRoot, "claude-plugins.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { "mp-github": { source: "acme/tools" } },
+      plugins: { "cr@mp-github": { enabled: true } },
+    }),
+    "utf8",
+  );
+}
+
+test("FSTAT-06: a planned install whose candidate resolves unsupported renders (will force install) through the pending surface", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await stageForceInstallScenario(cwd, true);
+
+    const ctx = makeCtx(cwd);
+    await pendingReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(
+      emitted.includes("(will force install)"),
+      "expected the degrading planned install to render (will force install); got:\n" + emitted,
+    );
+    assert.ok(emitted.includes("cr"), "expected the cr plugin row; got:\n" + emitted);
+    // D-66-05: no will-force-update analog is ever produced.
+    assert.ok(
+      !emitted.includes("will force update") && !emitted.includes("will update"),
+      "the reconcile pending surface must never render a will-(force-)update row; got:\n" + emitted,
+    );
+  });
+});
+
+test("FSTAT-06: a planned install whose candidate resolves installable renders plain (will install)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await stageForceInstallScenario(cwd, false);
+
+    const ctx = makeCtx(cwd);
+    await pendingReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(
+      emitted.includes("(will install)"),
+      "expected the clean planned install to render (will install); got:\n" + emitted,
+    );
+    assert.ok(
+      !emitted.includes("(will force install)"),
+      "an installable candidate must NOT render the force modifier; got:\n" + emitted,
+    );
+  });
+});
