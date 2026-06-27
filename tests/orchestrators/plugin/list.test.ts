@@ -40,6 +40,7 @@ import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 import type {
   ExtensionAPI,
@@ -117,7 +118,21 @@ interface SeedMarketplaceOpts {
    * populated, every other axis empty) -- the exact shape that triggered
    * the hooks-only-list-disabled regression.
    */
-  installed?: Record<string, { version: string; disabled?: boolean; hooksOnly?: boolean }>;
+  installed?: Record<
+    string,
+    {
+      version: string;
+      disabled?: boolean;
+      hooksOnly?: boolean;
+      /**
+       * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
+       * component-kind list. A non-empty value reproduces a recorded-installed
+       * plugin that resolved `unsupported` at install time (the force-installed
+       * signal the deriver reads, with `installable: false`).
+       */
+      unsupported?: readonly string[];
+    }
+  >;
   /** When provided, sets `autoupdate` on the marketplace record. */
   autoupdate?: boolean;
   /** When provided, plugin source dirs at these names get created so resolver probes find them. */
@@ -185,10 +200,22 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       resources = { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] };
     }
 
+    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
+    // resolution dropped components persists `unsupported` (and
+    // `installable: false`). The deriver reads this to render
+    // `(force-installed)` -- no separate persisted flag.
+    const unsupported = info.unsupported ?? [];
+    const compatibility = {
+      installable: unsupported.length === 0,
+      notes: [],
+      supported: [],
+      unsupported: [...unsupported],
+    };
+
     plugins[name] = {
       version: info.version,
       resolvedSource: "./placeholder",
-      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      compatibility,
       resources,
       enabled: info.disabled !== true,
       installedAt: "2026-01-01T00:00:00.000Z",
@@ -851,6 +878,177 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     assert.match(out, /\(upgradable\)/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// FSTAT-01 / FSTAT-03 / FSTAT-04 / FSTAT-05 / D-66-01 / D-66-02 force-state
+// deriver matrix: purity (no state write), A4 ordering (force-installed wins),
+// no-network candidate split, and auto-return-to-installed.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(force-installed)` with NO state write", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "1.0.0" }],
+      },
+      // Degraded record: persisted `unsupported` non-empty -> force-installed.
+      installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
+      installablePluginDirs: ["plug"],
+    });
+
+    // FSTAT-01 purity: the deriver is a pure read of the persisted record --
+    // listing MUST NOT rewrite state.json.
+    const stateJsonPath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
+    const before = await readFile(stateJsonPath, "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // ◉ glyph + `(force-installed)`; version is the installed record's version.
+    assert.match(out, /◉ plug v1\.0\.0 \(force-installed\)/);
+
+    const after = await readFile(stateJsonPath, "utf8");
+    assert.equal(after, before, "the deriver must not write state.json (FSTAT-01)");
+  });
+});
+
+test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives `(force-installed)`, NEVER `(force-upgradable)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        // Newer candidate that ALSO resolves unsupported (declares lspServers).
+        // A4 ordering: force-installed is checked first, so the candidate
+        // resolve never runs / never wins.
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "2.0.0", lspServers: { ls: {} } }],
+      },
+      installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
+      installablePluginDirs: ["plug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /\(force-installed\)/);
+    assert.equal(out.includes("(force-upgradable)"), false, out);
+  });
+});
+
+test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` derives `(force-upgradable)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        // Newer candidate version AND declares lspServers -> resolveStrict
+        // yields `unsupported`, newly degrading a currently-clean plugin.
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "1.0.1", lspServers: { ls: {} } }],
+      },
+      installed: { plug: { version: "1.0.0" } },
+      installablePluginDirs: ["plug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // ● glyph (clean today) + `(force-upgradable)`; version stays the installed
+    // record's version. The reasons brace carries the narrowUnsupportedKinds
+    // marker for the degrading candidate kind.
+    assert.match(out, /● plug v1\.0\.0 \(force-upgradable\)/);
+    assert.match(out, new RegExp(`\\{${narrowUnsupportedKinds(["lspServers"]).join(", ")}\\}`));
+  });
+});
+
+test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` derives `(upgradable)` (no force state)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        // Newer candidate, but clean (no unsupported kinds) -> plain upgradable.
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "1.0.1" }],
+      },
+      installed: { plug: { version: "1.0.0" } },
+      installablePluginDirs: ["plug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
+    assert.equal(out.includes("force-"), false, out);
+  });
+});
+
+test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-return, no lingering force state)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "1.0.0" }],
+      },
+      installed: { plug: { version: "1.0.0" } },
+      installablePluginDirs: ["plug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /● plug v1\.0\.0 \(installed\)/);
+    assert.equal(out.includes("force-"), false, out);
+  });
+});
+
+test("FSTAT-01 / D-64-02: the force-installed row's reasons are the narrowUnsupportedKinds dropped-component markers", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "plug", source: "./plug", version: "1.0.0" }],
+      },
+      // Two dropped kinds: lspServers -> `lsp`, monitors -> `unsupported source`
+      // (first-wins dedup is exercised on the `unsupported source` mapping).
+      installed: { plug: { version: "1.0.0", unsupported: ["lspServers", "monitors"] } },
+      installablePluginDirs: ["plug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    const expectedMarkers = narrowUnsupportedKinds(["lspServers", "monitors"]).join(", ");
+    assert.match(out, /\(force-installed\)/);
+    assert.match(out, new RegExp(`\\{${expectedMarkers}\\}`));
   });
 });
 
