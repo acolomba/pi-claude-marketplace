@@ -1678,6 +1678,10 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
  *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
  *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
+ *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) routes its
+ *      bare token through the shared `narrowUnsupportedKinds` helper so the
+ *      install surface emits the same per-kind marker set as `list`/`info`
+ *      (CR-01 / SURF-01 / D-64-02) instead of dropping non-`lspServers` kinds
  *   2. "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
@@ -1716,6 +1720,19 @@ function narrowResolverReasons(reasons: readonly string[]): readonly ContentReas
     const manifestFieldToken = manifestFieldTokenFromNote(reason);
     if (manifestFieldToken !== undefined) {
       out.push(manifestFieldToken);
+      continue;
+    }
+
+    // CR-01 / SURF-01 / D-64-02: a `contains <kind>` note for a kind OTHER than
+    // the `lspServers` carve-out handled above (e.g. `monitors`, `themes`) is
+    // still a per-kind unsupported component marker. Route its bare token
+    // through the SAME shared helper `list`/`info` consume so a multi-kind
+    // `unsupported` plugin emits a byte-identical marker set on every surface.
+    // Previously these notes were dropped here whenever an earlier note had
+    // already populated `out` (the empty-array fallback then did not fire), so
+    // `install` rendered fewer markers than `list`/`info` for the same plugin.
+    if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
+      out.push(...narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)]));
       continue;
     }
 

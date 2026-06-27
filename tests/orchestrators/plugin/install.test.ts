@@ -2126,11 +2126,17 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   // supported component kind, so the resolver no longer emits a
   // `"contains hooks"` note in real traffic; the dead branch was
   // removed). `contains lspServers` remains the SOLE manifest-field
-  // carve-out and maps to `lsp` per SNM-36 / D-24-04. The test pins
-  // the post-D-58-02 behavior: a synthetic input mixing `contains hooks`
-  // with `contains lspServers` extracts only `lsp` (the `contains hooks`
-  // arm falls through to the permissive `unsupported source` fallback,
-  // but is dedup-suppressed when another permissive arm already fired).
+  // carve-out and maps to `lsp` per SNM-36 / D-24-04.
+  //
+  // CR-01 / SURF-01 / D-64-02: every OTHER `contains <kind>` note routes its
+  // bare token through the shared `narrowUnsupportedKinds` helper and renders
+  // the generic `unsupported source` marker -- it is NO LONGER dropped when an
+  // earlier marker already populated the row. A synthetic input mixing
+  // `contains hooks` with `contains lspServers` therefore emits BOTH markers
+  // (`unsupported source` for the non-carve-out kind, `lsp` for `lspServers`),
+  // byte-identical to what `list`/`info` derive from the typed `unsupported[]`
+  // list for the same kinds. D-58-02 is preserved: the synthetic `contains
+  // hooks` renders the generic `unsupported source`, NOT `unsupported hooks`.
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2143,7 +2149,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["lsp"]);
+  assert.deepEqual(row.reasons, ["unsupported source", "lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
