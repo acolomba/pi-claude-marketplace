@@ -24,7 +24,7 @@ import path from "node:path";
 import { assertSafeName, generatedCommandName } from "../../domain/name.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
@@ -66,7 +66,7 @@ function duplicateWarning(sourceName: string, commandsDir: string, generatedName
 
 export async function discoverPluginCommands(input: {
   pluginName: string;
-  resolved: ResolvedPluginInstallable;
+  resolved: MaterializablePlugin;
 }): Promise<DiscoverPluginCommandsResult> {
   // The resolver populates componentPaths.commands with one element per
   // declared (or implicit-by-convention) commands directory. Empty array

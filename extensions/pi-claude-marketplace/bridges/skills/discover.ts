@@ -22,7 +22,7 @@ import path from "node:path";
 import { assertSafeName, generatedSkillName } from "../../domain/name.ts";
 
 import type { DiscoveredSkill } from "./types.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { Dirent } from "node:fs";
 
 /**
@@ -88,7 +88,7 @@ function duplicateWarning(sourceName: string, skillsDir: string, generatedName: 
  */
 export async function discoverPluginSkills(input: {
   pluginName: string;
-  resolved: ResolvedPluginInstallable;
+  resolved: MaterializablePlugin;
 }): Promise<DiscoverPluginSkillsResult> {
   const skillsDirs = input.resolved.componentPaths.skills;
 

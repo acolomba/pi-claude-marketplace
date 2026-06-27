@@ -31,6 +31,7 @@ export type {
   ResolvedPluginInstallable,
   ResolvedPluginUnsupported,
   ResolvedPluginUnavailable,
+  MaterializablePlugin,
   ResolveContext,
 } from "./resolver.ts";
 export {

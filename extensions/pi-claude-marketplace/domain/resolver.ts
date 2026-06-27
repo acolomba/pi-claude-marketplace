@@ -126,6 +126,14 @@ export type ResolvedPluginInstallable = Type.Static<typeof ResolvedPluginInstall
 export type ResolvedPluginUnsupported = Type.Static<typeof ResolvedPluginUnsupportedSchema>;
 export type ResolvedPluginUnavailable = Type.Static<typeof ResolvedPluginUnavailableSchema>;
 export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
+
+// NFR-7: the force-materializable union. It names exactly the two arms that
+// carry `pluginRoot` + the full component payload -- `installable` and the
+// force-degradable `unsupported` (D-64-06) -- and EXCLUDES `unavailable`, so
+// no consumer that widens a holder to this union can read `pluginRoot` off a
+// structurally-broken plugin. This is exactly the type `requireForceInstallable`
+// narrows to, and the type the force install/update holders accept.
+export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginUnsupported;
 type StatKind = "file" | "dir" | null;
 type StatKindReader = (p: string) => Promise<StatKind>;
 

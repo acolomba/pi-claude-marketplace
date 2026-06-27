@@ -24,7 +24,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -488,7 +488,7 @@ export async function resolveInstalledMarketplaceTarget(opts: {
  */
 export async function resolvePluginVersion(
   entry: PluginEntry,
-  installable: ResolvedPluginInstallable,
+  installable: MaterializablePlugin,
 ): Promise<string> {
   // Tier 1: the plugin's own plugin.json `version`. Re-read in place; any
   // failure falls through to the next tier (D-23-02 / D-23-03).
@@ -515,7 +515,7 @@ export async function resolvePluginVersion(
 }
 
 /** Bridge adapter for the resolver's `componentPaths.agents` array shape. */
-export function pickAgentsSourceDir(installable: ResolvedPluginInstallable): string | null {
+export function pickAgentsSourceDir(installable: MaterializablePlugin): string | null {
   const first = installable.componentPaths.agents[0];
   if (first === undefined) {
     return null;

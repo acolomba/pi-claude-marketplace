@@ -22,12 +22,14 @@ import type {
   ResolvedPluginInstallable,
   ResolvedPluginUnsupported,
   ResolvedPluginUnavailable,
+  MaterializablePlugin,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 declare const r: ResolvedPlugin;
 declare const inst: ResolvedPluginInstallable;
 declare const unsup: ResolvedPluginUnsupported;
 declare const unavail: ResolvedPluginUnavailable;
+declare const materializable: MaterializablePlugin;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Positive narrowing: pluginRoot is readable on installable + unsupported
@@ -84,6 +86,31 @@ function gateExcludesUnavailable(): void {
   void bad;
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// NFR-7 / FORCE-05: MaterializablePlugin admits installable + unsupported and
+// EXCLUDES the unavailable arm. The force install/update holders widen to this
+// union; the negative assertion proves no widened holder can ever carry an
+// `unavailable` plugin (and therefore can never read `pluginRoot` off one).
+// ──────────────────────────────────────────────────────────────────────────
+
+function materializableAdmitsInstallable(): MaterializablePlugin {
+  return inst; // OK -- installable is a Materializable arm (NFR-7).
+}
+
+function materializableAdmitsUnsupported(): MaterializablePlugin {
+  return unsup; // OK -- D-64-06: unsupported is the force-degradable arm.
+}
+
+function materializableExposesPluginRoot(): string {
+  return materializable.pluginRoot; // OK -- both arms carry pluginRoot (NFR-7).
+}
+
+function materializableExcludesUnavailable(): void {
+  // @ts-expect-error -- NFR-7 / FORCE-05: the unavailable arm is not assignable to MaterializablePlugin.
+  const bad: MaterializablePlugin = unavail;
+  void bad;
+}
+
 // Reference the helpers so tsc doesn't flag them as unused (they're not
 // exported -- keeping them tree-shake-safe).
 void consumeInstallable;
@@ -93,6 +120,10 @@ void consumeUnavailable;
 void narrowOnDiscriminatorNegative;
 void gateNarrowsForce;
 void gateExcludesUnavailable;
+void materializableAdmitsInstallable;
+void materializableAdmitsUnsupported;
+void materializableExposesPluginRoot;
+void materializableExcludesUnavailable;
 
 test("NFR-7 type-level test: typecheck (npm run typecheck) is the load-bearing assertion", () => {
   // The actual NFR-7 verification happens at compile time -- if this file
