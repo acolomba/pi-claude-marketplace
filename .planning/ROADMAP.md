@@ -307,7 +307,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 67-01-PLAN.md — reinstall `--force` retirement: unconditional overwrite-everything; handler/router/completion-provider/usage strip; coupled tests + docs lockstep (RINST-01)
+- [x] 67-01-PLAN.md — reinstall `--force` retirement: unconditional overwrite-everything; handler/router/completion-provider/usage strip; coupled tests + docs lockstep (RINST-01)
 
 **Wave 2** *(blocked on Wave 1: shared provider.test.ts / router.test.ts / docs surfaces)*
 
@@ -430,7 +430,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
-| 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/4 | Not started | -          |
+| 67. List Filters, Completion & Reinstall Repair                     | force-install | 1/4 | In Progress|  |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
