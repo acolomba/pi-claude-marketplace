@@ -340,13 +340,17 @@ test("TC-3 :: -- and - prefixes behave identically", async () => {
   }
 });
 
-test("PRL-16 :: reinstall flag completion includes --force only for reinstall", async () => {
+test("PRL-16 / RINST-01 :: reinstall flag completion excludes --force; --scope still offered", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const reinstallItems = await getArgumentCompletions("reinstall -", f.resolver);
     assert.ok(reinstallItems !== null);
-    assert.ok(reinstallItems.some((i) => i.label === "--force"));
+    // D-67-03: `--force` is retired from the reinstall completion surface.
+    assert.equal(
+      reinstallItems.some((i) => i.label === "--force"),
+      false,
+    );
     assert.ok(reinstallItems.some((i) => i.label === "--scope"));
 
     for (const head of ["install", "uninstall", "update", "list", "ls", "marketplace"]) {
@@ -960,27 +964,11 @@ test("PRL-16 :: reinstall completion mode shows only installed plugins", async (
   }
 });
 
-test("PRL-16 :: reinstall --force completion still reaches installed refs", async () => {
-  __resetCacheForTests();
-  const f = await makeFixture({
-    state: { user: { mp: {} }, project: {} },
-    manifests: { user: { mp: [{ name: "solo", status: "installed" }] }, project: {} },
-  });
-  try {
-    const items = await getArgumentCompletions("reinstall --force ", f.resolver);
-    assert.ok(items !== null);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["solo@mp"],
-    );
-    assert.deepEqual(
-      items.map((i) => i.value),
-      ["reinstall --force solo@mp "],
-    );
-  } finally {
-    await f.cleanup();
-  }
-});
+// RINST-01 / D-67-03: removed the former `reinstall --force completion still
+// reaches installed refs` test -- `--force` is no longer a reinstall token, so
+// the completion provider no longer special-cases it during positional
+// extraction. The bare `reinstall ` installed-plugin completion above is the
+// surviving coverage for the reinstall ref surface.
 
 test("PRL-16 :: reinstall @ completes marketplace-only targets", async () => {
   __resetCacheForTests();

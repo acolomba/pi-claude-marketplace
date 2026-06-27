@@ -83,11 +83,14 @@ test("AP-3 :: empty input emits TOP_LEVEL_USAGE at error severity", async () => 
   // notifyUsageError emits `${message}\n\n${usageBlock}` -- assert the
   // Usage block is present in the surfaced message.
   assert.ok(notifications[0]?.message.includes(TOP_LEVEL_USAGE));
+  // RINST-01 / D-67-03: the reinstall help line no longer advertises
+  // `[--force]` (overwrite is unconditional; `--force` errors as unknown).
   assert.ok(
     TOP_LEVEL_USAGE.includes(
-      "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--force]",
+      "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n",
     ),
   );
+  assert.doesNotMatch(TOP_LEVEL_USAGE, /reinstall.*\[--force\]/);
   assert.ok(notifications[0]?.message.includes("import"));
 });
 

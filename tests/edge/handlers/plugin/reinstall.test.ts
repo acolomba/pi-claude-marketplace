@@ -1,9 +1,11 @@
 // reinstall handler shim tests.
 //
-// Reinstall mirrors update's three target forms but adds a command-specific
-// `--force` flag. These tests verify the thin edge parser reaches the bulk
-// orchestrator for valid forms and rejects invalid flags/positionals before
-// any successful reinstall can occur.
+// Reinstall mirrors update's three target forms. Overwrite of collisions and
+// foreign content is unconditional (RINST-01 / D-67-03): there is no
+// command-local `--force` flag, and passing one errors as an UNKNOWN flag.
+// These tests verify the thin edge parser reaches the bulk orchestrator for
+// valid forms and rejects invalid flags/positionals before any successful
+// reinstall can occur.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -213,7 +215,7 @@ test("shim :: --scope works before and after reinstall ref", async () => {
   });
 });
 
-test("shim :: --force works before and after reinstall ref", async () => {
+test("RINST-01 / D-67-03 :: bare reinstall over foreign content overwrites unconditionally; --force is an unknown flag", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { pluginRoot } = await seedInstalledAgentPlugin({ cwd });
     const locations = locationsFor("project", cwd);
@@ -222,56 +224,46 @@ test("shim :: --force works before and after reinstall ref", async () => {
     await writeAgentPluginTree(pluginRoot, "hello", "new agent");
 
     const handler = makeReinstallHandler(makePi());
-    const defaultAttempt = makeCtx(cwd);
-    await handler("hello@mp --scope project", defaultAttempt.ctx);
-    // D-19-02: a cascade with a failed row tips severity
-    // to `error` per D-16-11 (notify() content-derived ladder; failed
-    // beats warning in first-match order). Per MSG-SR-6, severity is
-    // owned by the cascade contents. The per-row reason is derived
-    // structurally via the
-    // failed outcome's `failureClass` tag (set by the orchestrator catch
-    // when the bridge throws a ManualRecoveryError); in THIS scenario
-    // (`replacePreparedAgents` rejects foreign content before any backup
-    // commit, so no inner bridge rollback runs and the bridge never
-    // throws ManualRecoveryError), the failed outcome carries no
-    // `failureClass` tag and the renderer falls through to the closed-set
-    // narrowing fallback `{not in manifest}`. Per-row scope orphan-folded.
-    assert.equal(defaultAttempt.notifications[0]?.severity, "error");
-    assert.match(defaultAttempt.notifications[0]?.message ?? "", /⊘ hello \(failed\)/);
 
-    const forceAfter = makeCtx(cwd);
-    await handler("hello@mp --scope project --force", forceAfter.ctx);
+    // RINST-01: overwrite of collisions + foreign content is unconditional.
+    // A bare reinstall (no flag) over an agent that holds foreign bytes now
+    // SUCCEEDS with a (reinstalled) row -- the prior contract required a
+    // command-local `--force`. Per-row scope orphan-folded (matches
+    // marketplace scope).
+    const bareAttempt = makeCtx(cwd);
+    await handler("hello@mp --scope project", bareAttempt.ctx);
     assert.equal(
-      forceAfter.notifications.some((n) => n.severity === "error"),
+      bareAttempt.notifications.some((n) => n.severity === "error"),
       false,
     );
-    // D-19-02: single-plugin reinstall success renders as
-    // a 1-row cascade carrying PluginReinstalledMessage; per-row scope
-    // orphan-folded (matches marketplace scope).
     assert.match(
-      forceAfter.notifications[0]?.message ?? "",
+      bareAttempt.notifications[0]?.message ?? "",
       /● mp \[project\]\n {2}● hello v\d.+\(reinstalled\)/,
     );
 
+    // D-67-03: `--force` is no longer an accepted flag -> it errors as an
+    // UNKNOWN flag (the shared edge scanner rejects it before any reinstall
+    // runs), a clear signal the contract changed rather than a silent no-op.
     await writeFile(agentPath, "manual foreign bytes again", "utf8");
     await writeAgentPluginTree(pluginRoot, "hello", "newer agent");
-    const forceBefore = makeCtx(cwd);
-    await handler("--force hello@mp --scope project", forceBefore.ctx);
-    assert.equal(
-      forceBefore.notifications.some((n) => n.severity === "error"),
-      false,
+    const forceRejected = makeCtx(cwd);
+    await handler("hello@mp --scope project --force", forceRejected.ctx);
+    assert.equal(forceRejected.notifications.length, 1);
+    assert.equal(forceRejected.notifications[0]?.severity, "error");
+    assert.ok(
+      (forceRejected.notifications[0]?.message ?? "").startsWith('Unknown flag: "--force".'),
     );
-    assert.match(
-      forceBefore.notifications[0]?.message ?? "",
-      /● mp \[project\]\n {2}● hello v\d.+\(reinstalled\)/,
-    );
+    assert.match(forceRejected.notifications[0]?.message ?? "", /Usage: \/claude:plugin reinstall/);
+    assert.doesNotMatch(forceRejected.notifications[0]?.message ?? "", /\(reinstalled\)/);
   });
 });
 
 test("PRL-01: shim :: invalid ref unknown flag and extra positionals emit reinstall usage (top-level command exposes a clear Usage: block)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const handler = makeReinstallHandler(makePi());
-    for (const args of ["no-at-sign", "--bogus", "a@mp b@mp", "--force=true"]) {
+    // D-67-03: bare `--force` joins the unknown-flag set (sibling of the
+    // existing `--force=true`) -- reinstall no longer accepts it.
+    for (const args of ["no-at-sign", "--bogus", "a@mp b@mp", "--force=true", "--force"]) {
       const { ctx, notifications } = makeCtx(cwd);
       await handler(args, ctx);
       assert.equal(notifications.length, 1, args);
@@ -304,6 +296,8 @@ test("USAGE string contains [--local]", async () => {
     await handler("badtoken --frobnicate", ctx);
     assert.equal(notifications.length, 1);
     assert.match(notifications[0]!.message, /\[--local\]/);
+    // RINST-01 / D-67-03: the usage string no longer advertises `[--force]`.
+    assert.doesNotMatch(notifications[0]!.message, /\[--force\]/);
   });
 });
 
