@@ -193,7 +193,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
 - [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
 - [x] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove (completed 2026-06-27)
-- [ ] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail
+- [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail (completed 2026-06-27)
 - [ ] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites
 - [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
 - [ ] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split
@@ -290,7 +290,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 - [x] 66-02-PLAN.md — list deriver: no-network `resolveStrict` + four-way force-installed/force-upgradable/upgradable/installed predicate (FSTAT-01/03/04/05)
 - [x] 66-03-PLAN.md — info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-02/03/07)
-- [ ] 66-04-PLAN.md — reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
+- [x] 66-04-PLAN.md — reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
 
 #### Phase 67: List Filters, Completion & Reinstall Repair
 
@@ -413,7 +413,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 63. Lifecycle Cascade, User-Facing Surface & Docs                   | v1.13     | 11/11 | Complete    | 2026-06-16 |
 | 64. Resolver Three-Way State                                        | force-install | 2/2 | Complete    | 2026-06-27 |
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
-| 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 3/4 | In Progress|  |
+| 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete   | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 0/TBD | Not started | -          |
 | 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
