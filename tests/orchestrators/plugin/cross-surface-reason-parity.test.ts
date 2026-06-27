@@ -97,6 +97,39 @@ for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
   });
 }
 
+// RSTATE-05 / SURF-01 / D-64-02 multi-kind parity: a single-element case agrees
+// across surfaces only by coincidence (the install path's empty-array fallback
+// happens to emit the same generic marker). The byte-parity invariant must hold
+// for a MULTI-kind `unsupported` plugin, where the install path previously
+// dropped every non-`lspServers` kind once an earlier kind had populated the
+// row -- so `install` rendered `["lsp"]` while `list`/`info` rendered
+// `["lsp","unsupported source"]` for the SAME plugin. This case pairs the typed
+// kind list (list/info input) against the matching resolver notes (install
+// input) and asserts both surfaces emit a byte-identical multi-marker set.
+test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-identical across list, info, and install", () => {
+  // list + info derive markers from the typed `unsupported[]` list via the
+  // shared helper.
+  const listInfoOut = narrowUnsupportedKinds(["lspServers", "themes"]);
+  // install error surface derives markers from the resolver `contains <kind>`
+  // notes threaded onto the thrown PluginShapeError's `reasons`.
+  const installOut = __test_narrowResolverReasons(["contains lspServers", "contains themes"]);
+  assert.deepEqual(
+    listInfoOut,
+    ["lsp", "unsupported source"],
+    `list/info surface emitted ${JSON.stringify(listInfoOut)}`,
+  );
+  assert.deepEqual(
+    installOut,
+    ["lsp", "unsupported source"],
+    `install surface emitted ${JSON.stringify(installOut)}`,
+  );
+  assert.deepEqual(
+    listInfoOut,
+    installOut,
+    "list/info and install multi-kind markers must be byte-identical",
+  );
+});
+
 // RSTATE-05 / D-64-07 regression guard: structural reasons stay on the `notes`
 // path and are NOT re-routed through the per-kind list helper. The `unsupported`
 // arm's `unsupported[]` list never carries a `hooks` kind (a malformed/unsupported
