@@ -1,14 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: force-install
-milestone_name: Claude Hook Bridge
+milestone_name: milestone
 status: executing
-last_updated: "2026-06-27T15:06:04.478Z"
-last_activity: 2026-06-27 -- Phase 66 planning complete
+stopped_at: Phase 65.1 context gathered
+last_updated: "2026-06-27T15:48:02.088Z"
+last_activity: 2026-06-27 -- Phase 65.1 execution started
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 9
+  total_plans: 11
   completed_plans: 5
   percent: 25
 ---
@@ -19,14 +20,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 65 — force-install-update
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 65.1 — reload-deferred-will-grammar-consistency
 
 ## Current Position
 
-Phase: 66
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-27 -- Phase 66 planning complete
+Phase: 65.1 (reload-deferred-will-grammar-consistency) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 65.1
+Last activity: 2026-06-27 -- Phase 65.1 execution started
 
 ## Performance Metrics
 

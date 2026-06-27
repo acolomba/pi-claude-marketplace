@@ -261,7 +261,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 65.1-01-PLAN.md — WILL-02 reload-hint agreement test (new isolated file) + additive marketplace-remove-with-installed-plugins catalog-uat byte state; both green on the current tree (WILL-02, WILL-04)
+- [x] 65.1-01-PLAN.md — WILL-02 reload-hint agreement test (new isolated file) + additive marketplace-remove-with-installed-plugins catalog-uat byte state; both green on the current tree (WILL-02, WILL-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
