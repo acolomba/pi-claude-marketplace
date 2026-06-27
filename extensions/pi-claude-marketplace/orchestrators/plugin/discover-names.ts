@@ -16,7 +16,7 @@ import {
 
 import { pickAgentsSourceDir } from "./shared.ts";
 
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 
 export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];
@@ -27,7 +27,7 @@ export interface DiscoveredGeneratedNames {
 
 export async function discoverGeneratedNames(
   plugin: string,
-  installable: ResolvedPluginInstallable,
+  installable: MaterializablePlugin,
 ): Promise<DiscoveredGeneratedNames> {
   const skillsDiscovery = await discoverPluginSkills({ pluginName: plugin, resolved: installable });
   const commandsDiscovery = await discoverPluginCommands({
