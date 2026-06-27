@@ -739,6 +739,53 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
 });
 
 // ---------------------------------------------------------------------------
+// FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves `unsupported`
+// (manifest declares an unsupported component kind such as `lspServers`)
+// is reported as `(force-installed)` with the dropped-component detail
+// from `narrowUnsupportedKinds` -- NOT `(installed)`. The `unavailable`
+// arm keeps `(installed)` (D-64-05, covered by WR-01 above) and the
+// `installable` arm keeps `(installed)` (INFO-02 above); info never emits
+// `force-upgradable` (that is a list-inventory-only concept).
+// ---------------------------------------------------------------------------
+
+test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers) renders `◉ ... (force-installed) {lsp}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "degraded",
+            source: "./degraded",
+            version: "1.0.0",
+            // An unsupported component kind flips resolveStrict to the
+            // `unsupported` arm (D-64-06); narrowUnsupportedKinds maps
+            // `lspServers` -> the `lsp` manifest-field marker.
+            lspServers: { foo: { command: "foo-lsp" } },
+          },
+        ],
+      },
+      installed: { degraded: { version: "1.0.0" } },
+      installablePluginDirs: ["degraded"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (force-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (h-WR-02) WR-02: the NOT-installed catch path
 // must classify the probe throw via the SAME `narrowProbeError` ladder
 // as `list.ts`, not hardcode `"unreadable"`. We exercise the
