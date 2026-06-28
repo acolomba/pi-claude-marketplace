@@ -864,10 +864,13 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-02 / D-69-03: structurally `unavailable` install failure -- force
-    // cannot help, so the row is byte-frozen (no `--force` hint, info severity).
+    // SEV-02 / D-69-03 / D-70-02: structurally `unavailable` install failure --
+    // force cannot degrade-install a structural defect, so the row carries NO
+    // `--force` hint, but it still stamps error severity (the leading summary
+    // line fires) because an install failure must read as an error.
     "failure-structural-unavailable": {
       pi: piWithBothLoaded(),
+      expectedSeverity: "error",
       message: {
         marketplaces: [
           {
@@ -878,6 +881,7 @@ const FIXTURES: FixtureMap = {
                 status: "unavailable",
                 name: "helper",
                 reasons: ["unsupported source"],
+                severity: "error",
               },
             ],
           },

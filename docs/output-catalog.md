@@ -446,11 +446,13 @@ The manifest declares Claude features Pi doesn't support, but the plugin is othe
 <!-- catalog-state: failure-structural-unavailable -->
 
 ```text
+A plugin operation has failed.
+
 ● official [user]
   ⊘ helper (unavailable) {unsupported source}
 ```
 
-The plugin has a structural defect (e.g. a missing source directory), so the resolver verdict is the `unavailable` arm -- `--force` cannot help (SEV-02 / D-69-03). The row renders byte-frozen: NO `--force` hint trailer and no severity stamp (info, no leading summary line), exactly as an `unavailable` row renders elsewhere. The `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; the reason names the structural defect. No reload-hint (nothing landed).
+The plugin has a structural defect (e.g. a missing source directory), so the resolver verdict is the `unavailable` arm -- `--force` cannot degrade-install a structural defect (SEV-02 / D-69-03 / D-70-02). The row carries NO `--force` hint trailer, but it still renders at `error` severity (so the leading summary line fires) because an install failure must read as an error, not a benign info row. The `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; the reason names the structural defect. No reload-hint (nothing landed). This install-failure error stamp is caller-stamped on the row by `composeUnavailableMessage`; the SAME `unavailable` variant continues to render at info on the list surface, where rows omit `severity`.
 
 ### Failure -- runtime error with cause chain
 
