@@ -332,7 +332,17 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   2. The backfill scan fires only when `lastReconciledExtensionVersion` in `state.json` differs from the running extension version; an unchanged version skips the scan.
   3. The new `lastReconciledExtensionVersion` stamp is written to and read from `state.json` across loads via a non-destructive schema migration.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 68-01-PLAN.md — Version-stamp foundation: EXTENSION_VERSION constant + drift guard, optional lastReconciledExtensionVersion field + loadState normalization (BFILL-02)
+- [ ] 68-02-PLAN.md — Reinstall force-capability widening: requireForceInstallable gate + record real compatibility set (BFILL-01)
+- [ ] 68-03-PLAN.md — Backfill outcome arm + cascade projection (installed/force-installed) (BFILL-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 68-04-PLAN.md — Version-gated backfill scan in applyReconcile: re-materialize + stamp + single-cascade fold (BFILL-01, BFILL-02)
 
 #### Phase 69: Force-Path Severity
 
@@ -431,6 +441,6 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
-| 68. Load-Time Backfill                                              | force-install | 0/TBD | Not started | -          |
+| 68. Load-Time Backfill                                              | force-install | 0/4 | Not started | -          |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
