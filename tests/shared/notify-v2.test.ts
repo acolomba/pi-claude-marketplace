@@ -3453,11 +3453,12 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
 // bare `<event>` for non-tool events).
 // ===========================================================================
 
-test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for tool events, FORBIDS it for non-tool events", () => {
-  // Compile-time exhaustiveness pin: tool events (PreToolUse, PostToolUse,
-  // PostToolUseFailure) carry a `matcher: string` field; non-tool events
-  // (SessionStart, etc.) cannot. The `@ts-expect-error` directives below
-  // assert that the misuse cases fail to typecheck.
+test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for the untagged tool-event arm", () => {
+  // Compile-time exhaustiveness pin: the untagged tool-event arm
+  // (PreToolUse, PostToolUse, PostToolUseFailure) carries a required
+  // `matcher: string`; the untagged non-tool arm carries no matcher field.
+  // The `@ts-expect-error` below asserts the missing-matcher misuse fails to
+  // typecheck.
 
   // Valid: tool event with matcher.
   const validToolEntry: HookSummaryEntry = { event: "PreToolUse", matcher: "Bash" };
@@ -3466,8 +3467,20 @@ test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for too
 
   // @ts-expect-error PreToolUse requires matcher per D-63-06
   const missingMatcher: HookSummaryEntry = { event: "PreToolUse" };
-  // @ts-expect-error SessionStart forbids matcher per D-63-06
-  const extraneousMatcher: HookSummaryEntry = { event: "SessionStart", matcher: "anything" };
+
+  // PHOOK-05 / D-71-05: the lenient arm now carries an OPTIONAL `matcher` so
+  // the info surface can enumerate a dropped matcher group as
+  // `event(matcher) (unsupported)`. Because `matcher` is now a known
+  // property of the union, a non-tool event literal carrying one is no longer
+  // a union-level excess-property error -- it is tolerated against the
+  // untagged non-tool arm. The untagged non-tool arm itself still declares no
+  // matcher field; only the tagged lenient arm accepts one.
+  const lenientDroppedGroup: HookSummaryEntry = {
+    kind: "lenient",
+    event: "PreToolUse",
+    supported: false,
+    matcher: ".*",
+  };
 
   // Reference the locals so TS does not flag them unused (the assertions
   // ABOVE -- not the runtime body -- are the actual contract).
@@ -3475,7 +3488,7 @@ test("SURF-02 / D-63-06: HookSummaryEntry discriminator REQUIRES matcher for too
   assert.equal(validToolEntry.matcher, "Bash");
   assert.equal(validNonToolEntry.event, "SessionStart");
   assert.equal((missingMatcher as { event: string }).event, "PreToolUse");
-  assert.equal((extraneousMatcher as { event: string }).event, "SessionStart");
+  assert.equal("kind" in lenientDroppedGroup && lenientDroppedGroup.matcher, ".*");
 });
 
 test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", () => {

@@ -27,7 +27,11 @@ import {
   TOOL_EVENTS,
   type ToolEvent,
 } from "../../domain/components/hook-events.ts";
-import { parseHooksConfig, type HooksConfig } from "../../domain/components/hooks.ts";
+import {
+  parseHooksConfig,
+  type DroppedHook,
+  type HooksConfig,
+} from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
   resolveStrict,
@@ -298,6 +302,39 @@ function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEnt
 }
 
 /**
+ * PHOOK-05 / D-71-05: project the partition's `dropped` enumeration to
+ * lenient `HookSummaryEntry` rows so a force-degradable plugin enumerates
+ * the handlers the install path WILL drop. A `kind:"event"` drop (a whole
+ * non-bucket-A event, P1) renders bare `<event> (unsupported)`; a
+ * `kind:"group"` (P2-P5) or `kind:"handler"` (P6) drop renders at
+ * matcher-group granularity `<event>(<matcher>) (unsupported)`. Multiple
+ * handler drops sharing one matcher group collapse to a single line
+ * (matcher-group granularity), so the dropped block mirrors the supported
+ * block's one-line-per-group convention (FSTAT-07 dropped-component detail).
+ */
+function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly HookSummaryEntry[] {
+  const entries: HookSummaryEntry[] = [];
+  const seen = new Set<string>();
+  for (const drop of dropped) {
+    const matcher = drop.kind === "event" ? undefined : drop.matcher;
+    const key = `${drop.event} ${matcher ?? ""}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    entries.push({
+      kind: "lenient",
+      event: drop.event,
+      supported: false,
+      ...(matcher !== undefined && { matcher }),
+    });
+  }
+
+  return entries;
+}
+
+/**
  * Read & re-parse `<pluginRoot>/<resolved.hooksConfigPath>` from disk
  * and project to `HookSummaryEntry[]`. The resolver discards the parsed
  * value (it only records `hooksConfigPath`), so the info renderer must
@@ -306,6 +343,15 @@ function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEnt
  * when the re-parse fails (the resolver would also have flipped
  * `installable: false`, so this branch is defensive only -- the file
  * was parseable at resolve time).
+ *
+ * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
+ * subset as `value` plus the `dropped` enumeration. For a force-degradable
+ * plugin the row records `hooksConfigPath`, so info routes HERE (the strict
+ * reader) rather than the lenient bail reader -- the dropped enumeration
+ * must therefore render on THIS path or it vanishes. The supported entries
+ * render plain (declaration order); the dropped entries render
+ * `(unsupported)`-suffixed afterwards, re-derived from the SAME pure parse
+ * (no separate threading -- the partition is deterministic).
  *
  * I/O failures (EACCES / ENOENT after resolve) PROPAGATE so the row
  * builder's outer catch can classify via the existing `narrowProbeError`
@@ -330,7 +376,9 @@ async function readHookSummaryEntries(
     return undefined;
   }
 
-  return projectHookSummaryEntries(parsed.value);
+  const supported = projectHookSummaryEntries(parsed.value);
+  const dropped = projectDroppedHookEntries(parsed.dropped);
+  return [...supported, ...dropped];
 }
 
 /**

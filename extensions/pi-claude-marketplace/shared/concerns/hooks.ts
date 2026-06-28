@@ -28,15 +28,21 @@
 //   - tool event (untagged): statically carries `matcher: string`.
 //   - non-tool event (untagged): statically cannot carry a matcher.
 //   - lenient (tagged `kind: "lenient"`): produced by the info-surface
-//     lenient reader when the resolver bailed (it did NOT record
-//     `hooksConfigPath`). Carries an arbitrary `event: string` (the
-//     resolver rejected this key, so it may be `Stop`, `Notification`,
-//     or any other token the plugin author wrote) plus a
-//     `supported: boolean` bucket-A membership flag. Rendered with a
-//     ` (unsupported)` suffix iff `supported === false`. The lenient
-//     arm exists ONLY on the info surface; the resolver-side strict
-//     parser (`domain/components/hooks.ts::parseHooksConfig`) remains
-//     strict and never produces lenient entries.
+//     readers for entries the install path will NOT materialize. Two
+//     producers: (1) the lenient reader when the resolver bailed (it did
+//     NOT record `hooksConfigPath`), and (2) the strict reader's
+//     dropped-handler enumeration for a force-degradable plugin
+//     (PHOOK-05 / D-71-05) whose parseable hooks.json had one or more
+//     unsupportable events / matcher groups / handlers partitioned out.
+//     Carries an arbitrary `event: string` (may be `Stop`,
+//     `Notification`, or any other token the plugin author wrote), a
+//     `supported: boolean` bucket-A / supportability flag, and an
+//     optional `matcher`. Rendered as `<event>` (or `<event>(<matcher>)`
+//     when `matcher` is present) with a ` (unsupported)` suffix iff
+//     `supported === false`. The lenient arm exists ONLY on the info
+//     surface; the resolver-side strict parser
+//     (`domain/components/hooks.ts::parseHooksConfig`) remains strict and
+//     never produces lenient entries.
 // Discriminator is structural: the untagged arms have no `kind` field;
 // the lenient arm is the only one carrying `kind: "lenient"`. The
 // renderer branches on `"kind" in entry` first, then on `"matcher" in
@@ -68,6 +74,7 @@ export type HookSummaryEntry =
       readonly kind: "lenient";
       readonly event: string;
       readonly supported: boolean;
+      readonly matcher?: string;
     };
 
 export interface HookSummary {
@@ -78,10 +85,12 @@ export interface HookSummary {
  * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
  * carries one or more entries. Emits a 4-space-indent header followed by
  * one 6-space-indent line per entry. Three arm shapes:
- *   - lenient arm (`kind === "lenient"`): bare `<event>`, with a
- *     ` (unsupported)` suffix iff `supported === false`. Produced only
- *     by the info-surface lenient reader on rows where the resolver did
- *     NOT record `hooksConfigPath`.
+ *   - lenient arm (`kind === "lenient"`): `<event>` -- or
+ *     `<event>(<matcher>)` when a `matcher` is present (matcher-group
+ *     granularity for a dropped group / handler, PHOOK-05 / D-71-05) --
+ *     with a ` (unsupported)` suffix iff `supported === false`. Produced
+ *     by the info-surface lenient reader (resolver did NOT record
+ *     `hooksConfigPath`) and by the strict reader's dropped enumeration.
  *   - tool event (untagged, has `matcher`): `<event>(<matcher>)`.
  *   - non-tool event (untagged, no `matcher`): bare `<event>`.
  * Reads `entry.event` / `entry.matcher` directly -- no re-derivation
@@ -99,7 +108,8 @@ export function appendHooksBlock(
   lines.push("    hooks:");
   for (const entry of entries) {
     if ("kind" in entry) {
-      lines.push(`      ${entry.event}${entry.supported ? "" : " (unsupported)"}`);
+      const matcherPart = entry.matcher === undefined ? "" : `(${entry.matcher})`;
+      lines.push(`      ${entry.event}${matcherPart}${entry.supported ? "" : " (unsupported)"}`);
     } else if ("matcher" in entry) {
       lines.push(`      ${entry.event}(${entry.matcher})`);
     } else {

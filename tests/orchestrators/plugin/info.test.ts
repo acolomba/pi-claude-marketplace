@@ -1979,8 +1979,10 @@ test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(
     });
 
     // ralph-loop fixture shape: a single top-level `Stop` event, which is
-    // not in v1.13's BUCKET_A_EVENTS. The strict resolver flips
-    // installable: false; the lenient reader still enumerates `Stop`.
+    // not in BUCKET_A_EVENTS. The partition filters it to the EMPTY subset
+    // (Q2), so the plugin resolves `unsupported` WITHOUT recording
+    // `hooksConfigPath` -- info therefore routes to the lenient reader, which
+    // still enumerates `Stop (unsupported)` from the source file.
     const pluginDir = path.join(mpRoot, "ralph");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(
@@ -2001,7 +2003,7 @@ test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(
   });
 });
 
-test("INFO-05: lenient reader lists BOTH events in declaration order on a mixed `PostToolUse` + `Stop` row; only the non-bucket-A one carries `(unsupported)`", async () => {
+test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group plus the dropped `Stop (unsupported)` on a mixed force-degradable row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -2017,10 +2019,11 @@ test("INFO-05: lenient reader lists BOTH events in declaration order on a mixed 
     });
 
     // Mixed shape: PostToolUse (bucket-A, with a matcher) + Stop
-    // (non-bucket-A). The strict resolver still flips installable: false
-    // because Stop trips TOOL-02. The lenient reader does NOT extract
-    // matchers (it only enumerates event keys), so PostToolUse renders
-    // bare on this rejected-by-resolver code path.
+    // (non-bucket-A). The partition keeps the supportable PostToolUse(Bash)
+    // group and drops the Stop event, so the plugin resolves `unsupported`
+    // and records `hooksConfigPath`. Info therefore routes to the STRICT
+    // reader, which extracts the matcher (`PostToolUse(Bash)`) and now also
+    // enumerates the dropped Stop event (FSTAT-07 dropped-component detail).
     const pluginDir = path.join(mpRoot, "mixed");
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(
@@ -2039,8 +2042,58 @@ test("INFO-05: lenient reader lists BOTH events in declaration order on a mixed 
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
-    // Declaration order: PostToolUse first (no suffix), then Stop with suffix.
-    assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\n {6}Stop \(unsupported\)/);
+    // Kept group first (with its matcher, via the strict reader), then the
+    // dropped Stop event carrying the (unsupported) suffix.
+    assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\(Bash\)\n {6}Stop \(unsupported\)/);
+  });
+});
+
+test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matcher group as `PreToolUse(.*) (unsupported)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "grouped", source: "./grouped", version: "0.1.0" }],
+      },
+      installablePluginDirs: ["grouped"],
+    });
+
+    // Intra-event matcher-group partition (D-71-02): PreToolUse declares a
+    // supportable `Edit` group and an unsupportable regex `.*` group. The
+    // partition keeps the Edit group and drops the regex group, so the plugin
+    // resolves `unsupported` with `hooksConfigPath` recorded. The strict
+    // reader renders the kept group plain and the dropped group at
+    // matcher-group granularity with the (unsupported) suffix.
+    const pluginDir = path.join(mpRoot, "grouped");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
+            { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+          ],
+        },
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "grouped", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    // Kept group plain, dropped regex group at matcher-group granularity.
+    assert.match(
+      msg,
+      /\n {4}hooks:\n {6}PreToolUse\(Edit\)\n {6}PreToolUse\(\.\*\) \(unsupported\)/,
+    );
   });
 });
 

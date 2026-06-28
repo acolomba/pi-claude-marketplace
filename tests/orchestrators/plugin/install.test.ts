@@ -2145,23 +2145,18 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
   // The resolver's `r.notes` carry the
   // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
-  // carve-out in `narrowResolverReasons` strips the prefix and emits
-  // the bare token as the Reason. HOOK-04 / D-58-02 dropped the
-  // `contains hooks` half of the carve-out (under v1.13 `hooks` is a
-  // supported component kind, so the resolver no longer emits a
-  // `"contains hooks"` note in real traffic; the dead branch was
-  // removed). `contains lspServers` remains the SOLE manifest-field
-  // carve-out and maps to `lsp` per SNM-36 / D-24-04.
+  // carve-out in `narrowResolverReasons` strips the prefix and routes the
+  // bare token through the shared `narrowUnsupportedKinds` helper.
+  // `contains lspServers` maps to `lsp` (SNM-36 / D-24-04).
   //
-  // CR-01 / SURF-01 / D-64-02: every OTHER `contains <kind>` note routes its
-  // bare token through the shared `narrowUnsupportedKinds` helper and renders
-  // the generic `unsupported source` marker -- it is NO LONGER dropped when an
-  // earlier marker already populated the row. A synthetic input mixing
-  // `contains hooks` with `contains lspServers` therefore emits BOTH markers
-  // (`unsupported source` for the non-carve-out kind, `lsp` for `lspServers`),
+  // PHOOK-05 / D-71-04: the `hooks` kind is now a force-degradable marker
+  // and renders the single aggregate `unsupported hooks` reason via the SAME
+  // shared helper. A synthetic input mixing `contains hooks` with `contains
+  // lspServers` therefore emits BOTH markers (`unsupported hooks`, `lsp`),
   // byte-identical to what `list`/`info` derive from the typed `unsupported[]`
-  // list for the same kinds. D-58-02 is preserved: the synthetic `contains
-  // hooks` renders the generic `unsupported source`, NOT `unsupported hooks`.
+  // list for the same kinds. (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`,
+  // so the resolver never emits a real `contains hooks` note -- this synthetic
+  // input pins the shared-helper mapping for cross-surface parity.)
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2175,7 +2170,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported source", "lsp"]);
+  assert.deepEqual(row.reasons, ["unsupported hooks", "lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
@@ -2366,18 +2361,18 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
 // `unsupported source` fallback runs only when no classifier matched.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("HOOK-04 / D-58-02: narrowResolverReasons drops the dead `contains hooks` carve-out -> permissive fallback `unsupported source`", () => {
-  // Under v1.13, `hooks` is a SUPPORTED component kind
-  // (`SUPPORTED_COMPONENT_KINDS` in `domain/resolver.ts` includes
-  // `"hooks"`), so the resolver no longer emits a
-  // `"contains hooks"` note in real traffic. D-58-02 dropped the
-  // dead branch from `MANIFEST_FIELD_REASONS` / `MANIFEST_FIELD_TO_REASON`;
-  // a synthetic `"contains hooks"` input now misses the carve-out and
-  // falls through to the permissive `unsupported source` fallback.
-  // The real `{unsupported hooks}` reason is sourced through
-  // `shared/probe-classifiers.ts::narrowResolverNotes` against the
-  // `parseHooksConfig` prefix tokens, not through this carve-out.
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["unsupported source"]);
+test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` token through the shared per-kind helper -> `unsupported hooks`", () => {
+  // `hooks` is a SUPPORTED component kind that, when a parseable hooks.json
+  // drops one or more unsupportable handlers, becomes a force-degradable
+  // `unsupported` marker (D-71-04). The shared `narrowUnsupportedKinds` helper
+  // maps the `hooks` kind to the single aggregate `unsupported hooks` reason,
+  // so a `contains hooks` token narrows to `unsupported hooks` on the install
+  // error surface -- byte-identical to the `list`/`info` per-kind path.
+  //
+  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver does not
+  // emit a real `contains hooks` note; the degradable signal travels on the
+  // typed `unsupported[]` list. This pins the shared-helper mapping.)
+  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["unsupported hooks"]);
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
