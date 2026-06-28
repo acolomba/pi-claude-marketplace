@@ -339,6 +339,17 @@ Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 s
 
 A recorded-installed plugin that currently re-resolves `unsupported` (installed with one or more components dropped) is DERIVED as `force-installed` -- no persisted flag, no migration (FSTAT-01 / D-66-01). The row uses the dedicated `◉` glyph (`ICON_FORCE_INSTALLED`), DISTINCT from the clean `(installed)` row's `●` so the degraded install is visually separable (FSTAT-02). The reasons brace carries the degradation detail, composed exactly like the `upgradable` row. Severity `info`; no reload-hint (inventory row). Once a fully-supported upgrade rewrites the recorded resolution the same deriver yields `(installed)` with no lingering state (FSTAT-03).
 
+### Force-installed inventory row -- partial-hook plugin (FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04)
+
+<!-- catalog-state: force-installed-inventory-hooks -->
+
+```text
+● official [user] <autoupdate>
+  ◉ hook-plugin v1.0.0 (force-installed) {unsupported hooks}
+```
+
+A partial-hook plugin -- one whose `hooks.json` parses and validates cleanly but declares an unsupportable event (a non-bucket-A event such as `Stop`) or matcher group -- force-installs its supported components PLUS the supportable hook handlers, staging a `hooks.json` that is a strict subset of the source with only the unsupportable handlers dropped (PHOOK-04). Once recorded-installed it re-resolves `unsupported` and is DERIVED as `force-installed`, identical to any other dropped-component degrade. The `hooks` kind rides the SINGLE aggregate `{unsupported hooks}` brace regardless of how many events / matcher groups dropped (D-71-04); the per-handler `event(matcher) (unsupported)` breakdown lives on the `info` surface (D-71-05). The aggregate marker is sourced through `shared/probe-classifiers.ts::narrowUnsupportedKinds` (the typed `unsupported` kind list), distinct from the structural `narrowResolverNotes` path that an `unavailable` malformed-`hooks.json` row uses. Severity `info`; no reload-hint (inventory row).
+
 ### Force-upgradable inventory row (FSTAT-04 / D-66-02 / D-66-03)
 
 <!-- catalog-state: force-upgradable-inventory -->
@@ -1319,7 +1330,7 @@ The `info` surface conveys a recorded-but-disabled plugin via the SAME `(disable
 
 ### Success -- unavailable single scope
 
-Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `lspServers` or carries a `hooks/hooks.json` whose contents fail parse/schema/supportability). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{unsupported hooks}` / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
+Triggered when `resolveStrict` returns `installable: false` for the plugin entry (typically because the manifest declares an unsupported component such as `lspServers` or carries a `hooks/hooks.json` that is structurally malformed -- invalid JSON, or a schema failure such as a `type:"command"` handler missing its `command`). A parseable-but-unsupportable `hooks.json` (a non-bucket-A event or unsupported matcher group) no longer resolves `unavailable`: it is force-degradable, resolving `unsupported` and rendering `force-installed` once installed (D-71-03 / PHOOK-03). The status glyph is `⊘`; the row reads `(unavailable)` followed by a closed-set REASON brace (`{unsupported hooks}` for the malformed-`hooks.json` case / `{lsp}` / `{unsupported source}` per `narrowResolverNotes`). The renderer's `componentsResolved: false` switch arm fires for the unavailable arm, emitting the `components: not resolved` marker line in place of per-kind component lists -- the plugin is not installable so its component layout is moot. Severity `info` (unavailable is not a failure on the info surface; only `failed` routes to error).
 
 <!-- catalog-state: unavailable-single-scope -->
 

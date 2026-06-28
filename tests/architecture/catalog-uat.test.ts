@@ -243,6 +243,29 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //     dependencies / scope / version / cause / rollbackPartial fields).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Q3 AUDIT (D-71-03 / PHOOK-03): classify every `{unsupported hooks}` fixture
+// below by what now resolves `unavailable`. After the partial-hook partition,
+// a parseable-but-unsupportable `hooks.json` (non-bucket-A event / unsupported
+// matcher group) is FORCE-DEGRADABLE -- it resolves `unsupported` and renders
+// `force-installed` (see `force-installed-inventory-hooks` + the install
+// `failure-unsupported-features` row). Only a STRUCTURALLY malformed
+// `hooks.json` (invalid JSON / `type:"command"` missing `command`) stays
+// `unavailable`, emitting `{unsupported hooks}` via the structural
+// `malformed hooks.json:` notes path (`narrowResolverNotes`).
+//
+// Every `{unsupported hooks}` row in this map renders on a surface whose token
+// is `(unavailable)` for BOTH resolver buckets, so NONE of them flip:
+//   - list (`single-mp-mixed`, `description-lines`) + reinstall-cascade
+//     (`plugin-became-unavailable`) + import-cascade rows collapse resolver
+//     `unsupported` into the `(unavailable)` token (D-67-01), so the byte form
+//     is identical regardless of the split;
+//   - info `unavailable-single-scope` carries `componentsResolved: false` --
+//     i.e. the malformed-structural case (a force-degradable plugin resolves,
+//     setting `componentsResolved: true`, and renders `force-installed`).
+// They are therefore classified as the structural / list-collapsed arm and
+// keep their `(unavailable) {unsupported hooks}` bytes (PHOOK-03 / Pitfall 4).
+// ---------------------------------------------------------------------------
 const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin list -- list-surface; mp.status === undefined.
@@ -658,6 +681,36 @@ const FIXTURES: FixtureMap = {
                 name: "degraded-plugin",
                 version: "1.0.0",
                 reasons: ["lsp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04: list-surface inventory row for
+    // a recorded-installed partial-hook plugin re-resolving `unsupported` with
+    // one or more hook events / matcher groups dropped. The force-degradable
+    // `hooks` kind rides the SINGLE aggregate `{unsupported hooks}` brace (no
+    // per-handler fan-out on the list row -- D-71-04); the
+    // `event(matcher) (unsupported)` breakdown lives on `info` (D-71-05). The
+    // brace is sourced via `narrowUnsupportedKinds` (typed kind), distinct from
+    // the structural `narrowResolverNotes` path an `unavailable` malformed-hooks
+    // row uses.
+    "force-installed-inventory-hooks": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "force-installed",
+                name: "hook-plugin",
+                version: "1.0.0",
+                reasons: ["unsupported hooks"],
               },
             ],
           },
