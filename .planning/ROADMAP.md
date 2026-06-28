@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete   | 2026-06-28 |
+| 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
 
 #### Phase 71: Partial Hook Force-Install
 
