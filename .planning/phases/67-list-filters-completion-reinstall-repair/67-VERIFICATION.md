@@ -14,6 +14,14 @@ re_verification: null
 **Status:** passed
 **Re-verification:** No — initial verification
 
+> **Forward-reference (record accuracy):** The completion plugin-index cache is
+> cited below as `schemaVersion 2` with a 7-status union -- the as-of-67
+> snapshot. The Phase 67 WR-02 follow-up fix (commit `31589e66`) later added the
+> internal `force-installed-upgradable` status, bumping the cache to
+> `schemaVersion 3` with an 8-status union. The user-visible closed-set tokens
+> (22/17/7) were unaffected. The values here are a correct point-in-time record,
+> not the current cache schema.
+
 ---
 
 ## Goal Achievement

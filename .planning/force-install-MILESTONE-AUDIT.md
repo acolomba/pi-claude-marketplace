@@ -17,8 +17,8 @@ tech_debt:
       - "Parallel-run-only test flakes: ENOTEMPTY tmpdir teardown race (autoupdate/update/hooks-exec) and hooks-async-rewake D-62-05 PID-count race (2 != 1). Both predate this milestone (Phase 62 / v0.6.0 hooks bridge), pass serialized/in-isolation. Confirmed: full hooks-async-rewake.test.ts = 37 pass / 0 fail in isolation."
   - phase: 66-derived-force-state-glyphs
     items:
-      - "WR-02 (deferred, acknowledged): force-installed source divergence -- list reads persisted compatibility, info/install/update read live resolveStrict. Both surfaces still correctly report force-installed; noted for future hardening, not a phase-goal gap."
-      - "WR-03 / IN-01 / IN-02: deferred per phase brief, not phase-goal blockers."
+      - "WR-02 (RESOLVED -- audit note corrected post-audit): the list/info force-installed divergence for non-path (github/npm/url) sources was FIXED in commit 82cb9d8c (`fix(66): WR-02 align non-path info force-installed with list`; marked resolved in 913869af). info.ts now derives force-installed from the persisted compatibility record for non-path sources, so list and info agree. The original audit text mischaracterized this as deferred; not a gap."
+      - "WR-03 (RESOLVED): force-install success rows gained soft-dep markers via commit cc8818e5. IN-01 / IN-02: deferred per phase brief, not phase-goal blockers."
   - phase: 69-force-path-severity
     items:
       - "WR-01 (intentional, documented): SEV-01 soft-dep companion warning scoped to install + manual update success only; deliberately NOT wired into the marketplace autoupdate cascade. Settled in Phase 70 D-70-03, recorded in PRD L403 with auditable comment at marketplace/update.ts:648-671. Intentional and shipped, not a gap."
@@ -110,11 +110,21 @@ Integration checker (gsd-integration-checker) verified the seam chain 64 -> 65 -
 | Source | Item | Severity | Disposition |
 |--------|------|----------|-------------|
 | Cross-milestone (pre-existing) | Parallel-run-only test flakes: ENOTEMPTY tmpdir teardown + hooks-async-rewake D-62-05 PID race | Non-blocking | Predate force-install (Phase 62 / v0.6.0); pass in isolation. Not milestone-attributable. |
-| Phase 66 | WR-02 force-installed source divergence (list persisted vs live resolveStrict) | Non-blocking | Deferred; both surfaces report force-installed correctly. Future hardening. |
+| Phase 66 | WR-02 force-installed list/info divergence (non-path sources) | RESOLVED | Fixed in 82cb9d8c (info reads persisted force-state for non-path sources; list/info agree). Audit text corrected post-audit. |
 | Phase 69 | WR-01 SEV-01 companion warning absent from autoupdate cascade | By design | Intentional, documented (D-70-03, PRD L403, auditable comment). Not a gap. |
-| All phases | Nyquist VALIDATION.md drafts non-compliant (7) + Phase 70 missing | Non-blocking | Discovery-only; optional pre-archive validation. |
-| Doc hygiene | Empty SUMMARY frontmatter (WILL, DOC-03); stale VERIFICATION docs (67 cache schema, 65.1 closed-set counts) | Cosmetic | Code + traceability correct; verification docs capture intermediate state. |
+| All phases | Nyquist VALIDATION.md coverage | RESOLVED | Validation sweep completed post-audit: all 8 phases (64-70) nyquist_compliant=true; 0 tests needed (coverage pre-existed). |
+| Doc hygiene | Stale VERIFICATION docs (67 cache schema, 65.1 closed-set counts) | RESOLVED | Forward-reference notes added to 65.1/67 VERIFICATION clarifying the point-in-time snapshots vs final 22/17/7. |
+| Cross-milestone (pre-existing) | Parallel-run test flakes (ENOTEMPTY tmpdir + hooks PID race) | Tracked | Predate force-install (Phase 62/v0.6.0); being fixed before close at the user's request. |
 
 ## Conclusion
 
-The force-install milestone delivered its definition of done: all 30 requirements are satisfied with codebase evidence, every cross-phase seam is wired, and all three primary E2E flows complete end-to-end. There are **no critical blockers** and **no unsatisfied requirements**, so the FAIL gate is not triggered. Status is **tech_debt** (not `passed`) because of accumulated non-blocking deferred items worth a review before archive -- principally the incomplete Nyquist validation across all phases and the Phase 66 WR-02 source-divergence deferral. None of these block completion; the milestone can be archived as-is by accepting the documented debt.
+The force-install milestone delivered its definition of done: all 30 requirements are satisfied with codebase evidence, every cross-phase seam is wired, and all three primary E2E flows complete end-to-end. There are **no critical blockers** and **no unsatisfied requirements**, so the FAIL gate is not triggered. Status is **tech_debt** (not `passed`) because of accumulated non-blocking deferred items worth a review before archive -- principally the incomplete Nyquist validation across all phases and the Phase 66 WR-02 source-divergence deferral. None of these block completion.
+
+> **Post-audit update (2026-06-28):** The two actionable debt items have been
+> resolved before archive at the user's direction: (1) the Nyquist validation
+> sweep ran across all 8 phases -- every phase is now `nyquist_compliant=true`
+> (0 tests needed; coverage pre-existed); (2) the doc-hygiene staleness in the
+> 65.1/67 VERIFICATION docs is annotated, and the Phase 66 WR-02 note above is
+> corrected (it was fixed in 82cb9d8c, not deferred). The pre-existing
+> parallel-run test flakes (Phase 62/v0.6.0, not force-install) are being fixed
+> in a dedicated pass before the milestone closes.
