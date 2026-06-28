@@ -1,10 +1,11 @@
 ---
 phase: 65
 slug: force-install-update
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: 2026-06-27
+validated: 2026-06-28
 ---
 
 # Phase 65 — Validation Strategy
@@ -69,11 +70,25 @@ created: 2026-06-27
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] All tasks have automated verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [x] Wave 0 covers all MISSING references (none — existing infra covers all)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-06-28
+
+## Validation Audit 2026-06-28
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Retroactive audit: FORCE-01..05 all carry automated coverage landed during
+execution (FORCE-01/02/03/04 in install/update orchestrator + handler suites,
+FORCE-05 gate negatives in resolver-strict). 165 targeted tests pass across
+`install`/`update` orchestrator and edge-handler suites. No new tests generated;
+no implementation files touched.
