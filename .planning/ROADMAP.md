@@ -196,7 +196,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (â) / `force-upgradable` (â), will-force preview tokens, info detail (completed 2026-06-27)
 - [x] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites (completed 2026-06-27)
 - [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
-- [ ] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split
+- [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
 - [ ] **Phase 70: Spec & Documentation Reconcile** - PRD Â§11, output-catalog, messaging-style-guide reconciled to the final token set
 
 #### Phase 64: Resolver Three-Way State
@@ -373,7 +373,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 4** *(blocked on Wave 3: shares catalog-uat + output-catalog)*
 
-- [ ] 69-04-PLAN.md — SEV-05 backfill force-installed row carries a factual {reasons} brace via the shared narrowUnsupportedKinds seam; benign promotion stays info (D-69-04, A3)
+- [x] 69-04-PLAN.md — SEV-05 backfill force-installed row carries a factual {reasons} brace via the shared narrowUnsupportedKinds seam; benign promotion stays info (D-69-04, A3)
 
 #### Phase 70: Spec & Documentation Reconcile
 
@@ -458,5 +458,5 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
-| 69. Force-Path Severity                                             | force-install | 3/4 | In Progress|  |
+| 69. Force-Path Severity                                             | force-install | 4/4 | Complete   | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |

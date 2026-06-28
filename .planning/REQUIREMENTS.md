@@ -64,7 +64,7 @@ Builds on the desired-state, caller-stamped severity model delivered by the noti
 - [x] **SEV-02**: Installing an `unsupported` plugin without `--force` renders at **error** with a message pointing at `--force`; installing an `unavailable` (structural) plugin renders at **error** with **no** `--force` suggestion.
 - [x] **SEV-03**: Auto-update of a force-upgradable plugin is taken automatically (no `(skipped) {no longer installable}` for the unsupported-component case); it renders at **warning** only when it **newly** degrades a previously-clean plugin, at **info** when the plugin was already degraded.
 - [x] **SEV-04**: A targeted `update <plugin>@<marketplace>` that declines a force-upgradable upgrade (no `--force`) renders at **warning**; an untargeted/bulk `update` that skips a force-upgradable plugin renders at **info**.
-- [ ] **SEV-05**: Any row carries a factual `{reasons}` brace whenever reasons are present, including `installed`, `force-installed`, and `force-upgradable` rows.
+- [x] **SEV-05**: Any row carries a factual `{reasons}` brace whenever reasons are present, including `installed`, `force-installed`, and `force-upgradable` rows.
 
 ### Spec & Documentation Reconcile (DOC)
 
@@ -121,7 +121,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SEV-02 | Phase 69 | Complete |
 | SEV-03 | Phase 69 | Complete |
 | SEV-04 | Phase 69 | Complete |
-| SEV-05 | Phase 69 | Pending |
+| SEV-05 | Phase 69 | Complete |
 | DOC-01 | Phase 70 | Pending |
 | DOC-02 | Phase 70 | Pending |
 | DOC-03 | Phase 70 | Pending |
