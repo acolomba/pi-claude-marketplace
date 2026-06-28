@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 0/0 | Not Started | --         |
+| 71. Partial Hook Force-Install                                      | force-install | 0/4 | Planned     | --         |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -485,4 +485,20 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. `install --force` on such a plugin materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; the dropped handlers are never staged.
   5. The dropped hook events/matchers render as `{unsupported hooks}` reasons on the force-installed row at the correct severity, identically across `list` and `info`; without `--force` the plugin still blocks.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+
+- [ ] 71-01-PLAN.md -- Partition primitive: `partitionHooks` accumulator + `DroppedHook`/`HooksPartition` types + `parseHooksConfig` filtered-subset success arm; synthetic fixtures + supportability test migration; S1/S2/X1 stay structural (PHOOK-01, PHOOK-03)
+
+**Wave 2** *(blocked on Wave 1: consumes `DroppedHook` + `parseHooksConfig.dropped`)*
+
+- [ ] 71-02-PLAN.md -- Resolver verdict split: `applyHooksConfig` routes degradable drops to `partial.unsupported` + threads `droppedHooks`; structural stays `unavailable`; Q2 empty-subset edge; resolver-strict cases (PHOOK-02, PHOOK-03)
+
+**Wave 3** *(blocked on Wave 2: reads the routed `"hooks"` kind + threaded `droppedHooks`)*
+
+- [ ] 71-03-PLAN.md -- Reason + info plumbing: `narrowUnsupportedKinds` third case `"hooks" -> "unsupported hooks"` (REASONS stays 32) aggregate list marker; `appendHooksBlock` matcher-group `(unsupported)` detail on the strict info path; cross-surface parity (PHOOK-05)
+
+**Wave 4** *(blocked on Wave 3: byte forms depend on the reconciled renderer)*
+
+- [ ] 71-04-PLAN.md -- Byte-exact reconcile + PHOOK-04: audit each `{unsupported hooks}` catalog fixture (Q3, structural stays `unavailable`); reconcile catalog/notify/docs; strict-subset `install --force` staging assertion + no-force-blocks + SEV-01/02 severity coverage (PHOOK-04, PHOOK-05)
