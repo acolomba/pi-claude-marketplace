@@ -47,11 +47,12 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
 import { notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { setPluginEnabled } from "../plugin/enable-disable.ts";
@@ -64,6 +65,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcilePlan } from "./types.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Reason } from "../../shared/notify.ts";
@@ -104,6 +106,13 @@ interface ScopeReadResult {
   readonly plan: ReconcilePlan | undefined;
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
   readonly invalidOutcomes: readonly PerEntryOutcome[];
+  /**
+   * BFILL-02: the read-pass state snapshot, carried out so the load-time
+   * backfill gate can read its persisted `lastReconciledExtensionVersion`
+   * stamp + scan its force-installed plugins. Undefined for a pristine scope
+   * (no state.json) -- backfill MUST NOT create state.json there (WR-05).
+   */
+  readonly state?: ExtensionState;
 }
 
 /**
@@ -200,7 +209,10 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
 
     // (4) Plan against the merged config + current state. Pure -- no I/O.
     const plan = planReconcile(outcome.merged, state, scope);
-    return { scope, plan, invalidOutcomes: [] };
+    // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
+    // read its stamp + scan its force-installed plugins. planReconcile is pure,
+    // so the snapshot is the unmutated read-pass state.
+    return { scope, plan, invalidOutcomes: [], state };
   });
 }
 
@@ -774,6 +786,58 @@ async function applyPlan(
 }
 
 /**
+ * BFILL-01 / BFILL-02 / D-68-03: the load-time backfill step. Runs as a sibling
+ * inside applyReconcile's per-scope apply region with NO outer lock (CR-01):
+ * the stamp `withStateGuard` takes its own per-scope lock and proper-lockfile is
+ * not re-entrant.
+ *
+ * Gate (BFILL-02): the supported-kind boundary can only move when the extension
+ * version changes, so the scan fires ONLY when the persisted
+ * `lastReconciledExtensionVersion` differs from `EXTENSION_VERSION` (an absent
+ * stamp = scan-once per D-68-01). An equal stamp returns immediately -- no scan,
+ * no write, state.json mtime preserved (RECON-05).
+ *
+ * A pristine scope (no state.json) carries no read-pass snapshot, so backfill is
+ * skipped there -- it must never create an unsolicited state.json (WR-05).
+ *
+ * Stamp-on-gate-open (D-68-03): whenever the gate opened, the running version is
+ * stamped UNCONDITIONALLY -- even with zero force-installed plugins to promote --
+ * so the gate closes and does not reopen on the next load. The stamp is written
+ * via withStateGuard -> saveState (the sole sanctioned state.json writer, SPLIT-02
+ * / NFR-1), never a bare atomicWriteJson.
+ */
+async function applyBackfillForScope(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  readResult: ScopeReadResult,
+): Promise<void> {
+  const state = readResult.state;
+  if (state === undefined) {
+    // Pristine scope -- nothing recorded, no state.json to stamp (WR-05).
+    return;
+  }
+
+  if (state.lastReconciledExtensionVersion === EXTENSION_VERSION) {
+    // Gate closed: the extension version has not moved since the last
+    // reconcile, so the supported-kind boundary cannot have moved either.
+    // No scan, no write -- RECON-05 mtime invariant preserved.
+    return;
+  }
+
+  // Gate OPEN. The per-plugin scan + re-materialize is wired in a follow-up
+  // step; with no force-installed plugins it yields nothing.
+
+  // D-68-03 (stamp-on-gate-open): close the gate even when nothing was
+  // backfilled. SPLIT-02 / NFR-1: route through withStateGuard -> saveState,
+  // never a bare atomicWriteJson. CR-01: this takes its own per-scope lock; the
+  // surrounding apply region holds no outer lock.
+  const loc = locationsFor(scope, opts.cwd);
+  await withStateGuard(loc, (fresh) => {
+    fresh.lastReconciledExtensionVersion = EXTENSION_VERSION;
+  });
+}
+
+/**
  * RECON-01..05: the load-time apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withStateGuard (migrate -> load -> plan),
@@ -836,6 +900,12 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     if (readResult.plan !== undefined) {
       await applyPlan(opts, readResult.plan, outcomes);
     }
+
+    // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
+    // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
+    // promotions ride the same single cascade (RECON-04). Gated on the version
+    // stamp; stamps the running version whenever the gate opened.
+    await applyBackfillForScope(opts, scope, readResult);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
     // this scope's routing tables so the next Pi event fires against a
