@@ -117,6 +117,15 @@ interface ScopeReadResult {
    * (no state.json) -- backfill MUST NOT create state.json there (WR-05).
    */
   readonly state?: ExtensionState;
+  /**
+   * WR-01: whether state.json existed ON DISK at read time. A config-present /
+   * state.json-absent scope loads DEFAULT_STATE inside the read pass (so
+   * `state` is defined) even though no state.json exists; the backfill stamp
+   * must NOT bring an unsolicited state.json into existence purely to record
+   * the version when there is nothing to promote (WR-05). False for the
+   * pristine arm (no `state` carried anyway).
+   */
+  readonly stateExisted: boolean;
 }
 
 /**
@@ -148,7 +157,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
-    return { scope, plan: undefined, invalidOutcomes: [] };
+    return { scope, plan: undefined, invalidOutcomes: [], stateExisted: false };
   }
 
   return withLockedStateTransaction(loc, async (tx) => {
@@ -208,7 +217,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     }
 
     if (invalidOutcomes.length > 0) {
-      return { scope, plan: undefined, invalidOutcomes };
+      return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
     }
 
     // (4) Plan against the merged config + current state. Pure -- no I/O.
@@ -216,7 +225,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
     // read its stamp + scan its force-installed plugins. planReconcile is pure,
     // so the snapshot is the unmutated read-pass state.
-    return { scope, plan, invalidOutcomes: [], state };
+    return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
   });
 }
 
@@ -804,11 +813,18 @@ async function applyPlan(
  * A pristine scope (no state.json) carries no read-pass snapshot, so backfill is
  * skipped there -- it must never create an unsolicited state.json (WR-05).
  *
- * Stamp-on-gate-open (D-68-03): whenever the gate opened, the running version is
- * stamped UNCONDITIONALLY -- even with zero force-installed plugins to promote --
- * so the gate closes and does not reopen on the next load. The stamp is written
- * via withStateGuard -> saveState (the sole sanctioned state.json writer, SPLIT-02
- * / NFR-1), never a bare atomicWriteJson.
+ * WR-01: a config-present / state.json-absent scope DOES carry a snapshot (the
+ * read pass loads DEFAULT_STATE), so `state` is defined even though no state.json
+ * exists on disk. With zero force-installed plugins to promote, the stamp write
+ * would CREATE an unsolicited state.json purely to record the version -- the same
+ * WR-05 violation. That case is skipped silently below.
+ *
+ * Stamp-on-gate-open (D-68-03): whenever the gate opened AND a state.json already
+ * exists (or there is real backfill work), the running version is stamped
+ * UNCONDITIONALLY -- even with zero force-installed plugins to promote -- so the
+ * gate closes and does not reopen on the next load. The stamp is written via
+ * withStateGuard -> saveState (the sole sanctioned state.json writer, SPLIT-02 /
+ * NFR-1), never a bare atomicWriteJson.
  */
 async function applyBackfillForScope(
   opts: ApplyReconcileOptions,
@@ -829,6 +845,14 @@ async function applyBackfillForScope(
     return;
   }
 
+  // WR-01: no state.json on disk AND nothing to promote -- skip silently. The
+  // stamp write below would otherwise bring an unsolicited state.json into
+  // existence purely to record the version (WR-05). When state.json already
+  // exists, stamping it (even with zero promotions) stays correct per D-68-03.
+  if (!readResult.stateExisted && !hasForceInstalledPlugin(state)) {
+    return;
+  }
+
   // Gate OPEN. Scan every force-installed plugin and re-materialize the ones
   // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
   await scanForceInstalledBackfills(opts, scope, state, outcomes);
@@ -841,6 +865,24 @@ async function applyBackfillForScope(
   await withStateGuard(loc, (fresh) => {
     fresh.lastReconciledExtensionVersion = EXTENSION_VERSION;
   });
+}
+
+/**
+ * WR-01: true iff any recorded plugin in this scope is force-installed
+ * (compatibility.installable === false) -- the only kind the backfill scan can
+ * promote. Decides whether a stamp write is worth bringing a state.json into
+ * existence for: with none and no state.json on disk, the file stays absent.
+ */
+function hasForceInstalledPlugin(state: ExtensionState): boolean {
+  for (const mp of Object.values(state.marketplaces)) {
+    for (const record of Object.values(mp.plugins)) {
+      if (!record.compatibility.installable) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**

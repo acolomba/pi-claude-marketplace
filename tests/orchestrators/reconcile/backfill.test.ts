@@ -19,6 +19,7 @@
 //     single applyReconcile cascade (RECON-04).
 
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -505,5 +506,29 @@ test("NFR-5: the backfill scan and re-materialize perform no network call", asyn
       pluginRecordOf(await loadState(extensionRoot), "mp", "hello").compatibility.installable,
       true,
     );
+  });
+});
+
+test("WR-01 / WR-05: a config-present, state.json-absent scope with no force-installed plugins creates no state.json and stays silent", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const loc = locationsFor("project", cwd);
+    // The scope has a config file but NO state.json on disk. The read pass loads
+    // DEFAULT_STATE inside the lock (so `state` is defined), the empty config
+    // yields an empty plan, and there is nothing to backfill.
+    await mkdir(loc.extensionRoot, { recursive: true });
+    await writeFile(
+      loc.configJsonPath,
+      JSON.stringify({ schemaVersion: 1, marketplaces: {}, plugins: {} }, null, 2),
+      "utf8",
+    );
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // WR-05: the gate must NOT bring an unsolicited state.json into existence
+    // purely to record the version stamp when there is nothing to promote.
+    assert.equal(existsSync(loc.stateJsonPath), false);
+    // Empty-and-clean reconcile -> silent (NFR-2 / A4).
+    assert.equal(ctx.ui.notify.mock.calls.length, 0);
   });
 });
