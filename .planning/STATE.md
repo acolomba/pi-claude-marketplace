@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
 status: executing
-last_updated: "2026-06-28T20:28:40.277Z"
+last_updated: "2026-06-28T20:43:27.500Z"
 last_activity: 2026-06-28
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 30
-  completed_plans: 27
+  completed_plans: 28
   percent: 89
 ---
 
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 71 (partial-hook-force-install) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-06-28
 
@@ -143,6 +143,7 @@ Last activity: 2026-06-28
 | Phase 69 P69-03 | ~70min | 2 tasks | 8 files |
 | Phase 69 P04 | ~35min | 1 tasks | 6 files |
 | Phase 71 P01 | 22 | 2 tasks | 6 files |
+| Phase 71 P02 | 12min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -301,6 +302,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: SEV-03 (D-69-01): autoupdate cascade takes the force path; degrading plugin renders (force-installed) not (skipped) {no longer installable}; severity follows prior persisted compatibility.unsupported (empty=warning newly-degraded, non-empty=info already-degraded); manual update --force stays info
 - [Phase ?]: Q1: partial-hook non-command handlers drop at HANDLER granularity; empty group/event omitted
 - [Phase ?]: X1 hooks table-desync surfaces structurally via HooksTableDesyncError caught by parseHooksConfig (stays unavailable)
+- [Phase ?]: Resolver droppedHooks threads partial-hook supportability drops to partial.unsupported; structural defects stay unavailable (D-71-03)
 
 ### Pending Todos
 
@@ -363,8 +365,8 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-28T20:28:23.143Z
-Stopped At: Phase 71 context gathered
+Last session: 2026-06-28T20:43:27.490Z
+Stopped At: Completed 71-02-PLAN.md
 Resume File: None
 
 ## Operator Next Steps

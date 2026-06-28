@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 1/4 | In Progress|  |
+| 71. Partial Hook Force-Install                                      | force-install | 2/4 | In Progress|  |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -493,7 +493,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1: consumes `DroppedHook` + `parseHooksConfig.dropped`)*
 
-- [ ] 71-02-PLAN.md -- Resolver verdict split: `applyHooksConfig` routes degradable drops to `partial.unsupported` + threads `droppedHooks`; structural stays `unavailable`; Q2 empty-subset edge; resolver-strict cases (PHOOK-02, PHOOK-03)
+- [x] 71-02-PLAN.md -- Resolver verdict split: `applyHooksConfig` routes degradable drops to `partial.unsupported` + threads `droppedHooks`; structural stays `unavailable`; Q2 empty-subset edge; resolver-strict cases (PHOOK-02, PHOOK-03)
 
 **Wave 3** *(blocked on Wave 2: reads the routed `"hooks"` kind + threaded `droppedHooks`)*
 
