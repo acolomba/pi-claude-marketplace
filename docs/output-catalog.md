@@ -847,6 +847,32 @@ Plugin update: 1 success
 
 OUT-03/D-04: the single `updated` row is the one success in the plural tally. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
+### Force-upgradable decline, targeted update (SEV-04 / D-69-02)
+
+<!-- catalog-state: decline-force-upgradable-targeted -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ⊘ hello v1.0.0 (skipped) {no longer installable}
+```
+
+A TARGETED `update <plugin>@<marketplace>` (no `--force`) whose candidate re-resolves `unsupported` declines the force-upgradable upgrade and renders `(skipped) {no longer installable}`. The user explicitly named this plugin, so the decline is actionable -> severity `warning` (SEV-04 / D-69-02): the cascade prepends the `A plugin operation needs attention.` summary line. Single cardinality, so no trailing tally. The per-row bytes are identical to the bulk form below -- only the threaded invocation cardinality changes the stamped severity. No reload-hint (nothing changed on disk).
+
+### Force-upgradable skip, bulk update (SEV-04 / D-69-02)
+
+<!-- catalog-state: skip-force-upgradable-bulk -->
+
+```text
+● mp [project]
+  ⊘ hello v1.0.0 (skipped) {no longer installable}
+
+Plugin update: 1 success
+```
+
+The SAME force-upgradable candidate skipped by a BULK `update @<marketplace>` (or bare `update`) the user did NOT individually target is benign -> severity `info` (SEV-04 / D-69-02): no summary line, and the plural tally counts the info skip among its successes (`1 success`). The per-row `(skipped) {no longer installable}` bytes are identical to the targeted form above; only the stamped severity (and therefore the summary line / tally) moves. No reload-hint.
+
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
 Triggered when `update <plugin>@<marketplace>` or `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope` (or is present only in the OTHER scope). ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.

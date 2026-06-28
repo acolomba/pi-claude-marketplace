@@ -2996,6 +2996,43 @@ test("FORCE-03: without --force the same unsupported candidate still blocks `(sk
   });
 });
 
+// SEV-04 / D-69-02: a BULK (`@marketplace`) update that skips a force-upgradable
+// candidate the user did not target is benign -> info (contrast PUP-4 / FORCE-03,
+// the TARGETED decline that stays warning). Same `(skipped) {no longer
+// installable}` per-row bytes; only the severity (and the summary tally) move.
+test("SEV-04: bulk update skipping a force-upgradable candidate -> info (untargeted decline)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev04-bulk-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        // Bulk `@mp` form -> cardinality "plural" -> the decline is benign info.
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /\(skipped\) \{no longer installable\}/);
+      assert.equal(notifications[0]?.severity, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("FORCE-04: the force-degrade update path emits no warning severity and no `Warning:` summary", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force04-"));

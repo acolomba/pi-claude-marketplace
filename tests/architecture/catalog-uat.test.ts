@@ -1610,6 +1610,62 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-04 / D-69-02: a TARGETED `update <plugin>@<marketplace>` that declines
+    // a force-upgradable candidate (no `--force`, reason `no longer installable`)
+    // is actionable -> warning. Single cardinality, so no trailing tally; the
+    // cascade carries the `needs attention` summary line.
+    "decline-force-upgradable-targeted": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["no longer installable"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SEV-04 / D-69-02: a BULK `update @<marketplace>` that skips the same
+    // force-upgradable candidate the user did NOT target is benign -> info. No
+    // summary line; the plural tally counts the info skip among its successes.
+    "skip-force-upgradable-bulk": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["no longer installable"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,

@@ -1546,6 +1546,32 @@ interface TargetedOutcome {
 }
 
 /**
+ * SEV-04 / D-69-02: severity for a `skipped` update row. An absent-target skip
+ * (`not installed` / `not found`) is always error (D-01). A force-upgradable
+ * decline (`no longer installable`, no `--force`) follows the invocation shape:
+ * a targeted `<plugin>@<marketplace>` update the user explicitly opted into is
+ * actionable -> warning; a bulk / untargeted update that skips one the user did
+ * not name is benign -> info. This threads the EXISTING `cardinality`
+ * invocation-shape signal -- no inference from cascade shape. All OTHER
+ * non-idempotent reasons keep the producer-local `skipSeverity` judgment, so the
+ * change is surgical to the force-upgradable decline.
+ */
+function cascadeSkipSeverity(
+  reasons: readonly ContentReason[],
+  cardinality: "single" | "plural",
+): "info" | "warning" | "error" {
+  if (reasons.includes("not installed") || reasons.includes("not found")) {
+    return "error";
+  }
+
+  if (reasons.includes("no longer installable")) {
+    return cardinality === "single" ? "warning" : "info";
+  }
+
+  return skipSeverity(reasons);
+}
+
+/**
  * Map an outcome to a `PluginNotificationMessage`. Returns `undefined`
  * for outcomes the cascade should skip rendering entirely (currently
  * none -- the `unchanged` partition maps to a `(skipped) {up-to-date}`
@@ -1559,12 +1585,13 @@ interface TargetedOutcome {
  *
  * Plugin scope is forwarded so the renderer's orphan-fold
  * can suppress the redundant `[<scope>]` bracket when plugin.scope ===
- * mp.scope.
+ * mp.scope. `cardinality` drives the SEV-04 targeted-vs-bulk decline severity.
  */
 function outcomeToCascadePluginMessage(
   target: ResolvedTarget,
   outcome: PluginUpdateOutcome,
   probe: SoftDepStatus,
+  cardinality: "single" | "plural",
 ): UpdateMsg {
   // SEV-01: an otherwise-successful update whose DECLARED soft-dep companion is
   // unloaded silently degrades a clean update -> raise the desired-state
@@ -1643,11 +1670,10 @@ function outcomeToCascadePluginMessage(
         // not found) cannot be carried out -> error (severity-only flip; the
         // `(skipped) {not installed}` per-row grammar is preserved). Otherwise
         // benign idempotent skip -> info, actionable skip -> warning; never
-        // reloads.
-        severity:
-          reasons.includes("not installed") || reasons.includes("not found")
-            ? "error"
-            : skipSeverity(reasons),
+        // reloads. SEV-04 / D-69-02: a `no longer installable` force-upgradable
+        // decline follows the invocation cardinality (targeted warning / bulk
+        // info).
+        severity: cascadeSkipSeverity(reasons, cardinality),
         needsReload: false,
       };
     }
@@ -1764,10 +1790,10 @@ function renderUpdateCascadeAndNotify(
       byMp.set(key, {
         name: target.marketplace,
         scope: target.scope,
-        plugins: [outcomeToCascadePluginMessage(target, outcome, probe)],
+        plugins: [outcomeToCascadePluginMessage(target, outcome, probe, cardinality)],
       });
     } else {
-      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome, probe));
+      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome, probe, cardinality));
     }
   }
 
