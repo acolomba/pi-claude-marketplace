@@ -930,6 +930,12 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * backfill) and re-materialize each whose supported set grew. Iterates the
  * snapshot; reinstallPlugin self-locks and re-reads fresh state per plugin
  * (CR-01).
+ *
+ * WR-03: the snapshot predates applyPlan, which may have re-materialized a
+ * force-installed plugin in the SAME load (e.g. a disable/enable that emits its
+ * own transition row). Skip any plugin already represented in this scope's
+ * accumulated outcomes so a single load can never emit two rows for one plugin
+ * (nor clobber a just-applied transition with a redundant overwrite).
  */
 async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
@@ -937,6 +943,13 @@ async function scanForceInstalledBackfills(
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
+  const alreadyTouched = new Set<string>();
+  for (const o of outcomes) {
+    if (o.scope === scope && "plugin" in o) {
+      alreadyTouched.add(`${o.marketplace} ${o.plugin}`);
+    }
+  }
+
   for (const [marketplace, mp] of Object.entries(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
       // D-68-03: scan ONLY force-installed plugins.
@@ -944,10 +957,25 @@ async function scanForceInstalledBackfills(
         continue;
       }
 
+      // WR-03: applyPlan already touched this plugin this load -- don't
+      // double-emit / re-materialize over it.
+      if (alreadyTouched.has(`${marketplace} ${plugin}`)) {
+        continue;
+      }
+
       await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
     }
   }
 }
+
+/**
+ * Test seam (mirrors reinstall.ts's `__test_*` exports): exercise the WR-03
+ * dedupe directly with a pre-populated `outcomes` array standing in for a
+ * same-load applyPlan transition (the planner's enable bucket requires
+ * installable === true, so a force-installed plugin cannot reach it through a
+ * real plan -- the seam injects the precondition).
+ */
+export { scanForceInstalledBackfills as __test_scanForceInstalledBackfills };
 
 type StateMarketplaceRecord = ExtensionState["marketplaces"][string];
 type StatePluginRecord = StateMarketplaceRecord["plugins"][string];

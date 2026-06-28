@@ -30,6 +30,7 @@ import lockfile from "proper-lockfile";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   __test_applyBackfillForScopeIsolated,
+  __test_scanForceInstalledBackfills,
   applyReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -582,5 +583,46 @@ test("WR-02: a held scope lock on the stamp write is coerced to a structured row
     assert.ok(failed !== undefined, "expected an invalid-block row for the stamp throw");
     assert.equal(failed.basename, "state.json");
     assert.equal(failed.reason, "lock held");
+  });
+});
+
+test("WR-03: a plugin already touched by applyPlan this load is not double-emitted by the backfill scan", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is force-installed with a grown on-disk supported set (skills +
+    // commands; recorded supported only skills) -- a backfill candidate.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      },
+    });
+    const state = await loadState(extensionRoot);
+    const ctx = makeCtx();
+
+    // Simulate applyPlan having ALREADY emitted a transition row for hello this
+    // load (an enable re-installs the plugin and emits an (installed) row).
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-enabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ];
+
+    await __test_scanForceInstalledBackfills(
+      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+      "project",
+      state,
+      outcomes,
+    );
+
+    // The scan deduped against the prior row: no second row for hello, and no
+    // redundant plugin-backfilled overwrite.
+    assert.equal(outcomes.length, 1);
+    assert.equal(outcomes.filter((o) => "plugin" in o && o.plugin === "hello").length, 1);
+    assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
   });
 });
