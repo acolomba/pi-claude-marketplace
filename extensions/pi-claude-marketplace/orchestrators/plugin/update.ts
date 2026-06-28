@@ -93,6 +93,7 @@ import {
 } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   appendLeaks,
@@ -109,7 +110,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -134,7 +135,7 @@ import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1563,7 +1564,12 @@ interface TargetedOutcome {
 function outcomeToCascadePluginMessage(
   target: ResolvedTarget,
   outcome: PluginUpdateOutcome,
+  probe: SoftDepStatus,
 ): UpdateMsg {
+  // SEV-01: an otherwise-successful update whose DECLARED soft-dep companion is
+  // unloaded silently degrades a clean update -> raise the desired-state
+  // severity from info to warning (symmetric with the install success arm).
+  const successSeverity = companionSeverity(outcome.declaresAgents, outcome.declaresMcp, probe);
   switch (outcome.partition) {
     case "updated":
       // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
@@ -1587,7 +1593,8 @@ function outcomeToCascadePluginMessage(
           version: outcome.toVersion,
           dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
           reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
-          severity: "info",
+          // SEV-01: info, raised to warning on a missing declared companion.
+          severity: successSeverity,
           needsReload: true,
         };
       }
@@ -1602,8 +1609,9 @@ function outcomeToCascadePluginMessage(
         // marker (MSG-SD-3). The renderer narrows on `dependencies`
         // membership + the notify-time probe.
         dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-        // D-03/D-06: realized update transition -> info, reloads Pi resources.
-        severity: "info",
+        // D-03/D-06: realized update transition -> reloads Pi resources.
+        // SEV-01: info, raised to warning above on a missing declared companion.
+        severity: successSeverity,
         needsReload: true,
       };
     case "unchanged":
@@ -1738,6 +1746,10 @@ function renderUpdateCascadeAndNotify(
     readonly scope: Scope;
     readonly plugins: UpdateMsg[];
   }
+  // SEV-01: single companion probe per notify invocation, threaded into every
+  // per-row mapping so the success arms can raise severity on a missing
+  // declared companion (mirrors the renderer's single-probe discipline).
+  const probe = softDepStatus(pi);
   const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
     const key = `${target.scope}:${target.marketplace}`;
@@ -1752,10 +1764,10 @@ function renderUpdateCascadeAndNotify(
       byMp.set(key, {
         name: target.marketplace,
         scope: target.scope,
-        plugins: [outcomeToCascadePluginMessage(target, outcome)],
+        plugins: [outcomeToCascadePluginMessage(target, outcome, probe)],
       });
     } else {
-      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome));
+      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome, probe));
     }
   }
 

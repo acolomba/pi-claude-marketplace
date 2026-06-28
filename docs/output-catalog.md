@@ -374,13 +374,15 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 <!-- catalog-state: success-with-soft-dep -->
 
 ```text
+A plugin operation needs attention.
+
 ● official [user]
   ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
 
 /reload to pick up changes
 ```
 
-`helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15).
+`helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15). SEV-01: a declared companion that is unloaded silently degrades an otherwise-clean install, so the success row stamps `warning` and the cascade carries the `needs attention` summary line. The per-row bytes are unchanged from the info form -- only the severity (and therefore the summary line) moves.
 
 ### Success with orphan-rewake warning (SURF-05 / D-63-08)
 
@@ -400,26 +402,30 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 <!-- catalog-state: success-with-orphan-rewake-and-soft-dep -->
 
 ```text
+A plugin operation needs attention.
+
 ● official [user]
   ● helper v1.0.0 (installed) {orphan rewake, requires pi-subagents}
 
 /reload to pick up changes
 ```
 
-The closed-set REASONS token and the soft-dep marker share ONE brace block per MSG-GR-4. The `composeReasons` helper appends the soft-dep markers AFTER the typed `reasons[]` so the orphan-rewake token leads.
+The closed-set REASONS token and the soft-dep marker share ONE brace block per MSG-GR-4. The `composeReasons` helper appends the soft-dep markers AFTER the typed `reasons[]` so the orphan-rewake token leads. SEV-01: the declared `pi-subagents` companion is unloaded, so the success row stamps `warning` and the cascade carries the `needs attention` summary line (the per-row bytes are unchanged from the info form).
 
 ### Force-install success with a soft-dep marker (WR-03)
 
 <!-- catalog-state: success-force-installed-with-soft-dep -->
 
 ```text
+A plugin operation needs attention.
+
 ● official [user]
   ◉ helper v1.0.0 (force-installed) {lsp, requires pi-subagents}
 
 /reload to pick up changes
 ```
 
-A `--force` install that succeeds with one or more components dropped (the resolver's `unsupported` arm) renders the `(force-installed)` row with the dedicated `◉` glyph. The force-degradable arm still stages the SUPPORTED components, so a `(force-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. force-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`).
+A `--force` install that succeeds with one or more components dropped (the resolver's `unsupported` arm) renders the `(force-installed)` row with the dedicated `◉` glyph. The force-degradable arm still stages the SUPPORTED components, so a `(force-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. force-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`). SEV-01: the unloaded `agents` companion is a silent degradation independent of the dropped components, so the success row stamps `warning` and the cascade carries the `needs attention` summary line (the per-row bytes are unchanged from the info force-installed form). The direct `--force` opt-in itself stays benign info -- the warning here is the missing companion, not the force degrade.
 
 ### Failure -- unsupported features in manifest (force-degradable)
 

@@ -717,8 +717,13 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-01: both declared companions are unloaded, so the otherwise-clean
+    // install row stamps `warning` (silent degradation) and the cascade carries
+    // the `needs attention` summary line. The per-row bytes are unchanged from
+    // the info form -- only the severity / summary line moves.
     "success-with-soft-dep": {
       pi: piWithNothingLoaded(),
+      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -727,7 +732,7 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
-                severity: "info",
+                severity: "warning",
                 needsReload: true,
                 name: "helper",
                 version: "1.0.0",
@@ -772,8 +777,12 @@ const FIXTURES: FixtureMap = {
     // markers AFTER the typed `reasons[]`, so the brace renders as
     // `{orphan rewake, requires pi-subagents}`. Probe with only `mcp`
     // loaded so the `agents` soft-dep marker fires.
+    // SEV-01: the declared `agents` companion is unloaded, so the success row
+    // stamps `warning` even though the install succeeded -- the cascade carries
+    // the `needs attention` summary line (per-row bytes unchanged).
     "success-with-orphan-rewake-and-soft-dep": {
       pi: piWithMcpLoaded(),
+      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -782,7 +791,7 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
-                severity: "info",
+                severity: "warning",
                 needsReload: true,
                 name: "helper",
                 version: "1.0.0",
@@ -802,8 +811,14 @@ const FIXTURES: FixtureMap = {
     // extension unloaded the soft-dep marker fires in the SAME brace AFTER the
     // dropped-component reason (MSG-GR-4), rendering `{lsp, requires
     // pi-subagents}`. Probe with only `mcp` loaded so the `agents` marker fires.
+    // SEV-01: the unloaded `agents` companion is a silent degradation
+    // independent of the dropped components, so the force-installed success row
+    // stamps `warning` and the cascade carries the `needs attention` summary
+    // line. The direct `--force` opt-in itself stays benign info -- the warning
+    // is the missing companion, not the force degrade.
     "success-force-installed-with-soft-dep": {
       pi: piWithMcpLoaded(),
+      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -812,7 +827,7 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "force-installed",
-                severity: "info",
+                severity: "warning",
                 needsReload: true,
                 name: "helper",
                 version: "1.0.0",

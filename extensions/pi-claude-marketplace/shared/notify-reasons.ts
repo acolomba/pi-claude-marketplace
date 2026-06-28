@@ -1,4 +1,5 @@
 import type { Reason } from "./notify.ts";
+import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
@@ -54,6 +55,27 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
     reasons.every((r) => IDEMPOTENT_REASON_SET.has(r))
     ? "info"
     : "warning";
+}
+
+/**
+ * SEV-01: per-producer severity for an otherwise-successful install/update row,
+ * classified from the plugin's DECLARED soft-dep companions and the host's
+ * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
+ * declared `mcp` kind requires `pi-mcp-adapter`. When a declared companion is
+ * unloaded the clean operation is silently degraded -> `warning`; otherwise
+ * (companion present, or none declared) -> `info`. The caller passes the single
+ * sanctioned `softDepStatus(pi)` probe (the same one the renderer uses for the
+ * `{requires pi-...}` marker), so the row bytes are unchanged -- only the
+ * desired-state severity moves.
+ */
+export function companionSeverity(
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  probe: SoftDepStatus,
+): "info" | "warning" {
+  return (declaresAgents && !probe.piSubagentsLoaded) || (declaresMcp && !probe.piMcpAdapterLoaded)
+    ? "warning"
+    : "info";
 }
 
 /**

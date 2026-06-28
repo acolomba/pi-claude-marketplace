@@ -497,14 +497,19 @@ test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new versio
       // the plugin declares agents + mcp but the host's `getAllTools()`
       // returns [] (probe sees both companions unloaded). Reload-hint
       // appended by notify() per D-16-12 from the `updated` variant.
+      // SEV-01: the update declares agents + mcp while both companions are
+      // unloaded, so the success row stamps warning (symmetric with the install
+      // success arm) -- the cascade gains the `needs attention` summary line.
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       const body = notifications[0]?.message ?? "";
       assert.equal(
         body,
-        "● mp [project]\n" +
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
           "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n" +
           "\n" +
           "/reload to pick up changes",

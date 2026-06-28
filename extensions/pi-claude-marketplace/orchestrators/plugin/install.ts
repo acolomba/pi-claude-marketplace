@@ -108,6 +108,7 @@ import {
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -118,6 +119,7 @@ import {
   PluginShapeError,
 } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { companionSeverity } from "../../shared/notify-reasons.ts";
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -1405,6 +1407,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // SUPPORTED components, so the row threads `dependencies` -- the soft-dep
     // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a degraded
     // install exactly as on a clean one (where the signal is most relevant).
+    // SEV-01: an otherwise-successful install whose DECLARED soft-dep companion
+    // is unloaded silently degrades a clean install -> raise the desired-state
+    // severity from info to warning. A staged agent declares a `pi-subagents`
+    // companion; a staged mcp server declares `pi-mcp-adapter`. `softDepStatus`
+    // is the single sanctioned companion probe -- the same one the renderer uses
+    // for the `{requires pi-...}` marker that already renders the detail, so this
+    // is a metadata-only stamp (the per-row bytes do not change; the cascade
+    // gains the warning summary line). A loaded companion -- or no declared
+    // companion -- keeps the info stamp. Applies to BOTH the clean `installed`
+    // and degraded `force-installed` success arms.
+    const successSeverity = companionSeverity(
+      installCtx.stagedAgentNames.length > 0,
+      installCtx.stagedMcpServerNames.length > 0,
+      softDepStatus(pi),
+    );
     const installedRow: InstallMsg =
       installCtx.resolved.state === "unsupported"
         ? {
@@ -1413,7 +1430,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             dependencies,
             version: installCtx.version,
             reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
-            severity: "info",
+            severity: successSeverity,
             needsReload: true,
           }
         : {
@@ -1422,8 +1439,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             dependencies,
             version: installCtx.version,
             ...(reasons.length > 0 && { reasons }),
-            // D-03/D-06: realized install transition -> info, reloads Pi resources.
-            severity: "info",
+            // D-03/D-06: realized install transition -> reloads Pi resources.
+            // SEV-01: info, raised to warning above on a missing companion.
+            severity: successSeverity,
             needsReload: true,
           };
     // notify() call mirrors the recipe at

@@ -802,19 +802,21 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
-      // V2 byte form matches `docs/output-catalog.md:286-292`
-      // (`success-with-soft-dep`): the default `makeCtx()` mocks pi
-      // without `subagent` or `mcp` tools so both companion extensions
-      // are unloaded; the renderer emits both per-row soft-dep markers
-      // from `dependencies: ["agents", "mcp"]` + the threaded probe
-      // per D-16-14 / D-16-15. The fixture seeds version 1.0.0.
-      // PluginInstalledMessage triggers the reload-hint structurally
-      // per D-16-12.
+      // V2 byte form matches `docs/output-catalog.md` (`success-with-soft-dep`):
+      // the default `makeCtx()` mocks pi without `subagent` or `mcp` tools so
+      // both companion extensions are unloaded; the renderer emits both per-row
+      // soft-dep markers from `dependencies: ["agents", "mcp"]` + the threaded
+      // probe per D-16-14 / D-16-15. The fixture seeds version 1.0.0.
+      // PluginInstalledMessage triggers the reload-hint structurally per D-16-12.
+      // SEV-01: both declared companions are unloaded, so the success row stamps
+      // warning -- the cascade gains the `needs attention` summary line.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" +
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
           "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}\n" +
           "\n" +
           "/reload to pick up changes",
@@ -925,8 +927,10 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
       // fires when (declaresAgents AND !piSubagentsLoaded). The renderer
       // composes the marker into the reasons block of the PluginInlineRow
       // per D-13-07.
+      // SEV-01: the declared `pi-subagents` companion is unloaded, so the
+      // success row stamps warning (silent degradation of a clean install).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.match(
         notifications[0]?.message ?? "",
         /\{requires pi-subagents\}/,
@@ -966,8 +970,10 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
 
       // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp}`
       // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
+      // SEV-01: the declared `pi-mcp-adapter` companion is unloaded, so the
+      // success row stamps warning (silent degradation of a clean install).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.match(
         notifications[0]?.message ?? "",
         /\{requires pi-mcp\}/,
@@ -1264,12 +1270,15 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
       const after = await loadState(locations.extensionRoot);
       assert.ok("hello" in (after.marketplaces["mp"]?.plugins ?? {}));
 
-      // D-19-01: no warning notification fires in standalone
-      // mode -- the AS-7 foreign-agent warning surface is dropped. Only
-      // the canonical success notification is emitted, and the
-      // "pre-existing agent file" phrase MUST NOT appear on it.
+      // D-19-01: no AS-7 foreign-agent warning notification fires in standalone
+      // mode -- that warning surface is dropped. Only the canonical success
+      // notification is emitted, and the "pre-existing agent file" phrase MUST
+      // NOT appear on it. SEV-01: the plugin declares an agent while the
+      // `pi-subagents` companion is unloaded, so the canonical success row
+      // independently stamps warning (the missing-companion ladder, not the
+      // dropped AS-7 surface).
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "warning");
       assert.equal(
         (notifications[0]?.message ?? "").includes("pre-existing agent file"),
         false,
@@ -3272,17 +3281,62 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         force: true,
       });
 
+      // SEV-01: the force-degraded install stages an agent while `pi-subagents`
+      // is unloaded -> the missing-companion ladder raises the success row to
+      // warning, so the cascade gains the `needs attention` summary line.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      assert.equal(notifications[0]?.severity, "warning", "missing companion -> warning");
       // WR-03: the soft-dep marker shares the brace with the dropped-component
       // reason -- composeReasons appends `{requires pi-subagents}` AFTER the
       // typed reason (MSG-GR-4), so `unsupported source` leads.
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" +
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
           "  ◉ p1 v1.0.0 (force-installed) {unsupported source, requires pi-subagents}\n" +
           "\n" +
           "/reload to pick up changes",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// SEV-01 regression guard: the missing-companion warning is conditioned on the
+// probe -- when the declared companion IS loaded, the success row stays info.
+test("SEV-01: install staging agents with pi-subagents loaded stays info (companion present)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-sev01-loaded-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        agents: [{ sourceName: "bot" }],
+      });
+
+      // Probe reports the `pi-subagents` companion loaded -> no missing
+      // companion -> the success row keeps its info stamp (no summary line).
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" + "  ● hello v1.0.0 (installed)\n" + "\n" + "/reload to pick up changes",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
