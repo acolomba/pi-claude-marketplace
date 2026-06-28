@@ -1093,6 +1093,10 @@ export function requireInstallable(
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: r.name,
     reasons: r.notes,
+    // SEV-02 / D-69-03: `unsupported` is force-degradable; `unavailable` is
+    // a structural defect force cannot help -- carry the distinction the
+    // render row uses to condition the `--force` hint.
+    forceable: r.state === "unsupported",
   });
 }
 
@@ -1120,5 +1124,9 @@ export function requireForceInstallable(
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: r.name,
     reasons: r.notes,
+    // SEV-02 / D-69-03: this gate only ever throws for `unavailable`
+    // (`installable`/`unsupported` return above), which force cannot help --
+    // never forceable.
+    forceable: false,
   });
 }

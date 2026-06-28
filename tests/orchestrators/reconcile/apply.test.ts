@@ -932,13 +932,23 @@ test("I6 / PR #51: classifyOrchestratorThrow maps PluginShapeError.kind and Stat
   // import/execute.ts::importWarningReason for the "uninstallable" warning).
   assert.equal(
     classifyOrchestratorThrow(
-      new PluginShapeError({ kind: "not-installable", plugin: "p", reasons: ["hooks"] }),
+      new PluginShapeError({
+        kind: "not-installable",
+        plugin: "p",
+        reasons: ["hooks"],
+        forceable: false,
+      }),
     ),
     "no longer installable",
   );
   assert.equal(
     classifyOrchestratorThrow(
-      new PluginShapeError({ kind: "no-longer-installable", plugin: "p", reasons: ["lsp"] }),
+      new PluginShapeError({
+        kind: "no-longer-installable",
+        plugin: "p",
+        reasons: ["lsp"],
+        forceable: false,
+      }),
     ),
     "no longer installable",
   );

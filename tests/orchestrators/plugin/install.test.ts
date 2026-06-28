@@ -2155,6 +2155,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     kind: "not-installable",
     plugin: "p",
     reasons: ["contains hooks", "contains lspServers"],
+    forceable: false,
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -2176,6 +2177,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
     kind: "not-installable",
     plugin: "p",
     reasons: ["source dir does not exist"],
+    forceable: false,
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -2232,6 +2234,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     kind: "not-installable",
     plugin: "p",
     reasons: ["hooks"],
+    forceable: false,
   });
   const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
   assert.equal(notInstallable.status, "failed");
@@ -2242,6 +2245,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     kind: "no-longer-installable",
     plugin: "p",
     reasons: ["unsupported source"],
+    forceable: false,
   });
   const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
   assert.equal(noLongerInstallable.status, "failed");

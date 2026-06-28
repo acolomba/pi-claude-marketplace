@@ -408,11 +408,19 @@ export type PluginShapeErrorShape =
       readonly kind: "not-installable";
       readonly plugin: string;
       readonly reasons: readonly string[];
+      // SEV-02 / D-69-03: three-way distinction the resolver loses at the
+      // throw. `true` when the verdict is `unsupported` (force can
+      // degrade-install it), `false` when `unavailable` (structural; force
+      // cannot help). The render row points the user at `--force` iff this
+      // is `true`. Does NOT affect `buildPluginShapeMessage` bytes.
+      readonly forceable: boolean;
     }
   | {
       readonly kind: "no-longer-installable";
       readonly plugin: string;
       readonly reasons: readonly string[];
+      // SEV-02 / D-69-03: see `not-installable` -- same three-way force hint.
+      readonly forceable: boolean;
     };
 
 export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];

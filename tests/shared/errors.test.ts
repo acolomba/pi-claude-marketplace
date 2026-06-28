@@ -198,6 +198,7 @@ test("PluginShapeError: kind=not-installable -> byte-equal resolver.ts:786 insta
     kind: "not-installable",
     plugin: "p1",
     reasons: ["hooks", "lspServers"],
+    forceable: false,
   });
   assert.equal(err.message, 'Plugin "p1" is not installable: hooks; lspServers');
   assert.equal(err.kind, "not-installable");
@@ -214,6 +215,7 @@ test("PluginShapeError: kind=no-longer-installable -> byte-equal resolver.ts:786
     kind: "no-longer-installable",
     plugin: "p1",
     reasons: ["unsupported source"],
+    forceable: false,
   });
   assert.equal(err.message, 'Plugin "p1" is no longer installable: unsupported source');
   assert.equal(err.kind, "no-longer-installable");
@@ -237,6 +239,7 @@ test("PluginShapeError: reasons preserve arbitrary resolver.ts notes verbatim (b
     kind: "not-installable",
     plugin: "p1",
     reasons: ["source dir does not exist", "contains hooks"],
+    forceable: false,
   });
   assert.equal(
     err.message,
@@ -258,6 +261,7 @@ test("PluginShapeError: readonly fields survive cast to base Error", () => {
     kind: "not-installable",
     plugin: "p1",
     reasons: ["hooks"],
+    forceable: false,
   });
   // The discriminated payload survives narrowing through the base Error
   // ref because the fields are own enumerable properties on the instance.
