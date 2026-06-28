@@ -369,7 +369,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 3** *(blocked on Wave 2: shares plugin/update.ts + catalog-uat)*
 
-- [ ] 69-03-PLAN.md — SEV-03 autoupdate cascade takes the force path (skipped->force-installed flip) with prior-state severity: warning when newly degrading a clean plugin, info when already degraded (D-69-01)
+- [x] 69-03-PLAN.md — SEV-03 autoupdate cascade takes the force path (skipped->force-installed flip) with prior-state severity: warning when newly degrading a clean plugin, info when already degraded (D-69-01)
 
 **Wave 4** *(blocked on Wave 3: shares catalog-uat + output-catalog)*
 
@@ -458,5 +458,5 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
-| 69. Force-Path Severity                                             | force-install | 2/4 | In Progress|  |
+| 69. Force-Path Severity                                             | force-install | 3/4 | In Progress|  |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |

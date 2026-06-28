@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
 status: executing
-last_updated: "2026-06-28T13:40:56.103Z"
+last_updated: "2026-06-28T14:05:32.604Z"
 last_activity: 2026-06-28
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 75
 ---
 
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 ## Current Position
 
 Phase: 69 (force-path-severity) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-28
 
@@ -140,6 +140,7 @@ Last activity: 2026-06-28
 | Phase 68 P04 | 14min | 2 tasks | 3 files |
 | Phase 69 P01 | 40min | 2 tasks | 7 files |
 | Phase 69 P69-02 | ~75min | 2 tasks | 7 files |
+| Phase 69 P69-03 | ~70min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -294,6 +295,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: SEV-02 structural unavailable arm kept byte-frozen at info severity; final severity reconcile deferred to Phase 70
 - [Phase ?]: SEV-01 missing-companion warning is a cascade-level change: stamping info->warning prepends the notify summary line, so catalog blocks and byte-form tests moved in lockstep (69-02)
 - [Phase ?]: SEV-04 force-upgradable decline severity follows invocation cardinality (targeted=warning, bulk=info), scoped strictly to the no-longer-installable reason (D-69-02)
+- [Phase ?]: SEV-03 (D-69-01): autoupdate cascade takes the force path; degrading plugin renders (force-installed) not (skipped) {no longer installable}; severity follows prior persisted compatibility.unsupported (empty=warning newly-degraded, non-empty=info already-degraded); manual update --force stays info
 
 ### Pending Todos
 
@@ -356,7 +358,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-28T13:40:45.419Z
+Last session: 2026-06-28T14:05:12.062Z
 Stopped At: Completed 69-01-PLAN.md
 Resume File: None
 
