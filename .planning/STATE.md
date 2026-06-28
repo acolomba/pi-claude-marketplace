@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-status: executing
-last_updated: "2026-06-28T21:06:31.321Z"
+status: verifying
+last_updated: "2026-06-28T21:29:13.272Z"
 last_activity: 2026-06-28
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 30
-  completed_plans: 29
-  percent: 89
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 71 (partial-hook-force-install) — EXECUTING
+Phase: 71 (partial-hook-force-install) — COMPLETE
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-28
 
 ## Performance Metrics
@@ -145,6 +145,7 @@ Last activity: 2026-06-28
 | Phase 71 P01 | 22 | 2 tasks | 6 files |
 | Phase 71 P02 | 12min | 2 tasks | 2 files |
 | Phase 71 P03 | 16min | 2 tasks | 8 files |
+| Phase 71 P4 | 17min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -306,6 +307,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Resolver droppedHooks threads partial-hook supportability drops to partial.unsupported; structural defects stay unavailable (D-71-03)
 - [Phase 71]: D-71-04: narrowUnsupportedKinds maps the hooks kind to the existing unsupported hooks REASONS member (closed set stays 32); single aggregate {unsupported hooks} marker across list/info
 - [Phase 71]: D-71-05: info strict reader enumerates dropped handlers at matcher-group granularity event(matcher) (unsupported), re-derived from its own pure parse (lenient->strict flip resolved)
+- [Phase ?]: Phase 71 complete (PHOOK-01..05): partial-hook plugins blocked solely by a non-bucket-A event or unsupported matcher now force-install, staging a strict-subset hooks.json; {unsupported hooks} renders byte-identically across list/info/force-installed surfaces; no-force install blocks with the --force hint
 
 ### Pending Todos
 
@@ -368,7 +370,7 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-28T21:04:56.775Z
+Last session: 2026-06-28T21:29:06.486Z
 Stopped At: Completed 71-02-PLAN.md
 Resume File: None
 

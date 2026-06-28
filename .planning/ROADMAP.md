@@ -198,7 +198,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
 - [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
-- [ ] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable`
+- [x] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable` (completed 2026-06-28)
 
 #### Phase 64: Resolver Three-Way State
 
@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 3/4 | In Progress|  |
+| 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete   | 2026-06-28 |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -501,4 +501,4 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 4** *(blocked on Wave 3: byte forms depend on the reconciled renderer)*
 
-- [ ] 71-04-PLAN.md -- Byte-exact reconcile + PHOOK-04: audit each `{unsupported hooks}` catalog fixture (Q3, structural stays `unavailable`); reconcile catalog/notify/docs; strict-subset `install --force` staging assertion + no-force-blocks + SEV-01/02 severity coverage (PHOOK-04, PHOOK-05)
+- [x] 71-04-PLAN.md -- Byte-exact reconcile + PHOOK-04: audit each `{unsupported hooks}` catalog fixture (Q3, structural stays `unavailable`); reconcile catalog/notify/docs; strict-subset `install --force` staging assertion + no-force-blocks + SEV-01/02 severity coverage (PHOOK-04, PHOOK-05)

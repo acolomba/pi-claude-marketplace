@@ -79,7 +79,7 @@ Extends `--force` component degradation to hooks: a parseable-but-unsupportable 
 - [x] **PHOOK-01**: `checkMatcherSupportability` partitions a parsed `hooks.json` into supported vs unsupported handlers at BOTH event level (non-bucket-A events) and matcher level (unsupported matchers on a supported event), instead of rejecting the whole config on the first failure.
 - [x] **PHOOK-02**: A plugin whose `hooks.json` parses but contains at least one unsupportable handler, with no structural defect, resolves `unsupported` (force-degradable) rather than `unavailable`; the dropped handlers surface via `partial.unsupported` (not the structural `dirty` accumulator).
 - [x] **PHOOK-03**: Structural precedence is preserved -- an unparseable `hooks.json` or a malformed handler (e.g. `type:"command"` with no `command`) still resolves `unavailable`; only supportability failures (event/matcher) become degradable.
-- [ ] **PHOOK-04**: `install --force` materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; dropped handlers are never staged by the hooks bridge. Without `--force`, the plugin still blocks.
+- [x] **PHOOK-04**: `install --force` materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; dropped handlers are never staged by the hooks bridge. Without `--force`, the plugin still blocks.
 - [x] **PHOOK-05**: Dropped hook handlers render as `{unsupported hooks}` reasons on the force-installed row at the correct desired-state severity, identical across `list` and `info`; the byte-exact catalog/style-guide and notify tests reflect the partial-hook rows.
 
 ## Out of Scope
@@ -138,7 +138,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PHOOK-01 | Phase 71 | Complete |
 | PHOOK-02 | Phase 71 | Complete |
 | PHOOK-03 | Phase 71 | Complete |
-| PHOOK-04 | Phase 71 | Pending |
+| PHOOK-04 | Phase 71 | Complete |
 | PHOOK-05 | Phase 71 | Complete |
 
 **Coverage:**
