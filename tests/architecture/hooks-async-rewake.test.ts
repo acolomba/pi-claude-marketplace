@@ -356,7 +356,12 @@ async function makeTempLocations(): Promise<{
         process.env.PI_CODING_AGENT_DIR = prev;
       }
 
-      await rm(root, { recursive: true, force: true });
+      // `maxRetries` backstops the drain above: under parallel CPU load a
+      // late off-band persist (or its write-file-atomic temp file in
+      // _shared/) can still race the recursive walk and surface a transient
+      // ENOTEMPTY. Retrying the unlink converges deterministically once the
+      // last temp file is renamed away.
+      await rm(root, { recursive: true, force: true, maxRetries: 10 });
     },
   };
 }
