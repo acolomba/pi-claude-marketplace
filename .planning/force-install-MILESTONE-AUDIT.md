@@ -1,7 +1,8 @@
 ---
 milestone: force-install
 audited: 2026-06-28T18:10:00-04:00
-status: tech_debt
+status: passed
+status_note: "Re-audit returned tech_debt; all actionable items were then resolved (see Post-Audit Resolution below) -- flipped to passed 2026-06-28."
 scope_note: "Re-audit covering all 9 phases (64, 65, 65.1, 66, 67, 68, 69, 70, 71) and all 35 requirements. Supersedes the prior 8-phase / 30-requirement audit (which found tech_debt, all 30 satisfied, since-resolved); Phase 71 (Partial Hook Force-Install, PHOOK-01..05) is now folded in."
 scores:
   requirements: 35/35
@@ -35,6 +36,31 @@ nyquist:
 
 **Audited:** 2026-06-28 (re-audit)
 **Status:** tech_debt -- all 35 requirements satisfied, every cross-phase seam wired, all E2E flows complete, no critical blockers; one fresh actionable item (Phase 71 Nyquist validation still in draft) plus minor doc-hygiene warrant review before archive.
+
+## Post-Audit Resolution (2026-06-28)
+
+All actionable tech-debt items from this re-audit have been resolved on
+`features/force-install`; status flipped to **passed**:
+
+1. **Phase 71 Nyquist** -- `gsd-validate-phase 71` ran; `71-VALIDATION.md` is now
+   `nyquist_compliant: true` (PHOOK-01..05 all covered by green tests; 0 gaps).
+   Commit `893be5f3`. Milestone Nyquist is now 9/9 compliant.
+2. **REQUIREMENTS.md coverage footer** -- updated to 35 total / Phases 64-71.
+   Commit `142bd2df`.
+3. **Phase 71 IN-02** -- FIXED (was deferred): the no-`--force` install failure
+   row now renders the typed unsupported-kind marker (`{unsupported hooks}`,
+   `{lsp}`, ...) via the shared `narrowUnsupportedKinds` path, byte-identical
+   across the failure row, `list`, and `info`; structural `unavailable` rows
+   unchanged; REASONS stays 32. Commit `46bc0757` (+ regression tests).
+4. **Pre-existing parallel-run flake** -- the remaining `hooks-async-rewake`
+   `ENOTEMPTY` teardown race fixed test-only (`maxRetries` on the shared temp-dir
+   cleanup); confirmed green across 3 parallel `npm run check` runs. Commit
+   `a961a3f8`.
+
+Remaining (non-actionable, cosmetic): empty `requirements_completed` frontmatter
+on the 65.1/70-03 SUMMARYs (the requirements are VERIFIED in those phases'
+VERIFICATION tables and `[x]` in traceability). `npm run check` GREEN
+(2495 unit/arch/orchestrator + 16 integration, 0 fail, 0 ENOTEMPTY).
 
 ## What Changed Since the Prior Audit
 
