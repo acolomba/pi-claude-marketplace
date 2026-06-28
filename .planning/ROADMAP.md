@@ -198,6 +198,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
 - [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
+- [ ] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable`
 
 #### Phase 64: Resolver Three-Way State
 
@@ -469,3 +470,19 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
+| 71. Partial Hook Force-Install                                      | force-install | 0/0 | Not Started | --         |
+
+#### Phase 71: Partial Hook Force-Install
+
+**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks (non-bucket-A events, or unsupported matchers on supported events) becomes `unsupported` (force-installable) instead of `unavailable`. `--force` installs the plugin's supported components AND the supportable hook handlers, dropping only the unsupportable ones; genuinely malformed configs (bad JSON, malformed handlers) still resolve `unavailable`.
+**Depends on**: Phase 64 (three-way resolver state), Phase 65 (`--force` path), Phase 66 (derived force state + `{unsupported hooks}` reason rendering)
+**Requirements**: PHOOK-01, PHOOK-02, PHOOK-03, PHOOK-04, PHOOK-05
+**Success Criteria** (what must be TRUE):
+
+  1. `checkMatcherSupportability` PARTITIONS a parsed `hooks.json` into supported vs unsupported handlers (event-level AND matcher-level) instead of rejecting the whole config on the first failure.
+  2. A plugin with at least one unsupportable hook but no structural defect resolves `unsupported` (force-degradable), not `unavailable` -- the unsupportable hooks surface as a `partial.unsupported` marker.
+  3. A genuinely malformed `hooks.json` (unparseable JSON, malformed handler such as `type:"command"` with no `command`) STILL resolves `unavailable` (structural precedence preserved).
+  4. `install --force` on such a plugin materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; the dropped handlers are never staged.
+  5. The dropped hook events/matchers render as `{unsupported hooks}` reasons on the force-installed row at the correct severity, identically across `list` and `info`; without `--force` the plugin still blocks.
+
+**Plans**: TBD

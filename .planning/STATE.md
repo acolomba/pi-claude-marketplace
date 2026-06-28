@@ -2,19 +2,15 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
-current_phase: 70
 status: executing
-stopped_at: Phase 70 context gathered
-last_updated: "2026-06-28T16:39:21.416Z"
-last_activity: 2026-06-28
-last_activity_desc: Phase 70 complete
+last_updated: "2026-06-28T19:28:04.547Z"
+last_activity: 2026-06-28 — Phase 70 complete
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 8
   total_plans: 26
   completed_plans: 26
-  percent: 100
-current_phase_name: spec-documentation-reconcile
+  percent: 89
 ---
 
 # Project State
@@ -166,6 +162,7 @@ Last activity: 2026-06-28 — Phase 70 complete
 
 - v1.12 roadmap (2026-06-09): 6 phases (51-56) created by `gsd-roadmapper`, continuing phase numbering from v1.11 Phase 50 (NOT reset to 1). All 24 v1.12 requirements mapped exactly once: CFG-01/02/03 + SPLIT-01/02 -> Phase 51 (Config Schema, Persistence & State Split -- typebox CONFIG_SCHEMA + loadConfig/saveConfig seam mirroring state-io, entry-level base+local merge -> MergedConfig, the absent/unparseable/valid trichotomy that aborts on bad input rather than reading it as empty desired-state, and the STATE_SCHEMA field-relocation that carves desired/user-settings fields out of state.json into the config; ownership-split write seams enforced by architecture test + NFR-10 containment extension); MIG-01/02 -> Phase 52 (First-Run Migration -- generate-only, atomic, idempotent, lossless incl. soft-degraded entries; migrate-before-reconcile ordering rail; migrate-then-reconcile no-op exit gate); DIFF-01/02 -> Phase 53 (Pure Reconcile Planner & Dry-Run Preview -- the pure bidirectional planReconcile foundation colocated with its first user-observable consumer, the read-only no-network/no-write diff command, since DIFF depends on the planner existing and a standalone planner phase would have task-shaped not user-observable criteria; locked subject-first row grammar, any pending-tense tokens land in lockstep with catalog + byte-UAT fixtures); ENBL-01/02/03/04 -> Phase 54 (Enable/Disable Commands -- autoupdate/noautoupdate command shape, disabled keeps config entry + version pin with artefacts not materialized, enable re-materializes from cache no-network NFR-5, three orthogonal facts declared/enabled/available kept distinct on list/info; depends on the Phase 51 state split); RECON-01..06 -> Phase 55 (Load-Time Reconcile Apply, Notification & Wiring -- the highest-integration phase: provenance-scoped add/remove at resources_discover before aggregateDiscoveredResources, per-entry network soft-fail never crossing the boundary NFR-5, reconcile cascade through the existing notify/emitWithSummary seam with NO /reload hint, fixed-point convergence, and cross-process lock coverage of the internal file; depends on the Phase 53 planner AND Phase 54 enable/disable; carries the research-flagged notify-sink feasibility spike since resources_discover has no ctx/pi today); WB-01/02/03/04 + CFG-04 -> Phase 56 (Write-Back Integration & Documentation -- the broadest mechanical surface, landing last on a frozen foundation: targeted entry-level patch re-read under the scope lock inside each command's existing withLockedStateTransaction closure, --local targets the local file and never touches base, import/bootstrap batched multi-entry patch under one lock, plus the README .local gitignore convention; depends on the Phase 51 persistence seam and the Phase 55 apply path). Build order follows the research dependency graph (frozen shapes -> one-way-door migration -> pure planner+dry-run / offline enable-disable -> load wiring -> write-back). Phase 55 is the only phase touching shared/notify.ts / catalog / byte-UAT; its new emission context must land catalog + fixture changes atomically with the renderer/token changes they describe (v1.3 atomic-supersession lesson; same constraint applies to any DIFF-02 / ENBL-04 new status tokens). The research SUMMARY proposed 7 phases; merged its config-schema + state-split into one Phase 51 (both pure-addition schema work on the same shapes) and folded the dry-run preview into the planner phase rather than splitting a thin internal-only planner phase, yielding 6 phases within standard granularity.
 - Phase 65.1 inserted after Phase 65: Reload-deferred will grammar consistency: will-prefix marks only reload-deferred actions; audit+fix marketplace add/remove before force-display phases (URGENT)
+- Phase 71 added: Partial hook force-install: unsupportable hooks degrade under --force (event + matcher level) instead of failing the plugin unavailable
 
 ### Decisions
 

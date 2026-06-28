@@ -72,6 +72,16 @@ Builds on the desired-state, caller-stamped severity model delivered by the noti
 - [x] **DOC-02**: `docs/output-catalog.md` and `docs/messaging-style-guide.md` reflect the reconciled token set (`force-installed`, `unsupported`, `force-upgradable`), the derived-state severity, and the exact byte forms.
 - [x] **DOC-03**: No stale comments claim idempotent autoupdate is "warning" -- such cases are info/benign.
 
+### Partial Hook Force-Install (PHOOK)
+
+Extends `--force` component degradation to hooks: a parseable-but-unsupportable `hooks.json` becomes force-degradable instead of a structural failure, so the supportable handlers install and only the unsupportable ones are dropped.
+
+- [ ] **PHOOK-01**: `checkMatcherSupportability` partitions a parsed `hooks.json` into supported vs unsupported handlers at BOTH event level (non-bucket-A events) and matcher level (unsupported matchers on a supported event), instead of rejecting the whole config on the first failure.
+- [ ] **PHOOK-02**: A plugin whose `hooks.json` parses but contains at least one unsupportable handler, with no structural defect, resolves `unsupported` (force-degradable) rather than `unavailable`; the dropped handlers surface via `partial.unsupported` (not the structural `dirty` accumulator).
+- [ ] **PHOOK-03**: Structural precedence is preserved -- an unparseable `hooks.json` or a malformed handler (e.g. `type:"command"` with no `command`) still resolves `unavailable`; only supportability failures (event/matcher) become degradable.
+- [ ] **PHOOK-04**: `install --force` materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; dropped handlers are never staged by the hooks bridge. Without `--force`, the plugin still blocks.
+- [ ] **PHOOK-05**: Dropped hook handlers render as `{unsupported hooks}` reasons on the force-installed row at the correct desired-state severity, identical across `list` and `info`; the byte-exact catalog/style-guide and notify tests reflect the partial-hook rows.
+
 ## Out of Scope
 
 Explicitly excluded; documented to prevent scope creep.
@@ -125,6 +135,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 | DOC-01 | Phase 70 | Complete |
 | DOC-02 | Phase 70 | Complete |
 | DOC-03 | Phase 70 | Complete |
+| PHOOK-01 | Phase 71 | Pending |
+| PHOOK-02 | Phase 71 | Pending |
+| PHOOK-03 | Phase 71 | Pending |
+| PHOOK-04 | Phase 71 | Pending |
+| PHOOK-05 | Phase 71 | Pending |
 
 **Coverage:**
 
