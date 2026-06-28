@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 2/4 | In Progress|  |
+| 71. Partial Hook Force-Install                                      | force-install | 3/4 | In Progress|  |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -497,7 +497,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 3** *(blocked on Wave 2: reads the routed `"hooks"` kind + threaded `droppedHooks`)*
 
-- [ ] 71-03-PLAN.md -- Reason + info plumbing: `narrowUnsupportedKinds` third case `"hooks" -> "unsupported hooks"` (REASONS stays 32) aggregate list marker; `appendHooksBlock` matcher-group `(unsupported)` detail on the strict info path; cross-surface parity (PHOOK-05)
+- [x] 71-03-PLAN.md -- Reason + info plumbing: `narrowUnsupportedKinds` third case `"hooks" -> "unsupported hooks"` (REASONS stays 32) aggregate list marker; `appendHooksBlock` matcher-group `(unsupported)` detail on the strict info path; cross-surface parity (PHOOK-05)
 
 **Wave 4** *(blocked on Wave 3: byte forms depend on the reconciled renderer)*
 
