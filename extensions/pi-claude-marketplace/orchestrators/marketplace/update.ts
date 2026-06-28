@@ -117,6 +117,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { makeRawNotifyFn } from "../../shared/notify.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 
 import {
@@ -633,25 +634,51 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
   // partitions and ends with an `assertNever` so any future variant addition
   // fails at compile time.
   switch (outcome.partition) {
-    case "updated":
+    case "updated": {
+      // CMC-13: declared kinds drive the per-row soft-dep marker (MSG-SD-3).
+      // The renderer narrows on `dependencies` membership ("agents" / "mcp") +
+      // the notify-time probe; we forward the boolean flags as the conventional
+      // Dependency[] representation. Shared by the `(updated)` and the degraded
+      // `(force-installed)` arms (WR-03: a force-installed row carries
+      // dependencies exactly like a clean update row).
+      const dependencies = [
+        ...(outcome.declaresAgents ? (["agents"] as const) : []),
+        ...(outcome.declaresMcp ? (["mcp"] as const) : []),
+      ];
+      // SEV-03 / D-69-01 / FSTAT-07: the autoupdate cascade now TAKES the force
+      // path (`updateSinglePlugin` sets `force: true`), so a candidate that
+      // re-resolved `unsupported` degraded in place. Report `(force-installed)`
+      // with the dropped-component detail instead of `(updated)`. A clean
+      // candidate keeps `(updated)` (no `unsupportedKinds`). force-installed is
+      // a realized transition -> reloads Pi resources. The warning/info
+      // prior-state severity refinement (newly-degraded vs already-degraded)
+      // lands separately; default `info` here keeps this step green.
+      if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
+        return {
+          status: "force-installed",
+          name: outcome.name,
+          scope,
+          version: outcome.toVersion,
+          dependencies,
+          reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
+          severity: "info",
+          needsReload: true,
+        };
+      }
+
       return {
         status: "updated",
         name: outcome.name,
         scope,
         from: outcome.fromVersion,
         to: outcome.toVersion,
-        // CMC-13: declared kinds drive the per-row soft-dep marker
-        // (MSG-SD-3). The renderer narrows on `dependencies` membership
-        // ("agents" / "mcp") + the notify-time probe; we forward the boolean
-        // flags as the conventional Dependency[] representation.
-        dependencies: [
-          ...(outcome.declaresAgents ? (["agents"] as const) : []),
-          ...(outcome.declaresMcp ? (["mcp"] as const) : []),
-        ],
+        dependencies,
         // D-03/D-06: realized update transition -> info, reloads Pi resources.
         severity: "info",
         needsReload: true,
       };
+    }
+
     case "unchanged":
       return {
         status: "skipped",

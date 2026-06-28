@@ -959,6 +959,125 @@ test("WR-04: successful update populates stagedAgents + stagedMcpServers on outc
   });
 });
 
+// ─── SEV-03 / D-69-01: autoupdate cascade TAKES the force path ────────────────
+
+test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force path -- an `unsupported` candidate degrades to partition='updated' carrying unsupportedKinds (NOT skipped)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-force-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      // Make the candidate re-resolve `unsupported`: an `lspServers` component
+      // (the `.lsp.json` convention) is a known-but-unsupported kind. The skill
+      // stays supported, so the candidate DEGRADES rather than going
+      // structurally `unavailable` -- the force path can materialize it.
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".lsp.json"),
+        JSON.stringify({ servers: {} }),
+      );
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        const outcome = await updateSinglePlugin("hello", "mp", "project");
+        assert.equal(outcome.partition, "updated");
+        if (outcome.partition !== "updated") {
+          throw new Error("unreachable: narrowed above");
+        }
+
+        // The dropped kind rides the outcome so the cascade mapper renders
+        // `(force-installed) {lsp}`.
+        assert.deepEqual([...(outcome.unsupportedKinds ?? [])], ["lspServers"]);
+      } finally {
+        process.chdir(prevCwd);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- a github-source (`unavailable`) candidate still returns partition='skipped' {no longer installable}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-unavail-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        // MM-3 / PR-2: a github-source entry from a path marketplace is
+        // structurally `unavailable` -- `requireForceInstallable` blocks it even
+        // on the force path (force degrades `unsupported`, never `unavailable`).
+        manifestPlugins: {
+          hello: { version: "1.1.0", hasSkill: true, rawSourceOverride: "github:owner/repo" },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        const outcome = await updateSinglePlugin("hello", "mp", "project");
+        assert.equal(outcome.partition, "skipped");
+        if (outcome.partition !== "skipped") {
+          throw new Error("unreachable: narrowed above");
+        }
+
+        assert.deepEqual([...outcome.reasons], ["no longer installable"]);
+      } finally {
+        process.chdir(prevCwd);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SEV-03: the manual `update` path (no --force) is UNCHANGED -- an `unsupported` candidate still declines with `(skipped) {no longer installable}`", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-manual-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".lsp.json"),
+        JSON.stringify({ servers: {} }),
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // The manual path only takes the force path when the user passes
+      // `--force`; without it the decline byte form is unchanged (SEV-04 targeted
+      // decline -> warning, the same row Plan 02 locked).
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
+      );
+      assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── PUP-1 pl@mp form: not-installed plugin -> partition='skipped' ─────────────
 
 test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {

@@ -2656,6 +2656,38 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path, so a
+    // candidate re-resolving `unsupported` renders `(force-installed) {dropped
+    // kinds}` (◉ glyph, via the shared `forceInstalledRow`) instead of
+    // declining with `(skipped) {no longer installable}`. ALREADY-degraded case:
+    // the persisted `compatibility.unsupported` was non-empty before the
+    // auto-update, so re-degrading is benign -> INFO (no `expectedSeverity`).
+    // force-installed is a realized transition -> reload-hint fires.
+    "autoupdate-force-installed-already-degraded": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "force-installed",
+                name: "degraded-plugin",
+                scope: "user",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["lsp"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "mp-failure-network": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

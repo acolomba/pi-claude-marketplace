@@ -17,6 +17,7 @@ import {
   ICON_UNINSTALLABLE,
   composeReasons,
   composeVersionArrow,
+  forceInstalledRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -25,6 +26,7 @@ import {
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type {
   PluginFailedMessage,
+  PluginForceInstalledMessage,
   PluginSkippedMessage,
   PluginUpdatedMessage,
 } from "../../shared/notify.ts";
@@ -42,11 +44,18 @@ export type UpdateMpStatus = (typeof UPDATE_MP_STATUSES)[number];
 
 /**
  * The plugin-child-row statuses `marketplace update`'s autoupdate-ON cascade
- * emits: `updated`, `skipped`, `failed`. This is the Status set the render map
- * below is total over (D-10: a missing arm is a TS2741 compile error).
+ * emits: `updated`, `force-installed`, `skipped`, `failed`. This is the Status
+ * set the render map below is total over (D-10: a missing arm is a TS2741
+ * compile error). SEV-03 / D-69-01: `force-installed` joins the set because the
+ * autoupdate cascade now TAKES the force path, so a degrading candidate renders
+ * `(force-installed) {dropped kinds}` instead of `(skipped) {no longer installable}`.
  */
-type UpdateRowStatus = "updated" | "skipped" | "failed";
-export type UpdateRowMsg = PluginUpdatedMessage | PluginSkippedMessage | PluginFailedMessage;
+type UpdateRowStatus = "updated" | "force-installed" | "skipped" | "failed";
+export type UpdateRowMsg =
+  | PluginUpdatedMessage
+  | PluginForceInstalledMessage
+  | PluginSkippedMessage
+  | PluginFailedMessage;
 
 /**
  * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace update` command
@@ -71,6 +80,12 @@ export const UPDATE_CONTEXT = {
           probe,
         ),
       ]),
+    // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
+    // `unsupported` degraded via the force path. Reuse `forceInstalledRow` --
+    // the SOLE composition site (D-11 "call, never duplicate") -- so the
+    // `◉ <name> v<version> (force-installed) {dropped kinds[, requires pi-...]}`
+    // bytes stay identical to the install / update success surfaces.
+    "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
     skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   },

@@ -1144,6 +1144,55 @@ test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage wit
   assert.deepEqual(msg.dependencies, ["agents"]);
 });
 
+test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForceInstalledMessage (force-installed), info severity, reasons narrowed", () => {
+  // The autoupdate cascade now TAKES the force path, so a candidate that
+  // re-resolved `unsupported` produces an `updated` outcome carrying
+  // `unsupportedKinds`. The marketplace mapper must render `(force-installed)`
+  // with the narrowed dropped-component reason instead of `(updated)`.
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "degraded-plugin",
+    fromVersion: "0.9.0",
+    toVersion: "1.0.0",
+    stagedAgents: [],
+    stagedMcpServers: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    unsupportedKinds: ["lspServers"],
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  assert.equal(msg.status, "force-installed");
+  if (msg.status !== "force-installed") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  assert.equal(msg.name, "degraded-plugin");
+  assert.equal(msg.scope, "user");
+  // `narrowUnsupportedKinds(["lspServers"])` -> the closed-set `lsp` reason.
+  assert.deepEqual(msg.reasons, ["lsp"]);
+  // Single version (the realized toVersion), no version arrow on the force row.
+  assert.equal(msg.version, "1.0.0");
+  // Task-1 default: info (the newly-degraded warning refinement lands with the
+  // prior-state read). force-installed is a realized transition -> reloads.
+  assert.equal(msg.severity, "info");
+  assert.equal(msg.needsReload, true);
+});
+
+test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updated), not force-installed", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "clean-plugin",
+    fromVersion: "0.9.0",
+    toVersion: "1.0.0",
+    stagedAgents: [],
+    stagedMcpServers: [],
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  assert.equal(msg.status, "updated");
+});
+
 test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage with ["up-to-date"] (glyph flips to ⊘ at render time)', () => {
   // `unchanged` maps to `skipped` + `["up-to-date"]`; the renderer routes
   // `skipped` to warning severity -> ⊘ glyph.

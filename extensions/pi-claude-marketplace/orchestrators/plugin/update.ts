@@ -491,6 +491,16 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       cwd,
       locations,
       cascade: true,
+      // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path
+      // automatically. A force-upgradable candidate (re-resolves `unsupported`)
+      // degrades in place -- supported components materialize, unsupported kinds
+      // skip -- and renders `(force-installed) {dropped kinds}` instead of
+      // declining with `(skipped) {no longer installable}`. `requireForceInstallable`
+      // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
+      // automatic force path can never materialize a structurally-broken plugin.
+      // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
+      // directly) is unaffected; it sets `force` from the user's `--force` flag.
+      force: true,
     });
   } catch (err) {
     // Cascade-safe: capture throws into a partition='failed' outcome so the
