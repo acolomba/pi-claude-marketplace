@@ -33,7 +33,7 @@ import {
   NON_TOOL_EVENT_FIELDS,
   TOOL_EVENTS,
 } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
-import { checkMatcherSupportability } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { partitionHooks } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 1: TOOL-02 bucket-A 8-event tuple (D-58-06)
@@ -215,63 +215,71 @@ test("WR-04: every NON_TOOL_EVENT_FIELDS event with a non-null field name has a 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 6: TOOL-02 checkMatcherSupportability debugDetail prefix contract
+// Block 6: PHOOK-01 partitionHooks DroppedHook discriminant contract
 // ──────────────────────────────────────────────────────────────────────────
 
-test("TOOL-02: checkMatcherSupportability debugDetail prefixes are (a)/(b)/(c)/(d)", () => {
-  // Locks the per-condition debug-detail prefix shape so downstream
-  // consumers (the debug-log channel and the catalog-layer narrowing in
-  // `shared/probe-classifiers.ts::narrowResolverNotes`) have a stable
-  // token contract. A future contributor who renames any of the four
-  // prefixes red-fails this assertion.
+test("PHOOK-01: partitionHooks maps each unsupportable matcher to its DroppedHook discriminant", () => {
+  // Locks the partition's per-condition discriminant so downstream consumers
+  // (the info enumeration and the aggregate `{unsupported hooks}` reason in
+  // `shared/probe-classifiers.ts`) have a stable token contract. A future
+  // contributor who renames a `cond` literal or a `kind` arm red-fails this
+  // assertion. The legacy `(a)/(b)/(c)/(d)` debugDetail prefixes collapse
+  // into the `kind` + `cond` discriminants per D-71-01.
 
-  // (a) regex matcher.
-  const regexResult = checkMatcherSupportability({
+  // (a) -> kind:"group", cond:"regex".
+  const regex = partitionHooks({
     PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  assert.equal(regexResult.ok, false);
-  if (!regexResult.ok) {
-    assert.ok(
-      regexResult.debugDetail.startsWith("(a) "),
-      `(a) regex prefix expected, got: ${regexResult.debugDetail}`,
-    );
-  }
+  assert.deepEqual(regex.supported, {});
+  assert.deepEqual(regex.dropped, [
+    { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
+  ]);
 
-  // (b) unmapped tool.
-  const unmappedResult = checkMatcherSupportability({
+  // (b) -> kind:"group", cond:"unmapped-tool".
+  const unmapped = partitionHooks({
     PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  assert.equal(unmappedResult.ok, false);
-  if (!unmappedResult.ok) {
-    assert.ok(
-      unmappedResult.debugDetail.startsWith("(b) "),
-      `(b) unmapped-tool prefix expected, got: ${unmappedResult.debugDetail}`,
-    );
-  }
+  assert.deepEqual(unmapped.dropped, [
+    { kind: "group", event: "PreToolUse", matcher: "MultiEdit", cond: "unmapped-tool" },
+  ]);
 
-  // (c) non-bucket-A event (the simplest (c) variant; the (c) closed-set
-  // and no-matcher-support variants share the same prefix and are
-  // covered in tests/domain/components/hooks.test.ts).
-  const nonBucketAResult = checkMatcherSupportability({
+  // (c) non-bucket-A event -> kind:"event".
+  const nonBucketA = partitionHooks({
     Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  assert.equal(nonBucketAResult.ok, false);
-  if (!nonBucketAResult.ok) {
-    assert.ok(
-      nonBucketAResult.debugDetail.startsWith("(c) "),
-      `(c) non-bucket-A prefix expected, got: ${nonBucketAResult.debugDetail}`,
-    );
-  }
+  assert.deepEqual(nonBucketA.supported, {});
+  assert.deepEqual(nonBucketA.dropped, [{ kind: "event", event: "Stop" }]);
 
-  // (d) non-command handler.
-  const nonCommandResult = checkMatcherSupportability({
+  // (c) no-matcher-support -> kind:"group", cond:"no-matcher-support".
+  const noMatcher = partitionHooks({
+    UserPromptSubmit: [
+      { matcher: "anything", hooks: [{ type: "command", command: "/bin/false" }] },
+    ],
+  });
+  assert.deepEqual(noMatcher.dropped, [
+    {
+      kind: "group",
+      event: "UserPromptSubmit",
+      matcher: "anything",
+      cond: "no-matcher-support",
+    },
+  ]);
+
+  // (c) closed-set -> kind:"group", cond:"closed-set".
+  const closedSet = partitionHooks({
+    SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.deepEqual(closedSet.dropped, [
+    { kind: "group", event: "SessionStart", matcher: "clear", cond: "closed-set" },
+  ]);
+
+  // (d) non-command handler -> kind:"handler" (HANDLER granularity, Q1).
+  const nonCommand = partitionHooks({
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "frobnicate", command: "/bin/false" }] }],
   });
-  assert.equal(nonCommandResult.ok, false);
-  if (!nonCommandResult.ok) {
-    assert.ok(
-      nonCommandResult.debugDetail.startsWith("(d) "),
-      `expected "(d) non-command-handler" prefix on synthetic handler type, got: ${nonCommandResult.debugDetail}`,
-    );
-  }
+  assert.deepEqual(nonCommand.dropped, [
+    { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "frobnicate" },
+  ]);
+  // The group's only handler dropped, so the event is omitted entirely.
+  assert.deepEqual(nonCommand.supported, {});
 });

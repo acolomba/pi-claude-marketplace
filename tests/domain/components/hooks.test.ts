@@ -6,9 +6,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   HOOKS_VALIDATOR,
-  checkMatcherSupportability,
   parseHooksConfig,
   parseMatcher,
+  partitionHooks,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // MATCH-03: synthetic path-anchor triple + no-op compileIf callback
@@ -290,176 +290,187 @@ test("parseMatcher: mixed tool|mcp literal -> regex (mixed-token rejection)", ()
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// checkMatcherSupportability (TOOL-02 four-condition gate) + parseHooksConfig
-// single-seam extension (D-58-03)
+// partitionHooks (PHOOK-01 / D-71-01 accumulating partition) + parseHooksConfig
+// structural-vs-supportability split (PHOOK-03 / D-71-03)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("checkMatcherSupportability: regex matcher -> (a) via parseHooksConfig", () => {
-  const raw = JSON.stringify({
+test("PHOOK-01: regex matcher drops the group with cond=regex (a)", () => {
+  const partition = partitionHooks({
     PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.startsWith("unsupported hooks: (a) regex matcher"),
-      `expected "(a) regex matcher" prefix, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
+  ]);
 });
 
-test("checkMatcherSupportability: unmapped tool (MultiEdit) -> (b)", () => {
-  const raw = JSON.stringify({
+test("PHOOK-01: unmapped tool (MultiEdit) drops the group with cond=unmapped-tool (b)", () => {
+  const partition = partitionHooks({
     PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(b) unmapped tool in PreToolUse: MultiEdit"),
-      `expected "(b) unmapped tool" detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "PreToolUse", matcher: "MultiEdit", cond: "unmapped-tool" },
+  ]);
 });
 
-test("checkMatcherSupportability: non-bucket-A event (Stop) -> (c)", () => {
-  const raw = JSON.stringify({
+test("PHOOK-01: non-bucket-A event (Stop) drops the whole event (P1)", () => {
+  const partition = partitionHooks({
     Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(c) non-bucket-A event: Stop"),
-      `expected "(c) non-bucket-A event: Stop" detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Stop" }]);
 });
 
-test("checkMatcherSupportability: UserPromptSubmit with non-empty matcher -> (c) no-matcher-support", () => {
+test("PHOOK-01: non-empty matcher on UserPromptSubmit drops the group with cond=no-matcher-support (c)", () => {
   // Pi-side / Claude-side disposition: UserPromptSubmit has no upstream
-  // matcher support, so any non-empty matcher trips TOOL-02(c) per
-  // strict-supportability stance.
-  const raw = JSON.stringify({
+  // matcher support, so any non-empty matcher drops the group per
+  // strict-supportability stance (D-58-06).
+  const partition = partitionHooks({
     UserPromptSubmit: [
       { matcher: "anything", hooks: [{ type: "command", command: "/bin/false" }] },
     ],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(c) matcher on no-matcher-support event: UserPromptSubmit"),
-      `expected no-matcher-support detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    {
+      kind: "group",
+      event: "UserPromptSubmit",
+      matcher: "anything",
+      cond: "no-matcher-support",
+    },
+  ]);
 });
 
-test("checkMatcherSupportability: SessionStart source=clear -> (c) closed-set", () => {
+test("PHOOK-01: SessionStart source=clear drops the group with cond=closed-set (c)", () => {
   // Pi `SessionStartEvent.reason` does NOT expose `clear` -- strict-
-  // supportability trip.
-  const raw = JSON.stringify({
+  // supportability trip (D-58-06).
+  const partition = partitionHooks({
     SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(c) matcher value not in closed set for SessionStart: clear"),
-      `expected closed-set detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "SessionStart", matcher: "clear", cond: "closed-set" },
+  ]);
 });
 
-test("checkMatcherSupportability: SessionStart source=startup -> ok (admissible)", () => {
+test("PHOOK-01: SessionStart source=startup is admissible (no drop)", () => {
   // Pi-side analog: `startup` IS in the SessionStart closed set.
-  const raw = JSON.stringify({
+  const config = {
     SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "/bin/false" }] }],
-  });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, true);
+  };
+  const partition = partitionHooks(config);
+  assert.deepEqual(partition.supported, config);
+  assert.deepEqual(partition.dropped, []);
 });
 
-test("checkMatcherSupportability: PreCompact trigger=manual -> (c) closed-set", () => {
-  // Pi compact events carry no `trigger` field -- empty closed set;
-  // every non-empty matcher trips.
-  const raw = JSON.stringify({
+test("PHOOK-01: PreCompact trigger=manual drops the group with cond=closed-set (c)", () => {
+  // Pi compact events carry no `trigger` field -- empty closed set; every
+  // non-empty matcher trips (D-58-06).
+  const partition = partitionHooks({
     PreCompact: [{ matcher: "manual", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(c) matcher value not in closed set for PreCompact: manual"),
-      `expected closed-set detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "PreCompact", matcher: "manual", cond: "closed-set" },
+  ]);
 });
 
-test("checkMatcherSupportability: PreCompact empty matcher -> ok (match-all)", () => {
+test("PHOOK-01: PreCompact empty matcher is admissible (match-all, no drop)", () => {
   // Match-all is always supportable on every bucket-A event per D-58-06.
-  const raw = JSON.stringify({
+  const config = {
     PreCompact: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
-  });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, true);
+  };
+  const partition = partitionHooks(config);
+  assert.deepEqual(partition.supported, config);
+  assert.deepEqual(partition.dropped, []);
 });
 
-test("checkMatcherSupportability: non-command handler type (http) -> (d)", () => {
-  // HOOK-03 lenient schema accepts unknown handler types; TOOL-02(d)
-  // owns the supportability trip.
-  const raw = JSON.stringify({
+test("PHOOK-01 / Q1: non-command handler (http) drops at HANDLER granularity (d)", () => {
+  // HOOK-03 lenient schema accepts unknown handler types; the partition
+  // drops the non-command handler at HANDLER granularity (Q1). The group's
+  // only handler dropped, so the group and event are omitted entirely.
+  const partition = partitionHooks({
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "http", command: "/bin/false" }] }],
   });
-  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.ok(
-      result.reason.includes("(d) non-command handler in PreToolUse: http"),
-      `expected "(d) non-command handler" detail, got: ${result.reason}`,
-    );
-  }
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
+  ]);
 });
 
-test("checkMatcherSupportability: success path -> ok=true", () => {
-  // Clean PreToolUse + Edit matcher + command handler = fully supportable.
-  const raw = JSON.stringify({
+test("PHOOK-01: a fully supportable config partitions to itself with no drops", () => {
+  const config = {
     PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  };
+  const partition = partitionHooks(config);
+  assert.deepEqual(partition.supported, config);
+  assert.deepEqual(partition.dropped, []);
+});
+
+test("D-71-02: a mixed event keeps the clean group and drops only the unsupportable group", () => {
+  // One PreToolUse event with a clean Edit group and a regex `.*` group --
+  // the clean group survives and source group order is preserved.
+  const partition = partitionHooks({
+    PreToolUse: [
+      { matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] },
+      { matcher: ".*", hooks: [{ type: "command", command: "/bin/regex" }] },
+    ],
+  });
+  assert.deepEqual(partition.supported, {
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
+  });
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+  ]);
+});
+
+test("D-71-01: a supported event survives while a sibling non-bucket-A event drops", () => {
+  const partition = partitionHooks({
+    PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
+    Stop: [{ hooks: [{ type: "command", command: "/bin/stop" }] }],
+  });
+  assert.deepEqual(partition.supported, {
+    PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
+  });
+  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Stop" }]);
+});
+
+test("PHOOK-01 / Q1: a group with command + non-command handlers keeps the command handler", () => {
+  const partition = partitionHooks({
+    PreToolUse: [
+      {
+        matcher: "Edit",
+        hooks: [
+          { type: "command", command: "/bin/ok" },
+          { type: "http", command: "/bin/nope" },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(partition.supported, {
+    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/ok" }] }],
+  });
+  assert.deepEqual(partition.dropped, [
+    { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
+  ]);
+});
+
+// PHOOK-03 / D-71-03: parseHooksConfig success arm returns the FILTERED
+// subset as `value` plus the `dropped` enumeration; structural S1/S2 still
+// fail (asserted in the discriminated-result block above).
+test("PHOOK-03: parseHooksConfig success arm returns the filtered subset as value plus dropped", () => {
+  const raw = JSON.stringify({
+    PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
+    Stop: [{ hooks: [{ type: "command", command: "/bin/stop" }] }],
   });
   const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
-
-  // Direct gate call on a typed HooksConfig: also ok.
-  const direct = checkMatcherSupportability({
-    PreToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/false" }] }],
-  });
-  assert.deepEqual(direct, { ok: true });
-});
-
-test("parseHooksConfig: hookDebugLog fires for supportability failure when PI_CLAUDE_MARKETPLACE_DEBUG=1", (t) => {
-  const prior = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  const captured: string[] = [];
-  t.mock.method(console, "error", (msg: unknown) => {
-    captured.push(String(msg));
-  });
-
-  try {
-    const raw = JSON.stringify({
-      PreToolUse: [{ matcher: "Edit.*", hooks: [{ type: "command", command: "/bin/false" }] }],
+  if (result.ok) {
+    assert.deepEqual(result.value, {
+      PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
     });
-    const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
-    assert.equal(result.ok, false);
-    assert.ok(
-      captured.some((line) => line.includes("unsupported hooks: (a) regex matcher")),
-      `expected debug-log line, captured: ${JSON.stringify(captured)}`,
-    );
-  } finally {
-    if (prior === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = prior;
-    }
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
   }
 });
 
@@ -620,5 +631,57 @@ test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire 
     assert.ok("PreToolUse" in result.value);
     assert.ok("PostToolUse" in result.value);
     assert.ok("UserPromptSubmit" in result.value);
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// PHOOK-01 / D-71-02 partial-hook fixtures. Synthetic configs mirroring the
+// upstream plugin-format wrapper shape plus an unsupportable element, since
+// the live validation-target plugins (hookify / ralph-loop /
+// security-guidance) are not in the local checkout.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("PHOOK-01: hooks-stop-only fixture partitions to the empty subset (Q2 edge)", async () => {
+  const raw = await readFile(
+    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-stop-only.json"),
+    "utf8",
+  );
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, {});
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
+  }
+});
+
+test("PHOOK-01: hooks-posttooluse-and-stop fixture keeps PostToolUse, drops Stop", async () => {
+  const raw = await readFile(
+    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-posttooluse-and-stop.json"),
+    "utf8",
+  );
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.ok("PostToolUse" in result.value);
+    assert.ok(!("Stop" in result.value));
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
+  }
+});
+
+test("D-71-02: hooks-pretooluse-matcher-mix fixture keeps the clean group, drops the regex group", async () => {
+  const raw = await readFile(
+    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-pretooluse-matcher-mix.json"),
+    "utf8",
+  );
+  const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    const groups = result.value.PreToolUse;
+    assert.ok(groups !== undefined, "PreToolUse must survive the partition");
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0]?.matcher, "Edit");
+    assert.deepEqual(result.dropped, [
+      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+    ]);
   }
 });

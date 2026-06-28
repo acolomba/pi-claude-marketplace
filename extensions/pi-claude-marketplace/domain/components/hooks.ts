@@ -288,16 +288,60 @@ export function ifPredicateMapKey(
 }
 
 /**
- * Discriminated parse result. Consumers (resolver) narrow on `ok` to
- * surface the `{unsupported hooks}` reason on failure (D-57-04).
+ * One dropped hook event / matcher group / handler recorded by
+ * `partitionHooks`, for the `info` enumeration (D-71-05) and the aggregate
+ * `{unsupported hooks}` reason (D-71-04). PHOOK-01 partition granularity:
  *
- * MATCH-03 extension: the success arm now carries the compiled
- * `ifPredicates` side-Map; failure arm unchanged. Generic in `P` so
- * the bridge layer's concrete `IfPredicate` discriminated union flows
- * out typed correctly.
+ *   - `kind:"event"` (P1): a whole non-bucket-A event was dropped.
+ *   - `kind:"group"` (P2-P5): a single matcher group was dropped because its
+ *     matcher has no Pi analog. `cond` names which TOOL-02 condition tripped:
+ *     a regex matcher, an unmapped tool, a non-empty matcher on a
+ *     no-matcher-support event, or a matcher value outside the closed set.
+ *   - `kind:"handler"` (P6, Q1): a single non-`command` handler was dropped
+ *     from an otherwise-supportable group (HANDLER granularity).
+ */
+export type DroppedHook =
+  | { kind: "event"; event: string }
+  | {
+      kind: "group";
+      event: BucketAEvent;
+      matcher: string;
+      cond: "regex" | "unmapped-tool" | "no-matcher-support" | "closed-set";
+    }
+  | { kind: "handler"; event: BucketAEvent; matcher: string; handlerType: string };
+
+/**
+ * Partition of a schema-validated `HooksConfig` into the supported strict
+ * subset plus the enumeration of dropped events / groups / handlers
+ * (PHOOK-01, D-71-01). `supported` is a deterministic subset of the input --
+ * same event-key order, same group order, same surviving-handler order --
+ * and may be `{}` when every handler drops (D-71-02 empty-subset edge).
+ * `dropped` is in encounter order.
+ */
+export interface HooksPartition {
+  readonly supported: HooksConfig;
+  readonly dropped: readonly DroppedHook[];
+}
+
+/**
+ * Discriminated parse result. Consumers (resolver) narrow on `ok`.
+ *
+ * MATCH-03 extension: the success arm carries the compiled `ifPredicates`
+ * side-Map. D-71-03 extension: the success arm's `value` is now the FILTERED
+ * supported subset and `dropped` enumerates the skipped events / groups /
+ * handlers; degradable supportability failures no longer fail the parse. The
+ * failure arm is reserved for STRUCTURAL defects only -- invalid JSON (S1),
+ * schema-validation failure (S2), and the X1 table-desync programmer bug.
+ * Generic in `P` so the bridge layer's concrete `IfPredicate` discriminated
+ * union flows out typed correctly.
  */
 export type HookConfigParseResult<P> =
-  | { ok: true; value: HooksConfig; ifPredicates: CompiledIfPredicateMap<P> }
+  | {
+      ok: true;
+      value: HooksConfig;
+      dropped: readonly DroppedHook[];
+      ifPredicates: CompiledIfPredicateMap<P>;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -360,18 +404,28 @@ export function parseHooksConfig<P>(
     return { ok: false, reason };
   }
 
-  // D-58-03 single-seam supportability gate (TOOL-02). Fold matcher /
-  // event / handler-type supportability failure into the EXISTING
-  // `{ok:false, reason}` arm so the resolver's not-installable cascade
-  // narrows on `ok` unchanged. The reason carries the parse-time
-  // `"unsupported hooks: " + debugDetail` form; the catalog-layer
-  // narrowing in `shared/probe-classifiers.ts::narrowResolverNotes`
-  // collapses this to the closed-set `{unsupported hooks}` Reason.
-  const supportability = checkMatcherSupportability(candidate);
-  if (!supportability.ok) {
-    const reason = `unsupported hooks: ${supportability.debugDetail}`;
-    hookDebugLog(reason);
-    return { ok: false, reason };
+  // D-71-01 / D-71-03 partition gate (PHOOK-01 / PHOOK-03). The JSON.parse
+  // (S1) and HOOKS_VALIDATOR.Check (S2) arms above own the STRUCTURAL
+  // failures and stay `{ok:false}` -- by the time we get here the config is
+  // shape-valid. `partitionHooks` accumulates every supportability failure
+  // into the `dropped` enumeration and returns the supported strict subset;
+  // degradable drops no longer fail the parse (D-71-03). The catalog-layer
+  // narrowing in `shared/probe-classifiers.ts` collapses the routed `dropped`
+  // signal to the closed-set `{unsupported hooks}` Reason (D-71-04). The one
+  // exception is the X1 table-desync programmer bug, which `partitionHooks`
+  // raises as a `HooksTableDesyncError` so it stays loud `{ok:false}`
+  // (arch-test-guarded, D-71-03).
+  let partition: HooksPartition;
+  try {
+    partition = partitionHooks(candidate);
+  } catch (err) {
+    if (err instanceof HooksTableDesyncError) {
+      const reason = `unsupported hooks: ${err.message}`;
+      hookDebugLog(reason);
+      return { ok: false, reason };
+    }
+
+    throw err;
   }
 
   // MATCH-03: compile the side-Map of `if` predicates via the caller-
@@ -380,11 +434,19 @@ export function parseHooksConfig<P>(
   // parser never fails on an `if`-field issue (plugin always installs).
   // The `skipIfMap` opt-out returns an empty Map without iteration for
   // callers that consume only the installable verdict (resolver probe).
+  //
+  // D-71-03: build the side-Map over the FILTERED subset so a dropped
+  // handler's `if` predicate never enters the dispatch Map.
   const ifPredicates: CompiledIfPredicateMap<P> = options.skipIfMap
     ? new Map<string, P>()
-    : buildIfPredicateMap(candidate, ctx, compileIf);
+    : buildIfPredicateMap(partition.supported, ctx, compileIf);
 
-  return { ok: true, value: candidate, ifPredicates };
+  return {
+    ok: true,
+    value: partition.supported,
+    dropped: partition.dropped,
+    ifPredicates,
+  };
 }
 
 /**
@@ -395,8 +457,8 @@ export function parseHooksConfig<P>(
  * `if` field are absent from the map (the flatten consumer falls back
  * to MATCH_ALL_IF).
  *
- * Pre-condition: `checkMatcherSupportability` has already accepted the
- * config, so every event key is a BucketAEvent.
+ * Pre-condition: `partitionHooks` has already filtered the config to the
+ * supported subset, so every event key is a BucketAEvent.
  */
 function buildIfPredicateMap<P>(
   config: HooksConfig,
@@ -643,58 +705,67 @@ export function parseMatcher(raw: string): ParsedMatcher {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// checkMatcherSupportability (TOOL-02 four-condition gate, D-58-06)
+// partitionHooks (TOOL-02 four-condition gate as an accumulating partition,
+// D-58-06 / D-71-01)
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Supportability verdict carried out of the four-condition TOOL-02 gate.
- * `ok: true` means every event / matcher / handler combination in the
- * config has a Pi peer-dep analog the dispatcher can fire on. `ok: false`
- * carries the per-condition `debugDetail` string with a locked
- * `(a)` / `(b)` / `(c)` / `(d)` prefix routed to `hookDebugLog` only --
- * never to `ctx.ui.notify` or stdout.
+ * Matcher-level supportability condition (PHOOK-01 / D-71-01). Names the
+ * TOOL-02 condition that caused a matcher GROUP to be dropped. The four
+ * literals replace the legacy `(a)` / `(b)` / `(c)` debugDetail prefixes:
  *
- * The four conditions map to the audit-locked TOOL-02 catalog:
- *   - `(a)`: regex matcher (MATCH-02 trip).
- *   - `(b)`: tool-event matcher referencing a Claude tool with no Pi
- *            TOOL-01 reverse-map entry (`MultiEdit` / `WebFetch` /
- *            `Task` / Pi-form lowercase / etc.).
- *   - `(c)`: non-bucket-A event, OR non-tool-event matcher value outside
- *            the Pi-mappable closed set, OR non-empty matcher on a
- *            no-matcher-support event.
- *   - `(d)`: a hook handler whose `type` is not `"command"`.
+ *   - `regex`: regex matcher on a tool event (was `(a)`).
+ *   - `unmapped-tool`: tool-event matcher with no Pi TOOL-01 reverse-map
+ *     entry -- `MultiEdit` / `WebFetch` / `Task` / Pi-form lowercase (was
+ *     `(b)`).
+ *   - `no-matcher-support`: a non-empty matcher on a no-matcher-support event
+ *     (`UserPromptSubmit`; was `(c)`).
+ *   - `closed-set`: a matcher value outside the Pi-mappable closed set (was
+ *     `(c)`).
  */
-type SupportabilityResult = { ok: true } | { ok: false; debugDetail: string };
+type MatcherCond = "regex" | "unmapped-tool" | "no-matcher-support" | "closed-set";
 
 /**
- * TOOL-02 supportability gate. Pure and total: iterates every event /
- * group / handler triple and returns the FIRST encountered failure with
- * a per-condition debug detail. Strict per-PLUGIN policy: a single
- * unsupportable matcher trips the entire plugin to
- * `(unavailable) {unsupported hooks}`.
+ * Outcome of the matcher-level (group) supportability check. `null` means
+ * the matcher is admissible -- keep the group, then filter its handlers for
+ * the (d) condition.
  *
- * No-op happy path: an empty config, or a config whose events are all
- * bucket-A members with admissible matchers + `command` handlers, returns
- * `{ok: true}` without producing a debug-log line.
+ *   - `kind:"drop"`: a degradable matcher-group drop (P2-P5) carrying `cond`.
+ *   - `kind:"structural"`: the X1 table-desync programmer bug
+ *     (`NON_TOOL_EVENT_FIELDS` declares a field with no
+ *     `NON_TOOL_EVENT_CLOSED_SETS` entry). NOT degradable -- surfaced loud as
+ *     `{ok:false}` by `parseHooksConfig` (D-71-03).
  */
+type MatcherTrip = { kind: "drop"; cond: MatcherCond } | { kind: "structural"; detail: string };
+
+/**
+ * Internal structural signal for the X1 table-desync programmer bug. Thrown
+ * by `partitionHooks` and caught by `parseHooksConfig`, which returns
+ * `{ok:false}` so the failure stays loud/structural rather than silently
+ * degrading a group (D-71-03). Never raised for plugin-authored input -- only
+ * when the two non-tool-event tables fall out of sync, which the architecture
+ * test pins (statically unreachable today).
+ */
+class HooksTableDesyncError extends Error {}
+
 const BUCKET_A_MEMBERS = new Set<string>(BUCKET_A_EVENTS);
 const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 
 /**
- * TOOL-02(a)/(b) gate for tool events. Translates a parsed matcher arm
- * into the corresponding `(a)` / `(b)` failure detail when the matcher
- * is unsupportable on a tool event. Returns `null` when the matcher is
- * admissible (match-all / tool-set / mcp-literal).
+ * TOOL-02(a)/(b) gate for tool events. Translates a parsed matcher arm into
+ * the corresponding degradable `cond` when the matcher is unsupportable on a
+ * tool event. Returns `null` when the matcher is admissible (match-all /
+ * tool-set / mcp-literal).
  */
-function tryToolEventTrip(event: ToolEvent, rawMatcher: string): SupportabilityResult | null {
+function tryToolEventTrip(rawMatcher: string): MatcherTrip | null {
   const parsed = parseMatcher(rawMatcher);
 
   if (parsed.kind === "regex") {
-    return { ok: false, debugDetail: `(a) regex matcher in ${event}: ${rawMatcher}` };
+    return { kind: "drop", cond: "regex" };
   }
 
   if (parsed.kind === "unmapped") {
-    return { ok: false, debugDetail: `(b) unmapped tool in ${event}: ${parsed.token}` };
+    return { kind: "drop", cond: "unmapped-tool" };
   }
 
   return null;
@@ -704,118 +775,181 @@ function tryToolEventTrip(event: ToolEvent, rawMatcher: string): SupportabilityR
  * TOOL-02(c) gate for non-tool bucket-A events. Handles two sub-cases:
  *
  *   - Null sentinel in `NON_TOOL_EVENT_FIELDS`: Claude has no upstream
- *     matcher support (UserPromptSubmit). Any non-empty matcher trips.
- *   - String field in `NON_TOOL_EVENT_FIELDS`: matcher value must be in
- *     the Pi-mappable closed set per `NON_TOOL_EVENT_CLOSED_SETS`.
+ *     matcher support (UserPromptSubmit). Any non-empty matcher drops the
+ *     group with `cond:"no-matcher-support"`.
+ *   - String field in `NON_TOOL_EVENT_FIELDS`: matcher value must be in the
+ *     Pi-mappable closed set per `NON_TOOL_EVENT_CLOSED_SETS`; otherwise the
+ *     group drops with `cond:"closed-set"`.
  *
- * Match-all (empty / `*`) is always admissible and short-circuits to
- * `null` before this function is called.
+ * Match-all (empty / `*`) is always admissible and short-circuits to `null`
+ * before this function is called.
+ *
+ * The X1 table-desync case (field declared, closed-set entry missing) returns
+ * a `kind:"structural"` trip -- it is a programmer bug, not user input, and
+ * must stay loud rather than degrade (D-71-03).
  */
 function tryNonToolEventTrip(
   event: Exclude<BucketAEvent, ToolEvent>,
   rawMatcher: string,
-): SupportabilityResult | null {
+): MatcherTrip | null {
   const fieldName = NON_TOOL_EVENT_FIELDS[event];
 
   if (fieldName === null) {
-    return {
-      ok: false,
-      debugDetail: `(c) matcher on no-matcher-support event: ${event}`,
-    };
+    return { kind: "drop", cond: "no-matcher-support" };
   }
 
   const closedSet = NON_TOOL_EVENT_CLOSED_SETS[event];
   if (closedSet === undefined) {
-    // WR-04 (D-58 review): NON_TOOL_EVENT_FIELDS declared a matcher
-    // target field for this event but NON_TOOL_EVENT_CLOSED_SETS has no
+    // WR-04 (D-58 review): NON_TOOL_EVENT_FIELDS declared a matcher target
+    // field for this event but NON_TOOL_EVENT_CLOSED_SETS has no
     // corresponding entry -- the two tables fell out of sync. This is a
-    // programming error, not a user-input miss; distinguish it from the
-    // ordinary "value not in the closed set" case so the debug detail
-    // tells the truth. The architecture test in
-    // `tests/architecture/hooks-supportability.test.ts` red-fails CI
-    // when the two tables disagree, so this branch should be
-    // statically unreachable today; it is the loud fallback for future
-    // table edits.
+    // programming error, not a user-input miss; signalled STRUCTURAL so
+    // parseHooksConfig stays `{ok:false}` rather than degrading a group
+    // (D-71-03). The architecture test in
+    // `tests/architecture/hooks-supportability.test.ts` red-fails CI when the
+    // two tables disagree, so this branch should be statically unreachable
+    // today; it is the loud fallback for future table edits.
     return {
-      ok: false,
-      debugDetail: `(c) missing closed-set entry for non-tool event: ${event}`,
+      kind: "structural",
+      detail: `(c) missing closed-set entry for non-tool event: ${event}`,
     };
   }
 
   if (!closedSet.has(rawMatcher)) {
-    return {
-      ok: false,
-      debugDetail: `(c) matcher value not in closed set for ${event}: ${rawMatcher}`,
-    };
+    return { kind: "drop", cond: "closed-set" };
   }
 
   return null;
 }
 
 /**
- * TOOL-02(d) gate. Scans the handler list and returns the FIRST
- * non-`command` handler's type in a `(d)` failure detail. Returns `null`
- * when every handler is `command`.
+ * Per-event-group matcher gate composing the TOOL-02(a)/(b)/(c) conditions.
+ * Routes the matcher through tool-event (a/b) or non-tool-event (c) handling.
+ * Returns `null` when the matcher is admissible (the caller then filters the
+ * group's handlers for the (d) condition at HANDLER granularity per Q1).
  */
-function tryHandlerTrip(
-  event: BucketAEvent,
-  handlers: ReadonlyArray<HookHandlerEntry>,
-): SupportabilityResult | null {
-  for (const handler of handlers) {
-    if (handler.type !== "command") {
-      return {
-        ok: false,
-        debugDetail: `(d) non-command handler in ${event}: ${handler.type}`,
-      };
-    }
-  }
-
-  return null;
-}
-
-/**
- * Per-event-group gate composing the four TOOL-02 conditions. Routes the
- * matcher through tool-event (a/b) or non-tool-event (c) handling and
- * scans the handler list for (d). Returns `null` when every check passes.
- */
-function tryGroupTrip(
+function tryMatcherTrip(
   event: BucketAEvent,
   group: { matcher?: string; hooks: ReadonlyArray<HookHandlerEntry> },
-): SupportabilityResult | null {
+): MatcherTrip | null {
   const rawMatcher = group.matcher ?? "";
 
   if (TOOL_EVENT_MEMBERS.has(event)) {
-    const toolTrip = tryToolEventTrip(event as ToolEvent, rawMatcher);
-    if (toolTrip !== null) {
-      return toolTrip;
-    }
-  } else if (rawMatcher !== "" && rawMatcher !== "*") {
+    return tryToolEventTrip(rawMatcher);
+  }
+
+  if (rawMatcher !== "" && rawMatcher !== "*") {
     // D-58-06: match-all is always supportable on every bucket-A event.
-    // Anything non-empty routes through the non-tool-event closed-set
-    // gate.
-    const nonToolTrip = tryNonToolEventTrip(event as Exclude<BucketAEvent, ToolEvent>, rawMatcher);
-    if (nonToolTrip !== null) {
-      return nonToolTrip;
+    // Anything non-empty routes through the non-tool-event closed-set gate.
+    return tryNonToolEventTrip(event as Exclude<BucketAEvent, ToolEvent>, rawMatcher);
+  }
+
+  return null;
+}
+
+/**
+ * P6 / Q1 handler filter. Returns the group with its surviving `command`
+ * handlers (source order preserved), or `undefined` when every handler
+ * dropped. Pushes a `kind:"handler"` DroppedHook per non-`command` handler
+ * at HANDLER granularity.
+ */
+function partitionGroupHandlers(
+  event: BucketAEvent,
+  matcher: string,
+  group: HooksConfig[string][number],
+  dropped: DroppedHook[],
+): HooksConfig[string][number] | undefined {
+  const keptHandlers: HookHandlerEntry[] = [];
+  for (const handler of group.hooks) {
+    if (handler.type === "command") {
+      keptHandlers.push(handler);
+    } else {
+      dropped.push({ kind: "handler", event, matcher, handlerType: handler.type });
     }
   }
 
-  return tryHandlerTrip(event, group.hooks);
+  if (keptHandlers.length === 0) {
+    return undefined;
+  }
+
+  return { ...group, hooks: keptHandlers };
 }
 
-export function checkMatcherSupportability(config: HooksConfig): SupportabilityResult {
+/**
+ * Partition one bucket-A event's groups (D-71-01 / D-71-02). Drops
+ * unsupportable matcher groups (P2-P5) and non-`command` handlers (P6/Q1),
+ * returning the surviving groups (empty array when the event fully drops).
+ * Throws `HooksTableDesyncError` on the X1 structural signal (D-71-03).
+ */
+function partitionEventGroups(
+  event: BucketAEvent,
+  groups: HooksConfig[string],
+  dropped: DroppedHook[],
+): HooksConfig[string] {
+  const keptGroups: HooksConfig[string] = [];
+
+  for (const group of groups) {
+    const matcher = group.matcher ?? "";
+    const trip = tryMatcherTrip(event, group);
+
+    if (trip !== null) {
+      if (trip.kind === "structural") {
+        // X1: stays loud/structural (D-71-03).
+        throw new HooksTableDesyncError(trip.detail);
+      }
+
+      // P2-P5: degradable matcher-group drop.
+      dropped.push({ kind: "group", event, matcher, cond: trip.cond });
+      continue;
+    }
+
+    const keptGroup = partitionGroupHandlers(event, matcher, group, dropped);
+    if (keptGroup !== undefined) {
+      keptGroups.push(keptGroup);
+    }
+  }
+
+  return keptGroups;
+}
+
+/**
+ * PHOOK-01 / D-71-01 partition. Accumulates every supportability failure
+ * instead of returning on the first trip, producing the supported strict
+ * subset plus the `dropped` enumeration. Granularity is event (P1) + matcher
+ * group (P2-P5) + handler (P6, Q1):
+ *
+ *   - Non-bucket-A event -> drop the whole EVENT (`kind:"event"`).
+ *   - Unsupportable matcher -> drop the matcher GROUP (`kind:"group"`),
+ *     keeping the event's clean groups (D-71-02).
+ *   - Non-`command` handler in an otherwise-supportable group -> drop the
+ *     HANDLER (`kind:"handler"`), keeping the group's `command` handlers; a
+ *     group whose handlers all drop is omitted; an event whose groups all
+ *     drop is omitted (D-71-02 empty-subset edge).
+ *
+ * Pure and total over every schema-validated `HooksConfig`. The sole
+ * non-total path is the X1 table-desync programmer bug, raised as a
+ * `HooksTableDesyncError` so the structural failure stays loud (D-71-03); it
+ * is statically unreachable while the two non-tool-event tables stay in sync.
+ */
+export function partitionHooks(config: HooksConfig): HooksPartition {
+  const supported: Record<string, HooksConfig[string]> = {};
+  const dropped: DroppedHook[] = [];
+
   for (const [eventName, groups] of Object.entries(config)) {
+    // P1: non-bucket-A event -> drop the whole event.
     if (!BUCKET_A_MEMBERS.has(eventName)) {
-      return { ok: false, debugDetail: `(c) non-bucket-A event: ${eventName}` };
+      dropped.push({ kind: "event", event: eventName });
+      continue;
     }
 
     const bucketAEvent = eventName as BucketAEvent;
-    for (const group of groups) {
-      const trip = tryGroupTrip(bucketAEvent, group);
-      if (trip !== null) {
-        return trip;
-      }
+    const keptGroups = partitionEventGroups(bucketAEvent, groups, dropped);
+
+    // An event whose groups all dropped is omitted (D-71-02 empty-subset).
+    if (keptGroups.length > 0) {
+      supported[bucketAEvent] = keptGroups;
     }
   }
 
-  return { ok: true };
+  return { supported, dropped };
 }
