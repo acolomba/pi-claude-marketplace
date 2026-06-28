@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic fixture: a single non-bucket-A Stop event (empty-subset edge, D-71-02 / Q2)",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "echo stop" }]
+      }
+    ]
+  }
+}

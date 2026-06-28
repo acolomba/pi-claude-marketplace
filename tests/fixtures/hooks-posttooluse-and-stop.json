@@ -1,0 +1,16 @@
+{
+  "description": "Synthetic fixture: a supported PostToolUse group plus a dropped Stop event (event-level partition, D-71-01)",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [{ "type": "command", "command": "echo posttooluse" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "echo stop" }]
+      }
+    ]
+  }
+}

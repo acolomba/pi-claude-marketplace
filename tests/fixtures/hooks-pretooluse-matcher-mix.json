@@ -1,0 +1,15 @@
+{
+  "description": "Synthetic fixture: one PreToolUse event with a clean Edit group and a regex group (intra-event matcher-group partition, D-71-02)",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [{ "type": "command", "command": "echo edit" }]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [{ "type": "command", "command": "echo regex" }]
+      }
+    ]
+  }
+}
