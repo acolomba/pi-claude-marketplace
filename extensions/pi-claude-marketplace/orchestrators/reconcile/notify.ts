@@ -495,6 +495,38 @@ function applyOutcomeToBlock(
         needsReload: true,
       });
       return;
+    case "plugin-backfilled":
+      // BFILL-01 / D-68-04: a load-time backfill re-materialized the plugin in
+      // place. The re-resolved `installable` selects the row: a fully promoted
+      // plugin (unsupported set now empty) reuses the `installed` row including
+      // `dependencies` for the soft-dep markers; a partial re-materialize (still
+      // degraded) renders a `force-installed` row. Both fold into THIS single
+      // applied cascade -- no second notify() (RECON-04). Severity is a sensible
+      // default (info); the force-path severity nuance is finalized later.
+      if (outcome.installable) {
+        block.plugins.push({
+          status: "installed",
+          name: outcome.plugin,
+          ...(outcome.version !== undefined && { version: outcome.version }),
+          dependencies: outcome.dependencies,
+          severity: "info",
+          needsReload: true,
+        });
+      } else {
+        block.plugins.push({
+          status: "force-installed",
+          name: outcome.plugin,
+          ...(outcome.version !== undefined && { version: outcome.version }),
+          dependencies: outcome.dependencies,
+          // The dropped-component degradation detail is not carried on the
+          // backfill outcome; the byte-exact reasons token is frozen later.
+          reasons: [],
+          severity: "info",
+          needsReload: true,
+        });
+      }
+
+      return;
     case "plugin-uninstalled":
       block.plugins.push({
         status: "uninstalled",

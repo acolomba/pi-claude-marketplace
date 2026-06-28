@@ -384,6 +384,95 @@ test("Y4 byte-neutral applied-cascade projection: InvalidBlockOutcome.basename k
   assert.equal(child.name, "claude-plugins.json");
 });
 
+test("BFILL-01: a fully-promoted backfill (installable:true) projects to an (installed) row, severity info, needsReload", () => {
+  // A load-time backfill whose re-resolved unsupported set is now empty promotes
+  // the plugin to a clean install -- it reuses the installed row and threads
+  // dependencies for the soft-dep markers (D-68-04).
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: ["agents"],
+    installable: true,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.name, "cr");
+  assert.equal(row.severity, "info");
+  assert.equal(row.needsReload, true);
+  // The installed row carries dependencies for the soft-dep markers.
+  assert.deepEqual(row.status === "installed" ? [...row.dependencies] : "absent", ["agents"]);
+});
+
+test("BFILL-01: a partial backfill (installable:false) projects to a (force-installed) row, severity info, needsReload", () => {
+  // A load-time backfill whose re-resolved unsupported set is still non-empty
+  // stays degraded -- it renders a force-installed row (the ◉ glyph), not a
+  // clean (installed) row (D-68-04 / T-68-07).
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    installable: false,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "force-installed");
+  assert.equal(row.name, "cr");
+  assert.equal(row.severity, "info");
+  assert.equal(row.needsReload, true);
+});
+
+test("RECON-04: a cascade with an install row + a backfill row yields ONE message carrying both rows", () => {
+  // D-68-04: backfill promotions fold into the SINGLE applied cascade -- there
+  // is no second notification path. One install + one backfill outcome produce
+  // exactly one message whose blocks carry both rows.
+  const installed: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "fresh",
+    dependencies: [],
+  };
+  const backfilled: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "promoted",
+    dependencies: [],
+    installable: false,
+  };
+  const msg = buildReconcileAppliedCascade([installed, backfilled]);
+  // One block (same marketplace + scope) carrying both plugin rows -- a single
+  // cascade message, never two.
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 2);
+  assert.deepEqual(
+    [...block.plugins].map((p) => [p.name, p.status]),
+    [
+      ["fresh", "installed"],
+      ["promoted", "force-installed"],
+    ],
+  );
+});
+
 test("dangling-reference mismatch (plugin attributed) -> child (failed) {source mismatch} plugin row (WR-03)", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),

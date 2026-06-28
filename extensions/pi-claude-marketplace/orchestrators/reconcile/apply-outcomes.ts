@@ -94,6 +94,24 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
   readonly postCommitWarnings?: readonly string[];
 }
 
+/**
+ * Plugin re-materialized in place by load-time backfill (BFILL-01). A
+ * force-installed plugin is re-resolved offline (NFR-5) and its now-fuller
+ * supported set is materialized via the reinstall primitive; this outcome folds
+ * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
+ * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
+ * `dependencies` drives the soft-dep markers like the install arm. The required
+ * `installable` is the RE-RESOLVED installability: `true` selects the
+ * `(installed)` row (unsupported set now empty -> fully promoted), `false`
+ * selects the `(force-installed)` row (partial re-materialize, still degraded).
+ */
+export interface PluginBackfilledOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-backfilled";
+  readonly version?: string;
+  readonly dependencies: readonly Dependency[];
+  readonly installable: boolean;
+}
+
 /** Plugin install failure outcome. */
 export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
@@ -238,6 +256,7 @@ export type PerEntryOutcome =
   | MpRemoveFailedOutcome
   | MpRemovePartialOutcome
   | PluginInstalledOutcome
+  | PluginBackfilledOutcome
   | PluginInstallFailedOutcome
   | PluginUninstalledOutcome
   | PluginUninstallFailedOutcome
