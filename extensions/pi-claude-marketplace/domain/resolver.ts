@@ -1103,9 +1103,10 @@ export function requireInstallable(
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
  * three arms so `reasons` compiles.
  *
- * NOTE: this gate has no production caller yet -- the `--force` flag plumbing
- * lands in a later phase. It is exported and test-covered so the contract is
- * locked now.
+ * BFILL-01: the reinstall primitive (orchestrators/plugin/reinstall.ts) resolves
+ * through this gate so it can re-materialize a force-installed (`unsupported`)
+ * plugin in place. The `--force` install/update flag plumbing lands in a
+ * later phase.
  */
 export function requireForceInstallable(
   r: ResolvedPlugin,

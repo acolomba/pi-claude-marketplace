@@ -65,7 +65,7 @@ import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { requireInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { requireForceInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -106,7 +106,7 @@ import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/age
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
-import type { ResolvedPluginInstallable } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -1259,12 +1259,18 @@ async function loadCachedEntry(
   return entryRaw;
 }
 
+// BFILL-01 / D-68-02: reinstall is force-capable. It resolves through the
+// `requireForceInstallable` gate (admitting both `installable` and the
+// force-degradable `unsupported` arm) so backfill can re-materialize a
+// still-partial plugin in place without throwing `{not-installable}`. The
+// `unavailable` arm is still rejected (NFR-7). Resolution stays cache-only via
+// `resolveStrict` -- no network (NFR-5).
 async function resolveInstallable(
   entry: PluginEntry,
   marketplaceRoot: string,
-): Promise<ResolvedPluginInstallable> {
+): Promise<MaterializablePlugin> {
   const resolved = await resolveStrict(entry, { marketplaceRoot });
-  requireInstallable(resolved, "install");
+  requireForceInstallable(resolved, "install");
   return resolved;
 }
 
@@ -1273,7 +1279,7 @@ async function prepareAllHandles(input: {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
-  readonly installable: ResolvedPluginInstallable;
+  readonly installable: MaterializablePlugin;
   readonly pluginDataDir: string;
   readonly oldRecord: PluginRecord;
   readonly agentsSourceDir: string | null;
@@ -1378,7 +1384,7 @@ interface HooksReplaceArgs {
   readonly locations: ScopedLocations;
   readonly cwd: string;
   readonly plugin: string;
-  readonly installable: ResolvedPluginInstallable;
+  readonly installable: MaterializablePlugin;
 }
 
 /**
@@ -1418,7 +1424,7 @@ function updateStateRecord(
   marketplace: string,
   plugin: string,
   oldRecord: PluginRecord,
-  installable: ResolvedPluginInstallable,
+  installable: MaterializablePlugin,
   handles: PreparedHandles,
 ): void {
   const mp = state.marketplaces[marketplace];
@@ -1447,7 +1453,7 @@ function updateStateRecord(
 function resourcesFromHandles(
   handles: PreparedHandles,
   plugin?: string,
-  installable?: ResolvedPluginInstallable,
+  installable?: MaterializablePlugin,
 ): PluginRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),

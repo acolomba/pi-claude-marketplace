@@ -2672,3 +2672,85 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
     }
   });
 });
+
+// BFILL-01 / RINST-01 / D-68-02: reinstall is force-capable. It resolves the
+// `installable | unsupported` union through `requireForceInstallable`, so a
+// plugin that re-resolves `unsupported` (here: a `.lsp.json` lspServers
+// convention file beside a supported skill) no longer throws `{not-installable}`
+// at the gate. Re-resolution stays cache-only (NFR-5). The persisted
+// compatibility record reflects the REAL supported/unsupported sets at the
+// SAME recorded version (a promotion-shaped repair, not an upgrade).
+async function seedThenDegradeToUnsupported(cwd: string): Promise<string> {
+  // Install a normal (installable) plugin with one supported skill.
+  const seeded = await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { skill: "old skill" },
+    install: true,
+  });
+  // Drop an lspServers convention file so re-resolution degrades to
+  // `unsupported` with supported=["skills"], unsupported=["lspServers"].
+  await writeFile(path.join(seeded.pluginRoot, ".lsp.json"), "{}");
+  return seeded.pluginRoot;
+}
+
+test("BFILL-01 / RINST-01: reinstalling a force-installed (unsupported) plugin succeeds instead of throwing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-force-"));
+    try {
+      await seedThenDegradeToUnsupported(cwd);
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(notifications.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-full-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(record !== undefined);
+      assert.equal(record.compatibility.installable, true);
+      assert.deepEqual(record.compatibility.unsupported, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
