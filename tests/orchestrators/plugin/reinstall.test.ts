@@ -2719,6 +2719,42 @@ test("BFILL-01 / RINST-01: reinstalling a force-installed (unsupported) plugin s
   });
 });
 
+test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupported set at the same version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-partial-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedThenDegradeToUnsupported(cwd);
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(record !== undefined);
+      // The partial re-materialize stays force-installed: installable=false
+      // with a non-empty unsupported set (D-66-01 derivation source).
+      assert.equal(record.compatibility.installable, false);
+      assert.deepEqual(record.compatibility.unsupported, ["lspServers"]);
+      assert.deepEqual(record.compatibility.supported, ["skills"]);
+      // D-68-02: SAME recorded version (a repair/promotion, not an upgrade).
+      assert.equal(record.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-full-"));

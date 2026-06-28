@@ -1435,10 +1435,17 @@ function updateStateRecord(
   }
 
   mp.plugins[plugin] = {
+    // D-68-02: SAME recorded version -- reinstall/backfill is a repair/promotion,
+    // never an upgrade.
     version: oldRecord.version,
     resolvedSource: installable.pluginRoot,
+    // BFILL-01: record the REAL compatibility from the resolve, not a hardcoded
+    // `installable: true`. A partial re-materialize (resolved `unsupported`)
+    // persists `installable: false` with the still-unsupported set, so the
+    // force-installed derivation (D-66-01) stays truthful; a full one records
+    // `installable: true` with an empty unsupported set.
     compatibility: {
-      installable: true,
+      installable: installable.state === "installable",
       notes: [...installable.notes],
       supported: [...installable.supported],
       unsupported: [...installable.unsupported],
