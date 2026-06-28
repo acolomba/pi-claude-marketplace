@@ -1020,7 +1020,6 @@ These items are documented in `BACKLOG.md` and intentionally deferred from V1 to
 - **JSON output / dry-run modes for install/update/uninstall.**
 - **Session-start autoupdate run** (Claude Code parity).
 - **`info` subcommand** for plugins/marketplaces.
-- **`--force` install with `incomplete` state** for partially-supported plugins.
 - **Mutating LLM tools** for install/update/remove.
 
 ______________________________________________________________________
