@@ -143,10 +143,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 **Coverage:**
 
-- Requirements: 30 total
-- Mapped to phases: 30 (Phases 64-70) ✓
+- Requirements: 35 total
+- Mapped to phases: 35 (Phases 64-71) ✓
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-26*
-*Last updated: 2026-06-27 after roadmap creation (Phases 64-70 mapped; 30/30 coverage)*
+*Last updated: 2026-06-28 after Phase 71 added (Partial Hook Force-Install; PHOOK-01..05); Phases 64-71 mapped, 35/35 coverage*
