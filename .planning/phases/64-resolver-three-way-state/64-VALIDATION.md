@@ -1,10 +1,11 @@
 ---
 phase: 64
 slug: resolver-three-way-state
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-26
+validated: 2026-06-28
 ---
 
 # Phase 64 — Validation Strategy
@@ -41,11 +42,11 @@ created: 2026-06-26
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists |
 |--------|----------|-----------|-------------------|-------------|
-| RSTATE-01 | `resolve` returns one of three `state` values (`installable` / `unsupported` / `unavailable`) | unit | `node --test tests/domain/resolver-strict.test.ts tests/domain/resolver-loose.test.ts` | ✅ migrate `assert.equal(r.installable, …)` → `assert.equal(r.state, …)` |
-| RSTATE-02 | structural defect + unsupported kind → `unavailable` (structural precedence, D-64-07) | unit | `node --test tests/domain/resolver-strict.test.ts` | ❌ W0 — add both-defects precedence fixture |
-| RSTATE-03 | `unavailable.pluginRoot` is a compile error (NFR-7); `unsupported.pluginRoot` readable | type | `npm run typecheck` (`tests/domain/resolver.types.test.ts`) | ✅ rewrite for three arms |
-| RSTATE-04 | `requireInstallable` throws on `unsupported` + `unavailable`; `requireForceInstallable` admits `unsupported`, throws on `unavailable` | unit + type | `node --test tests/domain/resolver-strict.test.ts` + `npm run typecheck` | ✅ `requireInstallable` tests exist; ❌ W0 — add `requireForceInstallable` tests |
-| RSTATE-05 | per-kind unsupported-component markers render identically across `list` / `info` and all force states | unit | `node --test tests/orchestrators/plugin/list.test.ts tests/orchestrators/plugin/info.test.ts` | ✅ existing surfaces — assert parity post-refactor |
+| RSTATE-01 | `resolve` returns one of three `state` values (`installable` / `unsupported` / `unavailable`) | unit | `node --test tests/domain/resolver-strict.test.ts tests/domain/resolver-loose.test.ts` | ✅ COVERED — 43 strict + 25 loose `r.state` assertions |
+| RSTATE-02 | structural defect + unsupported kind → `unavailable` (structural precedence, D-64-07) | unit | `node --test tests/domain/resolver-strict.test.ts tests/domain/resolver-loose.test.ts` | ✅ COVERED — precedence fixtures (resolver-strict.test.ts:665, resolver-loose.test.ts:325) |
+| RSTATE-03 | `unavailable.pluginRoot` is a compile error (NFR-7); `unsupported.pluginRoot` readable | type | `npm run typecheck` (`tests/domain/resolver.types.test.ts`) | ✅ COVERED — `@ts-expect-error` on `unavailable.pluginRoot` + positive reads on installable/unsupported |
+| RSTATE-04 | `requireInstallable` throws on `unsupported` + `unavailable`; `requireForceInstallable` admits `unsupported`, throws on `unavailable` | unit + type | `node --test tests/domain/resolver-strict.test.ts tests/domain/resolver-loose.test.ts` + `npm run typecheck` | ✅ COVERED — `requireForceInstallable` admit/throw tests (strict:686-727, loose:350-375) + `@ts-expect-error` narrowing (types:84) |
+| RSTATE-05 | per-kind unsupported-component markers render identically across `list` / `info` and all force states | unit | `node --test tests/orchestrators/plugin/cross-surface-reason-parity.test.ts` | ✅ COVERED — cross-surface parity + structural-stays-on-notes guard (cross-surface-reason-parity.test.ts:75-139) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -79,10 +80,10 @@ all `if (r.installable)` guards → `if (r.state === "installable")`.
 
 ## Wave 0 Requirements
 
-- [ ] `tests/domain/resolver.types.test.ts` — rewrite for three arms: positive `pluginRoot` read on `installable` + `unsupported`; `@ts-expect-error` negative on `unavailable`; `requireForceInstallable` rejects `unavailable` (covers RSTATE-03, RSTATE-04)
-- [ ] `tests/domain/resolver-strict.test.ts` — add RSTATE-02 both-defects precedence fixture (malformed manifest + unsupported kind → `unavailable`); add `requireForceInstallable` narrow/throw tests
-- [ ] `tests/domain/resolver-loose.test.ts` — same `requireForceInstallable` + precedence additions for loose mode
-- [ ] Framework install: none — existing `node:test` + `tsc` infrastructure covers all phase requirements
+- [x] `tests/domain/resolver.types.test.ts` — rewritten for three arms: positive `pluginRoot` read on `installable` + `unsupported`; `@ts-expect-error` negative on `unavailable`; `requireForceInstallable` rejects `unavailable` (covers RSTATE-03, RSTATE-04)
+- [x] `tests/domain/resolver-strict.test.ts` — RSTATE-02 both-defects precedence fixture (malformed manifest + unsupported kind → `unavailable`) + `requireForceInstallable` narrow/throw tests landed in execution
+- [x] `tests/domain/resolver-loose.test.ts` — `requireForceInstallable` + precedence additions for loose mode landed in execution
+- [x] Framework install: none — existing `node:test` + `tsc` infrastructure covers all phase requirements
 
 ---
 
@@ -96,11 +97,26 @@ all `if (r.installable)` guards → `if (r.state === "installable")`.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (precedence fixture, `requireForceInstallable` tests, three-arm type test)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (precedence fixture, `requireForceInstallable` tests, three-arm type test)
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-06-28
+
+## Validation Audit 2026-06-28
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Retroactive audit: all five RSTATE requirements (RSTATE-01..05) carry automated
+coverage that landed during phase execution — the draft's three Wave 0 gaps
+(RSTATE-02 precedence fixture, `requireForceInstallable` tests, three-arm type
+test) were all filled. `npm run typecheck` green; 66 targeted tests pass
+(resolver-strict, resolver-loose, resolver.types, cross-surface-reason-parity).
+No new tests generated; no implementation files touched.
