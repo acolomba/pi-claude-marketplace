@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
-status: verifying
-last_updated: "2026-06-28T14:18:28.353Z"
+status: ready_to_plan
+last_updated: 2026-06-28T14:45:49.153Z
 last_activity: 2026-06-28
 progress:
   total_phases: 8
@@ -11,6 +11,7 @@ progress:
   total_plans: 23
   completed_plans: 23
   percent: 88
+stopped_at: Phase 69 complete (4/4) — ready to discuss Phase 70
 ---
 
 # Project State
@@ -19,20 +20,20 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 69 — force-path-severity
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 70 — spec & documentation reconcile
 
 ## Current Position
 
-Phase: 69 (force-path-severity) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 70
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-28
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 236 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
+- Total plans completed: 240 (sum of recorded phase counts below; some early v1.0-v1.2 phases were archived without a recorded plan count)
 
 **Plans by phase:**
 
