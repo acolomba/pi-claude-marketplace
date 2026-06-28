@@ -54,7 +54,7 @@ The structural foundation: distinguish "not installable, but force can drop the 
 ### Load-Time Backfill (BFILL)
 
 - [ ] **BFILL-01**: Load-time reconciliation re-materializes (reinstall semantics) a force-installed plugin's previously-skipped components once the extension supports them, promoting it toward `(installed)` in place -- no upgrade, no manual command.
-- [ ] **BFILL-02**: The backfill scan is gated on a new `lastReconciledExtensionVersion` stamp in `state.json` and fires only when the extension version changed (the only thing that can move the supported-kind boundary); an unchanged extension version skips the scan.
+- [x] **BFILL-02**: The backfill scan is gated on a new `lastReconciledExtensionVersion` stamp in `state.json` and fires only when the extension version changed (the only thing that can move the supported-kind boundary); an unchanged extension version skips the scan.
 
 ### Force Severity (SEV)
 
@@ -116,7 +116,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | LIST-02 | Phase 67 | Complete |
 | RINST-01 | Phase 67 | Complete |
 | BFILL-01 | Phase 68 | Pending |
-| BFILL-02 | Phase 68 | Pending |
+| BFILL-02 | Phase 68 | Complete |
 | SEV-01 | Phase 69 | Pending |
 | SEV-02 | Phase 69 | Pending |
 | SEV-03 | Phase 69 | Pending |
