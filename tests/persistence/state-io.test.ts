@@ -630,3 +630,69 @@ test("ENBL-02: DisabledPluginRecord forbids non-empty resources at compile time"
   assert.deepEqual(okSkills, []);
   assert.equal(active.enabled, true);
 });
+
+test("BFILL-02 state with lastReconciledExtensionVersion validates and round-trips", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    const state: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: "0.6.2",
+      marketplaces: {},
+    };
+    assert.equal(STATE_VALIDATOR.Check(state), true);
+
+    await saveState(root, state);
+    const reloaded = await loadState(root);
+    assert.equal(reloaded.lastReconciledExtensionVersion, "0.6.2");
+    assert.equal(reloaded.schemaVersion, 2);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("BFILL-02 / D-68-01 old doc without the stamp loads unchanged (no schemaVersion bump)", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    // A doc with no stamp -- the absent-stamp = scan-once case.
+    const legacy = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp1: {
+          name: "mp1",
+          scope: "user",
+          source: { kind: "path", raw: "./local", logical: "./local" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/abs/mp1/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/abs/mp1",
+          plugins: {},
+        },
+      },
+    };
+    await writeFile(path.join(root, "state.json"), JSON.stringify(legacy));
+    const got = await loadState(root);
+    assert.equal(got.schemaVersion, 2);
+    assert.equal(got.lastReconciledExtensionVersion, undefined);
+    assert.ok((got.marketplaces as Record<string, unknown>)["mp1"]);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("BFILL-02 loadState normalization preserves a stamp present in the raw doc", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    // Guards the rebuilt-object drop hazard: loadState normalization rebuilds
+    // { schemaVersion, marketplaces } and would silently drop a new top-level
+    // field unless it is threaded through.
+    const raw = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: "0.5.0",
+      marketplaces: {},
+    };
+    await writeFile(path.join(root, "state.json"), JSON.stringify(raw));
+    const got = await loadState(root);
+    assert.equal(got.lastReconciledExtensionVersion, "0.5.0");
+  } finally {
+    await cleanup();
+  }
+});

@@ -152,6 +152,13 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
  */
 export const STATE_SCHEMA = Type.Object({
   schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),
+  // BFILL-02 / D-68-01: the last extension version that reconciled this state.
+  // OPTIONAL and additive -- NO schemaVersion bump. An absent stamp means
+  // scan-once (treated as version-changed) so an old doc without it loads
+  // unchanged and the next save writes it. It gates the load-time backfill
+  // scan, which only fires when this differs from EXTENSION_VERSION (the sole
+  // thing that can move the supported-kind boundary).
+  lastReconciledExtensionVersion: Type.Optional(Type.String()),
   marketplaces: Type.Record(Type.String(), MARKETPLACE_RECORD_SCHEMA),
 });
 
@@ -287,7 +294,20 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     normalizeStoredSource(mpName, mp);
   }
 
-  const normalized: unknown = { schemaVersion: 2, marketplaces };
+  // BFILL-02 / D-68-01: thread the optional stamp from the parsed root onto
+  // the rebuilt object. The normalization rebuilds { schemaVersion,
+  // marketplaces } and would otherwise SILENTLY DROP this top-level field,
+  // leaving the backfill gate permanently open. Only a string is carried
+  // through; a non-string or absent stamp is ignored (absent = scan-once).
+  const parsedRoot = parsed as { lastReconciledExtensionVersion?: unknown };
+  const normalized: unknown =
+    typeof parsedRoot.lastReconciledExtensionVersion === "string"
+      ? {
+          schemaVersion: 2,
+          lastReconciledExtensionVersion: parsedRoot.lastReconciledExtensionVersion,
+          marketplaces,
+        }
+      : { schemaVersion: 2, marketplaces };
 
   if (!STATE_VALIDATOR.Check(normalized)) {
     throw new Error(
