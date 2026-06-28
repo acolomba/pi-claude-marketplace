@@ -1038,6 +1038,11 @@ async function maybeBackfillPlugin(
     // (unsupported now empty) -> `installable` -> (installed); a partial
     // re-materialize stays `unsupported` -> (force-installed).
     installable: resolved.state === "installable",
+    // SEV-05 / D-69-04: carry the re-resolved dropped-component kinds so the
+    // `(force-installed)` row composes a factual `{reasons}` brace through the
+    // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
+    // the brace-less `(installed)` row, so its unsupported set is empty.
+    unsupported: resolved.state === "unsupported" ? resolved.unsupported : [],
   });
 }
 

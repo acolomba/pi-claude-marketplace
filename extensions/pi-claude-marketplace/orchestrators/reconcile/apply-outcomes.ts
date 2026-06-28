@@ -110,6 +110,15 @@ export interface PluginBackfilledOutcome extends PluginOutcomeBase {
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
   readonly installable: boolean;
+  /**
+   * SEV-05 / D-69-04: the re-resolved dropped-component kinds (the
+   * `unsupported` arm's component list) so the `(force-installed)` projection
+   * can populate a factual `{reasons}` brace through the shared
+   * `narrowUnsupportedKinds` seam -- exactly as the `install` success row does.
+   * Empty on a fully-promoted (`installable`) backfill, where the row drops to
+   * the brace-less `(installed)` projection.
+   */
+  readonly unsupported: readonly string[];
 }
 
 /** Plugin install failure outcome. */

@@ -396,6 +396,7 @@ test("BFILL-01: a fully-promoted backfill (installable:true) projects to an (ins
     version: "1.0.0",
     dependencies: ["agents"],
     installable: true,
+    unsupported: [],
   };
   const msg = buildReconcileAppliedCascade([outcome]);
   assert.equal(msg.marketplaces.length, 1);
@@ -412,10 +413,12 @@ test("BFILL-01: a fully-promoted backfill (installable:true) projects to an (ins
   assert.deepEqual(row.status === "installed" ? [...row.dependencies] : "absent", ["agents"]);
 });
 
-test("BFILL-01: a partial backfill (installable:false) projects to a (force-installed) row, severity info, needsReload", () => {
+test("SEV-05: a partial backfill (installable:false) projects to a (force-installed) row with the dropped-kinds reasons brace, severity info, needsReload", () => {
   // A load-time backfill whose re-resolved unsupported set is still non-empty
   // stays degraded -- it renders a force-installed row (the ◉ glyph), not a
-  // clean (installed) row (D-68-04 / T-68-07).
+  // clean (installed) row (D-68-04 / T-68-07). SEV-05 / D-69-04: the re-resolved
+  // dropped kinds compose a factual {reasons} brace through the shared
+  // narrowUnsupportedKinds seam (lspServers -> lsp).
   const outcome: PerEntryOutcome = {
     kind: "plugin-backfilled",
     scope: "project",
@@ -424,6 +427,7 @@ test("BFILL-01: a partial backfill (installable:false) projects to a (force-inst
     version: "1.0.0",
     dependencies: [],
     installable: false,
+    unsupported: ["lspServers"],
   };
   const msg = buildReconcileAppliedCascade([outcome]);
   assert.equal(msg.marketplaces.length, 1);
@@ -436,6 +440,31 @@ test("BFILL-01: a partial backfill (installable:false) projects to a (force-inst
   assert.equal(row.name, "cr");
   assert.equal(row.severity, "info");
   assert.equal(row.needsReload, true);
+  // SEV-05: the dropped kind renders through the shared narrower as `lsp`.
+  assert.deepEqual(row.status === "force-installed" ? [...row.reasons] : "absent", ["lsp"]);
+});
+
+test("SEV-05: a backfill with no dropped kinds (degenerate empty set) renders a brace-less (force-installed) row -- byte-identical to today", () => {
+  // The no-dropped-kinds force-installed backfill renders brace-less: the shared
+  // narrower returns [], so composeReasons emits no brace (D-69-04 -- rows
+  // without reasons stay byte-identical).
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    installable: false,
+    unsupported: [],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "force-installed");
+  assert.deepEqual(row.status === "force-installed" ? [...row.reasons] : "absent", []);
 });
 
 test("RECON-04: a cascade with an install row + a backfill row yields ONE message carrying both rows", () => {
@@ -456,6 +485,7 @@ test("RECON-04: a cascade with an install row + a backfill row yields ONE messag
     plugin: "promoted",
     dependencies: [],
     installable: false,
+    unsupported: [],
   };
   const msg = buildReconcileAppliedCascade([installed, backfilled]);
   // One block (same marketplace + scope) carrying both plugin rows -- a single

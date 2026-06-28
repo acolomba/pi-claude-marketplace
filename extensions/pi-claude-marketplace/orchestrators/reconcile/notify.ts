@@ -40,6 +40,7 @@
 import { resolveStrict } from "../../domain/resolver.ts";
 import { assertNever } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
@@ -501,8 +502,7 @@ function applyOutcomeToBlock(
       // plugin (unsupported set now empty) reuses the `installed` row including
       // `dependencies` for the soft-dep markers; a partial re-materialize (still
       // degraded) renders a `force-installed` row. Both fold into THIS single
-      // applied cascade -- no second notify() (RECON-04). Severity is a sensible
-      // default (info); the force-path severity nuance is finalized later.
+      // applied cascade -- no second notify() (RECON-04).
       if (outcome.installable) {
         block.plugins.push({
           status: "installed",
@@ -518,9 +518,16 @@ function applyOutcomeToBlock(
           name: outcome.plugin,
           ...(outcome.version !== undefined && { version: outcome.version }),
           dependencies: outcome.dependencies,
-          // The dropped-component degradation detail is not carried on the
-          // backfill outcome; the byte-exact reasons token is frozen later.
-          reasons: [],
+          // SEV-05 / D-69-04: populate the factual `{reasons}` brace from the
+          // re-resolved dropped-component kinds through the SAME shared
+          // `narrowUnsupportedKinds` seam the install/list/info surfaces use --
+          // no per-state reasons mechanism. An empty set renders brace-less
+          // (byte-identical to a no-dropped-kinds backfill).
+          reasons: narrowUnsupportedKinds(outcome.unsupported),
+          // SEV-03 / A3: a backfill is a benign promotion (re-materializing
+          // now-supported components), NOT a new degradation, so it stays info.
+          // The SEV-03 newly-degrades warning fires only on the autoupdate
+          // cascade, not on this load-time backfill row.
           severity: "info",
           needsReload: true,
         });

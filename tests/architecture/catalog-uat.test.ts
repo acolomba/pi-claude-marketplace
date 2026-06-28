@@ -3441,6 +3441,66 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // BFILL-01 / SEV-05 / D-69-04: a load-time backfill promotion row carries
+    // the re-resolved dropped-component kinds as a factual {reasons} brace
+    // through the shared narrowUnsupportedKinds seam (lspServers -> lsp). The
+    // marketplace was already added, so its header is bare (no status token).
+    // SEV-03 / A3: a benign promotion stays info -- no expectedSeverity.
+    "backfill-force-installed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "force-installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["lsp"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SEV-05 / D-69-04: a backfill force-installed row whose dropped-kind set is
+    // empty renders brace-less -- byte-identical to the pre-SEV-05 form (the
+    // change is additive; rows without reasons do not gain a brace).
+    "backfill-force-installed-no-reasons": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "force-installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
 

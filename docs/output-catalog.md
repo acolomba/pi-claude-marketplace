@@ -1583,6 +1583,32 @@ Reconcile: 3 failures, 1 success
 
 OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugin rows as three failures and the `uninstalled` plugin row as one success (`uninstalled` stamps info), all under the `Reconcile` operation name.
 
+### Load-time backfill -- force-installed promotion carries the dropped-kinds brace (SEV-05)
+
+BFILL-01 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded force-installed plugin in place (its supported set grew, but it still re-resolves `unsupported`). The promotion row reuses the `◉` `(force-installed)` byte form and now carries a factual `{reasons}` brace composed from the re-resolved dropped-component kinds through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `force-installed` / `force-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
+
+<!-- catalog-state: backfill-force-installed -->
+
+```text
+● local-mp [user]
+  ◉ hello v1.0.0 (force-installed) {lsp}
+
+Reconcile: 1 success
+```
+
+### Load-time backfill -- no dropped kinds renders brace-less (byte-identical to today)
+
+The degenerate case: a backfill `(force-installed)` row whose re-resolved dropped-kind set is empty renders brace-less -- `narrowUnsupportedKinds([])` returns `[]`, so `composeReasons` emits no brace and the row is byte-identical to the pre-SEV-05 form. This proves the SEV-05 change is additive: rows WITHOUT reasons do not gain a brace (D-69-04).
+
+<!-- catalog-state: backfill-force-installed-no-reasons -->
+
+```text
+● local-mp [user]
+  ◉ hello v1.0.0 (force-installed)
+
+Reconcile: 1 success
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
