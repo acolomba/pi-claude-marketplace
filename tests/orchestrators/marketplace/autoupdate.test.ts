@@ -70,8 +70,12 @@ async function withHermeticHome<T>(
       process.env.PI_CODING_AGENT_DIR = originalAgentDir;
     }
 
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
+    // A best-effort migration persist (write-file-atomic, fired off by
+    // loadState without await) may still be renaming state.json.<rand> into
+    // place when teardown runs; retry removal so the transient tmp entry does
+    // not yield ENOTEMPTY on macOS.
+    await rm(home, { recursive: true, force: true, maxRetries: 10 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
   }
 }
 
