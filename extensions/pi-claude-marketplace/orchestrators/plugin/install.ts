@@ -1504,13 +1504,14 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // across marketplaces), add it back here with a comment marking the
 // dependency.
 /**
- * SEV-02 / D-69-03: build the `(unavailable)` install-failure row, branching on
- * the three-way `forceable` discriminant the resolver stamped on the throw. The
- * force-degradable `unsupported` arm renders at error severity AND carries the
- * `--force` hint trailer (force can degrade-install it); the structural
- * `unavailable` arm stays byte-frozen -- no hint, no severity stamp (force
- * cannot help). PluginUnavailableMessage has no `cause?` field per D-15-01 --
- * the reason text carries the explanation.
+ * SEV-02 / D-69-03 / D-70-02: build the `(unavailable)` install-failure row,
+ * branching on the three-way `forceable` discriminant the resolver stamped on
+ * the throw. BOTH arms render at error severity (so the leading summary line
+ * fires) -- an install failure must read as an error, not a benign info row.
+ * The force-degradable `unsupported` arm ALSO carries the `--force` hint trailer
+ * (force can degrade-install it); the structural `unavailable` arm carries NO
+ * hint (force cannot degrade-install a structural defect). PluginUnavailableMessage
+ * has no `cause?` field per D-15-01 -- the reason text carries the explanation.
  */
 function composeUnavailableMessage(
   plugin: string,
@@ -1522,7 +1523,8 @@ function composeUnavailableMessage(
     name: plugin,
     reasons: entityErrorRow.reasons,
     ...(version !== undefined && version !== "" && { version }),
-    ...(entityErrorRow.forceable === true && { forceHint: true, severity: "error" }),
+    severity: "error" as const,
+    ...(entityErrorRow.forceable === true && { forceHint: true }),
   };
 }
 

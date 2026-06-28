@@ -500,14 +500,15 @@ test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () =>
       // `resolvePluginVersion` runs (`failureVersion` is undefined at
       // throw time). PluginUnavailableMessage carries no `cause?` field
       // per D-15-01 -- the reason text carries the explanation; no
-      // cause-chain trailer. Severity is undefined (info) per D-16-11 --
-      // `unavailable` is NOT in the error-severity set (catalog
-      // confirms: only the `failed` discriminator emits `error`).
+      // cause-chain trailer. D-70-02 / SEV-02: the structural `unavailable`
+      // install failure stamps `severity: "error"` (so the leading summary
+      // line fires), but carries NO `--force` hint trailer -- force cannot
+      // degrade-install a structural defect.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n  ⊘ hello (unavailable) {unsupported source}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (unavailable) {unsupported source}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2269,7 +2270,8 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   assert.equal(forceableMsg.forceHint, true);
   assert.equal(forceableMsg.severity, "error");
 
-  // Structural `unavailable` arm -> byte-frozen: no hint, no severity stamp.
+  // D-70-02: structural `unavailable` arm -> error severity, but NO `--force`
+  // hint (force cannot degrade-install a structural defect).
   const structuralErr = new PluginShapeError({
     kind: "not-installable",
     plugin: "helper",
@@ -2292,7 +2294,7 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   assert.equal(structuralMsg.status, "unavailable");
   assert.ok(structuralMsg.status === "unavailable");
   assert.equal(structuralMsg.forceHint, undefined);
-  assert.equal(structuralMsg.severity, undefined);
+  assert.equal(structuralMsg.severity, "error");
 });
 
 test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
