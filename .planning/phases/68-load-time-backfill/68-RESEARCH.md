@@ -638,9 +638,9 @@ await withStateGuard(locationsFor(scope, opts.cwd), (state) => {
 | A3 | Widening reinstall to `requireForceInstallable` is the intended reading of "reuse the reinstall primitive" rather than building a force-only wrapper around the bridge machinery. | Pitfall 1 | Medium — if the team prefers leaving reinstall installable-only, backfill needs a thin force-capable materialize that still reuses the bridge prepare/replace/finalize calls. Confirm in discuss/plan. |
 | A4 | The `EXTENSION_VERSION` constant + drift test is preferred over a runtime `package.json` read. | RQ1 | Low — both are viable; the constant is recommended for zero-I/O + no experimental feature. User may prefer single-source-of-truth fs-read. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Reinstall widening scope (A3).**
+1. **Reinstall widening scope (A3).** RESOLVED: widen `reinstallPlugin` via `requireForceInstallable` (plan 68-02).
    - What we know: D-68-02 says "reuse the reinstall primitive"; reinstall currently
      requires full installability and hardcodes `compatibility.installable: true`.
    - What's unclear: whether to widen `reinstallPlugin` itself (affecting the standalone
@@ -649,7 +649,7 @@ await withStateGuard(locationsFor(scope, opts.cwd), (state) => {
    - Recommendation: widen `reinstallPlugin` (matches RINST-01's repair-primitive intent);
      update the one reinstall test that asserts the old force-installed failure.
 
-2. **Promotion-row representation (A1).**
+2. **Promotion-row representation (A1).** RESOLVED: `PluginBackfilledOutcome` arm with `installable: boolean` (plan 68-03).
    - What we know: reconcile cascade narrow set is `installed`/`uninstalled`; global set
      already has `force-installed`.
    - What's unclear: one new `PerEntryOutcome` arm vs. reuse of `plugin-installed` for the
