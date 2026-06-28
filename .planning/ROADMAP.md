@@ -470,7 +470,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
-| 71. Partial Hook Force-Install                                      | force-install | 0/4 | Planned     | --         |
+| 71. Partial Hook Force-Install                                      | force-install | 1/4 | In Progress|  |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -489,7 +489,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 71-01-PLAN.md -- Partition primitive: `partitionHooks` accumulator + `DroppedHook`/`HooksPartition` types + `parseHooksConfig` filtered-subset success arm; synthetic fixtures + supportability test migration; S1/S2/X1 stay structural (PHOOK-01, PHOOK-03)
+- [x] 71-01-PLAN.md -- Partition primitive: `partitionHooks` accumulator + `DroppedHook`/`HooksPartition` types + `parseHooksConfig` filtered-subset success arm; synthetic fixtures + supportability test migration; S1/S2/X1 stay structural (PHOOK-01, PHOOK-03)
 
 **Wave 2** *(blocked on Wave 1: consumes `DroppedHook` + `parseHooksConfig.dropped`)*
 

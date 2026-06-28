@@ -2,17 +2,14 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-current_phase: 70
 status: executing
-stopped_at: Phase 71 context gathered
-last_updated: "2026-06-28T20:06:46.358Z"
+last_updated: "2026-06-28T20:28:40.277Z"
 last_activity: 2026-06-28
-last_activity_desc: Phase 70 complete
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 26
-  completed_plans: 26
+  total_plans: 30
+  completed_plans: 27
   percent: 89
 ---
 
@@ -22,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 70 — spec-documentation-reconcile
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 71 — partial-hook-force-install
 
 ## Current Position
 
-Phase: 70
-Plan: Not started
+Phase: 71 (partial-hook-force-install) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-28 — Phase 70 complete
+Last activity: 2026-06-28
 
 ## Performance Metrics
 
@@ -145,6 +142,7 @@ Last activity: 2026-06-28 — Phase 70 complete
 | Phase 69 P69-02 | ~75min | 2 tasks | 7 files |
 | Phase 69 P69-03 | ~70min | 2 tasks | 8 files |
 | Phase 69 P04 | ~35min | 1 tasks | 6 files |
+| Phase 71 P01 | 22 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -301,6 +299,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: SEV-01 missing-companion warning is a cascade-level change: stamping info->warning prepends the notify summary line, so catalog blocks and byte-form tests moved in lockstep (69-02)
 - [Phase ?]: SEV-04 force-upgradable decline severity follows invocation cardinality (targeted=warning, bulk=info), scoped strictly to the no-longer-installable reason (D-69-02)
 - [Phase ?]: SEV-03 (D-69-01): autoupdate cascade takes the force path; degrading plugin renders (force-installed) not (skipped) {no longer installable}; severity follows prior persisted compatibility.unsupported (empty=warning newly-degraded, non-empty=info already-degraded); manual update --force stays info
+- [Phase ?]: Q1: partial-hook non-command handlers drop at HANDLER granularity; empty group/event omitted
+- [Phase ?]: X1 hooks table-desync surfaces structurally via HooksTableDesyncError caught by parseHooksConfig (stays unavailable)
 
 ### Pending Todos
 
@@ -363,9 +363,9 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-28T19:32:35.970Z
+Last session: 2026-06-28T20:28:23.143Z
 Stopped At: Phase 71 context gathered
-Resume File: .planning/phases/71-partial-hook-force-install/71-CONTEXT.md
+Resume File: None
 
 ## Operator Next Steps
 
