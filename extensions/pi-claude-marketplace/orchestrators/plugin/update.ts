@@ -1688,10 +1688,10 @@ function outcomeToCascadePluginMessage(
         // D-01: an absent-target update (the named plugin is not installed /
         // not found) cannot be carried out -> error (severity-only flip; the
         // `(skipped) {not installed}` per-row grammar is preserved). Otherwise
-        // benign idempotent skip -> info, actionable skip -> warning; never
-        // reloads. SEV-04 / D-69-02: a `no longer installable` force-upgradable
-        // decline follows the invocation cardinality (targeted warning / bulk
-        // info).
+        // the benign/idempotent case stays info; an actionable (targeted)
+        // decline routes to warning (SEV-04); never reloads. SEV-04 / D-69-02:
+        // a `no longer installable` force-upgradable decline follows the
+        // invocation cardinality (targeted warning / bulk info).
         severity: cascadeSkipSeverity(reasons, cardinality),
         needsReload: false,
       };
