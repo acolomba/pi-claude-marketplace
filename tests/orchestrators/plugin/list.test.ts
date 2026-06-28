@@ -566,6 +566,34 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
   });
 });
 
+test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the single aggregate {unsupported hooks} marker on the list row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "hookplug", source: "./hookplug", version: "1.0.0" }],
+      },
+      // Recorded-installed with persisted `unsupported: ["hooks"]` (one or more
+      // hook events / matcher groups dropped at install) derives
+      // `force-installed`. The `hooks` kind maps to the SINGLE aggregate
+      // `{unsupported hooks}` marker via the shared `narrowUnsupportedKinds`
+      // helper -- byte-identical to the install / info surfaces (D-71-04).
+      installed: { hookplug: { version: "1.0.0", unsupported: ["hooks"] } },
+      installablePluginDirs: ["hookplug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    const out = notifications[0]!.message;
+    assert.match(out, /◉ hookplug v1\.0\.0 \(force-installed\) \{unsupported hooks\}/, out);
+  });
+});
+
 test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

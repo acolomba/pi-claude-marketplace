@@ -2292,6 +2292,214 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   assert.equal(structuralMsg.severity, "error");
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// PHOOK-04 -- partial-hook `install --force` stages a STRICT SUBSET of the
+// source `hooks.json`: the dropped event / matcher group is absent from the
+// written file, while the supported group is present. The bridge stages
+// `parseHooksConfig.value` (the pure filtered subset), so the staged file can
+// never carry a dropped handler (T-71-07 containment invariant). No source
+// change to install.ts / stage.ts -- the subset is inherited from the partition.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("PHOOK-04 / T-71-07: install --force stages a strict-subset hooks.json -- dropped Stop event absent, supported PostToolUse group present", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hook-plugin",
+        skills: [{ sourceName: "helper-skill" }],
+        // A supported PostToolUse(Edit) group plus a non-bucket-A `Stop` event.
+        // The partition keeps the PostToolUse group and drops the whole Stop
+        // event (event-level drop, D-71-01).
+        hooksJson: {
+          hooks: {
+            PostToolUse: [
+              { matcher: "Edit", hooks: [{ type: "command", command: "echo posttooluse" }] },
+            ],
+            Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }],
+          },
+        },
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hook-plugin",
+        force: true,
+      });
+
+      // Read the staged file the bridge wrote and assert the strict-subset
+      // property: the dropped `Stop` event is ABSENT, the supported
+      // `PostToolUse` group is PRESENT (PHOOK-04 / V5 output containment).
+      // The bridge stages the bare events map (`parseHooksConfig` unwraps the
+      // `{hooks:{...}}` wrapper and returns the filtered subset).
+      const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
+      const staged = JSON.parse(await readFile(stagedPath, "utf8")) as Record<string, unknown>;
+      assert.ok("PostToolUse" in staged, "supported PostToolUse group must be staged");
+      assert.equal("Stop" in staged, false, "dropped Stop event must NOT be staged");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher group within a supported event", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-matcher-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hook-plugin",
+        skills: [{ sourceName: "helper-skill" }],
+        // One supported event with a clean Edit group and an unsupportable
+        // regex group: the partition keeps the Edit group and drops only the
+        // `.*` regex group (intra-event matcher-group partition, D-71-02).
+        hooksJson: {
+          hooks: {
+            PreToolUse: [
+              { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
+              { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+            ],
+          },
+        },
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hook-plugin",
+        force: true,
+      });
+
+      const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
+      const staged = JSON.parse(await readFile(stagedPath, "utf8")) as {
+        PreToolUse: { matcher?: string }[];
+      };
+      // The event survives with ONLY the supportable Edit group; the dropped
+      // `.*` regex group is absent (strict subset within the kept event).
+      assert.equal(staged.PreToolUse.length, 1);
+      assert.equal(staged.PreToolUse[0]?.matcher, "Edit");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// SEV-01 / SEV-02 / D-71-06 -- the partial-hook plugin now resolves
+// `unsupported` (force-degradable), so it flows through the Phase 65/69 gates
+// with no severity-layer source change: WITHOUT `--force` it blocks at error
+// severity carrying the `--force` hint (SEV-02); WITH `--force` it degrades to
+// an info `force-installed` row with NO summary line (SEV-01 / D-71-06).
+// ───────────────────────────────────────────────────────────────────────────
+
+test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without --force (error + hint), degrades to info force-installed with --force", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-phook-sev-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hook-plugin",
+        skills: [{ sourceName: "helper-skill" }],
+        hooksJson: {
+          hooks: {
+            PostToolUse: [
+              { matcher: "Edit", hooks: [{ type: "command", command: "echo posttooluse" }] },
+            ],
+            Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }],
+          },
+        },
+      });
+
+      // SEV-02: no `--force`. The force-degradable `unsupported` verdict blocks
+      // the install at error severity and the row points at `--force`. Nothing
+      // is staged and no state record is written (force is never implied).
+      const noForce = makeCtx();
+      await installPlugin({
+        ctx: noForce.ctx,
+        pi: noForce.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hook-plugin",
+      });
+      assert.equal(noForce.notifications.length, 1);
+      assert.equal(noForce.notifications[0]?.severity, "error");
+      // SEV-02 contract: the force-degradable verdict renders the `(unavailable)`
+      // row at error severity and carries the `--force` hint trailer. (The
+      // no-force failure surface composes its reason from the structural `notes`
+      // path, so the `hooks` kind -- which rides the typed `unsupported[]` list,
+      // not `notes` -- renders the generic `{unsupported source}` here; the
+      // typed `{unsupported hooks}` marker rides the success / list / info
+      // surfaces via `narrowUnsupportedKinds`.)
+      assert.match(noForce.notifications[0]?.message ?? "", /hook-plugin \(unavailable\) \{/);
+      assert.match(
+        noForce.notifications[0]?.message ?? "",
+        /Re-run with --force to install the supported components\./,
+      );
+      const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
+      await assert.rejects(readFile(stagedPath, "utf8"), "no-force install must stage nothing");
+      const afterBlocked = await loadState(locations.extensionRoot);
+      assert.equal(
+        "hook-plugin" in (afterBlocked.marketplaces["mp"]?.plugins ?? {}),
+        false,
+        "no-force install must not record the plugin",
+      );
+
+      // SEV-01 / D-71-06: with `--force` the supported components install, the
+      // Stop event degrades, and the success row reads `(force-installed)
+      // {unsupported hooks}` at info severity with NO summary line (the body
+      // begins at the marketplace header, not a `... failed.` / `... attention.`
+      // summary). FSTAT-07: the row reads `force-installed`.
+      const forced = makeCtx();
+      await installPlugin({
+        ctx: forced.ctx,
+        pi: forced.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hook-plugin",
+        force: true,
+      });
+      assert.equal(forced.notifications.length, 1);
+      const forcedMsg = forced.notifications[0]?.message ?? "";
+      assert.notEqual(forced.notifications[0]?.severity, "error");
+      assert.notEqual(forced.notifications[0]?.severity, "warning");
+      assert.match(forcedMsg, /\(force-installed\)/);
+      assert.match(forcedMsg, /\{unsupported hooks\}/);
+      assert.ok(
+        forcedMsg.startsWith("●"),
+        "info force-installed body starts at the mp header, no summary line",
+      );
+      const afterForced = await loadState(locations.extensionRoot);
+      assert.ok(
+        "hook-plugin" in (afterForced.marketplaces["mp"]?.plugins ?? {}),
+        "force install must record the plugin",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
