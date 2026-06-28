@@ -2161,8 +2161,9 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * SEV-02 / D-69-03 `--force` hint trailer literal, rendered below a
  * force-degradable `unsupported` install-failure row. References the user's
  * own `--force` flag only -- no plugin / marketplace interpolation (T-69-01).
- * Placeholder wording; the byte-exact form is frozen in the DOC reconcile
- * (DOC-01..03).
+ * D-70-01: this byte form is FROZEN as the reconciled DOC contract and is
+ * locked byte-for-byte in docs/output-catalog.md and
+ * docs/messaging-style-guide.md. Do not change the wording.
  */
 const FORCE_INSTALL_HINT_TRAILER = "Re-run with --force to install the supported components.";
 
@@ -3349,8 +3350,9 @@ function composePluginLinesWith(
   // carries a 4-space-indented `--force` hint trailer (the structural
   // `unavailable` arm omits it -- force cannot help). The hint references the
   // user's own flag only and interpolates no plugin / marketplace identifier
-  // (T-69-01). Wording here is a clear placeholder; the byte-exact form is
-  // reconciled against the output catalog in the DOC pass (DOC-01..03).
+  // (T-69-01). D-70-01: the byte form is FROZEN as the reconciled DOC
+  // contract, locked byte-for-byte in docs/output-catalog.md and
+  // docs/messaging-style-guide.md.
   if (p.status === "unavailable" && p.forceHint === true) {
     lines.push(`    ${FORCE_INSTALL_HINT_TRAILER}`);
   }
