@@ -17,7 +17,11 @@ findings:
   warning: 3
   info: 3
   total: 6
-status: issues_found
+status: warnings_resolved
+resolved:
+  WR-01: 8093f48d
+  WR-02: fd9282f3
+  WR-03: df53b2df
 ---
 
 # Phase 68: Code Review Report
@@ -61,6 +65,16 @@ phase's own stated WR-05 contract on a narrow path.
 
 ### WR-01: Unsolicited `state.json` creation on a config-present / state-absent scope (WR-05 gap)
 
+> **RESOLVED in `8093f48d`.** `ScopeReadResult` now carries `stateExisted`
+> (from the existing on-disk probe). `applyBackfillForScope` skips the stamp
+> write when no state.json exists on disk AND no force-installed plugin can be
+> promoted (`hasForceInstalledPlugin`), so an absent-on-disk state.json is never
+> created merely to record the stamp. Reconciled with D-68-03: an EXISTING
+> state.json is still stamped on gate-open even with zero promotions (so the gate
+> does not reopen every load); only the absent-file/no-work case is left
+> untouched. The code's WR-05 comment was correct -- the gate logic was widened
+> to honor it. Regression: `WR-01 / WR-05 ...` in `backfill.test.ts`.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:824-836` (and `readPassForScope` `:214-219`)
 **Issue:** The pristine-scope guard in `applyBackfillForScope` is
 `if (state === undefined) return;`. But `readPassForScope` only leaves `state`
@@ -91,6 +105,18 @@ if (!readResult.stateExisted && Object.keys(state.marketplaces).length === 0) {
 ```
 
 ### WR-02: Backfill step is not throw-guarded — a stamp-write throw aborts the cascade and leaves the gate open
+
+> **RESOLVED in `fd9282f3`.** The scope loop now calls
+> `applyBackfillForScopeIsolated`, which wraps the scan + stamp in the same
+> per-entry coercion the rest of the apply pass uses (mirroring
+> `rebuildScopeRoutingTableIsolated`): a transient `StateLockHeldError`/EACCES
+> becomes a structured `invalid-block` row (subject `state.json`, closed-set
+> reason via `classifyReadPassThrow`) instead of propagating. The gate stays
+> open and self-heals next load (retry-safe, NFR-3); the sibling scope's
+> accumulated cascade is never aborted; NFR-1 atomicity is unaffected (the failed
+> write never committed). Regression: `WR-02 ...` in `backfill.test.ts` (held
+> scope lock). The `runPostSuccessMaintenance` exposure noted in the finding is
+> covered by the same wrapper, since it propagates through `applyBackfillForScope`.
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:1042` (call site) and `:830-835` (stamp write)
 **Issue:** In the `applyReconcile` scope loop, the per-scope try/catch wraps only
@@ -124,6 +150,17 @@ try {
 ```
 
 ### WR-03: Scan iterates the stale read-pass snapshot, not post-`applyPlan` state — possible duplicate/redundant promotion row
+
+> **RESOLVED in `df53b2df`.** `scanForceInstalledBackfills` now builds an
+> `alreadyTouched` set from the accumulated outcomes for this scope (every row
+> carrying a `plugin`) and skips any plugin already represented before calling
+> `reinstallPlugin`, so a single load can never emit two rows for one plugin nor
+> clobber a just-applied transition with a redundant overwrite. Note: the
+> specific ENABLE path in the finding is not reachable through the real planner
+> (`isRecordedButDisabled` requires `installable === true`, which a force-installed
+> plugin is not), but the dedupe is the correct general guard; the regression
+> (`WR-03 ...` in `backfill.test.ts`) injects a same-load `plugin-enabled` outcome
+> via a test seam to exercise it directly.
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:838-853` (`scanForceInstalledBackfills`)
 **Issue:** `applyBackfillForScope` scans `readResult.state`, the snapshot captured
