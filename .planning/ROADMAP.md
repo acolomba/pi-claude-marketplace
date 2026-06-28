@@ -197,7 +197,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites (completed 2026-06-27)
 - [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
-- [ ] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set
+- [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
 
 #### Phase 64: Resolver Three-Way State
 
@@ -390,12 +390,12 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 70-01-PLAN.md — D-70-02 unavailable-arm severity finalize: stamp error (no --force hint) on the structural unavailable install-failure arm; lockstep install test + catalog-uat fixture + output-catalog + style-guide (DOC-02)
-- [ ] 70-02-PLAN.md — DOC-01 PRD reconcile: document shipped force design (--force install/update, three-way resolver state, force-installed/unsupported/force-upgradable tokens, force-upgradable rules), fully remove dropped scope (D-70-04), record WR-01 autoupdate scoping (D-70-03)
+- [x] 70-01-PLAN.md — D-70-02 unavailable-arm severity finalize: stamp error (no --force hint) on the structural unavailable install-failure arm; lockstep install test + catalog-uat fixture + output-catalog + style-guide (DOC-02)
+- [x] 70-02-PLAN.md — DOC-01 PRD reconcile: document shipped force design (--force install/update, three-way resolver state, force-installed/unsupported/force-upgradable tokens, force-upgradable rules), fully remove dropped scope (D-70-04), record WR-01 autoupdate scoping (D-70-03)
 
 **Wave 2** *(blocked on Wave 1: shares output-catalog.md + messaging-style-guide.md with 70-01)*
 
-- [ ] 70-03-PLAN.md — D-70-01 hint freeze (drop placeholder framing, lock byte form in docs) + DOC-03 stale "autoupdate is warning" comment sweep + D-70-03 outcomeToCascadePluginMessage comment scrub
+- [x] 70-03-PLAN.md — D-70-01 hint freeze (drop placeholder framing, lock byte form in docs) + DOC-03 stale "autoupdate is warning" comment sweep + D-70-03 outcomeToCascadePluginMessage comment scrub
 
 ## Progress
 
@@ -468,4 +468,4 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
-| 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
+| 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |

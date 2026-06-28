@@ -68,9 +68,9 @@ Builds on the desired-state, caller-stamped severity model delivered by the noti
 
 ### Spec & Documentation Reconcile (DOC)
 
-- [ ] **DOC-01**: PRD §11 reflects `--force` install/update, the three-way resolver state, the new status tokens, and the force-upgradable rules, and removes the dropped items (global force default, manual `complete` command).
-- [ ] **DOC-02**: `docs/output-catalog.md` and `docs/messaging-style-guide.md` reflect the reconciled token set (`force-installed`, `unsupported`, `force-upgradable`), the derived-state severity, and the exact byte forms.
-- [ ] **DOC-03**: No stale comments claim idempotent autoupdate is "warning" -- such cases are info/benign.
+- [x] **DOC-01**: PRD §11 reflects `--force` install/update, the three-way resolver state, the new status tokens, and the force-upgradable rules, and removes the dropped items (global force default, manual `complete` command).
+- [x] **DOC-02**: `docs/output-catalog.md` and `docs/messaging-style-guide.md` reflect the reconciled token set (`force-installed`, `unsupported`, `force-upgradable`), the derived-state severity, and the exact byte forms.
+- [x] **DOC-03**: No stale comments claim idempotent autoupdate is "warning" -- such cases are info/benign.
 
 ## Out of Scope
 
@@ -122,9 +122,9 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SEV-03 | Phase 69 | Complete |
 | SEV-04 | Phase 69 | Complete |
 | SEV-05 | Phase 69 | Complete |
-| DOC-01 | Phase 70 | Pending |
-| DOC-02 | Phase 70 | Pending |
-| DOC-03 | Phase 70 | Pending |
+| DOC-01 | Phase 70 | Complete |
+| DOC-02 | Phase 70 | Complete |
+| DOC-03 | Phase 70 | Complete |
 
 **Coverage:**
 
