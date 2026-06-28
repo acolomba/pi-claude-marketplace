@@ -174,7 +174,7 @@ Declarative per-scope config files (`claude-plugins.json` + entry-level-override
 <details>
 <summary>Done v1.13 Claude Hook Bridge (Phases 57-63) -- SHIPPED 2026-06-19</summary>
 
-Hooks component bridge alongside skills/commands/agents/MCP, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Ships the **8 bucket-A direct-1:1-map events only** (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) â the subset where dispatch fires at 100% fidelity. Strict-supportability stance at BOTH event and plugin levels: plugins referencing other events, unmapped Claude tools, regex matchers, or non-`command` handlers install as `(unavailable) {unsupported hooks}`. Forward-compat investments shipped despite no first-party plugin exercising them under bucket-A-only scope: the `if` field permission-rule matcher (~300 LoC, MATCH-03) and the `asyncRewake` registry (~250 LoC, HOOK-06 + EXEC-05). Released as `pi-claude-marketplace@0.6.0`. 31/31 requirements complete. See `.planning/milestones/v1.13-ROADMAP.md` for full details.
+Hooks component bridge alongside skills/commands/agents/MCP, translating Claude plugin hook declarations into Pi extension event subscriptions and shell-outs. Ships the **8 bucket-A direct-1:1-map events only** (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd) Ã¢ÂÂ the subset where dispatch fires at 100% fidelity. Strict-supportability stance at BOTH event and plugin levels: plugins referencing other events, unmapped Claude tools, regex matchers, or non-`command` handlers install as `(unavailable) {unsupported hooks}`. Forward-compat investments shipped despite no first-party plugin exercising them under bucket-A-only scope: the `if` field permission-rule matcher (~300 LoC, MATCH-03) and the `asyncRewake` registry (~250 LoC, HOOK-06 + EXEC-05). Released as `pi-claude-marketplace@0.6.0`. 31/31 requirements complete. See `.planning/milestones/v1.13-ROADMAP.md` for full details.
 
 - [x] Phase 57: Schema, Component Type & Payload-Extension Tolerance -- HOOK-01, HOOK-02, HOOK-03 (completed 2026-06-14)
 - [x] Phase 58: Matcher Parser, Tool-Name Mapping & Supportability Gate -- MATCH-01, MATCH-02, TOOL-01, TOOL-02, HOOK-04 (pulled forward per D-58-01) (completed 2026-06-14)
@@ -188,16 +188,16 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 ### Active force-install (Phases 64-70)
 
-**Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD Â§11.
+**Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD ÃÂ§11.
 
 - [x] **Phase 64: Resolver Three-Way State** - Replace binary `installable: true|false` with `installable`/`unsupported`/`unavailable`; two narrowing gates; per-kind unsupported reasons (completed 2026-06-27)
 - [x] **Phase 65: Force Install & Update** - `install --force`/`update --force` degrade-not-block on `unsupported`; hard failures still block (completed 2026-06-27)
 - [x] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove (completed 2026-06-27)
-- [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (â) / `force-upgradable` (â), will-force preview tokens, info detail (completed 2026-06-27)
+- [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (Ã¢ÂÂ) / `force-upgradable` (Ã¢ÂÂ), will-force preview tokens, info detail (completed 2026-06-27)
 - [x] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites (completed 2026-06-27)
 - [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
-- [ ] **Phase 70: Spec & Documentation Reconcile** - PRD Â§11, output-catalog, messaging-style-guide reconciled to the final token set
+- [ ] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set
 
 #### Phase 64: Resolver Three-Way State
 
@@ -214,11 +214,11 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 64-01-PLAN.md â Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
+- [x] 64-01-PLAN.md Ã¢ÂÂ Three-way resolver union, factory split, structural-precedence decision, requireInstallable + requireForceInstallable gates, consumer + test migration (RSTATE-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 64-02-PLAN.md â Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
+- [x] 64-02-PLAN.md Ã¢ÂÂ Shared render-time per-kind unsupported-marker helper; list/info/install parity (RSTATE-05)
 
 #### Phase 65: Force Install & Update
 
@@ -237,12 +237,12 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 65-01-PLAN.md â Foundation: `MaterializablePlugin` union alias (NFR-7-safe), shared bridge/adapter type widening, `--force` recognition in the shared edge parser (FORCE-01/02/05)
+- [x] 65-01-PLAN.md Ã¢ÂÂ Foundation: `MaterializablePlugin` union alias (NFR-7-safe), shared bridge/adapter type widening, `--force` recognition in the shared edge parser (FORCE-01/02/05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 65-02-PLAN.md â Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
-- [x] 65-03-PLAN.md â Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
+- [x] 65-02-PLAN.md Ã¢ÂÂ Install force path: gate-select `requireForceInstallable` under `--force`, degrade unsupported via the reused materialize path, no-`Warning:` guarantee (FORCE-01/03/04/05)
+- [x] 65-03-PLAN.md Ã¢ÂÂ Update force path: force-gate the no-network candidate resolve, degrade now-unsupported candidate components, block without force (FORCE-02/03/04/05)
 
 #### Phase 65.1: Reload-Deferred Will Grammar Consistency (INSERTED)
 
@@ -261,11 +261,11 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 65.1-01-PLAN.md â WILL-02 reload-hint agreement test (new isolated file) + additive marketplace-remove-with-installed-plugins catalog-uat byte state; both green on the current tree (WILL-02, WILL-04)
+- [x] 65.1-01-PLAN.md Ã¢ÂÂ WILL-02 reload-hint agreement test (new isolated file) + additive marketplace-remove-with-installed-plugins catalog-uat byte state; both green on the current tree (WILL-02, WILL-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 65.1-02-PLAN.md â Atomic lockstep retirement of `will add` / `will remove`: closed-set tuples (22->20, 9->7), union arms, renderMpHeader, pending projection (add dropped, remove -> per-plugin will-uninstall cascade), PlannedMarketplaceRemove.plugins seam, all coupled tests, and docs/output-catalog + messaging-style-guide; single `npm run check`-green commit (WILL-01, WILL-02, WILL-03, WILL-04)
+- [x] 65.1-02-PLAN.md Ã¢ÂÂ Atomic lockstep retirement of `will add` / `will remove`: closed-set tuples (22->20, 9->7), union arms, renderMpHeader, pending projection (add dropped, remove -> per-plugin will-uninstall cascade), PlannedMarketplaceRemove.plugins seam, all coupled tests, and docs/output-catalog + messaging-style-guide; single `npm run check`-green commit (WILL-01, WILL-02, WILL-03, WILL-04)
 
 #### Phase 66: Derived Force-State, Glyphs & Force-Upgradability
 
@@ -274,9 +274,9 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 **Requirements**: FSTAT-01, FSTAT-02, FSTAT-03, FSTAT-04, FSTAT-05, FSTAT-06, FSTAT-07
 **Success Criteria** (what must be TRUE):
 
-  1. A plugin recorded as installed but currently re-resolving to `unsupported` renders `force-installed` with the `â` glyph on cascade and list surfaces -- derived, with no persisted `forceInstalled` flag and no state migration.
+  1. A plugin recorded as installed but currently re-resolving to `unsupported` renders `force-installed` with the `Ã¢ÂÂ` glyph on cascade and list surfaces -- derived, with no persisted `forceInstalled` flag and no state migration.
   2. A force-installed plugin whose newer version is fully supported returns to `(installed)` automatically after upgrade -- no lingering force state.
-  3. `list` shows `force-upgradable` (wearing the `â` glyph) for a currently-clean installed plugin whose newer cache-resolved candidate would **newly** degrade it; a force-installed plugin is never force-upgradable.
+  3. `list` shows `force-upgradable` (wearing the `Ã¢ÂÂ` glyph) for a currently-clean installed plugin whose newer cache-resolved candidate would **newly** degrade it; a force-installed plugin is never force-upgradable.
   4. The pending/preview surface renders `will force install` / `will force update` in place of `will install` / `will update` when a force operation is planned.
   5. `/claude:plugin info` reports `force-installed` and surfaces the dropped-component detail; the success notification for a force install/update reads "force-installed".
 
@@ -284,13 +284,13 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 66-01-PLAN.md â Notify status vocabulary foundation: `force-installed`/`force-upgradable` union arms + `â` glyph + render switch + `will install` force modifier + info-row status/glyph + tools projection; closed-set tripwire bump (20->22 / 15->17) + grammar-invariant widen + stamp-coverage + catalog rows/fixtures in one lockstep commit (FSTAT-02/04/06)
+- [x] 66-01-PLAN.md Ã¢ÂÂ Notify status vocabulary foundation: `force-installed`/`force-upgradable` union arms + `Ã¢ÂÂ` glyph + render switch + `will install` force modifier + info-row status/glyph + tools projection; closed-set tripwire bump (20->22 / 15->17) + grammar-invariant widen + stamp-coverage + catalog rows/fixtures in one lockstep commit (FSTAT-02/04/06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 66-02-PLAN.md â list deriver: no-network `resolveStrict` + four-way force-installed/force-upgradable/upgradable/installed predicate (FSTAT-01/03/04/05)
-- [x] 66-03-PLAN.md â info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-02/03/07)
-- [x] 66-04-PLAN.md â reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
+- [x] 66-02-PLAN.md Ã¢ÂÂ list deriver: no-network `resolveStrict` + four-way force-installed/force-upgradable/upgradable/installed predicate (FSTAT-01/03/04/05)
+- [x] 66-03-PLAN.md Ã¢ÂÂ info `force-installed` + dropped-component detail; install/update force-installed success rows (FSTAT-02/03/07)
+- [x] 66-04-PLAN.md Ã¢ÂÂ reconcile pending `will force install` via force modifier + no-network candidate resolve (FSTAT-06)
 
 #### Phase 67: List Filters, Completion & Reinstall Repair
 
@@ -307,19 +307,19 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 67-01-PLAN.md â reinstall `--force` retirement: unconditional overwrite-everything; handler/router/completion-provider/usage strip; coupled tests + docs lockstep (RINST-01)
+- [x] 67-01-PLAN.md Ã¢ÂÂ reinstall `--force` retirement: unconditional overwrite-everything; handler/router/completion-provider/usage strip; coupled tests + docs lockstep (RINST-01)
 
 **Wave 2** *(blocked on Wave 1: shared provider.test.ts / router.test.ts / docs surfaces)*
 
-- [x] 67-02-PLAN.md â list filters: resolver-state bucket threaded to `shouldShow`; `--unsupported` arm; widened `--installed` (force-installed/force-upgradable); narrowed `--unavailable`; handler flag + USAGE; docs prose (LIST-01)
+- [x] 67-02-PLAN.md Ã¢ÂÂ list filters: resolver-state bucket threaded to `shouldShow`; `--unsupported` arm; widened `--installed` (force-installed/force-upgradable); narrowed `--unavailable`; handler flag + USAGE; docs prose (LIST-01)
 
 **Wave 3** *(blocked on Wave 2: shares orchestrators/plugin/list.ts)*
 
-- [x] 67-03-PLAN.md â shared per-entry plugin-state classifier consumed by list + completion bucketizer; completion-cache schema bump (v1->2) + finer status set; no-network parity (LIST-02 foundation)
+- [x] 67-03-PLAN.md Ã¢ÂÂ shared per-entry plugin-state classifier consumed by list + completion bucketizer; completion-cache schema bump (v1->2) + finer status set; no-network parity (LIST-02 foundation)
 
 **Wave 4** *(blocked on Waves 1-3: shares completions/provider.ts + the finer cache statuses)*
 
-- [x] 67-04-PLAN.md â `--force`-gated install/update completion candidate sets over the finer statuses; `--force` flag completion + presence detection; no-force byte-identical regression; `npm run check` gate (LIST-02)
+- [x] 67-04-PLAN.md Ã¢ÂÂ `--force`-gated install/update completion candidate sets over the finer statuses; `--force` flag completion + presence detection; no-force byte-identical regression; `npm run check` gate (LIST-02)
 
 #### Phase 68: Load-Time Backfill
 
@@ -336,13 +336,13 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 68-01-PLAN.md â Version-stamp foundation: EXTENSION_VERSION constant + drift guard, optional lastReconciledExtensionVersion field + loadState normalization (BFILL-02)
-- [x] 68-02-PLAN.md â Reinstall force-capability widening: requireForceInstallable gate + record real compatibility set (BFILL-01)
-- [x] 68-03-PLAN.md â Backfill outcome arm + cascade projection (installed/force-installed) (BFILL-01)
+- [x] 68-01-PLAN.md Ã¢ÂÂ Version-stamp foundation: EXTENSION_VERSION constant + drift guard, optional lastReconciledExtensionVersion field + loadState normalization (BFILL-02)
+- [x] 68-02-PLAN.md Ã¢ÂÂ Reinstall force-capability widening: requireForceInstallable gate + record real compatibility set (BFILL-01)
+- [x] 68-03-PLAN.md Ã¢ÂÂ Backfill outcome arm + cascade projection (installed/force-installed) (BFILL-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [x] 68-04-PLAN.md â Version-gated backfill scan in applyReconcile: re-materialize + stamp + single-cascade fold (BFILL-01, BFILL-02)
+- [x] 68-04-PLAN.md Ã¢ÂÂ Version-gated backfill scan in applyReconcile: re-materialize + stamp + single-cascade fold (BFILL-01, BFILL-02)
 
 #### Phase 69: Force-Path Severity
 
@@ -361,19 +361,19 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [x] 69-01-PLAN.md — SEV-02 `--force` hint on the no-force unsupported install error; three-way `forceable` discriminant threaded through the thrown PluginShapeError; unavailable arm stays hint-less (D-69-03)
+- [x] 69-01-PLAN.md â SEV-02 `--force` hint on the no-force unsupported install error; three-way `forceable` discriminant threaded through the thrown PluginShapeError; unavailable arm stays hint-less (D-69-03)
 
 **Wave 2** *(blocked on Wave 1: shares install.ts + catalog-uat)*
 
-- [x] 69-02-PLAN.md — SEV-01 missing soft-dep companion warning via softDepStatus probe (+ live force-info/reinstall-warning regression lock) and SEV-04 targeted=warning/bulk=info force-upgradable decline (D-69-02)
+- [x] 69-02-PLAN.md â SEV-01 missing soft-dep companion warning via softDepStatus probe (+ live force-info/reinstall-warning regression lock) and SEV-04 targeted=warning/bulk=info force-upgradable decline (D-69-02)
 
 **Wave 3** *(blocked on Wave 2: shares plugin/update.ts + catalog-uat)*
 
-- [x] 69-03-PLAN.md — SEV-03 autoupdate cascade takes the force path (skipped->force-installed flip) with prior-state severity: warning when newly degrading a clean plugin, info when already degraded (D-69-01)
+- [x] 69-03-PLAN.md â SEV-03 autoupdate cascade takes the force path (skipped->force-installed flip) with prior-state severity: warning when newly degrading a clean plugin, info when already degraded (D-69-01)
 
 **Wave 4** *(blocked on Wave 3: shares catalog-uat + output-catalog)*
 
-- [x] 69-04-PLAN.md — SEV-05 backfill force-installed row carries a factual {reasons} brace via the shared narrowUnsupportedKinds seam; benign promotion stays info (D-69-04, A3)
+- [x] 69-04-PLAN.md â SEV-05 backfill force-installed row carries a factual {reasons} brace via the shared narrowUnsupportedKinds seam; benign promotion stays info (D-69-04, A3)
 
 #### Phase 70: Spec & Documentation Reconcile
 
@@ -382,11 +382,20 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 **Requirements**: DOC-01, DOC-02, DOC-03
 **Success Criteria** (what must be TRUE):
 
-  1. PRD Â§11 documents `--force` install/update, the three-way resolver state, the new status tokens, and the force-upgradable rules, and removes the dropped items (global force default, manual `complete` command).
+  1. PRD ÃÂ§11 documents `--force` install/update, the three-way resolver state, the new status tokens, and the force-upgradable rules, and removes the dropped items (global force default, manual `complete` command).
   2. `docs/output-catalog.md` and `docs/messaging-style-guide.md` reflect the reconciled token set (`force-installed`, `unsupported`, `force-upgradable`), the derived-state severity, and the exact byte forms -- catalog-UAT GREEN.
   3. No stale comment claims idempotent autoupdate is "warning"; such cases are documented as info/benign.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 70-01-PLAN.md — D-70-02 unavailable-arm severity finalize: stamp error (no --force hint) on the structural unavailable install-failure arm; lockstep install test + catalog-uat fixture + output-catalog + style-guide (DOC-02)
+- [ ] 70-02-PLAN.md — DOC-01 PRD reconcile: document shipped force design (--force install/update, three-way resolver state, force-installed/unsupported/force-upgradable tokens, force-upgradable rules), fully remove dropped scope (D-70-04), record WR-01 autoupdate scoping (D-70-03)
+
+**Wave 2** *(blocked on Wave 1: shares output-catalog.md + messaging-style-guide.md with 70-01)*
+
+- [ ] 70-03-PLAN.md — D-70-01 hint freeze (drop placeholder framing, lock byte form in docs) + DOC-03 stale "autoupdate is warning" comment sweep + D-70-03 outcomeToCascadePluginMessage comment scrub
 
 ## Progress
 
