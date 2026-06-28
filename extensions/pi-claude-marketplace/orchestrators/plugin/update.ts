@@ -1521,8 +1521,17 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // `unsupported` degraded it -- carry the dropped kinds so the cascade
     // renders `(force-installed)` instead of `(updated)`. Empty for a clean
     // candidate (FSTAT-03 -- no lingering force state).
+    //
+    // SEV-03 / D-69-01: `newlyDegraded` records whether this degrade NEWLY
+    // introduced force state -- the PERSISTED `compatibility.unsupported` read
+    // from the prior install record (`preflight.record`, loaded BEFORE the
+    // update applied) was empty. The autoupdate cascade renderer reads it to
+    // raise the row to `warning` (newly degraded) vs `info` (already degraded);
+    // the manual `update --force` renderer ignores it (explicit opt-in stays
+    // info). No schema change -- the field already exists on the record.
     ...(installable.state === "unsupported" && {
       unsupportedKinds: [...installable.unsupported],
+      newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
     }),
   };
 }

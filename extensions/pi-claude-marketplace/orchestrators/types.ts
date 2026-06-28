@@ -148,6 +148,20 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
    * true realized state.
    */
   readonly unsupportedKinds?: readonly string[];
+  /**
+   * SEV-03 / D-69-01: `true` when this force-degrading update NEWLY degrades a
+   * previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported`
+   * was EMPTY before the update applied. Read from the prior install record in
+   * `preflightUpdate` (no new tracking, no schema change). Only meaningful
+   * alongside `unsupportedKinds` (a degrade actually happened). The marketplace
+   * autoupdate cascade renderer reads this to raise the `(force-installed)` row
+   * to `warning` (a silent auto-update degradation is actionable); an
+   * already-degraded re-degrade (prior `unsupported` non-empty) stays `info`.
+   * The manual `update --force` renderer ignores it -- the explicit opt-in stays
+   * info unconditionally (SEV-01), so the warning fires ONLY on the autoupdate
+   * surface.
+   */
+  readonly newlyDegraded?: boolean;
 }
 
 /**

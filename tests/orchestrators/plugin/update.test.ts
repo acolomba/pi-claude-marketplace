@@ -1078,6 +1078,87 @@ test("SEV-03: the manual `update` path (no --force) is UNCHANGED -- an `unsuppor
   });
 });
 
+test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted unsupported empty) degraded by the autoupdate cascade carries newlyDegraded=true", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-newly-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        // seedPathMarketplace seeds compatibility.unsupported = [] -> the prior
+        // record is CLEAN, so the degrade is NEWLY introduced.
+        installedVersions: { hello: "1.0.0" },
+      });
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".lsp.json"),
+        JSON.stringify({ servers: {} }),
+      );
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        const outcome = await updateSinglePlugin("hello", "mp", "project");
+        assert.equal(outcome.partition, "updated");
+        if (outcome.partition !== "updated") {
+          throw new Error("unreachable: narrowed above");
+        }
+
+        assert.equal(outcome.newlyDegraded, true);
+      } finally {
+        process.chdir(prevCwd);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SEV-03 / D-69-01: prior-state read -- an ALREADY force-installed plugin (persisted unsupported non-empty) degraded again carries newlyDegraded=false", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-already-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".lsp.json"),
+        JSON.stringify({ servers: {} }),
+      );
+
+      // Pre-stamp the persisted record as ALREADY force-installed: a non-empty
+      // `compatibility.unsupported` is the prior-state the auto-update reads.
+      const locations = locationsFor("project", cwd);
+      const before = await loadState(locations.extensionRoot);
+      const rec = before.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      rec.compatibility.unsupported = ["lspServers"];
+      await saveState(locations.extensionRoot, before);
+
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        const outcome = await updateSinglePlugin("hello", "mp", "project");
+        assert.equal(outcome.partition, "updated");
+        if (outcome.partition !== "updated") {
+          throw new Error("unreachable: narrowed above");
+        }
+
+        assert.equal(outcome.newlyDegraded, false);
+      } finally {
+        process.chdir(prevCwd);
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── PUP-1 pl@mp form: not-installed plugin -> partition='skipped' ─────────────
 
 test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {

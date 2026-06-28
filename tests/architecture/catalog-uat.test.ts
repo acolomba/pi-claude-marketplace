@@ -2688,6 +2688,38 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-03 / D-69-01: the SAME `(force-installed)` autoupdate row, but the
+    // auto-update NEWLY degrades a previously-clean plugin (the persisted
+    // `compatibility.unsupported` was empty before the update). A silent
+    // automatic degradation is actionable -> `warning` + the `needs attention`
+    // summary line. The per-row bytes are identical to the already-degraded
+    // info fixture above; only the stamped severity moves.
+    "autoupdate-force-installed-newly-degraded": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "force-installed",
+                name: "degraded-plugin",
+                scope: "user",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["lsp"],
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "mp-failure-network": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

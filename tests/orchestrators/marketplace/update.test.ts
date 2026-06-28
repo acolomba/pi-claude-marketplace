@@ -1178,6 +1178,45 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForce
   assert.equal(msg.needsReload, true);
 });
 
+test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stamps severity warning", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "degraded-plugin",
+    fromVersion: "0.9.0",
+    toVersion: "1.0.0",
+    stagedAgents: [],
+    stagedMcpServers: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    unsupportedKinds: ["lspServers"],
+    newlyDegraded: true,
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  assert.equal(msg.status, "force-installed");
+  // A previously-clean plugin silently degraded by the auto-update is
+  // actionable -> warning (drives the `needs attention` summary line).
+  assert.equal(msg.severity, "warning");
+});
+
+test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) stays severity info", () => {
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "degraded-plugin",
+    fromVersion: "0.9.0",
+    toVersion: "1.0.0",
+    stagedAgents: [],
+    stagedMcpServers: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    unsupportedKinds: ["lspServers"],
+    newlyDegraded: false,
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  assert.equal(msg.status, "force-installed");
+  // Re-degrading a plugin that was already force-installed is benign -> info.
+  assert.equal(msg.severity, "info");
+});
+
 test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updated), not force-installed", () => {
   const outcome: PluginUpdateOutcome = {
     partition: "updated",

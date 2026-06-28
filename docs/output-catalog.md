@@ -1709,7 +1709,22 @@ Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fi
 /reload to pick up changes
 ```
 
-SEV-03 / D-69-01: the autoupdate cascade TAKES the force path automatically (`updateSinglePlugin` sets `force: true`), so a force-upgradable candidate that re-resolves `unsupported` degrades IN PLACE -- the supported components materialize, the unsupported kinds skip -- and renders `(force-installed) {dropped kinds}` with the dedicated `◉` glyph instead of declining with `(skipped) {no longer installable}`. The byte form REUSES `forceInstalledRow` (the SOLE composition site, D-11 "call, never duplicate"), so it is identical to the install / update success surfaces. force-installed is a realized transition, so the reload-hint fires. This state is the ALREADY-degraded case: the plugin's persisted `compatibility.unsupported` was already non-empty before the auto-update, so re-degrading it is benign -> severity `info` (no summary line). The NEWLY-degraded case (prior `unsupported` empty) raises the row to `warning` -- see `autoupdate-force-installed-newly-degraded`. `requireForceInstallable` still BLOCKS an `unavailable`/structural candidate (FORCE-05), so that arm keeps its `(skipped) {no longer installable}` decline -- force never bypasses a hard failure.
+SEV-03 / D-69-01: the autoupdate cascade TAKES the force path automatically (`updateSinglePlugin` sets `force: true`), so a force-upgradable candidate that re-resolves `unsupported` degrades IN PLACE -- the supported components materialize, the unsupported kinds skip -- and renders `(force-installed) {dropped kinds}` with the dedicated `◉` glyph instead of declining with `(skipped) {no longer installable}`. The byte form REUSES `forceInstalledRow` (the SOLE composition site, D-11 "call, never duplicate"), so it is identical to the install / update success surfaces. force-installed is a realized transition, so the reload-hint fires. This state is the ALREADY-degraded case: the plugin's persisted `compatibility.unsupported` was already non-empty before the auto-update, so re-degrading it is benign -> severity `info` (no summary line). The NEWLY-degraded case (prior `unsupported` empty) raises the row to `warning` -- see `autoupdate-force-installed-newly-degraded` below. `requireForceInstallable` still BLOCKS an `unavailable`/structural candidate (FORCE-05), so that arm keeps its `(skipped) {no longer installable}` decline -- force never bypasses a hard failure.
+
+### Autoupdate cascade takes the force path -- newly-degraded plugin (warning)
+
+<!-- catalog-state: autoupdate-force-installed-newly-degraded -->
+
+```text
+A plugin operation needs attention.
+
+● official [user] (updated)
+  ◉ degraded-plugin v1.0.0 (force-installed) {lsp}
+
+/reload to pick up changes
+```
+
+SEV-03 / D-69-01: the SAME `(force-installed)` autoupdate row as the already-degraded state above, but here the auto-update NEWLY degrades a previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported` was EMPTY before the auto-update applied (read from the prior install record, no new tracking, no schema change). An automatic upgrade that silently drops components the user never opted into is actionable, so the row stamps `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The per-row `◉ degraded-plugin v1.0.0 (force-installed) {lsp}` bytes are identical to the already-degraded form -- only the stamped severity (and therefore the summary line) moves. The reload-hint still fires (force-installed is a realized transition). The manual `update --force` degrade is unaffected -- the explicit opt-in stays `info` (SEV-01); the warning fires ONLY on this autoupdate surface.
 
 ### Marketplace update failed (manifest unreachable)
 

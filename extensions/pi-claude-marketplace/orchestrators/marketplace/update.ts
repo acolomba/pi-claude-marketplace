@@ -650,9 +650,16 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // re-resolved `unsupported` degraded in place. Report `(force-installed)`
       // with the dropped-component detail instead of `(updated)`. A clean
       // candidate keeps `(updated)` (no `unsupportedKinds`). force-installed is
-      // a realized transition -> reloads Pi resources. The warning/info
-      // prior-state severity refinement (newly-degraded vs already-degraded)
-      // lands separately; default `info` here keeps this step green.
+      // a realized transition -> reloads Pi resources.
+      //
+      // SEV-03 / D-69-01: an autoupdate that NEWLY degrades a previously-clean
+      // plugin (the prior persisted `compatibility.unsupported` was empty, read
+      // before the update applied) silently dropped components the user did not
+      // opt into -> the row is actionable -> `warning` (prepends the
+      // `A plugin operation needs attention.` summary line). Re-degrading a
+      // plugin that was ALREADY force-installed (prior `unsupported` non-empty)
+      // is benign -> `info`. The manual `update --force` opt-in stays info on its
+      // own renderer; the warning fires ONLY on this autoupdate surface.
       if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
         return {
           status: "force-installed",
@@ -661,7 +668,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
           version: outcome.toVersion,
           dependencies,
           reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
-          severity: "info",
+          severity: outcome.newlyDegraded === true ? "warning" : "info",
           needsReload: true,
         };
       }
