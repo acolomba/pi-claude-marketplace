@@ -4,8 +4,10 @@
 // narrowing/throwing, and one MM-5 happy path.
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   type ResolveContext,
@@ -57,6 +59,13 @@ function mockCtx(
 
 const MP = "/abs/marketplace";
 const ROOT = (rel: string): string => path.resolve(MP, rel);
+
+const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+/** Load a `tests/fixtures/<name>.json` payload as a raw string. */
+function fixture(name: string): Promise<string> {
+  return readFile(path.resolve(FIXTURE_DIR, "../fixtures", `${name}.json`), "utf8");
+}
 
 /**
  * Test entries are intentionally typed as `Record<string, unknown>` (the third-party
@@ -204,6 +213,81 @@ test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable
     r.notes.some((n) => n.includes("hooks.json")),
     `notes must mention hooks.json: ${r.notes.join(" / ")}`,
   );
+});
+
+// PHOOK-02 / D-71-03: a hooks.json that PARSES but drops a non-bucket-A
+// event (here `Stop`) while keeping a supported group resolves the
+// force-degradable `unsupported` arm, NOT `unavailable`. The kept group still
+// materializes (hooksConfigPath recorded, `"hooks"` in supported) and the
+// dropped `Stop` is enumerated in droppedHooks. `"hooks"` is intentionally a
+// member of BOTH supported and unsupported (dual membership).
+test("PHOOK-02 / D-71-03: hooks.json with a kept group + dropped Stop event -> unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: await fixture("hooks-posttooluse-and-stop"),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+
+  if (r.state === "unsupported") {
+    assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
+    assert.deepEqual(r.droppedHooks, [{ kind: "event", event: "Stop" }]);
+  }
+});
+
+// D-71-02 / PHOOK-02: an intra-event matcher mix keeps the clean group and
+// drops only the unsupportable (regex) group. The event survives partially:
+// `unsupported` with hooksConfigPath recorded and the regex group enumerated.
+test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex group -> unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: await fixture("hooks-pretooluse-matcher-mix"),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+
+  if (r.state === "unsupported") {
+    assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
+    assert.deepEqual(r.droppedHooks, [
+      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+    ]);
+  }
+});
+
+// D-71-03 / Q2: a Stop-only config filters to the EMPTY subset. It still
+// resolves `unsupported` (droppedHooks recorded) but stages nothing: no
+// hooksConfigPath and `"hooks"` is absent from supported (mirrors the
+// LSP-only precedent where force installs nothing).
+test("D-71-03 / Q2: Stop-only config (empty subset) -> unsupported, no hooksConfigPath, hooks absent from supported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: await fixture("hooks-stop-only"),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+
+  if (r.state === "unsupported") {
+    assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
+    assert.ok(
+      !r.supported.includes("hooks"),
+      `supported must omit hooks: ${r.supported.join(" / ")}`,
+    );
+    assert.equal(r.hooksConfigPath, undefined);
+    assert.deepEqual(r.droppedHooks, [{ kind: "event", event: "Stop" }]);
+  }
 });
 
 // WR-02 (D-58 review): an I/O failure reading hooks/hooks.json
