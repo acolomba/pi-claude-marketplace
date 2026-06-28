@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   __test_classifyEntityShapeError,
   __test_classifyInstallFailure,
+  __test_composeInstallFailureMessage,
   __test_narrowResolverReasons,
   installPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
@@ -2196,6 +2197,93 @@ test("classifyEntityShapeError returns undefined for non-PluginShapeError input 
     scope: "project",
   });
   assert.equal(row, undefined);
+});
+
+test("SEV-02 / D-69-03: classifyEntityShapeError threads forceable from the thrown shape", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+
+  const forceable = __test_classifyEntityShapeError(
+    new PluginShapeError({
+      kind: "not-installable",
+      plugin: "p",
+      reasons: ["contains lspServers"],
+      forceable: true,
+    }),
+    { plugin: "p", marketplace: "mp", scope: "project" },
+  );
+  assert.ok(forceable);
+  assert.equal(forceable.status, "unavailable");
+  assert.equal(forceable.forceable, true);
+
+  const structural = __test_classifyEntityShapeError(
+    new PluginShapeError({
+      kind: "not-installable",
+      plugin: "p",
+      reasons: ["source dir does not exist"],
+      forceable: false,
+    }),
+    { plugin: "p", marketplace: "mp", scope: "project" },
+  );
+  assert.ok(structural);
+  assert.equal(structural.status, "unavailable");
+  assert.equal(structural.forceable, false);
+});
+
+test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the verdict is force-degradable", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+
+  // Force-degradable `unsupported` arm -> the unavailable row carries the
+  // `--force` hint and renders at error severity.
+  const forceableErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "helper",
+    reasons: ["contains lspServers"],
+    forceable: true,
+  });
+  const forceableMsg = __test_composeInstallFailureMessage({
+    err: forceableErr,
+    plugin: "helper",
+    scope: "project",
+    version: undefined,
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: __test_classifyEntityShapeError(forceableErr, {
+      plugin: "helper",
+      marketplace: "mp",
+      scope: "project",
+    }),
+  });
+  assert.equal(forceableMsg.status, "unavailable");
+  assert.ok(forceableMsg.status === "unavailable");
+  assert.equal(forceableMsg.forceHint, true);
+  assert.equal(forceableMsg.severity, "error");
+
+  // Structural `unavailable` arm -> byte-frozen: no hint, no severity stamp.
+  const structuralErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "helper",
+    reasons: ["source dir does not exist"],
+    forceable: false,
+  });
+  const structuralMsg = __test_composeInstallFailureMessage({
+    err: structuralErr,
+    plugin: "helper",
+    scope: "project",
+    version: undefined,
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: __test_classifyEntityShapeError(structuralErr, {
+      plugin: "helper",
+      marketplace: "mp",
+      scope: "project",
+    }),
+  });
+  assert.equal(structuralMsg.status, "unavailable");
+  assert.ok(structuralMsg.status === "unavailable");
+  assert.equal(structuralMsg.forceHint, undefined);
+  assert.equal(structuralMsg.severity, undefined);
 });
 
 test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "failed"` shape carrying the typed Error', async () => {

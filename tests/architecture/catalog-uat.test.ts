@@ -825,8 +825,11 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-02 / D-69-03: force-degradable `unsupported` install failure -- the
+    // row carries the `--force` hint trailer and renders at error severity.
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
+      expectedSeverity: "error",
       message: {
         marketplaces: [
           {
@@ -837,6 +840,29 @@ const FIXTURES: FixtureMap = {
                 status: "unavailable",
                 name: "helper",
                 reasons: ["unsupported hooks", "lsp"],
+                forceHint: true,
+                severity: "error",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SEV-02 / D-69-03: structurally `unavailable` install failure -- force
+    // cannot help, so the row is byte-frozen (no `--force` hint, info severity).
+    "failure-structural-unavailable": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "unavailable",
+                name: "helper",
+                reasons: ["unsupported source"],
               },
             ],
           },

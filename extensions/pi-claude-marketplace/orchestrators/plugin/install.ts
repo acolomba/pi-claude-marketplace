@@ -170,6 +170,10 @@ interface EntityErrorRow {
   readonly scope?: Scope;
   readonly status: Extract<StatusToken, "failed" | "unavailable">;
   readonly reasons: readonly ContentReason[];
+  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `forceable`
+  // discriminant on the `unavailable` arm -- `true` when the resolver verdict
+  // is force-degradable `unsupported`, so the composed row points at `--force`.
+  readonly forceable?: boolean;
 }
 
 /**
@@ -1481,6 +1485,29 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // cause-chain composition (e.g. to disambiguate a same-named plugin
 // across marketplaces), add it back here with a comment marking the
 // dependency.
+/**
+ * SEV-02 / D-69-03: build the `(unavailable)` install-failure row, branching on
+ * the three-way `forceable` discriminant the resolver stamped on the throw. The
+ * force-degradable `unsupported` arm renders at error severity AND carries the
+ * `--force` hint trailer (force can degrade-install it); the structural
+ * `unavailable` arm stays byte-frozen -- no hint, no severity stamp (force
+ * cannot help). PluginUnavailableMessage has no `cause?` field per D-15-01 --
+ * the reason text carries the explanation.
+ */
+function composeUnavailableMessage(
+  plugin: string,
+  version: string | undefined,
+  entityErrorRow: EntityErrorRow,
+): PluginUnavailableMessage {
+  return {
+    status: "unavailable",
+    name: plugin,
+    reasons: entityErrorRow.reasons,
+    ...(version !== undefined && version !== "" && { version }),
+    ...(entityErrorRow.forceable === true && { forceHint: true, severity: "error" }),
+  };
+}
+
 function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -1539,13 +1566,7 @@ function composeInstallFailureMessage(args: {
   // field per D-15-01 -- the reason text carries the explanation.
   if (entityErrorRow !== undefined) {
     if (entityErrorRow.status === "unavailable") {
-      const unavailable: PluginUnavailableMessage = {
-        status: "unavailable",
-        name: plugin,
-        reasons: entityErrorRow.reasons,
-        ...(version !== undefined && version !== "" && { version }),
-      };
-      return unavailable;
+      return composeUnavailableMessage(plugin, version, entityErrorRow);
     }
 
     const failed: PluginFailedMessage = {
@@ -1658,6 +1679,9 @@ function classifyEntityShapeError(
         // guarantees `.reasons` is present -- no `?? []` fallback
         // needed.
         reasons: narrowResolverReasons(err.shape.reasons),
+        // SEV-02 / D-69-03: thread the three-way distinction the resolver
+        // stamped on the throw so the composer conditions the `--force` hint.
+        forceable: err.shape.forceable,
       };
     default:
       return assertNever(err.shape);
@@ -1840,4 +1864,5 @@ function classifyInstallFailure(err: unknown, formattedCause: string): InstallPl
  */
 export { classifyEntityShapeError as __test_classifyEntityShapeError };
 export { classifyInstallFailure as __test_classifyInstallFailure };
+export { composeInstallFailureMessage as __test_composeInstallFailureMessage };
 export { narrowResolverReasons as __test_narrowResolverReasons };

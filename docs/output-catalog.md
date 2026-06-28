@@ -421,16 +421,30 @@ The closed-set REASONS token and the soft-dep marker share ONE brace block per M
 
 A `--force` install that succeeds with one or more components dropped (the resolver's `unsupported` arm) renders the `(force-installed)` row with the dedicated `◉` glyph. The force-degradable arm still stages the SUPPORTED components, so a `(force-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. force-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`).
 
-### Failure -- unsupported features in manifest
+### Failure -- unsupported features in manifest (force-degradable)
 
 <!-- catalog-state: failure-unsupported-features -->
 
 ```text
+A plugin operation has failed.
+
 ● official [user]
   ⊘ helper (unavailable) {unsupported hooks, lsp}
+    Re-run with --force to install the supported components.
 ```
 
-The manifest declares Claude features Pi doesn't support; the `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. No `cause:` trailer -- the reason carries the explanation. No reload-hint (no state-changing status); severity is info.
+The manifest declares Claude features Pi doesn't support, but the plugin is otherwise structurally sound, so the resolver verdict is the force-degradable `unsupported` arm (SEV-02 / D-69-03). The `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. Because `--force` can degrade-install the supported components, the row carries a 4-space-indented `--force` hint trailer pointing the user at the flag, and the install renders at `error` severity (so the leading summary line fires). No `cause:` trailer -- the reason carries the explanation. No reload-hint (nothing landed). The hint references the user's own flag only, with no plugin/marketplace interpolation (T-69-01); the byte-exact wording is reconciled in the DOC pass (DOC-01..03).
+
+### Failure -- structurally unavailable (force cannot help)
+
+<!-- catalog-state: failure-structural-unavailable -->
+
+```text
+● official [user]
+  ⊘ helper (unavailable) {unsupported source}
+```
+
+The plugin has a structural defect (e.g. a missing source directory), so the resolver verdict is the `unavailable` arm -- `--force` cannot help (SEV-02 / D-69-03). The row renders byte-frozen: NO `--force` hint trailer and no severity stamp (info, no leading summary line), exactly as an `unavailable` row renders elsewhere. The `unavailable` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; the reason names the structural defect. No reload-hint (nothing landed).
 
 ### Failure -- runtime error with cause chain
 

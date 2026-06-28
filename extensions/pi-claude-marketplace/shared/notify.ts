@@ -671,6 +671,13 @@ export interface PluginUnavailableMessage extends MessageBase {
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
+  // SEV-02 / D-69-03: set on the install-failure surface when the resolver
+  // verdict is `unsupported` (force-degradable). The renderer appends a
+  // 4-space-indented `--force` hint trailer below the row pointing the user
+  // at the flag that can degrade-install the plugin. Absent on the
+  // structural `unavailable` arm (force cannot help) and on every list /
+  // inventory surface, which render byte-frozen.
+  readonly forceHint?: boolean;
 }
 
 /**
@@ -2151,6 +2158,15 @@ function renderPluginRow(
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
+ * SEV-02 / D-69-03 `--force` hint trailer literal, rendered below a
+ * force-degradable `unsupported` install-failure row. References the user's
+ * own `--force` flag only -- no plugin / marketplace interpolation (T-69-01).
+ * Placeholder wording; the byte-exact form is frozen in the DOC reconcile
+ * (DOC-01..03).
+ */
+const FORCE_INSTALL_HINT_TRAILER = "Re-run with --force to install the supported components.";
+
+/**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
  *   - `info`    = the resource reached the desired state (success / steady
  *                 inventory / benign idempotent no-op);
@@ -3327,6 +3343,16 @@ function composePluginLinesWith(
     p.description.length > 0
   ) {
     lines.push(`    ${truncateDescription(p.description)}`);
+  }
+
+  // SEV-02 / D-69-03: the force-degradable `unsupported` install-failure row
+  // carries a 4-space-indented `--force` hint trailer (the structural
+  // `unavailable` arm omits it -- force cannot help). The hint references the
+  // user's own flag only and interpolates no plugin / marketplace identifier
+  // (T-69-01). Wording here is a clear placeholder; the byte-exact form is
+  // reconciled against the output catalog in the DOC pass (DOC-01..03).
+  if (p.status === "unavailable" && p.forceHint === true) {
+    lines.push(`    ${FORCE_INSTALL_HINT_TRAILER}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {
