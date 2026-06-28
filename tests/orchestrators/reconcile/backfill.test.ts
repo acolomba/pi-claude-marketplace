@@ -25,8 +25,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { mock } from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  __test_applyBackfillForScopeIsolated,
+  applyReconcile,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -36,6 +41,7 @@ import {
 import { __resetCacheForTests } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
+import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface MockCtx {
@@ -530,5 +536,51 @@ test("WR-01 / WR-05: a config-present, state.json-absent scope with no force-ins
     assert.equal(existsSync(loc.stateJsonPath), false);
     // Empty-and-clean reconcile -> silent (NFR-2 / A4).
     assert.equal(ctx.ui.notify.mock.calls.length, 0);
+  });
+});
+
+test("WR-02: a held scope lock on the stamp write is coerced to a structured row and does not abort the cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Gate open (stamp 0.0.0), state.json exists, zero force-installed plugins
+    // -> the scan is a no-op and the only state.json write is the stamp.
+    const { extensionRoot } = await seedScope({ cwd, stamp: "0.0.0" });
+    const loc = locationsFor("project", cwd);
+    const state = await loadState(extensionRoot);
+    const ctx = makeCtx();
+
+    // Hold the per-scope state lock so the stamp's withStateGuard acquisition
+    // fails with StateLockHeldError (a concurrent process owns the scope lock).
+    const release = await lockfile.lock(loc.extensionRoot, {
+      lockfilePath: loc.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+    });
+
+    // A sibling outcome already accumulated by the apply pass -- it MUST survive.
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "mp-added", scope: "project", marketplace: "sib" },
+    ];
+
+    try {
+      // Must NOT throw: the lock-held throw is coerced into a structured row.
+      await __test_applyBackfillForScopeIsolated(
+        { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+        "project",
+        { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted: true },
+        outcomes,
+      );
+    } finally {
+      await release();
+    }
+
+    // The sibling outcome survived (cascade not aborted) ...
+    assert.ok(outcomes.some((o) => o.kind === "mp-added"));
+    // ... and the stamp throw surfaced as a structured lock-held row.
+    const failed = outcomes.find((o) => o.kind === "invalid-block");
+    assert.ok(failed !== undefined, "expected an invalid-block row for the stamp throw");
+    assert.equal(failed.basename, "state.json");
+    assert.equal(failed.reason, "lock held");
   });
 });

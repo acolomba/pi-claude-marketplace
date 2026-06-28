@@ -868,6 +868,45 @@ async function applyBackfillForScope(
 }
 
 /**
+ * WR-02: throw-isolated wrapper around `applyBackfillForScope`. The stamp
+ * `withStateGuard` (and the per-plugin re-materialize) can throw a transient
+ * `StateLockHeldError` (a concurrent process holds the scope lock) or an EACCES
+ * on saveState. Mirrors `rebuildScopeRoutingTableIsolated`: coerce the throw
+ * into a structured `invalid-block` row (subject `state.json`, closed-set
+ * reason) so a transient failure NEVER aborts the single cascade for both
+ * scopes. The gate stays open and the scan self-heals on the next load --
+ * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write simply
+ * did not commit).
+ */
+async function applyBackfillForScopeIsolated(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  readResult: ScopeReadResult,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  try {
+    await applyBackfillForScope(opts, scope, readResult, outcomes);
+  } catch (err) {
+    const causeText = errorMessageOf(err);
+    outcomes.push({
+      kind: "invalid-block",
+      scope,
+      basename: "state.json",
+      reason: classifyReadPassThrow(err),
+      cause: new Error(redactAbsolutePaths(causeText)),
+    });
+  }
+}
+
+/**
+ * Test seam (mirrors reinstall.ts's `__test_*` exports): exercise the WR-02
+ * throw-coercion directly. A held scope lock makes the stamp `withStateGuard`
+ * throw `StateLockHeldError`; the wrapper must coerce it into an `invalid-block`
+ * row instead of propagating and aborting the cascade.
+ */
+export { applyBackfillForScopeIsolated as __test_applyBackfillForScopeIsolated };
+
+/**
  * WR-01: true iff any recorded plugin in this scope is force-installed
  * (compatibility.installable === false) -- the only kind the backfill scan can
  * promote. Decides whether a stamp write is worth bringing a state.json into
@@ -1080,8 +1119,10 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
     // promotions ride the same single cascade (RECON-04). Gated on the version
-    // stamp; stamps the running version whenever the gate opened.
-    await applyBackfillForScope(opts, scope, readResult, outcomes);
+    // stamp; stamps the running version whenever the gate opened. WR-02: a
+    // transient lock-held / EACCES throw is coerced to a structured row so it
+    // never aborts the cascade.
+    await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
     // this scope's routing tables so the next Pi event fires against a
