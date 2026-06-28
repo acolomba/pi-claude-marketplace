@@ -29,7 +29,10 @@ findings:
   warning: 2
   info: 3
   total: 5
-status: issues_found
+status: warnings_resolved
+warnings_resolved:
+  - WR-01: f3426c34
+  - WR-02: 31589e66
 ---
 
 # Phase 67: Code Review Report
@@ -37,7 +40,8 @@ status: issues_found
 **Reviewed:** 2026-06-27
 **Depth:** standard
 **Files Reviewed:** 20
-**Status:** issues_found
+**Status:** warnings_resolved (WR-01 `f3426c34`, WR-02 `31589e66`; INFO items
+IN-01..03 remain deferred)
 
 ## Summary
 
@@ -61,6 +65,17 @@ error-handling code.
 ## Warnings
 
 ### WR-01: completion bucketizer skips the `isRecordedButDisabled` guard that `list` applies, and the parity test does not catch the divergence
+
+**Resolved:** commit `f3426c34` (`fix(67): WR-01 route disabled guard through
+shared classifier`). The recorded-but-disabled guard now lives in the shared
+`classifyInstalledRecord` (collapses a disabled record to `installed` ahead of
+the force-installed branch), so the completion bucketizer and `list` agree
+(D-67-02) with no completion-local reclassification -- a disabled +
+version-drifted plugin is `installed` in the cache (never upgradable/
+force-upgradable) so it cannot leak into the `update --force` candidate set
+while `list` renders it `(disabled)`. The parity drift-guard test dropped the
+false "== a divergence from list" claim and a dedicated WR-01 test now proves
+the property directly (bucketizer `installed` + `isRecordedButDisabled` holds).
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:81-107` (`classifyInstalledPluginRow`), `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts:334-346`, `tests/orchestrators/edge-deps.test.ts:460-520`
 
@@ -104,6 +119,20 @@ if (isRecordedButDisabled(installed)) {
 avoided).
 
 ### WR-02: `update --force` completion can surface a force-installed plugin's upgrade as nothing, and a force-installed+drifted plugin is silently unreachable
+
+**Resolved:** commit `31589e66` (`fix(67): WR-02 offer force-installed-upgradable
+under update --force`). Settled behavior: a force-installed plugin WITH a newer,
+NON-unavailable candidate has meaningful `update --force` work (promote back to
+`installed` if the candidate is supported -- FSTAT-03 -- or re-apply force if
+still unsupported), so it must be offerable; a no-candidate (or
+structural-unavailable-candidate) degraded record stays plain `force-installed`
+(a same-version re-apply is `reinstall`'s job, RINST-01), consistent with update
+completion's newer-version contract. The classifier now derives a distinct
+`force-installed-upgradable` status for that case -- rendered `(force-installed)`
+on `list` (no new user-visible token; STATUS_TOKENS stay 22/17/7), admitted to
+`FORCE_UPDATE_STATUSES`, and NEVER `force-upgradable` (FSTAT-04 unchanged). The
+plugin-index cache union gained the status and bumped schemaVersion 2 -> 3. The
+inaccurate `data.ts` comment was corrected.
 
 **File:** `extensions/pi-claude-marketplace/edge/completions/data.ts:80-83` (`FORCE_UPDATE_STATUSES`), `extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts:80-97`
 
