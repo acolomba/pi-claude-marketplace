@@ -195,7 +195,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 65.1: Reload-Deferred Will Grammar Consistency** (INSERTED) - `will` prefix marks only reload-deferred actions; audit + fix marketplace add/remove (completed 2026-06-27)
 - [x] **Phase 66: Derived Force-State, Glyphs & Force-Upgradability** - Derived `force-installed` (◉) / `force-upgradable` (●), will-force preview tokens, info detail (completed 2026-06-27)
 - [x] **Phase 67: List Filters, Completion & Reinstall Repair** - `--unsupported` filter, force completion sets, reinstall drops `--force` and always overwrites (completed 2026-06-27)
-- [ ] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion`
+- [x] **Phase 68: Load-Time Backfill** - Re-materialize force-installed plugins whose components became supported, gated on `lastReconciledExtensionVersion` (completed 2026-06-28)
 - [ ] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split
 - [ ] **Phase 70: Spec & Documentation Reconcile** - PRD §11, output-catalog, messaging-style-guide reconciled to the final token set
 
@@ -342,7 +342,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 68-04-PLAN.md — Version-gated backfill scan in applyReconcile: re-materialize + stamp + single-cascade fold (BFILL-01, BFILL-02)
+- [x] 68-04-PLAN.md — Version-gated backfill scan in applyReconcile: re-materialize + stamp + single-cascade fold (BFILL-01, BFILL-02)
 
 #### Phase 69: Force-Path Severity
 
@@ -441,6 +441,6 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 65. Force Install & Update                                          | force-install | 3/3 | Complete    | 2026-06-27 |
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
-| 68. Load-Time Backfill                                              | force-install | 3/4 | In Progress|  |
+| 68. Load-Time Backfill                                              | force-install | 4/4 | Complete   | 2026-06-28 |
 | 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
