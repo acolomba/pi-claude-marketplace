@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Claude Hook Bridge
 status: executing
-last_updated: "2026-06-28T12:48:03.138Z"
-last_activity: 2026-06-28 -- Phase 69 planning complete
+last_updated: "2026-06-28T13:12:21.057Z"
+last_activity: 2026-06-28
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
   percent: 75
 ---
 
@@ -19,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 69 — force path severity
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 69 — force-path-severity
 
 ## Current Position
 
-Phase: 69
-Plan: Not started
+Phase: 69 (force-path-severity) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-06-28 -- Phase 69 planning complete
+Last activity: 2026-06-28
 
 ## Performance Metrics
 
@@ -138,6 +138,7 @@ Last activity: 2026-06-28 -- Phase 69 planning complete
 | Phase 68 P02 | 18m | 2 tasks | 3 files |
 | Phase 68 P03 | 6min | 2 tasks | 4 files |
 | Phase 68 P04 | 14min | 2 tasks | 3 files |
+| Phase 69 P01 | 40min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -288,6 +289,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: 68-02: reinstall resolves via requireForceInstallable so backfill can re-materialize force-installed plugins; persisted compatibility.installable mirrors the resolve state at the SAME version (BFILL-01/D-68-02).
 - [Phase 68]: 68-03: backfill outcomes project to installed (full) / force-installed (partial) rows folded into the single applied cascade (BFILL-01 / D-68-04 / RECON-04)
 - [Phase ?]: 68-04: load-time backfill gates on the lastReconciledExtensionVersion stamp; stamps the running version on gate-open even with zero promotions (D-68-03) via withStateGuard->saveState (SPLIT-02); force-installed plugins re-materialize via reinstallPlugin only when the resolved supported set is a strict superset of the recorded one, folded into the single applyReconcile cascade (RECON-04)
+- [Phase ?]: SEV-02 --force hint renders as a 4-space trailer line, not a REASONS member; closed-set counts stay 22/17/7
+- [Phase ?]: SEV-02 structural unavailable arm kept byte-frozen at info severity; final severity reconcile deferred to Phase 70
 
 ### Pending Todos
 
@@ -350,8 +353,8 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Session Continuity
 
-Last session: 2026-06-28T02:07:11.205Z
-Stopped At: Completed 68-03-PLAN.md
+Last session: 2026-06-28T13:12:21.047Z
+Stopped At: Completed 69-01-PLAN.md
 Resume File: None
 
 ## Operator Next Steps

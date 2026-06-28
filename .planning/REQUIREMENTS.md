@@ -61,7 +61,7 @@ The structural foundation: distinguish "not installable, but force can drop the 
 Builds on the desired-state, caller-stamped severity model delivered by the notification-refactor workstream. These are the force-specific severity behaviours.
 
 - [ ] **SEV-01**: A direct `install --force` / `update --force` degrade renders at **info** (no `Warning:`); a `reinstall` manual-recovery and a missing soft-dependency companion on an otherwise-successful install render at **warning**.
-- [ ] **SEV-02**: Installing an `unsupported` plugin without `--force` renders at **error** with a message pointing at `--force`; installing an `unavailable` (structural) plugin renders at **error** with **no** `--force` suggestion.
+- [x] **SEV-02**: Installing an `unsupported` plugin without `--force` renders at **error** with a message pointing at `--force`; installing an `unavailable` (structural) plugin renders at **error** with **no** `--force` suggestion.
 - [ ] **SEV-03**: Auto-update of a force-upgradable plugin is taken automatically (no `(skipped) {no longer installable}` for the unsupported-component case); it renders at **warning** only when it **newly** degrades a previously-clean plugin, at **info** when the plugin was already degraded.
 - [ ] **SEV-04**: A targeted `update <plugin>@<marketplace>` that declines a force-upgradable upgrade (no `--force`) renders at **warning**; an untargeted/bulk `update` that skips a force-upgradable plugin renders at **info**.
 - [ ] **SEV-05**: Any row carries a factual `{reasons}` brace whenever reasons are present, including `installed`, `force-installed`, and `force-upgradable` rows.
@@ -118,7 +118,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | BFILL-01 | Phase 68 | Complete |
 | BFILL-02 | Phase 68 | Complete |
 | SEV-01 | Phase 69 | Pending |
-| SEV-02 | Phase 69 | Pending |
+| SEV-02 | Phase 69 | Complete |
 | SEV-03 | Phase 69 | Pending |
 | SEV-04 | Phase 69 | Pending |
 | SEV-05 | Phase 69 | Pending |

@@ -361,7 +361,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 **Wave 1**
 
-- [ ] 69-01-PLAN.md — SEV-02 `--force` hint on the no-force unsupported install error; three-way `forceable` discriminant threaded through the thrown PluginShapeError; unavailable arm stays hint-less (D-69-03)
+- [x] 69-01-PLAN.md — SEV-02 `--force` hint on the no-force unsupported install error; three-way `forceable` discriminant threaded through the thrown PluginShapeError; unavailable arm stays hint-less (D-69-03)
 
 **Wave 2** *(blocked on Wave 1: shares install.ts + catalog-uat)*
 
@@ -458,5 +458,5 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 66. Derived Force-State, Glyphs & Force-Upgradability               | force-install | 4/4 | Complete    | 2026-06-27 |
 | 67. List Filters, Completion & Reinstall Repair                     | force-install | 4/4 | Complete    | 2026-06-27 |
 | 68. Load-Time Backfill                                              | force-install | 4/4 | Complete    | 2026-06-28 |
-| 69. Force-Path Severity                                             | force-install | 0/TBD | Not started | -          |
+| 69. Force-Path Severity                                             | force-install | 1/4 | In Progress|  |
 | 70. Spec & Documentation Reconcile                                  | force-install | 0/TBD | Not started | -          |
