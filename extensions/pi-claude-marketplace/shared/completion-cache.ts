@@ -69,14 +69,17 @@ export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
 const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 
 // LIST-02 / D-67-02: the plugin-index cache carries the FINER derived status
-// set (installed | upgradable | force-installed | force-upgradable | available
-// | unsupported | unavailable) so the completion bucketizer can offer the
-// `--force`-gated candidate sets without a second classifier. The schemaVersion
-// bump (1 -> 2) makes every stale 3-status cache drop+rebuild on next read via
-// the existing mismatch path -- no manual migration (T-67-07: the plugin-index
-// cache is an ephemeral optimization cache, NOT the persisted state model).
+// set so the completion bucketizer can offer the `--force`-gated candidate sets
+// without a second classifier. WR-02 adds `force-installed-upgradable` -- a
+// force-installed row that ALSO has a meaningful (newer, non-unavailable)
+// candidate, so it is offered under `update --force` (rendered `(force-installed)`
+// on `list`). The schemaVersion bump (2 -> 3) makes every stale 2-status cache
+// (which flattened that case to plain `force-installed`) drop+rebuild on next
+// read via the existing mismatch path -- no manual migration (T-67-07: the
+// plugin-index cache is an ephemeral optimization cache, NOT the persisted state
+// model).
 export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(2),
+  schemaVersion: Type.Literal(3),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
   plugins: Type.Array(
@@ -86,6 +89,7 @@ export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
         Type.Literal("installed"),
         Type.Literal("upgradable"),
         Type.Literal("force-installed"),
+        Type.Literal("force-installed-upgradable"),
         Type.Literal("force-upgradable"),
         Type.Literal("available"),
         Type.Literal("unsupported"),
@@ -109,6 +113,7 @@ export interface PluginIndexRow {
     | "installed"
     | "upgradable"
     | "force-installed"
+    | "force-installed-upgradable"
     | "force-upgradable"
     | "available"
     | "unsupported"
@@ -326,7 +331,7 @@ export async function getPluginIndex(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 2 as const,
+        schemaVersion: 3 as const,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [] as PluginIndexRow[],
         _loadError: errorMessage(err.cause),
@@ -341,7 +346,7 @@ export async function getPluginIndex(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     lastRefreshedAt: new Date().toISOString(),
     plugins: rows.map((r) => {
       // Strip undefined version fields so the on-disk shape matches the

@@ -103,24 +103,75 @@ test("classifyInstalledRecord: a record with persisted compatibility.unsupported
   );
 });
 
-test("A4: force-installed wins over upgradable when a degraded record ALSO has an upgrade candidate", () => {
+test("A4: a degraded record is never split into `upgradable`/`force-upgradable`", () => {
   // Precedence: a record that is BOTH degraded (compatibility.unsupported
-  // non-empty) AND has a newer candidate resolves `force-installed`, never
-  // `upgradable`/`force-upgradable`. The candidate resolution is not even
-  // consulted once the degraded-record branch wins.
-  assert.equal(
+  // non-empty) AND has a newer candidate is never relabeled `upgradable` or
+  // `force-upgradable` -- those clean-record states stay off-limits (FSTAT-04).
+  // A meaningful candidate makes it `force-installed-upgradable` (see WR-02
+  // below); a no-candidate degraded record is plain `force-installed`.
+  assert.notEqual(
+    classifyInstalledRecord(record(["lspServers"]), {
+      upgradable: true,
+      resolved: installable(),
+    }),
+    "upgradable",
+  );
+  assert.notEqual(
     classifyInstalledRecord(record(["lspServers"]), {
       upgradable: true,
       resolved: unsupportedResolved(),
     }),
-    "force-installed",
+    "force-upgradable",
   );
+});
+
+test("WR-02 / FSTAT-03: a degraded record WITH a newer, non-unavailable candidate is `force-installed-upgradable`", () => {
+  // The force-update is meaningful: a supported candidate promotes the row back
+  // to `installed` (FSTAT-03), an unsupported candidate re-applies the force.
+  // Either way it must be offerable under `update --force` -- the distinct
+  // `force-installed-upgradable` status carries that affordance while `list`
+  // still renders it `(force-installed)`. It is NEVER `force-upgradable`.
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), {
       upgradable: true,
       resolved: installable(),
     }),
+    "force-installed-upgradable",
+  );
+  assert.equal(
+    classifyInstalledRecord(record(["lspServers"]), {
+      upgradable: true,
+      resolved: unsupportedResolved(),
+    }),
+    "force-installed-upgradable",
+  );
+});
+
+test("WR-02: a degraded record with NO newer candidate -- or a structural-`unavailable` candidate -- stays plain `force-installed`", () => {
+  // No newer candidate: nothing to upgrade to (a same-version force re-apply is
+  // `reinstall`'s job, RINST-01), so it is NOT an `update --force` candidate.
+  assert.equal(
+    classifyInstalledRecord(record(["lspServers"]), { upgradable: false }),
     "force-installed",
+  );
+  // A candidate that resolves structural `unavailable` cannot be installed even
+  // under `--force` (FORCE-05), so the degraded row stays plain `force-installed`.
+  assert.equal(
+    classifyInstalledRecord(record(["lspServers"]), {
+      upgradable: true,
+      resolved: unavailableResolved(),
+    }),
+    "force-installed",
+  );
+});
+
+test("WR-02 / CR-01: a degraded record whose newer candidate probe FAILED is `force-installed-upgradable` (undefined is not `unavailable`)", () => {
+  // `resolved: undefined` cannot assert the candidate is gone, so -- mirroring
+  // the clean record's degrade-to-`upgradable` -- it is treated as a meaningful
+  // (non-unavailable) candidate and remains offerable under `update --force`.
+  assert.equal(
+    classifyInstalledRecord(record(["lspServers"]), { upgradable: true, resolved: undefined }),
+    "force-installed-upgradable",
   );
 });
 

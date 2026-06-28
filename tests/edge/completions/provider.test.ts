@@ -1251,7 +1251,7 @@ test("LIST-02 / D-67-02 :: install --force offers available + unsupported, exclu
   }
 });
 
-test("LIST-02 / D-67-02 :: update --force offers upgradable + force-upgradable, excludes installed/force-installed/unavailable", async () => {
+test("LIST-02 / D-67-02 / WR-02 :: update --force offers upgradable + force-upgradable + force-installed-upgradable, excludes installed/force-installed/unavailable", async () => {
   __resetCacheForTests();
   const f = await makeFixture({
     state: { user: { mp: {} }, project: {} },
@@ -1260,7 +1260,11 @@ test("LIST-02 / D-67-02 :: update --force offers upgradable + force-upgradable, 
         mp: [
           { name: "p-upg", status: "upgradable" },
           { name: "p-fupg", status: "force-upgradable" },
+          // WR-02: a force-installed row with a meaningful (newer,
+          // non-unavailable) candidate IS a real `update --force` target.
+          { name: "p-finst-upg", status: "force-installed-upgradable" },
           { name: "p-inst", status: "installed" },
+          // Plain force-installed (no newer candidate) stays excluded.
           { name: "p-finst", status: "force-installed" },
           { name: "p-unavail", status: "unavailable" },
         ],
@@ -1272,7 +1276,7 @@ test("LIST-02 / D-67-02 :: update --force offers upgradable + force-upgradable, 
     const items = await getArgumentCompletions("update --force ", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["p-fupg@mp", "p-upg@mp"]);
+    assert.deepEqual([...labels].sort(), ["p-finst-upg@mp", "p-fupg@mp", "p-upg@mp"]);
   } finally {
     await f.cleanup();
   }
@@ -1315,6 +1319,7 @@ test("LIST-02 / D-67-02 :: update (no --force) offers ALL installed-family statu
           { name: "p-inst", status: "installed" },
           { name: "p-upg", status: "upgradable" },
           { name: "p-finst", status: "force-installed" },
+          { name: "p-finst-upg", status: "force-installed-upgradable" },
           { name: "p-fupg", status: "force-upgradable" },
           { name: "p-avail", status: "available" },
           { name: "p-unavail", status: "unavailable" },
@@ -1327,7 +1332,15 @@ test("LIST-02 / D-67-02 :: update (no --force) offers ALL installed-family statu
     const items = await getArgumentCompletions("update ", f.resolver);
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
-    assert.deepEqual([...labels].sort(), ["p-finst@mp", "p-fupg@mp", "p-inst@mp", "p-upg@mp"]);
+    // WR-02: `force-installed-upgradable` is part of the installed inventory, so
+    // the no-`--force` set still spans the full family (byte-identical contract).
+    assert.deepEqual([...labels].sort(), [
+      "p-finst-upg@mp",
+      "p-finst@mp",
+      "p-fupg@mp",
+      "p-inst@mp",
+      "p-upg@mp",
+    ]);
   } finally {
     await f.cleanup();
   }

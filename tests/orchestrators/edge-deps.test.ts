@@ -446,6 +446,32 @@ const FINER_STATUS_FIXTURE: readonly FixturePlugin[] = [
     disabled: true,
     installed: { version: "1.0.0" },
   },
+  // WR-02: degraded record (force-installed) with a newer candidate that
+  // resolves CLEAN -> force-installed-upgradable (a supported upgrade promotes
+  // it back to installed; offerable under `update --force`).
+  {
+    name: "forced-upg",
+    manifestVersion: "2.0.0",
+    installed: { version: "1.0.0", compatUnsupported: ["lspServers"] },
+  },
+  // WR-02: degraded record with a newer candidate that ALSO resolves
+  // unsupported -> force-installed-upgradable (force re-applied at the newer
+  // version; still offerable under `update --force`).
+  {
+    name: "forced-upg-unsup",
+    manifestVersion: "2.0.0",
+    declaresUnsupported: true,
+    installed: { version: "1.0.0", compatUnsupported: ["lspServers"] },
+  },
+  // WR-02: degraded record whose newer candidate has no on-disk tree
+  // (structural unavailable) -> stays plain force-installed (nothing
+  // installable to move to; NOT offered under `update --force`).
+  {
+    name: "forced-upg-gone",
+    manifestVersion: "2.0.0",
+    onDisk: false,
+    installed: { version: "1.0.0", compatUnsupported: ["lspServers"] },
+  },
   // Not-installed, clean on-disk -> available.
   { name: "avail", manifestVersion: "3.0.0" },
   // Not-installed, declares unsupported -> unsupported (distinct from unavailable).
@@ -470,6 +496,13 @@ test("loadManifestForMarketplace: bucketizer emits the finer derived statuses vi
     // frozen-pin collapse), never `upgradable` -- so it cannot leak into the
     // `update --force` candidate set while `list` renders it `(disabled)`.
     assert.equal(statusByName.get("disabled-drift"), "installed");
+    // WR-02: a force-installed record with a newer, non-unavailable candidate
+    // derives the distinct `force-installed-upgradable` (offered under
+    // `update --force`); a structural-unavailable candidate keeps it plain
+    // `force-installed`.
+    assert.equal(statusByName.get("forced-upg"), "force-installed-upgradable");
+    assert.equal(statusByName.get("forced-upg-unsup"), "force-installed-upgradable");
+    assert.equal(statusByName.get("forced-upg-gone"), "force-installed");
     assert.equal(statusByName.get("avail"), "available");
     // The old `installable ? available : unavailable` collapse is gone:
     // `unsupported` is now emitted DISTINCTLY from structural `unavailable`.

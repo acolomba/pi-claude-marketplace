@@ -388,8 +388,12 @@ async function installedRowMessage(
   // D-66-01 / FSTAT-01 / FSTAT-03: force-installed reads the persisted
   // install-time `compatibility.unsupported` (no new flag, no migration). The
   // dropped-component detail uses the shared `narrowUnsupportedKinds` render
-  // helper (D-64-02) for cross-surface marker parity.
-  if (status === "force-installed") {
+  // helper (D-64-02) for cross-surface marker parity. WR-02: a
+  // `force-installed-upgradable` record (a force-installed row that also carries
+  // a meaningful upgrade candidate) renders IDENTICALLY to `(force-installed)`
+  // here -- the upgrade affordance is a completion-only distinction (offered
+  // under `update --force`); the list row reflects the CURRENT degraded state.
+  if (status === "force-installed" || status === "force-installed-upgradable") {
     return {
       status: "force-installed",
       name: pluginName,

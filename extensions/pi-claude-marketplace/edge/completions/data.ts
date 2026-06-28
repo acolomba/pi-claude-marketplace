@@ -52,6 +52,7 @@ const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new 
   "installed",
   "upgradable",
   "force-installed",
+  "force-installed-upgradable",
   "force-upgradable",
 ]);
 
@@ -74,11 +75,17 @@ const FORCE_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
 /**
  * D-67-02 / LIST-02: with `--force`, update offers the force-UPGRADE
  * candidates -- installed plugins whose newest candidate would re-resolve to a
- * meaningful change (`upgradable`) or a force-upgrade (`force-upgradable`).
- * Plain `installed` / `force-installed` are excluded (nothing to upgrade).
+ * meaningful change. This spans `upgradable` (clean -> newer clean),
+ * `force-upgradable` (clean -> newer degrades), and -- WR-02 / FSTAT-03 --
+ * `force-installed-upgradable` (a force-installed row with a newer,
+ * NON-unavailable candidate, where `update --force` either promotes it back to
+ * `installed` or re-applies the force-install). Plain `installed` /
+ * `force-installed` are excluded (no newer candidate -- nothing to upgrade; a
+ * same-version force re-apply is `reinstall`'s job, RINST-01).
  */
 const FORCE_UPDATE_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "upgradable",
+  "force-installed-upgradable",
   "force-upgradable",
 ]);
 
@@ -388,8 +395,8 @@ async function getInstalledPluginToMarketplacesMap(
   // flattened every state-present plugin to `installed`; admitting them all
   // keeps the no-`--force` completion BYTE-IDENTICAL to today. With `--force`
   // (only ever reached via `update`), narrow to the force-upgrade candidates
-  // (`upgradable` + `force-upgradable`) -- plain `installed` / `force-installed`
-  // have nothing to upgrade.
+  // (`upgradable` + `force-upgradable` + `force-installed-upgradable`) -- plain
+  // `installed` / `force-installed` have no newer candidate to upgrade to.
   const allowed = force ? FORCE_UPDATE_STATUSES : INSTALLED_INVENTORY_STATUSES;
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =

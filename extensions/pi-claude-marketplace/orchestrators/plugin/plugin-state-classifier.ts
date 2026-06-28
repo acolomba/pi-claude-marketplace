@@ -29,11 +29,21 @@ import type { ResolvedPlugin } from "../../domain/resolver.ts";
  * keeping it in the no-`--force` inventory set while excluding it from the
  * `update --force` (upgradable/force-upgradable) candidates, at parity with the
  * frozen `(disabled)` row `list` shows.
+ *
+ * `force-installed-upgradable` is a force-installed record (already degraded)
+ * that ALSO carries a meaningful upgrade candidate -- a newer, NON-unavailable
+ * version. `list` renders it as `(force-installed)`, identical to a plain
+ * `force-installed` row, but -- unlike one -- it is a real `update --force`
+ * target: a supported candidate promotes it back to `installed` (FSTAT-03), an
+ * unsupported candidate re-applies the force-install. It is NEVER
+ * `force-upgradable` (FSTAT-04 -- that state is reserved for a currently-CLEAN
+ * row whose candidate would newly degrade it).
  */
 export type InstalledClassification =
   | "installed"
   | "upgradable"
   | "force-installed"
+  | "force-installed-upgradable"
   | "force-upgradable";
 
 /**
@@ -83,10 +93,17 @@ export type UpgradeCandidate =
 /**
  * Classify a persisted install record into the finer installed-inventory state.
  *
- * Precedence (A4): `force-installed` (install-time degrade) wins over any
- * upgrade signal -- a degraded record is never mis-split into `force-upgradable`
- * or `upgradable`. Only a CLEAN record consults its upgrade candidate:
- * a candidate that resolves `unsupported` would NEWLY degrade the plugin
+ * Precedence (A4): `force-installed` (install-time degrade) wins over the clean
+ * upgrade signals -- a degraded record is never mis-split into `force-upgradable`
+ * or `upgradable`. A degraded record WITH a newer, NON-unavailable candidate is
+ * `force-installed-upgradable` (WR-02): the force-update is meaningful (promote
+ * back to `installed` if the candidate is supported, or re-apply force if still
+ * unsupported), so it must be offerable under `update --force`. A degraded record
+ * with NO newer candidate -- or one whose candidate resolves structural
+ * `unavailable` (nothing installable to move to) -- stays plain `force-installed`.
+ *
+ * Only a CLEAN record reaches the `force-upgradable`/`upgradable` split: a
+ * candidate that resolves `unsupported` would NEWLY degrade the plugin
  * (`force-upgradable`); any other candidate (clean, structural-`unavailable`, or
  * an un-probeable `undefined`) stays plain `upgradable`.
  */
@@ -107,8 +124,19 @@ export function classifyInstalledRecord(
     return "installed";
   }
 
-  // FSTAT-01 / D-66-01 / A4: install-time degrade wins over upgradability.
+  // FSTAT-01 / D-66-01 / A4: install-time degrade wins over the clean upgrade
+  // split. WR-02 / FSTAT-03: a degraded record WITH a newer, NON-unavailable
+  // candidate is a real `update --force` target (promote to `installed` if the
+  // candidate is supported, re-apply force if still unsupported), so it derives
+  // the distinct `force-installed-upgradable` (offered under `update --force`,
+  // rendered `(force-installed)`, never `force-upgradable`). `undefined` (CR-01
+  // probe failure) is treated as NON-unavailable -- it cannot assert the
+  // candidate is gone -- matching the clean record's degrade-to-`upgradable`.
   if (record.compatibility.unsupported.length > 0) {
+    if (candidate.upgradable && candidate.resolved?.state !== "unavailable") {
+      return "force-installed-upgradable";
+    }
+
     return "force-installed";
   }
 
