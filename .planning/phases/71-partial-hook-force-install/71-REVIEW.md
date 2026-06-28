@@ -150,7 +150,19 @@ consumers need it. It does add schema weight and a spread that will never fire.
 
 ---
 
-### IN-02: No-force install failure renders `{unsupported source}`, not `{unsupported hooks}` (known, deferred)
+### IN-02: No-force install failure renders `{unsupported source}`, not `{unsupported hooks}` (RESOLVED -- commit 46bc0757)
+
+**Status:** RESOLVED in commit 46bc0757 (`fix(71): IN-02 render typed
+unsupported reason on no-force failure row`). The resolver threads its typed
+`unsupported[]` list onto the thrown `PluginShapeError` (`unsupportedKinds`),
+and `narrowResolverReasons` narrows it through the shared
+`narrowUnsupportedKinds` helper FIRST, deduped against the note-derived
+markers. The no-force failure row, `list`, and `info` now agree:
+hooks-unsupported reads `{unsupported hooks}`, lsp reads `{lsp}`. Genuinely
+`unavailable` (structural) rows carry an empty typed list and keep their
+notes-sourced reasons unchanged. Regression coverage added to
+`tests/orchestrators/plugin/install.test.ts` and
+`tests/orchestrators/plugin/cross-surface-reason-parity.test.ts`.
 
 **File:** `extensions/pi-claude-marketplace/domain/resolver.ts` / install orchestrator
 

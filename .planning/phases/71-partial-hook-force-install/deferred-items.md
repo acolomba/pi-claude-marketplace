@@ -2,6 +2,16 @@
 
 ## Cross-surface reason-token parity on the no-force install FAILURE row
 
+**RESOLVED** in commit 46bc0757 (`fix(71): IN-02 render typed unsupported
+reason on no-force failure row`). The resolver now threads its typed
+`unsupported[]` list onto the thrown `PluginShapeError` (`unsupportedKinds`),
+and the install failure-row composer narrows it through the shared
+`narrowUnsupportedKinds` helper FIRST, deduped against the note-derived
+markers. A hooks-only unsupported plugin now renders `{unsupported hooks}`
+(an lsp one `{lsp}`), byte-identical across the failure row, `list`, and
+`info`. The `unavailable` (structural) arm carries an empty typed list, so
+its notes-sourced reasons are unchanged. No new REASONS member required.
+
 **Discovered during:** 71-04 Task 2 (PHOOK-04 / SEV-02 coverage).
 
 **Observation:** A partial-hook plugin installed WITHOUT `--force` blocks with
