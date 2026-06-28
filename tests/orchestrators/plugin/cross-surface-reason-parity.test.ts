@@ -160,6 +160,35 @@ test("PHOOK-05 / D-71-04 a partial-hook + lsp plugin renders both markers identi
   assert.deepEqual(listOut, infoOut, "list and info multi-kind markers must be byte-identical");
 });
 
+// IN-02 / RSTATE-05: the no-force install/update FAILURE row sources its
+// per-kind markers from the resolver's typed `unsupported[]` list (threaded onto
+// the thrown PluginShapeError), narrowed through the SAME `narrowUnsupportedKinds`
+// helper `list`/`info` use. A `hooks`-only unsupported plugin carries NO
+// `contains hooks` note, so the typed list is its ONLY reason source -- without
+// it the row degraded to the generic `{unsupported source}` fallback (the IN-02
+// defect). These cases pin that `narrowResolverReasons` reads the typed list and
+// renders byte-identically to list/info.
+test("IN-02 / RSTATE-05: narrowResolverReasons reads the typed `hooks` kind (no notes) -> `unsupported hooks`, matching list/info", () => {
+  const listInfoOut = narrowUnsupportedKinds(["hooks"]);
+  // install failure row: empty `notes`, typed `unsupported[]` = ["hooks"].
+  const installOut = __test_narrowResolverReasons([], ["hooks"]);
+  assert.deepEqual(listInfoOut, ["unsupported hooks"]);
+  assert.deepEqual(installOut, ["unsupported hooks"]);
+  assert.deepEqual(listInfoOut, installOut, "list/info and install must agree for the hooks kind");
+});
+
+test("IN-02 / RSTATE-05: narrowResolverReasons dedups the typed `lspServers` kind against its `contains` note -> single `lsp`", () => {
+  const installOut = __test_narrowResolverReasons(["contains lspServers"], ["lspServers"]);
+  assert.deepEqual(installOut, ["lsp"]);
+});
+
+test("IN-02 / RSTATE-05: empty notes + empty typed kinds keeps the permissive `unsupported source` fallback", () => {
+  // The genuinely-unavailable (structural) path throws with an empty typed list,
+  // so the fallback still fires only when BOTH reason sources are empty.
+  assert.deepEqual([...__test_narrowResolverReasons([])], ["unsupported source"]);
+  assert.deepEqual([...__test_narrowResolverReasons([], [])], ["unsupported source"]);
+});
+
 // RSTATE-05 / D-64-07 regression guard: a STRUCTURAL hooks defect (malformed /
 // unparseable hooks.json) routes to the `unavailable` arm and its reason stays
 // on the `notes` path via `narrowResolverNotes`; the per-kind list helper is

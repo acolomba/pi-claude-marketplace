@@ -1175,6 +1175,12 @@ export function requireInstallable(
     // a structural defect force cannot help -- carry the distinction the
     // render row uses to condition the `--force` hint.
     forceable: r.state === "unsupported",
+    // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
+    // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
+    // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
+    // `unsupported` arm carries the field; `unavailable` keeps an empty list so
+    // its structural reasons stay sourced from `notes` (unchanged).
+    unsupportedKinds: r.state === "unsupported" ? r.unsupported : [],
   });
 }
 

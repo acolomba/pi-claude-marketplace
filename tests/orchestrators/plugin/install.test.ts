@@ -2204,6 +2204,76 @@ test("classifyEntityShapeError returns undefined for non-PluginShapeError input 
   assert.equal(row, undefined);
 });
 
+test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {unsupported hooks} on the failure row", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  // A partial-hook `unsupported` plugin carries NO `contains hooks` note (hooks
+  // is not an UNSUPPORTED_COMPONENT_KINDS member), so `reasons` is empty; the
+  // typed `hooks` kind on `unsupportedKinds` is the SOLE reason source. The
+  // failure row must read `{unsupported hooks}`, byte-identical to list/info,
+  // NOT the generic `{unsupported source}` fallback.
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: [],
+    forceable: true,
+    unsupportedKinds: ["hooks"],
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "unavailable");
+  assert.deepEqual(row.reasons, ["unsupported hooks"]);
+});
+
+test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failure row", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["contains lspServers"],
+    forceable: true,
+    unsupportedKinds: ["lspServers"],
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "unavailable");
+  // Deduped: the typed kind and the `contains lspServers` note both map to
+  // `lsp`, so the row renders a single marker.
+  assert.deepEqual(row.reasons, ["lsp"]);
+});
+
+test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their notes-derived reason, unchanged", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+  // The `unavailable` arm carries NO typed `unsupported[]` (empty list on the
+  // throw), so a structural defect keeps its `notes`-sourced reason. This pins
+  // that the IN-02 typed-kind path never perturbs a structural failure row.
+  const err = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "p",
+    reasons: ["source dir does not exist"],
+    forceable: false,
+    unsupportedKinds: [],
+  });
+  const row = __test_classifyEntityShapeError(err, {
+    plugin: "p",
+    marketplace: "mp",
+    scope: "project",
+  });
+  assert.ok(row);
+  assert.equal(row.status, "unavailable");
+  assert.deepEqual(row.reasons, ["unsupported source"]);
+});
+
 test("SEV-02 / D-69-03: classifyEntityShapeError threads forceable from the thrown shape", async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
@@ -2444,13 +2514,17 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       assert.equal(noForce.notifications.length, 1);
       assert.equal(noForce.notifications[0]?.severity, "error");
       // SEV-02 contract: the force-degradable verdict renders the `(unavailable)`
-      // row at error severity and carries the `--force` hint trailer. (The
-      // no-force failure surface composes its reason from the structural `notes`
-      // path, so the `hooks` kind -- which rides the typed `unsupported[]` list,
-      // not `notes` -- renders the generic `{unsupported source}` here; the
-      // typed `{unsupported hooks}` marker rides the success / list / info
-      // surfaces via `narrowUnsupportedKinds`.)
-      assert.match(noForce.notifications[0]?.message ?? "", /hook-plugin \(unavailable\) \{/);
+      // row at error severity and carries the `--force` hint trailer. IN-02 /
+      // RSTATE-05: the no-force failure row now renders the typed
+      // `{unsupported hooks}` marker -- byte-identical to the success / list /
+      // info surfaces -- because the resolver threads its typed `unsupported[]`
+      // list onto the thrown `PluginShapeError` and the composer narrows it via
+      // the shared `narrowUnsupportedKinds` path (the `hooks` kind carries no
+      // structural `notes` entry, so the typed list is its only reason source).
+      assert.match(
+        noForce.notifications[0]?.message ?? "",
+        /hook-plugin \(unavailable\) \{unsupported hooks\}/,
+      );
       assert.match(
         noForce.notifications[0]?.message ?? "",
         /Re-run with --force to install the supported components\./,

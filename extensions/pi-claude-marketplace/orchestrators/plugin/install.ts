@@ -1698,7 +1698,7 @@ function classifyEntityShapeError(
         // `.kind === "not-installable" | "no-longer-installable"`
         // guarantees `.reasons` is present -- no `?? []` fallback
         // needed.
-        reasons: narrowResolverReasons(err.shape.reasons),
+        reasons: narrowResolverReasons(err.shape.reasons, err.shape.unsupportedKinds),
         // SEV-02 / D-69-03: thread the three-way distinction the resolver
         // stamped on the throw so the composer conditions the `--force` hint.
         forceable: err.shape.forceable,
@@ -1785,10 +1785,22 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;
  * the preferred path is typed errno-bearing Errors dispatched at the
  * orchestrator catch site via `.code`.
+ *
+ * IN-02 / RSTATE-05: `unsupportedKinds` is the resolver's typed `unsupported[]`
+ * component-kind list (carried on the thrown `PluginShapeError`). It is narrowed
+ * FIRST, through the shared `narrowUnsupportedKinds` helper, so the failure row
+ * renders the same per-kind markers `list`/`info` do. This is the ONLY reason
+ * source for a `hooks`-only unsupported plugin (which carries no `contains hooks`
+ * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
+ * plugin yields one `lsp`, sourced from both the note and the typed kind). The
+ * permissive `unsupported source` fallback fires only when BOTH sources are empty.
  */
 // eslint-disable-next-line sonarjs/cognitive-complexity
-function narrowResolverReasons(reasons: readonly string[]): readonly ContentReason[] {
-  const out: ContentReason[] = [];
+function narrowResolverReasons(
+  reasons: readonly string[],
+  unsupportedKinds: readonly string[] = [],
+): readonly ContentReason[] {
+  const out: ContentReason[] = [...narrowUnsupportedKinds(unsupportedKinds)];
   for (const reason of reasons) {
     if (reason === "") {
       continue;

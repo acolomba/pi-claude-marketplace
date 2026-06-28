@@ -414,6 +414,14 @@ export type PluginShapeErrorShape =
       // cannot help). The render row points the user at `--force` iff this
       // is `true`. Does NOT affect `buildPluginShapeMessage` bytes.
       readonly forceable: boolean;
+      // IN-02 / RSTATE-05: the resolver's typed `unsupported[]` component-kind
+      // list, carried alongside the free-form `reasons`. A force-degradable
+      // `unsupported` plugin whose only signal is `hooks` carries NO `contains`
+      // note (hooks is not an UNSUPPORTED_COMPONENT_KINDS member), so the
+      // failure-row composer reads this typed list -- not `reasons` -- to render
+      // the same per-kind marker `list`/`info` emit via `narrowUnsupportedKinds`.
+      // Empty for `unavailable` (structural) throws. Does NOT affect message bytes.
+      readonly unsupportedKinds?: readonly string[];
     }
   | {
       readonly kind: "no-longer-installable";
@@ -421,6 +429,8 @@ export type PluginShapeErrorShape =
       readonly reasons: readonly string[];
       // SEV-02 / D-69-03: see `not-installable` -- same three-way force hint.
       readonly forceable: boolean;
+      // IN-02 / RSTATE-05: see `not-installable` -- typed unsupported-kind list.
+      readonly unsupportedKinds?: readonly string[];
     };
 
 export type PluginShapeErrorKind = PluginShapeErrorShape["kind"];
