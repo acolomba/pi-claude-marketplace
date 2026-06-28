@@ -28,8 +28,17 @@ import type { ResolvedPlugin } from "../../../extensions/pi-claude-marketplace/d
 // Fixtures
 // ──────────────────────────────────────────────────────────────────────────
 
-function record(unsupported: readonly string[] = []): InstalledRecordLike {
-  return { compatibility: { unsupported } };
+function record(
+  unsupported: readonly string[] = [],
+  opts: { enabled?: boolean; installable?: boolean } = {},
+): InstalledRecordLike {
+  return {
+    enabled: opts.enabled ?? true,
+    compatibility: {
+      installable: opts.installable ?? unsupported.length === 0,
+      unsupported,
+    },
+  };
 }
 
 function installable(name = "p"): ResolvedPlugin {
@@ -112,6 +121,24 @@ test("A4: force-installed wins over upgradable when a degraded record ALSO has a
       resolved: installable(),
     }),
     "force-installed",
+  );
+});
+
+test("WR-01 / ENBL-02: a recorded-but-disabled record is `installed`, never split into upgradable/force-upgradable", () => {
+  // The `installable: true` + `enabled: false` marker (isRecordedButDisabled)
+  // is version-frozen: even with a newer candidate that would resolve clean OR
+  // unsupported, the classifier short-circuits to `installed` so the disabled
+  // record never leaks into the `update --force` candidate set. `list` renders
+  // the distinct `(disabled)` token via its own pre-classifier guard.
+  const disabled = record([], { enabled: false, installable: true });
+  assert.equal(classifyInstalledRecord(disabled, { upgradable: false }), "installed");
+  assert.equal(
+    classifyInstalledRecord(disabled, { upgradable: true, resolved: installable() }),
+    "installed",
+  );
+  assert.equal(
+    classifyInstalledRecord(disabled, { upgradable: true, resolved: unsupportedResolved() }),
+    "installed",
   );
 });
 

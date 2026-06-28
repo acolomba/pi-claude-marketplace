@@ -21,8 +21,14 @@ import type { ResolvedPlugin } from "../../domain/resolver.ts";
 /**
  * The finer installed-inventory states the classifier derives from a persisted
  * install record (plus the no-network resolution of its upgrade candidate).
- * `disabled` is NOT produced here -- it stays handled by the caller's
- * `isRecordedButDisabled` guard ahead of the call (D-54-01 / ENBL-04).
+ *
+ * `disabled` is NOT produced here: `list` renders the distinct `(disabled)`
+ * inventory token via its own `isRecordedButDisabled` guard ahead of the call
+ * (D-54-01 / ENBL-04). The completion path has no `disabled` token, so the
+ * classifier collapses a recorded-but-disabled record to `installed` (WR-01) --
+ * keeping it in the no-`--force` inventory set while excluding it from the
+ * `update --force` (upgradable/force-upgradable) candidates, at parity with the
+ * frozen `(disabled)` row `list` shows.
  */
 export type InstalledClassification =
   | "installed"
@@ -39,12 +45,23 @@ export type ManifestEntryClassification = "available" | "unsupported" | "unavail
 /**
  * The minimal structural view of a persisted install record the classifier
  * reads. Both `ExtensionState[...]plugins[...]` and the bucketizer's state
- * record satisfy this by construction. `compatibility.unsupported` is the
- * install-time degrade signal (FSTAT-01 / D-66-01): non-empty means one or
- * more components were dropped, so the row derives `force-installed`.
+ * record satisfy this by construction.
+ *
+ * - `compatibility.unsupported` is the install-time degrade signal (FSTAT-01 /
+ *   D-66-01): non-empty means one or more components were dropped, so the row
+ *   derives `force-installed`.
+ * - `enabled` + `compatibility.installable` are the recorded-but-disabled axes
+ *   (ENBL-02 -- canonical `reconcile/plan.ts::isRecordedButDisabled`): an
+ *   `installable: true` record with `enabled: false` was explicitly disabled and
+ *   is version-frozen, so the classifier short-circuits it to `installed`
+ *   (WR-01) -- it must never split into `upgradable`/`force-upgradable`.
  */
 export interface InstalledRecordLike {
-  readonly compatibility: { readonly unsupported: readonly string[] };
+  readonly enabled: boolean;
+  readonly compatibility: {
+    readonly installable: boolean;
+    readonly unsupported: readonly string[];
+  };
 }
 
 /**
@@ -77,6 +94,19 @@ export function classifyInstalledRecord(
   record: InstalledRecordLike,
   candidate: UpgradeCandidate,
 ): InstalledClassification {
+  // WR-01 / ENBL-02 / D-54-01: a recorded-but-disabled record (the canonical
+  // `installable: true` + `enabled: false` marker `reconcile/plan.ts::
+  // isRecordedButDisabled` reads) is version-frozen while disabled, so it must
+  // never split into `upgradable`/`force-upgradable`. `list` renders it as the
+  // distinct `(disabled)` token via its own pre-classifier guard; the completion
+  // path has no `disabled` token, so collapse to `installed` here -- it stays in
+  // the no-`--force` inventory set but is excluded from `update --force`, at
+  // parity with the frozen `(disabled)` row. Checked BEFORE the force-installed
+  // branch so a disabled record is never mislabeled `force-installed`.
+  if (record.compatibility.installable && !record.enabled) {
+    return "installed";
+  }
+
   // FSTAT-01 / D-66-01 / A4: install-time degrade wins over upgradability.
   if (record.compatibility.unsupported.length > 0) {
     return "force-installed";

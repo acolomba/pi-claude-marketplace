@@ -21,6 +21,7 @@ import {
   classifyInstalledRecord,
   classifyManifestEntry,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts";
+import { isRecordedButDisabled } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -321,6 +322,11 @@ interface FixturePlugin {
   readonly onDisk?: boolean;
   /** Installed record (state-present). `compatUnsupported` non-empty -> force-installed. */
   readonly installed?: { readonly version: string; readonly compatUnsupported?: readonly string[] };
+  /**
+   * Mark the installed record recorded-but-disabled (ENBL-02): `enabled: false`
+   * with `installable: true`. The canonical `isRecordedButDisabled` marker.
+   */
+  readonly disabled?: boolean;
 }
 
 /**
@@ -386,7 +392,7 @@ async function layoutFixtureMarketplace(
         mcpServers: [],
         hooks: [],
       },
-      enabled: true,
+      enabled: p.disabled !== true,
       installedAt: "2026-06-17T00:00:00Z",
       updatedAt: "2026-06-17T00:00:00Z",
     };
@@ -429,6 +435,17 @@ const FINER_STATUS_FIXTURE: readonly FixturePlugin[] = [
     manifestVersion: "1.0.0",
     installed: { version: "1.0.0", compatUnsupported: ["lspServers"] },
   },
+  // WR-01: recorded-but-disabled (enabled:false, installable:true) record whose
+  // manifest version drifted (1.0.0 installed vs 2.0.0 manifest). The version
+  // pin is frozen while disabled (ENBL-02), so the shared classifier collapses
+  // it to `installed` -- NOT `upgradable` -- so it never leaks into the
+  // `update --force` candidate set while `list` renders it `(disabled)`.
+  {
+    name: "disabled-drift",
+    manifestVersion: "2.0.0",
+    disabled: true,
+    installed: { version: "1.0.0" },
+  },
   // Not-installed, clean on-disk -> available.
   { name: "avail", manifestVersion: "3.0.0" },
   // Not-installed, declares unsupported -> unsupported (distinct from unavailable).
@@ -449,6 +466,10 @@ test("loadManifestForMarketplace: bucketizer emits the finer derived statuses vi
     assert.equal(statusByName.get("upg"), "upgradable");
     assert.equal(statusByName.get("fup"), "force-upgradable");
     assert.equal(statusByName.get("forced"), "force-installed");
+    // WR-01: a disabled + version-drifted record classifies `installed` (the
+    // frozen-pin collapse), never `upgradable` -- so it cannot leak into the
+    // `update --force` candidate set while `list` renders it `(disabled)`.
+    assert.equal(statusByName.get("disabled-drift"), "installed");
     assert.equal(statusByName.get("avail"), "available");
     // The old `installable ? available : unavailable` collapse is gone:
     // `unsupported` is now emitted DISTINCTLY from structural `unavailable`.
@@ -466,10 +487,13 @@ test("D-67-02 / T-67-08 parity: the bucketizer rows equal the shared classifier 
     const actualByName = new Map(actual.map((r) => [r.name, r.status]));
 
     // Independently re-derive the expected status for every manifest entry by
-    // calling the SAME shared classifier `list` consumes against the same
-    // no-network `resolveStrict` inputs. Any divergence between the completion
-    // bucketizer and the shared classifier (== a divergence from `list`) fails
-    // here -- the drift guard D-67-02 / T-67-08 requires.
+    // calling the SAME shared classifier against the same no-network
+    // `resolveStrict` inputs. This proves the bucketizer holds NO provider-local
+    // reclassification -- it emits exactly what the shared classifier derives.
+    // (List parity for the disabled-record case -- where `list` applies
+    // `isRecordedButDisabled` ahead of the classifier -- is proven separately in
+    // the WR-01 test below, since `bucketizer == classifier` alone does not
+    // exercise that pre-classifier guard.)
     const state = await loadState(locationsFor("project", cwd).extensionRoot);
     const mp = state.marketplaces["parity-mp"];
     assert.ok(mp);
@@ -516,5 +540,33 @@ test("D-67-02 / T-67-08 parity: the bucketizer rows equal the shared classifier 
       [...expectedByName.entries()].sort(),
       "bucketizer must emit exactly what the shared classifier derives",
     );
+  });
+});
+
+test("WR-01: a disabled + version-drifted plugin -- `list` renders `(disabled)`, the bucketizer classifies `installed` (not offered under update --force)", async () => {
+  await withHermeticProjectScope(async ({ cwd }) => {
+    await layoutFixtureMarketplace(cwd, "wr01-mp", FINER_STATUS_FIXTURE);
+
+    // The completion bucketizer routes the disabled guard through the shared
+    // classifier, so a disabled record (version pin frozen, ENBL-02) lands in
+    // `installed` -- NEVER `upgradable`/`force-upgradable`, the only statuses the
+    // `update --force` candidate set (FORCE_UPDATE_STATUSES) admits.
+    const resolver = makeLocationsResolver(cwd);
+    const rows = await resolver.loadManifestForMarketplace("project", "wr01-mp");
+    const disabledRow = rows.find((r) => r.name === "disabled-drift");
+    assert.ok(disabledRow);
+    assert.equal(disabledRow.status, "installed");
+    assert.notEqual(disabledRow.status, "upgradable");
+    assert.notEqual(disabledRow.status, "force-upgradable");
+
+    // The SAME record satisfies the pre-classifier guard `list` applies, so
+    // `list` renders the distinct `(disabled)` token. The two surfaces agree:
+    // disabled on `list`, frozen-`installed` in completion -- never a candidate
+    // for `update --force`. This is the parity `bucketizer == classifier` alone
+    // cannot prove (the reviewer's WR-01 finding).
+    const state = await loadState(locationsFor("project", cwd).extensionRoot);
+    const record = state.marketplaces["wr01-mp"]?.plugins["disabled-drift"];
+    assert.ok(record);
+    assert.equal(isRecordedButDisabled(record), true);
   });
 });
