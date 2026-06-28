@@ -645,6 +645,15 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
         ...(outcome.declaresAgents ? (["agents"] as const) : []),
         ...(outcome.declaresMcp ? (["mcp"] as const) : []),
       ];
+      // SEV-01 / WR-01: the missing-soft-dep-companion `warning` stamp is
+      // deliberately NOT applied on this autoupdate cascade surface. SEV-01
+      // targets the interactive install / manual-update success arms, where the
+      // user is present to act on an absent companion. Autoupdate is a
+      // background operation; the actionable signal it must surface is a NEW
+      // degradation, already covered by the `newlyDegraded` warning below. A
+      // companion-absence warning here would be background noise. Any change to
+      // this asymmetry is owned by the final severity/output reconcile, not by
+      // the producer-stamp wiring.
       // SEV-03 / D-69-01 / FSTAT-07: the autoupdate cascade now TAKES the force
       // path (`updateSinglePlugin` sets `force: true`), so a candidate that
       // re-resolved `unsupported` degraded in place. Report `(force-installed)`
