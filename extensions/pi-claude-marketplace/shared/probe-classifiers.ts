@@ -132,24 +132,29 @@ export function narrowResolverNotes(
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
- * Mapping (HOOK-04 / D-58-02): `lspServers` is the sole non-generic kind and
- * renders as `lsp`; every other unsupported component kind renders the generic
- * `unsupported source` marker. First-wins dedup matches `narrowResolverNotes`
- * semantics (WR-01) so a multi-kind list never emits a duplicate token.
+ * Mapping (HOOK-04 / D-58-02 / D-71-04): `lspServers` renders as `lsp`; the
+ * `hooks` kind (a parseable hooks.json with at least one unsupportable
+ * event / matcher group / handler dropped) renders the single aggregate
+ * `unsupported hooks` marker -- an EXISTING REASONS member, so the closed
+ * set stays 32 (no new literal). Every other unsupported component kind
+ * renders the generic `unsupported source` marker. First-wins dedup matches
+ * `narrowResolverNotes` semantics (WR-01) so a multi-kind list never emits a
+ * duplicate token (one `{unsupported hooks}` regardless of how many handlers
+ * dropped).
  *
- * Structural reasons (malformed/unsupported `hooks.json`, NFR-10 source escape)
- * are NOT in this family: a structural defect routes to the `unavailable` arm
+ * Structural reasons (malformed `hooks.json`, NFR-10 source escape) are NOT
+ * in this family: a structural defect routes to the `unavailable` arm
  * (D-64-07) and its reason stays on the `notes`/structural path via
  * `narrowResolverNotes`. This helper covers only the force-degradable per-kind
  * markers on the `unsupported` arm.
  */
 export function narrowUnsupportedKinds(
   unsupported: readonly string[],
-): readonly ("lsp" | "unsupported source")[] {
-  const out: ("lsp" | "unsupported source")[] = [];
+): readonly ("lsp" | "unsupported hooks" | "unsupported source")[] {
+  const out: ("lsp" | "unsupported hooks" | "unsupported source")[] = [];
   const seen = new Set<string>();
   for (const kind of unsupported) {
-    const reason = kind === "lspServers" ? "lsp" : "unsupported source";
+    const reason = kindToReason(kind);
     if (!seen.has(reason)) {
       out.push(reason);
       seen.add(reason);
@@ -157,4 +162,16 @@ export function narrowUnsupportedKinds(
   }
 
   return out;
+}
+
+function kindToReason(kind: string): "lsp" | "unsupported hooks" | "unsupported source" {
+  if (kind === "lspServers") {
+    return "lsp";
+  }
+
+  if (kind === "hooks") {
+    return "unsupported hooks";
+  }
+
+  return "unsupported source";
 }

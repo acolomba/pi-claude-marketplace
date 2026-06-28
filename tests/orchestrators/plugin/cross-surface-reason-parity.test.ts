@@ -130,24 +130,58 @@ test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-iden
   );
 });
 
-// RSTATE-05 / D-64-07 regression guard: structural reasons stay on the `notes`
-// path and are NOT re-routed through the per-kind list helper. The `unsupported`
-// arm's `unsupported[]` list never carries a `hooks` kind (a malformed/unsupported
-// hooks.json is structural and routes to the `unavailable` arm), so the list
-// helper can never emit the structural `unsupported hooks` marker -- that marker
-// is reachable only via `narrowResolverNotes` over the structural notes.
-test("RSTATE-05 / D-64-07 structural hooks reason stays on the notes path, never the per-kind list helper", () => {
+// PHOOK-05 / D-71-04 / RSTATE-05: a parseable hooks.json with at least one
+// unsupportable event / matcher group / handler resolves `unsupported` (force-
+// degradable) and carries the typed `hooks` kind on the `unsupported[]` list.
+// `list` and `info` both derive the row brace from that typed list via the SAME
+// shared `narrowUnsupportedKinds` helper, so the single aggregate `{unsupported
+// hooks}` marker renders byte-identically across both read-only surfaces
+// regardless of how many handlers dropped (first-wins dedup).
+test("PHOOK-05 / D-71-04 partial-hook `{unsupported hooks}` aggregate is byte-identical across list and info", () => {
+  const listOut = narrowUnsupportedKinds(["hooks"]);
+  const infoOut = narrowUnsupportedKinds(["hooks"]);
+  assert.deepEqual(
+    listOut,
+    ["unsupported hooks"],
+    `list surface emitted ${JSON.stringify(listOut)}`,
+  );
+  assert.deepEqual(
+    infoOut,
+    ["unsupported hooks"],
+    `info surface emitted ${JSON.stringify(infoOut)}`,
+  );
+  assert.deepEqual(listOut, infoOut, "list and info partial-hook markers must be byte-identical");
+});
+
+test("PHOOK-05 / D-71-04 a partial-hook + lsp plugin renders both markers identically across list and info", () => {
+  const listOut = narrowUnsupportedKinds(["hooks", "lspServers"]);
+  const infoOut = narrowUnsupportedKinds(["hooks", "lspServers"]);
+  assert.deepEqual(listOut, ["unsupported hooks", "lsp"]);
+  assert.deepEqual(listOut, infoOut, "list and info multi-kind markers must be byte-identical");
+});
+
+// RSTATE-05 / D-64-07 regression guard: a STRUCTURAL hooks defect (malformed /
+// unparseable hooks.json) routes to the `unavailable` arm and its reason stays
+// on the `notes` path via `narrowResolverNotes`; the per-kind list helper is
+// NEVER fed a structural defect. The per-kind helper DOES emit `unsupported
+// hooks` for the force-degradable `hooks` kind (PHOOK-05 above), so the two
+// `unsupported hooks` sources are distinct: structural via notes, degradable via
+// the typed kind list. This guard pins that a structural input never sneaks onto
+// the per-kind path -- a `hooks`-free kind list yields only `lsp` / `unsupported
+// source`, never the marker by structural means.
+test("RSTATE-05 / D-64-07 structural hooks reason stays on the notes path, distinct from the degradable per-kind marker", () => {
   const structuralNote =
     "malformed hooks.json: hooks.json failed schema validation: /description: expected array";
   // notes path (unavailable arm) classifies the structural reason ...
   assert.deepEqual(narrowResolverNotes([structuralNote]), ["unsupported hooks"]);
   assert.deepEqual(__test_narrowResolverReasons([structuralNote]), ["unsupported hooks"]);
-  // ... but the per-kind list helper (unsupported arm) cannot produce it: even a
-  // mixed kind list only yields the closed `lsp` / `unsupported source` family.
+  // ... while a kind list WITHOUT `hooks` only yields the closed `lsp` /
+  // `unsupported source` family (the degradable `hooks` kind is the sole path to
+  // the per-kind `unsupported hooks` marker, exercised above).
   const listOut = narrowUnsupportedKinds(["lspServers", "monitors"]);
   assert.deepEqual(listOut, ["lsp", "unsupported source"]);
   assert.ok(
-    !listOut.includes("unsupported hooks" as never),
-    "per-kind list helper must never emit the structural `unsupported hooks` marker",
+    !listOut.includes("unsupported hooks"),
+    "a structural-only kind list must never emit the `unsupported hooks` marker",
   );
 });

@@ -12,7 +12,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { narrowResolverNotes } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import {
+  narrowResolverNotes,
+  narrowUnsupportedKinds,
+} from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 test("HOOK-04: narrowResolverNotes emits `unsupported hooks` for `hooks.json is not valid JSON:` prefix", () => {
   // parseHooksConfig emits this prefix when JSON.parse fails.
@@ -106,4 +109,19 @@ test("WR-01: a second `malformed hooks.json:` note does NOT leak an unrelated `u
     "malformed hooks.json: unsupported hooks: (a) regex matcher in PreToolUse: Edit.*",
   ]);
   assert.deepEqual([...reasons], ["unsupported hooks"]);
+});
+
+test("PHOOK-05 / D-71-04: narrowUnsupportedKinds maps the `hooks` kind to the existing `unsupported hooks` member", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["hooks"])], ["unsupported hooks"]);
+});
+
+test("PHOOK-05 / RSTATE-05: a mixed `hooks` + `lspServers` list dedups to two distinct tokens", () => {
+  assert.deepEqual(
+    [...narrowUnsupportedKinds(["hooks", "lspServers"])],
+    ["unsupported hooks", "lsp"],
+  );
+});
+
+test("PHOOK-05 / D-71-04: repeated `hooks` kinds collapse to a single aggregate `unsupported hooks` marker", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["hooks", "hooks"])], ["unsupported hooks"]);
 });
