@@ -314,3 +314,196 @@ test("BFILL-02 / D-68-03: a gate-open load with zero force-installed plugins sti
     assert.equal(ctx.ui.notify.mock.calls.length, 0);
   });
 });
+
+function pluginRecordOf(state: ExtensionState, marketplace: string, plugin: string): PluginRecord {
+  const record = state.marketplaces[marketplace]?.plugins[plugin];
+  assert.ok(record !== undefined, `expected ${plugin}@${marketplace} recorded`);
+  return record;
+}
+
+test("BFILL-01: a full promotion re-materializes the plugin to (installed) with an empty unsupported set", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // On-disk plugin advertises skills + commands (both supported now). The
+    // record was stored when only `skills` was supported (force-installed with
+    // `commands` recorded unsupported), so the supported set grew.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      },
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    // Full promotion: re-resolved installable, empty unsupported.
+    assert.equal(record.compatibility.installable, true);
+    assert.deepEqual(record.compatibility.unsupported, []);
+    assert.ok(record.compatibility.supported.includes("commands"));
+    // SAME recorded version -- a promotion is not an upgrade (D-68-02).
+    assert.equal(record.version, "1.0.0");
+
+    // RECON-04: exactly one cascade carrying one (installed) row for hello.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(body.includes("hello") && body.includes("(installed)"), `got:\n${body}`);
+    assert.ok(!body.includes("/reload to pick up changes"), `RECON-04 trailer leaked:\n${body}`);
+  });
+});
+
+test("BFILL-01: a partial re-materialize stays force-installed and records the real unsupported set", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // On-disk plugin advertises skills + an lspServers convention file (an
+    // unsupported kind). The record was stored with an EMPTY supported set, so
+    // the re-resolved `skills` makes the supported set grow -- but lspServers
+    // keeps it `unsupported`, so it stays force-installed.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, lsp: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: [],
+          unsupported: ["lspServers", "skills"],
+        }),
+      },
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    // Partial: still force-installed with the REAL non-empty unsupported set.
+    assert.equal(record.compatibility.installable, false);
+    assert.deepEqual(record.compatibility.unsupported, ["lspServers"]);
+    assert.ok(record.compatibility.supported.includes("skills"));
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(body.includes("hello") && body.includes("(force-installed)"), `got:\n${body}`);
+  });
+});
+
+test("BFILL-01: a force-installed plugin whose supported set did not grow is skipped (no row, no churn)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // On-disk plugin advertises only skills; the record already lists skills as
+    // its supported set, so the boundary did not move for THIS plugin.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["themes"],
+        }),
+      },
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // No re-materialize: the record is untouched (still force-installed,
+    // themes still recorded unsupported, empty resources).
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.equal(record.compatibility.installable, false);
+    assert.deepEqual(record.compatibility.unsupported, ["themes"]);
+    assert.deepEqual(record.resources.skills, []);
+    // Zero promotion rows -> silent. The gate still stamped (gate-open).
+    assert.equal(ctx.ui.notify.mock.calls.length, 0);
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  });
+});
+
+test("RECON-04: a load that backfills one plugin AND installs another emits exactly one cascade with both rows", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is recorded force-installed with a grown supported set (backfill);
+    // world is declared in config but NOT recorded -> the apply pass installs
+    // it. Both rows must fold into the single cascade.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true }, world: { skill: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      },
+      configPluginKeys: ["hello@mp", "world@mp"],
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // world was installed by the apply pass.
+    const state = await loadState(extensionRoot);
+    assert.ok(state.marketplaces["mp"]?.plugins["world"] !== undefined);
+    // hello was promoted.
+    assert.equal(pluginRecordOf(state, "mp", "hello").compatibility.installable, true);
+
+    // RECON-04: exactly one notify carrying BOTH rows.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(body.includes("hello"), `expected hello row:\n${body}`);
+    assert.ok(body.includes("world"), `expected world row:\n${body}`);
+  });
+});
+
+test("NFR-5: the backfill scan and re-materialize perform no network call", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      },
+    });
+    const ctx = makeCtx();
+    let cloneCalls = 0;
+    const failingGitOps = {
+      clone: (): Promise<never> => {
+        cloneCalls += 1;
+        return Promise.reject(new Error("network access is forbidden on the load path (NFR-5)"));
+      },
+    } as unknown as NonNullable<Parameters<typeof applyReconcile>[0]["gitOps"]>;
+
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+      gitOps: failingGitOps,
+    });
+
+    // The backfill path is cache-only resolveStrict + reinstall -- it never
+    // touches gitOps.
+    assert.equal(cloneCalls, 0);
+    // And it still promoted the plugin offline.
+    assert.equal(
+      pluginRecordOf(await loadState(extensionRoot), "mp", "hello").compatibility.installable,
+      true,
+    );
+  });
+});

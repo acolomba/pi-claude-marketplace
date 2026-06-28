@@ -35,6 +35,7 @@ import test, { mock } from "node:test";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -366,11 +367,19 @@ test("CR-01 (config key != manifest name): first apply records the MANIFEST name
 
 test("RECON-05 (back-to-back no-op): two consecutive applyReconcile calls against unchanged config + state -> config bytes unchanged, ZERO notify on the second call (silent empty-steady-state)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    const { configPath, statePath } = await setupProjectScope(cwd, {
-      schemaVersion: 1,
-      marketplaces: {},
-      plugins: {},
-    });
+    const { configPath, statePath } = await setupProjectScope(
+      cwd,
+      {
+        schemaVersion: 1,
+        marketplaces: {},
+        plugins: {},
+      },
+      // BFILL-02: seed the CURRENT extension-version stamp so the backfill gate
+      // is closed -- this is the true steady state (already reconciled by this
+      // version). An absent stamp would legitimately open the gate and stamp
+      // once on the first load, which is the gate-close write, not WR-05 churn.
+      { schemaVersion: 2, marketplaces: {}, lastReconciledExtensionVersion: EXTENSION_VERSION },
+    );
 
     // Capture the baseline.
     const beforeConfig = await readFile(configPath, "utf8");

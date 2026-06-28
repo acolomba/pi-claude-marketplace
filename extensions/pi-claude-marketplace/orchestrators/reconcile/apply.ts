@@ -43,6 +43,9 @@
 import path from "node:path";
 
 import { rebuildRoutingTables } from "../../bridges/hooks/index.ts";
+import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { resolveStrict } from "../../domain/resolver.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
@@ -57,6 +60,7 @@ import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { setPluginEnabled } from "../plugin/enable-disable.ts";
 import { installPlugin } from "../plugin/install.ts";
+import { reinstallPlugin } from "../plugin/reinstall.ts";
 import { uninstallPlugin } from "../plugin/uninstall.ts";
 
 import { buildReconcileAppliedCascade } from "./notify.ts";
@@ -810,6 +814,7 @@ async function applyBackfillForScope(
   opts: ApplyReconcileOptions,
   scope: Scope,
   readResult: ScopeReadResult,
+  outcomes: PerEntryOutcome[],
 ): Promise<void> {
   const state = readResult.state;
   if (state === undefined) {
@@ -824,8 +829,9 @@ async function applyBackfillForScope(
     return;
   }
 
-  // Gate OPEN. The per-plugin scan + re-materialize is wired in a follow-up
-  // step; with no force-installed plugins it yields nothing.
+  // Gate OPEN. Scan every force-installed plugin and re-materialize the ones
+  // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
+  await scanForceInstalledBackfills(opts, scope, state, outcomes);
 
   // D-68-03 (stamp-on-gate-open): close the gate even when nothing was
   // backfilled. SPLIT-02 / NFR-1: route through withStateGuard -> saveState,
@@ -835,6 +841,134 @@ async function applyBackfillForScope(
   await withStateGuard(loc, (fresh) => {
     fresh.lastReconciledExtensionVersion = EXTENSION_VERSION;
   });
+}
+
+/**
+ * BFILL-01 / D-68-03: scan the read-pass snapshot's force-installed plugins
+ * (compatibility.installable === false; clean/installed plugins have nothing to
+ * backfill) and re-materialize each whose supported set grew. Iterates the
+ * snapshot; reinstallPlugin self-locks and re-reads fresh state per plugin
+ * (CR-01).
+ */
+async function scanForceInstalledBackfills(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  state: ExtensionState,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  for (const [marketplace, mp] of Object.entries(state.marketplaces)) {
+    for (const [plugin, record] of Object.entries(mp.plugins)) {
+      // D-68-03: scan ONLY force-installed plugins.
+      if (record.compatibility.installable) {
+        continue;
+      }
+
+      await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
+    }
+  }
+}
+
+type StateMarketplaceRecord = ExtensionState["marketplaces"][string];
+type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
+
+/**
+ * BFILL-01: re-resolve one force-installed plugin offline (NFR-5) and, if its
+ * supported set strictly grew (the boundary moved for THIS plugin -- D-68-03,
+ * avoiding needless mtime churn), re-materialize it in place via the
+ * force-capable reinstall primitive at the SAME recorded version (no upgrade --
+ * D-68-02). The promotion folds into the single cascade as a
+ * `PluginBackfilledOutcome` whose `installable` boolean drives the
+ * (installed)-vs-(force-installed) projection.
+ */
+async function maybeBackfillPlugin(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  marketplace: string,
+  mp: StateMarketplaceRecord,
+  plugin: string,
+  record: StatePluginRecord,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  const resolved = await resolveRecordedPluginOffline(mp, plugin);
+  if (resolved === undefined || resolved.state === "unavailable") {
+    // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
+    // a resolve failure is the truthful "skip" default, never a crash).
+    return;
+  }
+
+  if (!supportedSetGrew(record.compatibility.supported, resolved.supported)) {
+    return;
+  }
+
+  // CR-01: render: "none" self-locking re-materialize. The recorded version is
+  // preserved by reinstall (D-68-02).
+  const outcome = await reinstallPlugin({
+    ctx: opts.ctx,
+    pi: opts.pi,
+    scope,
+    cwd: opts.cwd,
+    marketplace,
+    plugin,
+    render: "none",
+  });
+
+  if (outcome.partition !== "reinstalled") {
+    // A concurrent uninstall (skipped) or a re-materialize failure renders no
+    // promotion row -- the reconcile did not actually promote this plugin.
+    return;
+  }
+
+  outcomes.push({
+    kind: "plugin-backfilled",
+    scope,
+    marketplace,
+    plugin,
+    ...(outcome.version !== "" && { version: outcome.version }),
+    dependencies: dependenciesFromInstall(outcome),
+    // The re-resolved installability selects the row: a fully promoted plugin
+    // (unsupported now empty) -> `installable` -> (installed); a partial
+    // re-materialize stays `unsupported` -> (force-installed).
+    installable: resolved.state === "installable",
+  });
+}
+
+/**
+ * BFILL-01 / NFR-5: re-resolve a recorded plugin from its cached marketplace
+ * manifest with NO network (resolveStrict). Returns the resolved plugin, or
+ * `undefined` when the manifest is unreadable / the entry is missing or invalid
+ * -- in which case the plugin is simply not backfilled this load.
+ */
+async function resolveRecordedPluginOffline(
+  mp: StateMarketplaceRecord,
+  plugin: string,
+): Promise<import("../../domain/resolver.ts").ResolvedPlugin | undefined> {
+  try {
+    const manifest = await loadMarketplaceManifest(mp.manifestPath);
+    const entry = manifest.plugins.find((p) => p.name === plugin);
+    if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
+      return undefined;
+    }
+
+    return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * D-68-03: true iff `resolved` is a STRICT superset of `recorded` (the supported
+ * set grew for this plugin). A strictly larger set that still contains every
+ * recorded kind means the supported-kind boundary moved in this plugin's favour;
+ * an equal-or-smaller set is skipped so backfill never re-materializes (and
+ * churns state.json) for a plugin whose boundary did not move.
+ */
+function supportedSetGrew(recorded: readonly string[], resolved: readonly string[]): boolean {
+  if (resolved.length <= recorded.length) {
+    return false;
+  }
+
+  const resolvedSet = new Set(resolved);
+  return recorded.every((kind) => resolvedSet.has(kind));
 }
 
 /**
@@ -905,7 +1039,7 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
     // promotions ride the same single cascade (RECON-04). Gated on the version
     // stamp; stamps the running version whenever the gate opened.
-    await applyBackfillForScope(opts, scope, readResult);
+    await applyBackfillForScope(opts, scope, readResult, outcomes);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
     // this scope's routing tables so the next Pi event fires against a
