@@ -853,7 +853,7 @@ function detectOrphanRewake(parsed: HooksConfig): boolean {
  *   - The KEPT handlers (the filtered non-empty subset) still materialize:
  *     push "hooks" to `partial.supported` + record `hooksConfigPath`.
  *
- * SURF-05 / D-63-08 / T-71-04: on the materialized-subset branch only, writes
+ * SURF-05 / D-63-08: on the materialized-subset branch only, writes
  * `partial.orphanRewake` from `detectOrphanRewake` over the FILTERED subset,
  * so a dropped handler's orphan-rewake field cannot raise a false marker.
  */
@@ -890,7 +890,7 @@ async function applyHooksConfig(
       partial.hooksConfigPath = hooksResult.relativePath;
     }
 
-    // SURF-05 / D-63-08 / T-71-04: `detectOrphanRewake` runs over the FILTERED
+    // SURF-05 / D-63-08: `detectOrphanRewake` runs over the FILTERED
     // subset only. Only SET the flag when true (mirror hooksConfigPath
     // discipline). Absent-vs-false is intentional: a config with no orphan
     // handler leaves `partial.orphanRewake` undefined, the constructor spread

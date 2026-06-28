@@ -2297,11 +2297,11 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
 // source `hooks.json`: the dropped event / matcher group is absent from the
 // written file, while the supported group is present. The bridge stages
 // `parseHooksConfig.value` (the pure filtered subset), so the staged file can
-// never carry a dropped handler (T-71-07 containment invariant). No source
+// never carry a dropped handler (PHOOK-04 containment invariant). No source
 // change to install.ts / stage.ts -- the subset is inherited from the partition.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PHOOK-04 / T-71-07: install --force stages a strict-subset hooks.json -- dropped Stop event absent, supported PostToolUse group present", async () => {
+test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Stop event absent, supported PostToolUse group present", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
     try {
