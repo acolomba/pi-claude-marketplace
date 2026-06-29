@@ -17,7 +17,7 @@
 - Done **v1.11 Notification Summary-Line Grammar** -- Phase 50 (shipped 2026-06-08)
 - Done **v1.12 Marketplace and Plugin Config Files** -- Phases 51-56 (shipped 2026-06-11)
 - Done **v1.13 Claude Hook Bridge** -- Phases 57-63 (shipped 2026-06-19)
-- Active **force-install** -- Phases 64-70 (in progress)
+- Active **force-install** -- Phases 64-72 (in progress)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -186,7 +186,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 </details>
 
-### Active force-install (Phases 64-70)
+### Active force-install (Phases 64-72)
 
 **Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD ÃÂ§11.
 
@@ -199,6 +199,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
 - [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
 - [x] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable` (completed 2026-06-28)
+- [ ] **Phase 72: Unsupported Render Token** - not-installed force-installable plugins render a distinct `(unsupported)` status + `⊖` glyph in `list`/`info` instead of collapsing into `(unavailable)`/`⊘`; structural-unavailable plugins keep `(unavailable)`
 
 #### Phase 64: Resolver Three-Way State
 
@@ -471,6 +472,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
+| 72. Unsupported Render Token                                        | force-install | 0/0 | Pending     | -          |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -502,3 +504,18 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 **Wave 4** *(blocked on Wave 3: byte forms depend on the reconciled renderer)*
 
 - [x] 71-04-PLAN.md -- Byte-exact reconcile + PHOOK-04: audit each `{unsupported hooks}` catalog fixture (Q3, structural stays `unavailable`); reconcile catalog/notify/docs; strict-subset `install --force` staging assertion + no-force-blocks + SEV-01/02 severity coverage (PHOOK-04, PHOOK-05)
+
+#### Phase 72: Unsupported Render Token
+
+**Goal**: A not-installed plugin that resolves `unsupported` (force-installable: has unsupported components but no structural defect) renders a distinct `(unsupported)` status token with a dedicated `⊖` glyph in `list` and `info`, instead of collapsing into the `(unavailable)` / `⊘` render shared with structurally-unavailable plugins. This closes the D-64-01 deferral, which folded both resolver states into one render token "this phase" and left distinct glyphs/states to "a later phase". Structurally-`unavailable` plugins keep `(unavailable)` / `⊘`. The `--unsupported` / `--unavailable` list filters already partition on the pre-collapse resolver bucket and stay unaffected.
+**Depends on**: Phase 64 (three-way resolver state), Phase 66 (`force-installed` glyph/token render precedent + closed-set `STATUS_TOKENS` tripwire), Phase 71 (`{unsupported hooks}` reason on the not-installed `unsupported` row)
+**Requirements**: USTAT-01, USTAT-02
+**Success Criteria** (what must be TRUE):
+
+  1. A not-installed plugin resolving `unsupported` renders `⊖ <name> (unsupported) {unsupported hooks|lsp|...}` in `list`; a structurally-`unavailable` plugin still renders `⊘ <name> (unavailable) {...}`.
+  2. The same distinction holds in `info` (the not-installed row), byte-for-byte consistent with `list`.
+  3. `STATUS_TOKENS` gains an `"unsupported"` member (closed-set tripwire bumped) and the render layer maps it to the new `ICON_UNSUPPORTED = "⊖"`; `⊘` stays reserved for `unavailable` / blocked / failed rows.
+  4. Per-kind `{unsupported hooks}` / `{lsp}` reason braces (via `narrowUnsupportedKinds`) continue to render on the new `(unsupported)` row; the `--unsupported` and `--unavailable` filters keep partitioning correctly.
+  5. `npm run check` is green: the OUT-08 closed-set invariant test and any `list`/`info` catalog/golden fixtures asserting `(unavailable)` for not-installed hooks/LSP-bearing plugins are updated to the new token.
+
+**Plans**: TBD (planner)

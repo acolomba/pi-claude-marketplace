@@ -82,6 +82,13 @@ Extends `--force` component degradation to hooks: a parseable-but-unsupportable 
 - [x] **PHOOK-04**: `install --force` materializes the supported components plus a FILTERED `hooks.json` containing only the supportable handlers; dropped handlers are never staged by the hooks bridge. Without `--force`, the plugin still blocks.
 - [x] **PHOOK-05**: Dropped hook handlers render as `{unsupported hooks}` reasons on the force-installed row at the correct desired-state severity, identical across `list` and `info`; the byte-exact catalog/style-guide and notify tests reflect the partial-hook rows.
 
+### Unsupported Render Token (USTAT)
+
+Closes the D-64-01 deferral: the render layer collapsed both resolver `unsupported` (force-installable) and `unavailable` (structural) into one `(unavailable)` / `⊘` row, deferring distinct glyphs/states to "a later phase". DOC-02 already documented an `unsupported` token the display never emitted. This gives the not-installed force-installable row its own token and glyph.
+
+- [ ] **USTAT-01**: A not-installed plugin that resolves `unsupported` (force-installable: unsupported components, no structural defect) renders a distinct `(unsupported)` status token with a dedicated `⊖` glyph in both `list` and `info`, instead of collapsing into the `(unavailable)` / `⊘` render. A structurally-`unavailable` plugin still renders `(unavailable)` / `⊘`. `⊘` stays reserved for `unavailable` / blocked / failed rows.
+- [ ] **USTAT-02**: `STATUS_TOKENS` gains an `"unsupported"` member (closed-set tripwire bumped) and the new row keeps its per-kind `{unsupported hooks}` / `{lsp}` reason braces via `narrowUnsupportedKinds`; the `--unsupported` / `--unavailable` list filters keep partitioning on the pre-collapse resolver bucket; the OUT-08 closed-set invariant test and `list`/`info` catalog/golden fixtures are updated byte-exact.
+
 ## Out of Scope
 
 Explicitly excluded; documented to prevent scope creep.
@@ -140,13 +147,15 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PHOOK-03 | Phase 71 | Complete |
 | PHOOK-04 | Phase 71 | Complete |
 | PHOOK-05 | Phase 71 | Complete |
+| USTAT-01 | Phase 72 | Pending |
+| USTAT-02 | Phase 72 | Pending |
 
 **Coverage:**
 
-- Requirements: 35 total
-- Mapped to phases: 35 (Phases 64-71) ✓
+- Requirements: 37 total
+- Mapped to phases: 37 (Phases 64-72) ✓
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-26*
-*Last updated: 2026-06-28 after Phase 71 added (Partial Hook Force-Install; PHOOK-01..05); Phases 64-71 mapped, 35/35 coverage*
+*Last updated: 2026-06-28 after Phase 72 added (Unsupported Render Token; USTAT-01..02); Phases 64-72 mapped, 37/37 coverage*
