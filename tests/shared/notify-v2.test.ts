@@ -1364,6 +1364,33 @@ test("PL-4: unavailable row with description emits description line", () => {
   );
 });
 
+test("PL-4 / CR-01: unsupported row with description emits description line", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "unsupported",
+            name: "delta",
+            reasons: ["lsp"],
+            description: "Unsupported plugin that still surfaces its description.",
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.equal(
+    body,
+    "● official [user]\n  ⊖ delta (unsupported) {lsp}\n    Unsupported plugin that still surfaces its description.",
+  );
+});
+
 test("PL-4: disabled inventory row with description emits description line", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
