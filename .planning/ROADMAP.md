@@ -518,4 +518,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. Per-kind `{unsupported hooks}` / `{lsp}` reason braces (via `narrowUnsupportedKinds`) continue to render on the new `(unsupported)` row; the `--unsupported` and `--unavailable` filters keep partitioning correctly.
   5. `npm run check` is green: the OUT-08 closed-set invariant test and any `list`/`info` catalog/golden fixtures asserting `(unavailable)` for not-installed hooks/LSP-bearing plugins are updated to the new token.
 
-**Plans**: TBD (planner)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 72-01-PLAN.md — De-collapse the resolver `unsupported` arm: add `ICON_UNSUPPORTED`/`(unsupported)` token + closed-set tripwire bump, split list.ts + info.ts producers, reconcile byte-exact fixtures and docs
