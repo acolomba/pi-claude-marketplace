@@ -3393,14 +3393,16 @@ function composePluginLinesWith(
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
   // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
-  // / `available` / `unavailable` / `disabled` / `force-installed` /
-  // `force-upgradable`) carry the manifest description; cascade `installed` rows
-  // never set `description`, so the guard keeps them single-line.
+  // / `available` / `unavailable` / `unsupported` / `disabled` /
+  // `force-installed` / `force-upgradable`) carry the manifest description;
+  // cascade `installed` rows never set `description`, so the guard keeps them
+  // single-line.
   if (
     (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
       p.status === "unavailable" ||
+      p.status === "unsupported" ||
       p.status === "disabled" ||
       p.status === "force-installed" ||
       p.status === "force-upgradable") &&
