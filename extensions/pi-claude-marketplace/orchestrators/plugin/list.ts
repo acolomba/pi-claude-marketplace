@@ -85,6 +85,7 @@ import type {
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginUnavailableMessage,
+  PluginUnsupportedMessage,
   PluginUpgradableMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -105,6 +106,7 @@ type PluginRenderStatus =
   | "installed"
   | "upgradable"
   | "available"
+  | "unsupported"
   | "unavailable"
   | "disabled"
   // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
@@ -116,12 +118,14 @@ type PluginRenderStatus =
 
 /**
  * LIST-01 / D-67-01: the internal resolver-state bucket the filter predicate
- * keys on. It is DISTINCT from {@link PluginRenderStatus} because
- * `availableRowMessage` collapses BOTH resolver `unsupported` and `unavailable`
- * into the SAME `(unavailable)` render token (D-64-01). The filter needs the
- * pre-collapse bucket so `--unsupported` (not-installed plugins resolving
- * `unsupported` -- the force-installable candidates) partitions cleanly from
- * `--unavailable` (structural-unavailable only, A2). Installed-inventory rows
+ * keys on. It is retained as a concept DISTINCT from {@link PluginRenderStatus}
+ * even though USTAT-01 / D-64-01 now de-collapses the render tokens (resolver
+ * `unsupported` renders `(unsupported)` / `⊖`, structural `unavailable` renders
+ * `(unavailable)` / `⊘`): the filter keys on this pre-collapse bucket so
+ * `--unsupported` (not-installed plugins resolving `unsupported` -- the
+ * force-installable candidates) partitions cleanly from `--unavailable`
+ * (structural-unavailable only, A2) regardless of the render token.
+ * Installed-inventory rows
  * (installed / upgradable / disabled / force-installed / force-upgradable) are
  * not resolver-classified here -- they carry the `installed-inventory` bucket
  * and the filter keys on their render status instead.
@@ -211,14 +215,15 @@ function shouldShow(
   }
 
   // D-67-01: `--unsupported` selects not-installed plugins that resolve
-  // `unsupported`, keyed on the pre-collapse resolver bucket (the row still
-  // renders the `(unavailable)` token).
+  // `unsupported`, keyed on the pre-collapse resolver bucket (the row renders
+  // the de-collapsed `(unsupported)` / `⊖` token per USTAT-01).
   if (opts.unsupported === true && bucket === "unsupported") {
     return true;
   }
 
   // A2: `--unavailable` narrows to the structural `unavailable` bucket only --
-  // the not-installed `unsupported` rows (same render token) are excluded.
+  // the not-installed `unsupported` rows (now a distinct `(unsupported)` token)
+  // are excluded.
   if (opts.unavailable === true && bucket === "unavailable") {
     return true;
   }
@@ -491,7 +496,7 @@ async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
 ): Promise<{
-  message: PluginAvailableMessage | PluginUnavailableMessage;
+  message: PluginAvailableMessage | PluginUnsupportedMessage | PluginUnavailableMessage;
   bucket: FilterBucket;
 }> {
   // PL-4: description flows from the manifest entry onto the row for both
@@ -509,10 +514,14 @@ async function availableRowMessage(
     // classifier on this surface.
     const bucket = classifyManifestEntry(resolved);
 
-    // D-64-01: only the `installable` arm is `(available)`; both `unsupported`
-    // and `unavailable` render the `(unavailable)` row this phase (distinct
-    // glyphs/states are a later phase). The render collapse stays a caller
-    // concern -- the classifier keeps the buckets distinct.
+    // USTAT-01 / D-64-01: the render now de-collapses by resolver STATE. The
+    // `installable` arm is `(available)`; the `unsupported` arm emits the
+    // distinct `(unsupported)` / `⊖` row (force-installable: components would be
+    // dropped under `--force`); the structural `unavailable` arm keeps
+    // `(unavailable)` / `⊘`. The split follows `resolved.state`, NEVER the
+    // reason brace (the same `{unsupported hooks}` brace can appear on both
+    // arms). The filter `bucket` is unchanged -- `classifyManifestEntry` keeps
+    // `--unsupported` / `--unavailable` partitioning on the pre-collapse class.
     //
     // WR-03: discriminate the three-way union with an exhaustive
     // `switch (resolved.state)` + `assertNever` so a future fourth
@@ -530,29 +539,34 @@ async function availableRowMessage(
           bucket,
         };
       case "unsupported":
-      case "unavailable": {
         // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the
         // typed `unsupported[]` component-kind list via the shared render
-        // helper; the structural `unavailable` arm's reasons stay on the
-        // `notes` path.
-        const reasons =
-          resolved.state === "unsupported"
-            ? narrowUnsupportedKinds(resolved.unsupported)
-            : sharedNarrowResolverNotes(resolved.notes);
-
+        // helper.
+        return {
+          message: {
+            status: "unsupported",
+            name: manifestEntry.name,
+            reasons: narrowUnsupportedKinds(resolved.unsupported),
+            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+            ...descriptionField,
+          },
+          // D-67-01: `unsupported` -> the force-installable candidate bucket.
+          bucket,
+        };
+      case "unavailable":
+        // The structural `unavailable` arm's reasons stay on the `notes` path.
         return {
           message: {
             status: "unavailable",
             name: manifestEntry.name,
-            reasons,
+            reasons: sharedNarrowResolverNotes(resolved.notes),
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
           },
-          // D-67-01: `unsupported` -> the force-installable candidate bucket;
-          // the structural `unavailable` resolver arm -> the structural bucket.
+          // D-67-01: the structural `unavailable` resolver arm -> the
+          // structural bucket.
           bucket,
         };
-      }
 
       default:
         return assertNever(resolved);

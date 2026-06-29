@@ -9,6 +9,7 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 - `●` -- filled circle. On plugin rows: plugin is installed or pending a positive transition (covers `(installed)`, `(updated)`, `(reinstalled)`, `(upgradable)`, and the pending-tense `(will install)` / `(will enable)`). On marketplace headers: success / OK / state-changing outcome (`(added)`, `(removed)`, `(updated)`, and the list-surface label form, including the bare pending-preview header a marketplace add/remove renders).
 - `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers.
 - `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`. On marketplace headers: `(failed)` only.
+- `⊖` -- circled minus. On plugin rows: a not-installed, force-installable plugin whose components would be dropped under `--force` -- `(unsupported)` only. Stays in the circled-operator family with `⊘` but reads "diminished / components dropped" rather than "blocked". Not used on marketplace headers.
 - `◌` -- dotted circle. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row. Not used on marketplace headers.
 
 ### Always-marketplace-header form
@@ -34,12 +35,12 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` / `◌` per the effective-state rule above.
+- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◌` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
-- `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available` and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
+- `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `unsupported`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
-- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 5 reason-bearing variants (`unavailable | upgradable | skipped | failed | manual recovery`) and only when the composed reasons list is non-empty.
+- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 6 reason-bearing variants (`unsupported | unavailable | upgradable | skipped | failed | manual recovery`) and only when the composed reasons list is non-empty.
 
 ### Conditional plugin-row scope bracket
 
@@ -133,7 +134,8 @@ ______________________________________________________________________
 | `(reinstalled)`     | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                    |
 | `(uninstalled)`     | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                     |
 | `(available)`       | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                                                                                                                    |
-| `(unavailable)`     | ⊘    | Plugin row -- install / reinstall / import / list surfaces when a manifest declares unsupported Claude features; carries `{unsupported hooks}` / `{lsp}` etc.                                                                                                                       |
+| `(unsupported)`     | ⊖    | Plugin row -- list / info surfaces for a not-installed, force-installable plugin (resolver `unsupported`: lsp / hooks / unsupported source); carries `{unsupported hooks}` / `{lsp}` / `{unsupported source}`. Would degrade-install under `--force` (USTAT-01 / D-64-01).          |
+| `(unavailable)`     | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source); carries the structural reasons.                                                                                       |
 | `(upgradable)`      | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                  |
 | `(failed)`          | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                               |
 | `(skipped)`         | ⊘    | Plugin row -- per-plugin skip inside cascades; carries `reasons` (e.g. `{up-to-date}`, `{already installed}`).                                                                                                                                                                      |
@@ -160,7 +162,7 @@ ______________________________________________________________________
 
 Plugin-list surface. Marketplaces render as list-surface headers (`mp.status === undefined`); `mp.details.autoupdate` drives the `<autoupdate>` marker; plugin rows indent two spaces beneath.
 
-The optional filter flags (`--installed`, `--available`, `--unavailable`, `--unsupported`) select buckets by union; with no flag every bucket renders. They partition cleanly (LIST-01 / D-67-01): `--installed` spans the full installed inventory -- `installed`, `upgradable`, `disabled`, and the derived `force-installed` / `force-upgradable` rows; `--available` selects not-installed installable plugins; `--unsupported` selects not-installed plugins that resolve `unsupported` (the force-installable candidates); `--unavailable` selects only structurally-unavailable plugins. Because the list surface collapses both resolver `unsupported` and structural `unavailable` into the same `(unavailable)` row token, the `--unsupported` / `--unavailable` split keys on the internal resolver-state bucket, not the rendered token -- no rendered byte form changes, and there is no `--upgradable` filter.
+The optional filter flags (`--installed`, `--available`, `--unavailable`, `--unsupported`) select buckets by union; with no flag every bucket renders. They partition cleanly (LIST-01 / D-67-01): `--installed` spans the full installed inventory -- `installed`, `upgradable`, `disabled`, and the derived `force-installed` / `force-upgradable` rows; `--available` selects not-installed installable plugins; `--unsupported` selects not-installed plugins that resolve `unsupported` (the force-installable candidates); `--unavailable` selects only structurally-unavailable plugins. The list surface de-collapses the render token by resolver state (USTAT-01 / D-64-01): a not-installed plugin resolving `unsupported` renders `(unsupported)` / `⊖`, while a structurally-unavailable plugin renders `(unavailable)` / `⊘`. The `--unsupported` / `--unavailable` filters key on the internal resolver-state bucket, which is independent of the render token (so the partition is unaffected by the token split). There is no `--upgradable` filter.
 
 ### Empty -- no marketplaces configured
 
@@ -181,14 +183,15 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
   ● alpha v1.0.0 (installed)
   ● beta v1.0.0 (upgradable) {stale clone}
   ⊘ delta (unavailable) {unsupported hooks}
-  ⊘ epsilon (unavailable) {unsupported hooks, lsp}
+  ⊖ epsilon (unsupported) {unsupported hooks, lsp}
   ○ gamma v2.0.0 (available)
 ```
 
 Notes:
 
 - Marketplace header is SUB-BRANCH B (list-surface with `details.autoupdate: true`); `<autoupdate>` follows the scope bracket.
-- Plugin rows carry no scope bracket -- the variants either have no `scope` field (`available` / `unavailable`) or `p.scope === mp.scope`.
+- Plugin rows carry no scope bracket -- the variants either have no `scope` field (`available` / `unsupported` / `unavailable`) or `p.scope === mp.scope`.
+- `epsilon` resolves `unsupported` (carries `lsp`), so it renders the de-collapsed `(unsupported)` / `⊖` token; `delta` models a structurally-malformed plugin and keeps `(unavailable)` / `⊘` (USTAT-01 / D-64-01).
 - Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability but `notify()` does not sort internally.
 
 ### Same plugin installed in BOTH scopes -- per-scope marketplace headers, per-scope plugin rows

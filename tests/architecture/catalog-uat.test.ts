@@ -244,27 +244,26 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Q3 AUDIT (D-71-03 / PHOOK-03): classify every `{unsupported hooks}` fixture
-// below by what now resolves `unavailable`. After the partial-hook partition,
-// a parseable-but-unsupportable `hooks.json` (non-bucket-A event / unsupported
-// matcher group) is FORCE-DEGRADABLE -- it resolves `unsupported` and renders
-// `force-installed` (see `force-installed-inventory-hooks` + the install
-// `failure-unsupported-features` row). Only a STRUCTURALLY malformed
-// `hooks.json` (invalid JSON / `type:"command"` missing `command`) stays
-// `unavailable`, emitting `{unsupported hooks}` via the structural
-// `malformed hooks.json:` notes path (`narrowResolverNotes`).
-//
-// Every `{unsupported hooks}` row in this map renders on a surface whose token
-// is `(unavailable)` for BOTH resolver buckets, so NONE of them flip:
-//   - list (`single-mp-mixed`, `description-lines`) + reinstall-cascade
-//     (`plugin-became-unavailable`) + import-cascade rows collapse resolver
-//     `unsupported` into the `(unavailable)` token (D-67-01), so the byte form
-//     is identical regardless of the split;
+// USTAT-01 / D-64-01: the list/info render now de-collapses by resolver STATE.
+// A not-installed plugin that resolves `unsupported` (force-installable: lsp,
+// unsupported component kind, or a parseable-but-unsupportable `hooks.json`)
+// renders the distinct `(unsupported)` / `⊖` token; a STRUCTURALLY malformed
+// plugin (invalid JSON / `type:"command"` missing `command`) stays
+// `(unavailable)` / `⊘`. Classify each fixture below by its modeled resolver
+// state, NOT by its reason brace -- the same `{unsupported hooks}` brace can
+// appear on both arms (the structural arm via `narrowResolverNotes`, the
+// force-degradable arm via `narrowUnsupportedKinds`):
+//   - list `single-mp-mixed`: `epsilon` carries `lsp` -> unambiguously resolver
+//     `unsupported` -> modeled as `status: "unsupported"` -> `⊖ (unsupported)`;
+//     `delta` models the structural malformed-`hooks.json` arm -> stays
+//     `status: "unavailable"` -> `⊘ (unavailable)`. The catalog thus documents
+//     BOTH de-collapsed byte forms on the list surface.
 //   - info `unavailable-single-scope` carries `componentsResolved: false` --
-//     i.e. the malformed-structural case (a force-degradable plugin resolves,
-//     setting `componentsResolved: true`, and renders `force-installed`).
-// They are therefore classified as the structural / list-collapsed arm and
-// keep their `(unavailable) {unsupported hooks}` bytes (PHOOK-03 / Pitfall 4).
+//     the malformed-structural case (a force-degradable plugin resolves,
+//     setting `componentsResolved: true`, and renders `force-installed`), so it
+//     keeps its `(unavailable) {unsupported hooks}` bytes.
+// The filter buckets (`--unsupported` / `--unavailable`) are unchanged; only the
+// rendered token splits.
 // ---------------------------------------------------------------------------
 const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
@@ -301,7 +300,7 @@ const FIXTURES: FixtureMap = {
               },
               { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
               {
-                status: "unavailable",
+                status: "unsupported",
                 name: "epsilon",
                 reasons: ["unsupported hooks", "lsp"],
               },

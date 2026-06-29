@@ -4,6 +4,7 @@ import {
   ICON_FORCE_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
+  ICON_UNSUPPORTED,
   composeReasons,
   installedLikeRow,
   joinTokens,
@@ -17,6 +18,7 @@ import {
   type PluginForceUpgradableMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
+  type PluginUnsupportedMessage,
   type PluginUpgradableMessage,
 } from "../../shared/notify.ts";
 
@@ -46,6 +48,9 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 export const LIST_STATUSES = [
   "installed",
   "available",
+  // USTAT-01 / D-64-01: not-installed, force-installable row -- distinct from
+  // structural `unavailable` (renders `(unsupported)` / `⊖`).
+  "unsupported",
   "unavailable",
   "upgradable",
   "disabled",
@@ -63,6 +68,7 @@ export type ListStatus = (typeof LIST_STATUSES)[number];
 export type ListMsg =
   | PluginInstalledMessage
   | PluginAvailableMessage
+  | PluginUnsupportedMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
   | PluginDisabledMessage
@@ -110,6 +116,19 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
       "(unavailable)",
+      composeReasons(p.reasons, false, false, probe),
+    ]),
+  // USTAT-01 / D-64-01: not-installed, force-installable row -- the dedicated
+  // ICON_UNSUPPORTED (`⊖`) glyph + `(unsupported)` token. Body cloned from the
+  // `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out and reasons
+  // composition); only the glyph and token differ.
+  unsupported: (p, probe, mpScope) =>
+    joinTokens([
+      ICON_UNSUPPORTED,
+      p.name,
+      renderScopeBracket(undefined, mpScope),
+      renderVersion(p.version),
+      "(unsupported)",
       composeReasons(p.reasons, false, false, probe),
     ]),
   upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),

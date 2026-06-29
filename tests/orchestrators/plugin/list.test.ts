@@ -433,17 +433,16 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
 // LIST-01 / D-67-01: the four list filters partition cleanly.
 //   --unsupported  -> NOT-installed plugins that resolve `unsupported`
 //                     (the force-installable candidates); keyed on the internal
-//                     resolver bucket, NOT the render token (availableRowMessage
-//                     collapses `unsupported` -> `(unavailable)` at render).
+//                     resolver bucket, which is independent of the render token.
 //   --installed    -> installed + force-installed + force-upgradable (all
 //                     installed-inventory render statuses) (A1).
 //   --unavailable  -> structural-unavailable ONLY; it no longer admits the
 //                     not-installed `unsupported` rows (A2 partition).
-// No rendered byte changes: a not-installed unsupported plugin still emits the
-// `(unavailable)` row token under every filter that shows it.
+// USTAT-01 / D-64-01: a not-installed `unsupported` plugin renders the
+// de-collapsed `(unsupported)` / `⊖` token; the filter buckets are unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows under --unsupported (still the `(unavailable)` row token) and is ABSENT under --unavailable and --available", async () => {
+test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows under --unsupported (the `(unsupported)` row token) and is ABSENT under --unavailable and --available", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -467,13 +466,13 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
       installablePluginDirs: ["unsup", "clean"],
     });
 
-    // --unsupported: the unsupported row appears, rendered with the UNCHANGED
-    // `(unavailable)` token (no new render status). clean/gone are excluded.
+    // --unsupported: the unsupported row appears, rendered with the de-collapsed
+    // `(unsupported)` / `⊖` token (USTAT-01). clean/gone are excluded.
     {
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
       const out = notifications[0]!.message;
-      assert.match(out, /⊘ unsup v1\.0\.0 \(unavailable\) \{lsp\}/, out);
+      assert.match(out, /⊖ unsup v1\.0\.0 \(unsupported\) \{lsp\}/, out);
       assert.equal(out.includes("clean"), false, out);
       assert.equal(out.includes("gone"), false, out);
     }
@@ -619,7 +618,7 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
   });
 });
 
-test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row keeps its `(unavailable)` byte form", async () => {
+test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row renders the `(unsupported)` byte form", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -646,9 +645,9 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
     assert.match(out, /● inst v1\.0\.0 \(installed\)/, out);
     assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
     assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
-    // Byte form unchanged: not-installed unsupported still renders the
-    // `(unavailable)` row token (no new render status was introduced).
-    assert.match(out, /⊘ unsup v4\.0\.0 \(unavailable\) \{lsp\}/, out);
+    // USTAT-01 / D-64-01: the not-installed `unsupported` row renders the
+    // de-collapsed `(unsupported)` / `⊖` token, distinct from structural `⊘`.
+    assert.match(out, /⊖ unsup v4\.0\.0 \(unsupported\) \{lsp\}/, out);
   });
 });
 
@@ -1660,7 +1659,7 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
 
 // Gap 2: lspServers unsupported kind via declared field
 // Same path as Gap 1 but for the "lspServers" kind.
-test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspServers' note", async () => {
+test("gap: plugin declaring lspServers field renders as ⊖ (unsupported) with {lsp} note", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1678,7 +1677,7 @@ test("gap: plugin declaring lspServers field buckets as ⊘ with 'contains lspSe
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ lsp-plugin/);
+    assert.match(out, /⊖ lsp-plugin/);
     assert.match(out, /{lsp}/);
   });
 });
@@ -1749,7 +1748,7 @@ test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {u
 });
 
 // Gap 4: lspServers via file convention (.lsp.json)
-test("gap: plugin dir with .lsp.json file buckets as ⊘ via file convention", async () => {
+test("gap: plugin dir with .lsp.json file renders as ⊖ (unsupported) via file convention", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = path.join(userRoot, "marketplaces", "mp1");
@@ -1773,7 +1772,7 @@ test("gap: plugin dir with .lsp.json file buckets as ⊘ via file convention", a
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /⊘ lsp-conv/);
+    assert.match(out, /⊖ lsp-conv/);
     assert.match(out, /{lsp}/);
   });
 });
