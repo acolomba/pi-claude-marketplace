@@ -372,12 +372,31 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 - _Tab-completion: **accepted as-is.** `/claude:plugin update @<TAB>` works as is; our `tests/edge/completions/provider.test.ts` provider is correct and passes. No code change and no upstream issue needed._
 - _Label/color: **resolved by design.** The severity color comes from the severity argument of `ctx.ui.notify`, not from the label. v1.10/v1.11 use the correct severity and keep the `Error:`/`Warning:` label, always followed by a non-empty summary message with the cascade as its own separate block (D-29-01/02, GRAM-01..05). "Color requires dropping the label" is moot -- we never want color without the label. The supersession is recorded in `docs/adr/v2-001-structured-notify.md`; the obsolete UXG-03 spike test was deleted._
 
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 72 | verification_deferred_human | /gsd-verify-work 72 |
+
+Phase 72 (Unsupported Render Token) is implemented, reviewed, and fully
+committed; `npm run check` is GREEN. Verification is `human_needed` for a
+single live-TUI visual check only: after `/reload`, run
+`/claude:plugin list --unsupported` and confirm not-installed
+force-installable plugins render `⊖ <name> (unsupported) {…}` (e.g.
+`⊖ hookify (unsupported) {unsupported hooks}`, `⊖ clangd-lsp (unsupported) {lsp}`)
+while structural failures keep `⊘ (unavailable)`. The force-install
+milestone is intentionally left OPEN (not audited/archived) pending this
+check and a possible Phase 73 (cross-surface unification: install-error
+surface + review finding IN-01).
+
 ## Session Continuity
 
-Last session: 2026-06-28T21:29:06.486Z
-Stopped At: Completed 71-02-PLAN.md
+Last session: 2026-06-29T10:50:00.000Z
+Stopped At: Phase 72 executed + reviewed; verification deferred (human visual check)
 Resume File: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Validate Phase 72 in a live Pi TUI, then `/gsd-verify-work 72` to mark it passed
+- Optionally plan Phase 73 (cross-surface `⊖`/`⊘` unification + IN-01) before closing the milestone
+- When ready to close: re-run /gsd-autonomous (audit -> complete -> cleanup) or /gsd-complete-milestone
