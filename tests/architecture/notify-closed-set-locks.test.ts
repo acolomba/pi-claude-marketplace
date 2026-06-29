@@ -30,16 +30,21 @@ test("OUT-08: REASONS is the closed 32-entry reason set", () => {
   assert.equal(REASONS.length, 32);
 });
 
-test("SNM-02: STATUS_TOKENS is the closed 22-entry token set", () => {
+test("SNM-02: STATUS_TOKENS is the closed 23-entry token set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: +2 for the derived `force-installed` /
   // `force-upgradable` realized tokens. `will force install` is a render
   // modifier on `will install`, NOT a token, so the set grows by exactly 2.
-  assert.equal(STATUS_TOKENS.length, 22);
+  // USTAT-02 / D-64-01: +1 for the de-collapsed not-installed `unsupported`
+  // render token (22 -> 23).
+  assert.equal(STATUS_TOKENS.length, 23);
 });
 
-test("SNM-02: PLUGIN_STATUSES is the closed 17-entry plugin-status set", () => {
+test("SNM-02: PLUGIN_STATUSES is the closed 18-entry plugin-status set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: +2 for `force-installed` / `force-upgradable`.
-  assert.equal(PLUGIN_STATUSES.length, 17);
+  // USTAT-02 / D-64-01: +1 for `unsupported` (17 -> 18). Both tuples gain the
+  // member; `PLUGIN_STATUSES` MUST because `PluginInfoRowBase.status` derives via
+  // `Extract<PluginStatus, "unsupported">`.
+  assert.equal(PLUGIN_STATUSES.length, 18);
 });
 
 test("SNM-02: MARKETPLACE_STATUSES is the closed 7-entry marketplace-status set", () => {

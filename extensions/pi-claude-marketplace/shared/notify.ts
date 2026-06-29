@@ -225,6 +225,13 @@ export const STATUS_TOKENS = [
   // grows by exactly 2 (D-66-05).
   "force-installed",
   "force-upgradable",
+  // USTAT-02 / D-64-01: the not-installed, force-installable `unsupported`
+  // render token. Appended LAST (below the reload-hint trigger window, like
+  // `disabled` and the force-state tokens). Distinct from `unavailable`: a
+  // plugin resolving `unsupported` has no structural defect -- it would
+  // degrade-install (drop unsupported components) under `--force`. Maps to the
+  // dedicated `ICON_UNSUPPORTED` (`⊖`) glyph.
+  "unsupported",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -400,6 +407,13 @@ export const PLUGIN_STATUSES = [
   // list-inventory-only row (`needsReload: false`).
   "force-installed",
   "force-upgradable",
+  // USTAT-02 / D-64-01: the not-installed, force-installable `unsupported`
+  // plugin-status member. REQUIRED here (not just in STATUS_TOKENS) because
+  // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, ...>`; without
+  // this entry `Extract<PluginStatus, "unsupported">` resolves to `never`. This
+  // is an inventory/list-surface row (no realized transition), so it stamps no
+  // reload-hint trigger -- like `available` / `unavailable`.
+  "unsupported",
 ] as const;
 
 /**
@@ -681,6 +695,26 @@ export interface PluginUnavailableMessage extends MessageBase {
 }
 
 /**
+ * `(unsupported)` -- list/info-surface row for a not-installed, force-
+ * installable plugin (USTAT-01 / D-64-01). The manifest is structurally sound
+ * but carries components Pi cannot install (lsp / hooks / unsupported source),
+ * so the plugin would degrade-install under `--force`. Mirrors
+ * `PluginUnavailableMessage` (carries REQUIRED `reasons`; NO `scope` (SNM-11);
+ * no `dependencies`; PL-4 optional `description`) but DELIBERATELY OMITS the
+ * `forceHint?` field -- that is the install-error surface (out of scope here);
+ * the list/info rows render byte-frozen with no `--force` trailer. Uses the
+ * dedicated `ICON_UNSUPPORTED` (`⊖`) glyph. `extends MessageBase` (optional
+ * severity, defaults to info -- this is a token rename, not a severity change).
+ */
+export interface PluginUnsupportedMessage extends MessageBase {
+  readonly status: "unsupported";
+  readonly name: string;
+  readonly reasons: readonly ContentReason[];
+  readonly version?: string;
+  readonly description?: string;
+}
+
+/**
  * `(upgradable)` -- list-surface row for installed plugins with a newer
  * version available upstream. STRUCTURALLY constrained to the list surface
  * per MSG-PL-4 / CMC-09 (never emitted on cascade rows). Carries REQUIRED
@@ -871,6 +905,7 @@ export type PluginNotificationMessage =
   | PluginUninstalledMessage
   | PluginAvailableMessage
   | PluginUnavailableMessage
+  | PluginUnsupportedMessage
   | PluginUpgradableMessage
   | PluginFailedMessage
   | PluginSkippedMessage
@@ -1126,7 +1161,7 @@ interface PluginInfoRowBase {
   // or installed, never force-upgradable).
   readonly status: Extract<
     PluginStatus,
-    "installed" | "available" | "unavailable" | "failed" | "force-installed"
+    "installed" | "available" | "unavailable" | "unsupported" | "failed" | "force-installed"
   >;
   readonly name: string;
   readonly version?: string;
@@ -1381,6 +1416,18 @@ export const ICON_DISABLED = "◌";
  * precedent.
  */
 export const ICON_FORCE_INSTALLED = "◉";
+
+/**
+ * USTAT-02 / D-64-01: dedicated glyph for a not-installed, force-installable
+ * `unsupported` row (`⊖` U+2296, circled minus) -- a plugin whose manifest is
+ * sound but carries components Pi cannot install (lsp / hooks / unsupported
+ * source), so it would degrade-install under `--force`. Stays in the circled-
+ * operator family with `ICON_UNINSTALLABLE` (`⊘`) but reads "diminished /
+ * components dropped" rather than "blocked". DISTINCT from `⊘`
+ * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
+ * recovery) and from `◉` (`ICON_FORCE_INSTALLED`, the *installed*-degraded row).
+ */
+export const ICON_UNSUPPORTED = "⊖";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -2013,6 +2060,19 @@ function renderPluginRow(
         renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
         "(unavailable)",
+        composeReasons(p.reasons, false, false, probe),
+      ]);
+    case "unsupported":
+      // USTAT-01 / D-64-01: not-installed, force-installable row. Clones the
+      // `unavailable` arm, swapping the glyph (`⊘` -> `⊖`) and token
+      // (`(unavailable)` -> `(unsupported)`). MSG-PL-6 / SNM-11 carve-out:
+      // `unsupported` has NO `scope?` field, so the scope bracket is omitted.
+      return joinTokens([
+        ICON_UNSUPPORTED,
+        p.name,
+        renderScopeBracket(undefined, mpScope),
+        renderVersion(p.version),
+        "(unsupported)",
         composeReasons(p.reasons, false, false, probe),
       ]);
     case "upgradable":
@@ -2870,6 +2930,10 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
       return ICON_FORCE_INSTALLED;
     case "available":
       return ICON_AVAILABLE;
+    case "unsupported":
+      // USTAT-01 / D-64-01: not-installed, force-installable info row -- the
+      // dedicated `⊖` glyph, distinct from the `⊘` structural-unavailable arm.
+      return ICON_UNSUPPORTED;
     case "unavailable":
     case "failed":
       // Both use the prohibited-symbol glyph.

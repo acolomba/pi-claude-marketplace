@@ -156,7 +156,7 @@ interface PluginRow {
  * `manual recovery`) are unreachable on this surface and an exhaustive
  * `assertNever`-style throw guards the invariant.
  */
-function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
+export function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
     // RLD-04 / D-08: the list orchestrator emits the steady-state inventory
     // row as `installed`; it projects to the same `installed` tool surface as
@@ -173,6 +173,11 @@ function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPlug
     case "available":
       return "available";
     case "unavailable":
+      return "unavailable";
+    case "unsupported":
+      // USTAT-02 / D-64-01: a not-installed, force-installable plugin projects
+      // onto the coarse `unavailable` tool bucket -- the LLM-tool surface has no
+      // distinct `unsupported` bucket (mirrors `disabled` -> `unavailable`).
       return "unavailable";
     case "disabled":
       // D-54-01 / ENBL-04: a disabled plugin is recorded but its artefacts
@@ -329,6 +334,9 @@ function pluginScopeOrFallback(
       return p.scope ?? marketplaceScope;
     case "available":
     case "unavailable":
+    case "unsupported":
+      // USTAT-01 / SNM-11: the `unsupported` row carries no `scope` field (the
+      // carve-out applies to `available` / `unavailable` / `unsupported`).
       return marketplaceScope;
     case "updated":
     case "reinstalled":
@@ -353,7 +361,9 @@ function pluginScopeOrFallback(
  * omit `reasons` entirely (omit when undefined or empty).
  */
 function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
-  if (p.status === "unavailable" || p.status === "upgradable") {
+  if (p.status === "unavailable" || p.status === "unsupported" || p.status === "upgradable") {
+    // USTAT-01: the `unsupported` row carries the same per-kind reason braces as
+    // the `unavailable` row, so surface them on the tool details too.
     return p.reasons.length > 0 ? p.reasons : undefined;
   }
 
@@ -374,6 +384,7 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "upgradable":
     case "available":
     case "unavailable":
+    case "unsupported":
     case "reinstalled":
     case "uninstalled":
     case "failed":
@@ -385,7 +396,8 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
       // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
       // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
       // FSTAT-04 / D-66-03: the derived force states carry the same optional
-      // `version?` slot as the other list-surface inventory variants.
+      // `version?` slot as the other list-surface inventory variants. USTAT-01:
+      // the `unsupported` row carries the same optional `version?` slot.
       return p.version;
     case "updated":
       // The updated variant has `from`/`to` instead of a single `version`;

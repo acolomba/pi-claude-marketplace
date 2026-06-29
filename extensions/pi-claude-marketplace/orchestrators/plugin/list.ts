@@ -1002,6 +1002,9 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":
+      case "unsupported":
+        // USTAT-01 / SNM-11: the `unsupported` row has no `scope` field (the
+        // carve-out covers `available` / `unavailable` / `unsupported`).
         return marketplaceScope;
       case "updated":
       case "reinstalled":

@@ -14,6 +14,7 @@ import { test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  projectRowStatus,
   registerListMarketplacesTool,
   registerListPluginsTool,
 } from "../../../extensions/pi-claude-marketplace/edge/handlers/tools.ts";
@@ -516,6 +517,13 @@ test("pi_claude_marketplace_plugin_list :: path-source manifest entry -> availab
 
     await rm(mpRoot, { recursive: true, force: true });
   });
+});
+
+// USTAT-02 / D-64-01: a not-installed, force-installable `unsupported` list-
+// payload row projects onto the coarse `unavailable` tool bucket (the LLM-tool
+// surface has no distinct `unsupported` bucket; mirrors `disabled`).
+test("pi_claude_marketplace_plugin_list :: unsupported row projects to unavailable tool bucket", () => {
+  assert.equal(projectRowStatus("unsupported"), "unavailable");
 });
 
 // Lines 175+195+238+315+207-208: projectRowStatus 'unavailable' arm,

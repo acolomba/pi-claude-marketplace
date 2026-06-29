@@ -401,6 +401,62 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
   ]);
 });
 
+test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (MSG-PL-6 carve-out: NO scope bracket)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unsupported",
+            name: "hookify",
+            reasons: ["unsupported hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // info severity -> single-arg notify (the row omits `severity`).
+  assert.equal(args.length, 1);
+  // Variant has no `version` set -> renderVersion("") -> "" slot collapsed.
+  assert.equal(args[0], `● demo [user]\n  ⊖ hookify (unsupported) {unsupported hooks}`);
+  // The unsupported glyph ⊖ is byte-distinct from the ⊘ unavailable glyph.
+  assert.ok((args[0] as string).includes("⊖ hookify"));
+  assert.ok(!(args[0] as string).includes("⊘ hookify"));
+});
+
+test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {lsp} brace", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unsupported",
+            name: "clangd-lsp",
+            version: "1.0.0",
+            reasons: ["lsp"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user]\n  ⊖ clangd-lsp v1.0.0 (unsupported) {lsp}`,
+  ]);
+});
+
 test("notify renders upgradable plugin with version and reasons brace", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
