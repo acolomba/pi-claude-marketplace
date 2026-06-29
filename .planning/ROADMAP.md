@@ -199,7 +199,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 69: Force-Path Severity** - Wire SEV-01..05 onto the desired-state notification model; unsupported-vs-unavailable error split (completed 2026-06-28)
 - [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
 - [x] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable` (completed 2026-06-28)
-- [ ] **Phase 72: Unsupported Render Token** - not-installed force-installable plugins render a distinct `(unsupported)` status + `⊖` glyph in `list`/`info` instead of collapsing into `(unavailable)`/`⊘`; structural-unavailable plugins keep `(unavailable)`
+- [x] **Phase 72: Unsupported Render Token** - not-installed force-installable plugins render a distinct `(unsupported)` status + `⊖` glyph in `list`/`info` instead of collapsing into `(unavailable)`/`⊘`; structural-unavailable plugins keep `(unavailable)` (completed 2026-06-29)
 
 #### Phase 64: Resolver Three-Way State
 
@@ -472,7 +472,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 69. Force-Path Severity                                             | force-install | 4/4 | Complete    | 2026-06-28 |
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
-| 72. Unsupported Render Token                                        | force-install | 0/1 | Planned     | -          |
+| 72. Unsupported Render Token                                        | force-install | 1/1 | Complete   | 2026-06-29 |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -518,7 +518,8 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
   4. Per-kind `{unsupported hooks}` / `{lsp}` reason braces (via `narrowUnsupportedKinds`) continue to render on the new `(unsupported)` row; the `--unsupported` and `--unavailable` filters keep partitioning correctly.
   5. `npm run check` is green: the OUT-08 closed-set invariant test and any `list`/`info` catalog/golden fixtures asserting `(unavailable)` for not-installed hooks/LSP-bearing plugins are updated to the new token.
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans complete
 
 Plans:
-- [ ] 72-01-PLAN.md — De-collapse the resolver `unsupported` arm: add `ICON_UNSUPPORTED`/`(unsupported)` token + closed-set tripwire bump, split list.ts + info.ts producers, reconcile byte-exact fixtures and docs
+
+- [x] 72-01-PLAN.md — De-collapse the resolver `unsupported` arm: add `ICON_UNSUPPORTED`/`(unsupported)` token + closed-set tripwire bump, split list.ts + info.ts producers, reconcile byte-exact fixtures and docs

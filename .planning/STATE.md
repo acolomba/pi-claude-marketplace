@@ -2,18 +2,19 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-current_phase: 71
-status: verifying
+current_phase: 72
+current_phase_name: unsupported-render-token
+status: executing
 stopped_at: Completed 71-02-PLAN.md
-last_updated: "2026-06-28T22:00:10.360Z"
-last_activity: 2026-06-28
-last_activity_desc: Phase 71 complete
+last_updated: "2026-06-29T01:45:18.891Z"
+last_activity: 2026-06-29
+last_activity_desc: Phase 72 execution started
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 9
-  total_plans: 30
+  total_plans: 31
   completed_plans: 30
-  percent: 100
+  percent: 90
 ---
 
 # Project State
@@ -22,14 +23,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 71 — partial-hook-force-install
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 72 — unsupported-render-token
 
 ## Current Position
 
-Phase: 71
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-06-28 — Phase 71 complete
+Phase: 72 (unsupported-render-token) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 72
+Last activity: 2026-06-29 — Phase 72 execution started
 
 ## Performance Metrics
 
