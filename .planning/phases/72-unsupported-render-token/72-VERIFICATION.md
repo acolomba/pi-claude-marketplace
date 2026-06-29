@@ -1,10 +1,11 @@
 ---
 phase: 72-unsupported-render-token
 verified: 2026-06-29T02:31:03Z
-status: human_needed
+status: passed
 score: 6/6 must-haves verified
 overrides_applied: 0
 human_verification:
+
   - test: "Run `/claude:plugin list --unsupported` against the official marketplace after `/reload` in a live Pi TUI"
     expected: "Rows render `⊖ hookify (unsupported)` and `⊖ clangd-lsp (unsupported) {lsp}`; the U+2296 circled-minus glyph displays correctly (distinct from `⊘`/`◉`) in the terminal font; structural-unavailable plugins still show `⊘ … (unavailable)`"
     why_human: "Live TUI glyph rendering against real marketplace data cannot be asserted by the automated suite (byte-exact tests verify the string contains ⊖, but not the terminal/font visual presentation). Deferred manual-only per 72-VALIDATION.md."

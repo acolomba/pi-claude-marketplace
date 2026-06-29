@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
 current_phase: 72
-current_phase_name: unsupported-render-token
 status: executing
-stopped_at: Completed 71-02-PLAN.md
-last_updated: "2026-06-29T01:45:18.891Z"
+stopped_at: Phase 72 executed + reviewed; verification deferred (human visual check)
+last_updated: "2026-06-29T12:03:51.971Z"
 last_activity: 2026-06-29
-last_activity_desc: Phase 72 execution started
+last_activity_desc: Phase 72 complete
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 31
-  completed_plans: 30
-  percent: 90
+  completed_plans: 31
+  percent: 100
+current_phase_name: unsupported-render-token
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 72 (unsupported-render-token) — EXECUTING
-Plan: 1 of 1
+Phase: 72
+Plan: Not started
 Status: Executing Phase 72
-Last activity: 2026-06-29 — Phase 72 execution started
+Last activity: 2026-06-29 — Phase 72 complete
 
 ## Performance Metrics
 
@@ -374,29 +374,22 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Deferred Verification
 
-| Phase | State | Resume |
-|-------|-------|--------|
-| 72 | verification_deferred_human | /gsd-verify-work 72 |
-
-Phase 72 (Unsupported Render Token) is implemented, reviewed, and fully
-committed; `npm run check` is GREEN. Verification is `human_needed` for a
-single live-TUI visual check only: after `/reload`, run
-`/claude:plugin list --unsupported` and confirm not-installed
-force-installable plugins render `⊖ <name> (unsupported) {…}` (e.g.
-`⊖ hookify (unsupported) {unsupported hooks}`, `⊖ clangd-lsp (unsupported) {lsp}`)
-while structural failures keep `⊘ (unavailable)`. The force-install
-milestone is intentionally left OPEN (not audited/archived) pending this
-check and a possible Phase 73 (cross-surface unification: install-error
-surface + review finding IN-01).
+_RESOLVED 2026-06-29._ Phase 72 (Unsupported Render Token) UAT passed: the
+live-TUI visual check confirmed `⊖ <name> (unsupported)` renders correctly
+(distinct from `⊘`/`◉`) for both hooks-bearing and LSP-only force-installable
+plugins, with structural failures keeping `⊘ (unavailable)`. VERIFICATION.md
+is `status: passed`; the phase is marked complete. The force-install milestone
+is intentionally left OPEN (not audited/archived) pending the operator's
+decision on a possible Phase 73 (cross-surface unification: install-error
+surface still renders `⊘ (unavailable)` + `--force` hint; review finding IN-01).
 
 ## Session Continuity
 
-Last session: 2026-06-29T10:50:00.000Z
-Stopped At: Phase 72 executed + reviewed; verification deferred (human visual check)
+Last session: 2026-06-29T11:05:00.000Z
+Stopped At: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
 Resume File: None
 
 ## Operator Next Steps
 
-- Validate Phase 72 in a live Pi TUI, then `/gsd-verify-work 72` to mark it passed
-- Optionally plan Phase 73 (cross-surface `⊖`/`⊘` unification + IN-01) before closing the milestone
-- When ready to close: re-run /gsd-autonomous (audit -> complete -> cleanup) or /gsd-complete-milestone
+- Decide whether to plan Phase 73 (cross-surface `⊖`/`⊘` unification + IN-01) before closing
+- When ready to close force-install: /gsd-complete-milestone (or re-run /gsd-autonomous for audit -> complete -> cleanup)
