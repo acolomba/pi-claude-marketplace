@@ -11,9 +11,12 @@ import {
 // classifier `narrowResolverReasons` and the read-only probe classifier
 // `narrowResolverNotes` MUST emit the SAME closed-set REASONS token for the
 // SAME resolver-emitted note. Without this contract, the same on-disk
-// condition surfaces with different `(unavailable) {<reason>}` tokens
-// depending on which command the user runs (info/list vs install) --
-// violating the same-plugin-same-reason invariant.
+// condition surfaces with different `{<reason>}` brace content depending on
+// which command the user runs (info/list vs install) -- violating the
+// same-plugin-same-reason invariant. (USTAT-01 / D-64-01: the OUTER status
+// token now differs by surface -- list/info render `(unsupported)` for the
+// force-degradable arm while the install error surface renders `(unavailable)`
+// -- but the `{<reason>}` brace CONTENT this test pins is byte-identical.)
 //
 // The four `hooks.json`-prefix families and the `contains lspServers`
 // carve-out plus the generic catch-all are the cross-surface pin set.
@@ -59,8 +62,10 @@ for (const { note, expected } of PARITY_CASES) {
 // helper `narrowUnsupportedKinds`; the `install` error surface derives it from
 // the thrown PluginShapeError's `r.notes` (`contains <kind>`) via
 // `narrowResolverReasons`. Both MUST agree for the same kind, so a force-
-// degradable component never surfaces a different `(unavailable) {<reason>}`
-// token depending on which command the user runs. Each case pairs the typed
+// degradable component never surfaces a different `{<reason>}` brace content
+// depending on which command the user runs (the outer status token differs --
+// list/info `(unsupported)` vs install `(unavailable)` per USTAT-01 -- but the
+// brace content this test pins is byte-identical). Each case pairs the typed
 // kind token (list/info input) with its matching resolver note (install input).
 const PER_KIND_PARITY_CASES = [
   // HOOK-04 / D-58-02: `lspServers` is the sole non-generic (soft-degradable)

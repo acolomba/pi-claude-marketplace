@@ -950,8 +950,66 @@ async function buildInstalledRow(
 }
 
 /**
+ * Build the not-installed row for a PATH source whose resolver returned a
+ * non-installable arm (`unsupported` / `unavailable`). Enumerates components
+ * from disk via `buildNonInstallableRowFields`.
+ *
+ * USTAT-01 / D-64-01: de-collapse the row status by resolver STATE -- a
+ * force-installable `unsupported` plugin renders the distinct `(unsupported)` /
+ * `⊖` token (byte-consistent with the list surface), while a structural
+ * `unavailable` keeps `(unavailable)` / `⊘`. Severity is unchanged (token
+ * rename only).
+ *
+ * WR-02: `buildNonInstallableRowFields` -> `derivePluginRootForInfo` can throw
+ * `PathContainmentError` (NFR-10) for a not-installed path source whose `source`
+ * escapes the marketplace root -- BEFORE the inner try that wraps
+ * `composeResolvedComponents` only. Mirror `buildInstalledRow`'s outer catch so
+ * the unreadable case renders an `(unavailable)` row via `narrowProbeError`
+ * instead of throwing uncaught out of `getPluginInfo`.
+ */
+async function buildNotInstalledPathRow(
+  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  opts: {
+    pluginName: string;
+    version: string | undefined;
+    description: string | undefined;
+    entry: MarketplaceManifest["plugins"][number];
+    mpRecord: MarketplaceRecord;
+    parsedSource: ParsedSource;
+  },
+): Promise<PluginInfoRow> {
+  const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  try {
+    const fields = await buildNonInstallableRowFields(
+      resolved,
+      entry,
+      mpRecord.marketplaceRoot,
+      parsedSource,
+    );
+    return {
+      status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      ...fields,
+    };
+  } catch (err) {
+    // The probe-error catch arm stays `unavailable` (structural).
+    const reasons: readonly ContentReason[] = [narrowProbeError(err)];
+    return {
+      status: "unavailable",
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      reasons,
+      componentsResolved: false,
+    };
+  }
+}
+
+/**
  * Build the row for a plugin that is NOT in the state's installed
- * bucket. `resolveStrict` decides between `(available)` and
+ * bucket. `resolveStrict` decides between `(available)`, `(unsupported)`, and
  * `(unavailable)`; the per-kind component arrays follow the same
  * INFO-05 source-kind gate as the installed row.
  */
@@ -1000,38 +1058,14 @@ async function buildNotInstalledRow(
     // Path source whose resolver returned a non-installable arm: enumerate
     // components from disk. `unsupported` reads its component payload
     // directly; `unavailable` re-derives independently (D-64-05).
-    //
-    // WR-02: `buildNonInstallableRowFields` -> `derivePluginRootForInfo` can
-    // throw `PathContainmentError` (NFR-10) for a not-installed path source
-    // whose `source` escapes the marketplace root -- BEFORE the inner try that
-    // wraps `composeResolvedComponents` only. Mirror `buildInstalledRow`'s
-    // outer catch so the unreadable case renders an `(unavailable)` row via
-    // `narrowProbeError` instead of throwing uncaught out of `getPluginInfo`.
-    try {
-      const fields = await buildNonInstallableRowFields(
-        resolved,
-        entry,
-        mpRecord.marketplaceRoot,
-        parsedSource,
-      );
-      return {
-        status: "unavailable",
-        name: pluginName,
-        ...(version !== undefined && { version }),
-        ...(description !== undefined && { description }),
-        ...fields,
-      };
-    } catch (err) {
-      const reasons: readonly ContentReason[] = [narrowProbeError(err)];
-      return {
-        status: "unavailable",
-        name: pluginName,
-        ...(version !== undefined && { version }),
-        ...(description !== undefined && { description }),
-        reasons,
-        componentsResolved: false,
-      };
-    }
+    return buildNotInstalledPathRow(resolved, {
+      pluginName,
+      version,
+      description,
+      entry,
+      mpRecord,
+      parsedSource,
+    });
   }
 
   // Non-path sources reach the `(unavailable)` arm above because

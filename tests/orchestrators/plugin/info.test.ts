@@ -1960,10 +1960,11 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
 // the declared events with a `(unsupported)` suffix on each non-bucket-A
 // one. The strict resolver-side parser (HOOK-01) remains unchanged; the
 // lenient reader runs ONLY on the path-resolvable
-// `(unavailable) {unsupported hooks}` carrier row.
+// `(unsupported) {unsupported hooks}` carrier row (USTAT-01 / D-64-01: the
+// row resolves `unsupported`, so it renders the de-collapsed `⊖` token).
 // ---------------------------------------------------------------------------
 
-test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(unavailable) {unsupported hooks}` row", async () => {
+test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(unsupported) {unsupported hooks}` row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -1997,7 +1998,7 @@ test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
     // The hooks: block lists Stop with the (unsupported) suffix.
     assert.match(msg, /\n {4}hooks:\n {6}Stop \(unsupported\)/);
   });
@@ -2041,7 +2042,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
     // Kept group first (with its matcher, via the strict reader), then the
     // dropped Stop event carrying the (unsupported) suffix.
     assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\(Bash\)\n {6}Stop \(unsupported\)/);
@@ -2088,7 +2089,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "grouped", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unavailable\) \{unsupported hooks\}/);
+    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
     // Kept group plain, dropped regex group at matcher-group granularity.
     assert.match(
       msg,
