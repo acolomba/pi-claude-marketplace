@@ -93,9 +93,9 @@ Closes the D-64-01 deferral: the render layer collapsed both resolver `unsupport
 
 Extends the Phase 72 `⊖ (unsupported)` de-collapse to the surfaces it did not cover (install failure, update decline) so a force-installable plugin reads consistently everywhere. Surfaced by the force-install milestone UAT (2026-06-29). Severity is already correct (SEV-02 / SEV-04) and is NOT changed -- only the token + reason wording.
 
-- [ ] **XSURF-01**: The install-failure surface renders an `unsupported` (force-installable) plugin with the `⊖ (unsupported)` token consistent with `list`/`info`, not `⊘ (unavailable)`; the SEV-02 `--force` hint is preserved.
-- [ ] **XSURF-02**: `info.ts`'s non-locally-resolvable arm derives its status from `resolved.state` (matching the `list` surface) instead of hardcoding `"unavailable"` (UAT review finding IN-01).
-- [ ] **XSURF-03**: A manual `update` decline of a force-upgradable plugin surfaces a force-aware reason (not the misleading `{no longer installable}`) and points the user at `--force`; the SEV-04 severity split (targeted=warning, bulk=info) is preserved.
+- [x] **XSURF-01**: The install-failure surface renders an `unsupported` (force-installable) plugin with the `⊖ (unsupported)` token consistent with `list`/`info`, not `⊘ (unavailable)`; the SEV-02 `--force` hint is preserved.
+- [x] **XSURF-02**: `info.ts`'s non-locally-resolvable arm derives its status from `resolved.state` (matching the `list` surface) instead of hardcoding `"unavailable"` (UAT review finding IN-01).
+- [x] **XSURF-03**: A manual `update` decline of a force-upgradable plugin surfaces a force-aware reason (not the misleading `{no longer installable}`) and points the user at `--force`; the SEV-04 severity split (targeted=warning, bulk=info) is preserved.
 
 ### Bulk Update Grammar Refinement (UGRM)
 
@@ -164,9 +164,9 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PHOOK-05 | Phase 71 | Complete |
 | USTAT-01 | Phase 72 | Complete |
 | USTAT-02 | Phase 72 | Complete |
-| XSURF-01 | Phase 73 | Pending |
-| XSURF-02 | Phase 73 | Pending |
-| XSURF-03 | Phase 73 | Pending |
+| XSURF-01 | Phase 73 | Complete |
+| XSURF-02 | Phase 73 | Complete |
+| XSURF-03 | Phase 73 | Complete |
 | UGRM-01 | Phase 74 | Pending |
 | UGRM-02 | Phase 74 | Pending |
 

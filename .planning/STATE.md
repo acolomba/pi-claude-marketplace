@@ -2,19 +2,15 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-current_phase: 72
-status: executing
-stopped_at: Phase 72 executed + reviewed; verification deferred (human visual check)
-last_updated: "2026-06-29T12:03:51.971Z"
-last_activity: 2026-06-29
-last_activity_desc: Phase 72 complete
+status: verifying
+last_updated: "2026-06-30T03:33:27.931Z"
+last_activity: 2026-06-30
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 31
-  completed_plans: 31
-  percent: 100
-current_phase_name: unsupported-render-token
+  total_phases: 12
+  completed_phases: 11
+  total_plans: 33
+  completed_plans: 32
+  percent: 92
 ---
 
 # Project State
@@ -23,14 +19,14 @@ current_phase_name: unsupported-render-token
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 72 — unsupported-render-token
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 73 — force-cross-surface-token-unification
 
 ## Current Position
 
-Phase: 72
-Plan: Not started
-Status: Executing Phase 72
-Last activity: 2026-06-29 — Phase 72 complete
+Phase: 73 (force-cross-surface-token-unification) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-06-30
 
 ## Performance Metrics
 
@@ -150,6 +146,7 @@ Last activity: 2026-06-29 — Phase 72 complete
 | Phase 71 P02 | 12min | 2 tasks | 2 files |
 | Phase 71 P03 | 16min | 2 tasks | 8 files |
 | Phase 71 P4 | 17min | 2 tasks | 4 files |
+| Phase 73 P01 | 28min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -312,6 +309,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 71]: D-71-04: narrowUnsupportedKinds maps the hooks kind to the existing unsupported hooks REASONS member (closed set stays 32); single aggregate {unsupported hooks} marker across list/info
 - [Phase 71]: D-71-05: info strict reader enumerates dropped handlers at matcher-group granularity event(matcher) (unsupported), re-derived from its own pure parse (lenient->strict flip resolved)
 - [Phase ?]: Phase 71 complete (PHOOK-01..05): partial-hook plugins blocked solely by a non-bucket-A event or unsupported matcher now force-install, staging a strict-subset hooks.json; {unsupported hooks} renders byte-identically across list/info/force-installed surfaces; no-force install blocks with the --force hint
+- [Phase ?]: XSURF-03 update-decline reason sourced via narrowUnsupportedKinds (list-row seam) for byte-parity, not install-path narrowResolverReasons
+- [Phase ?]: XSURF-03 SEV-04 split moved onto the force-upgradable status arm; cascadeSkipSeverity untouched
 
 ### Pending Todos
 
@@ -385,7 +384,7 @@ surface still renders `⊘ (unavailable)` + `--force` hint; review finding IN-01
 
 ## Session Continuity
 
-Last session: 2026-06-29T11:05:00.000Z
+Last session: 2026-06-30T03:32:52.879Z
 Stopped At: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
 Resume File: None
 
