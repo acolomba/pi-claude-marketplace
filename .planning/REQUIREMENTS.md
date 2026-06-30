@@ -89,6 +89,21 @@ Closes the D-64-01 deferral: the render layer collapsed both resolver `unsupport
 - [x] **USTAT-01**: A not-installed plugin that resolves `unsupported` (force-installable: unsupported components, no structural defect) renders a distinct `(unsupported)` status token with a dedicated `⊖` glyph in both `list` and `info`, instead of collapsing into the `(unavailable)` / `⊘` render. A structurally-`unavailable` plugin still renders `(unavailable)` / `⊘`. `⊘` stays reserved for `unavailable` / blocked / failed rows.
 - [x] **USTAT-02**: `STATUS_TOKENS` gains an `"unsupported"` member (closed-set tripwire bumped) and the new row keeps its per-kind `{unsupported hooks}` / `{lsp}` reason braces via `narrowUnsupportedKinds`; the `--unsupported` / `--unavailable` list filters keep partitioning on the pre-collapse resolver bucket; the OUT-08 closed-set invariant test and `list`/`info` catalog/golden fixtures are updated byte-exact.
 
+### Force Cross-Surface Token Unification (XSURF)
+
+Extends the Phase 72 `⊖ (unsupported)` de-collapse to the surfaces it did not cover (install failure, update decline) so a force-installable plugin reads consistently everywhere. Surfaced by the force-install milestone UAT (2026-06-29). Severity is already correct (SEV-02 / SEV-04) and is NOT changed -- only the token + reason wording.
+
+- [ ] **XSURF-01**: The install-failure surface renders an `unsupported` (force-installable) plugin with the `⊖ (unsupported)` token consistent with `list`/`info`, not `⊘ (unavailable)`; the SEV-02 `--force` hint is preserved.
+- [ ] **XSURF-02**: `info.ts`'s non-locally-resolvable arm derives its status from `resolved.state` (matching the `list` surface) instead of hardcoding `"unavailable"` (UAT review finding IN-01).
+- [ ] **XSURF-03**: A manual `update` decline of a force-upgradable plugin surfaces a force-aware reason (not the misleading `{no longer installable}`) and points the user at `--force`; the SEV-04 severity split (targeted=warning, bulk=info) is preserved.
+
+### Bulk Update Grammar Refinement (UGRM)
+
+Pre-existing v1.5 (UXG-05) / v1.11 bulk-update grammar surfaced by the same UAT: a bulk `update` lists every up-to-date plugin and counts at-desired-state rows as "successes". Not force-install-specific; refines the cascade + summary for consistency with the project's benign-no-op suppression philosophy (UXG-02). Target grammar settled in spec/discuss.
+
+- [ ] **UGRM-01**: A bulk `update` does not emit a per-plugin `(skipped) {up-to-date}` row for every unchanged plugin (exact suppress-vs-summarize shape settled in spec); an all-up-to-date bulk update still communicates the no-op clearly.
+- [ ] **UGRM-02**: The bulk-update summary line distinguishes "updated" from "already at desired state" so the headline count reflects operations performed, not unchanged no-ops; `docs/output-catalog.md` / `docs/messaging-style-guide.md` and the byte-exact update tests are reconciled.
+
 ## Out of Scope
 
 Explicitly excluded; documented to prevent scope creep.
@@ -149,13 +164,18 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PHOOK-05 | Phase 71 | Complete |
 | USTAT-01 | Phase 72 | Complete |
 | USTAT-02 | Phase 72 | Complete |
+| XSURF-01 | Phase 73 | Pending |
+| XSURF-02 | Phase 73 | Pending |
+| XSURF-03 | Phase 73 | Pending |
+| UGRM-01 | Phase 74 | Pending |
+| UGRM-02 | Phase 74 | Pending |
 
 **Coverage:**
 
-- Requirements: 37 total
-- Mapped to phases: 37 (Phases 64-72) ✓
+- Requirements: 42 total
+- Mapped to phases: 42 (Phases 64-74) ✓
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-26*
-*Last updated: 2026-06-28 after Phase 72 added (Unsupported Render Token; USTAT-01..02); Phases 64-72 mapped, 37/37 coverage*
+*Last updated: 2026-06-29 after Phases 73-74 added from the force-install milestone UAT (XSURF-01..03 force cross-surface unification; UGRM-01..02 bulk-update grammar); Phases 64-74 mapped, 42/42 coverage*

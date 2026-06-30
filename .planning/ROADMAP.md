@@ -17,7 +17,7 @@
 - Done **v1.11 Notification Summary-Line Grammar** -- Phase 50 (shipped 2026-06-08)
 - Done **v1.12 Marketplace and Plugin Config Files** -- Phases 51-56 (shipped 2026-06-11)
 - Done **v1.13 Claude Hook Bridge** -- Phases 57-63 (shipped 2026-06-19)
-- Active **force-install** -- Phases 64-72 (in progress)
+- Active **force-install** -- Phases 64-74 (in progress)
 
 For full details of each milestone, see `.planning/milestones/v[X.Y]-ROADMAP.md` and `.planning/milestones/v[X.Y]-REQUIREMENTS.md`.
 
@@ -186,7 +186,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 
 </details>
 
-### Active force-install (Phases 64-72)
+### Active force-install (Phases 64-74)
 
 **Milestone Goal:** Let a Pi user `install`/`update --force` a *partially*-supported plugin -- install the supported components, degrade the unsupported ones, never block -- built on a **derived** force-state (no persisted flag) and the **desired-state** severity model, with consistent status, list, completion, and load-time-backfill behaviour. Clean-room rebuild; the earlier sticky-flag attempt is superseded. The byte-level output contract is governed by `docs/output-catalog.md`, `docs/messaging-style-guide.md`, and PRD ÃÂ§11.
 
@@ -200,6 +200,8 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 70: Spec & Documentation Reconcile** - PRD ÃÂ§11, output-catalog, messaging-style-guide reconciled to the final token set (completed 2026-06-28)
 - [x] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable` (completed 2026-06-28)
 - [x] **Phase 72: Unsupported Render Token** - not-installed force-installable plugins render a distinct `(unsupported)` status + `⊖` glyph in `list`/`info` instead of collapsing into `(unavailable)`/`⊘`; structural-unavailable plugins keep `(unavailable)` (completed 2026-06-29)
+- [ ] **Phase 73: Force Cross-Surface Token Unification** - the install-error and update-decline surfaces describe a force-installable plugin consistently with `list`/`info` (`⊖ (unsupported)`, force-aware decline reason + `--force` affordance); `info` non-resolvable arm keys on `resolved.state` (IN-01)
+- [ ] **Phase 74: Bulk Update Grammar Refinement** - a bulk `update` suppresses up-to-date no-op rows and reports a count that reflects updates performed rather than at-desired-state rows (pre-existing v1.5/v1.11 grammar)
 
 #### Phase 64: Resolver Three-Way State
 
@@ -473,6 +475,8 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
 | 72. Unsupported Render Token                                        | force-install | 1/1 | Complete    | 2026-06-29 |
+| 73. Force Cross-Surface Token Unification                           | force-install | 0/0 | Pending     | -          |
+| 74. Bulk Update Grammar Refinement                                  | force-install | 0/0 | Pending     | -          |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -523,3 +527,30 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 Plans:
 
 - [x] 72-01-PLAN.md — De-collapse the resolver `unsupported` arm: add `ICON_UNSUPPORTED`/`(unsupported)` token + closed-set tripwire bump, split list.ts + info.ts producers, reconcile byte-exact fixtures and docs
+
+#### Phase 73: Force Cross-Surface Token Unification
+
+**Goal**: A force-installable (`unsupported`) plugin is described **consistently across every user-facing surface**. Phase 72 de-collapsed `list` and `info` to `⊖ (unsupported)`, but the install-failure and update-decline surfaces still describe the same plugin with the old `⊘ (unavailable)` framing -- surfaced by the force-install milestone UAT (2026-06-29). This phase extends the resolver-state-driven render to those surfaces and removes the misleading `{no longer installable}` wording for the force-degradable case. Severity is already correct (SEV-02 / SEV-04) and is NOT changed.
+**Depends on**: Phase 72 (the `⊖ (unsupported)` token + `ICON_UNSUPPORTED`), Phase 64 (three-way resolver state), Phase 69 (force-path severity -- unchanged, only the token/reason wording moves)
+**Requirements**: XSURF-01, XSURF-02, XSURF-03
+**Success Criteria** (what must be TRUE):
+
+  1. The install-failure surface renders an `unsupported` (force-installable) plugin with the `⊖ (unsupported)` token consistent with `list`/`info`, not `⊘ (unavailable)`; the `--force` hint (SEV-02) is preserved.
+  2. `info.ts`'s non-locally-resolvable arm derives its status from `resolved.state` (matching the `list` surface) instead of hardcoding `"unavailable"` (UAT review finding IN-01).
+  3. A manual `update` decline of a force-upgradable plugin surfaces a force-aware reason (not the misleading `{no longer installable}`) and points the user at `--force`; the SEV-04 severity split (targeted=warning, bulk=info) is preserved.
+  4. The byte-exact catalog/style-guide and the install/update notify tests reflect the reconciled cross-surface tokens; `npm run check` stays green.
+
+**Plans**: TBD (planner)
+
+#### Phase 74: Bulk Update Grammar Refinement
+
+**Goal**: A bulk `update` reports **only what it changed**. The force-install milestone UAT (2026-06-29) surfaced that a bulk `update` lists every up-to-date plugin as `(skipped) {up-to-date}` and that the `Plugin update: N successes` summary counts at-desired-state (info-severity) rows, so up-to-date no-ops inflate the count (e.g. "5 successes" when 1 plugin was actually updated). This is **pre-existing v1.5 (UXG-05) / v1.11 grammar**, not force-install-specific, but it is inconsistent with the project's own benign-no-op suppression philosophy (UXG-02). This phase refines the bulk-update cascade + summary. The exact target grammar (suppress-vs-summarize no-ops; recount-vs-rename "successes") is a design decision to settle in discuss/spec.
+**Depends on**: Phase 50 (summary-line grammar), the v1.5 update no-op catalog states; no force-install dependency
+**Requirements**: UGRM-01, UGRM-02
+**Success Criteria** (what must be TRUE):
+
+  1. A bulk `update` with a mix of changed and up-to-date plugins does NOT emit a per-plugin `(skipped) {up-to-date}` row for every unchanged plugin (the exact suppression/summary shape is settled in spec); an all-up-to-date bulk update still communicates the no-op clearly.
+  2. The bulk-update summary line distinguishes "updated" from "already at desired state" so the headline count reflects operations performed, not unchanged no-ops.
+  3. `docs/output-catalog.md` / `docs/messaging-style-guide.md` and the byte-exact update tests are reconciled to the new grammar; `npm run check` stays green.
+
+**Plans**: TBD (planner)
