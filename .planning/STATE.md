@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
 current_phase: 74
-status: verifying
-stopped_at: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
+status: milestone_complete_pending_close
+stopped_at: All 12 phases complete + verified; milestone audit PASSED; left OPEN (not archived/tagged) by operator choice pending release flow
 last_updated: "2026-06-30T09:59:08.385Z"
 last_activity: 2026-06-30
 last_activity_desc: Phase 74 complete
@@ -379,22 +379,36 @@ _The two former `upstream_finding` rows (pi-tui `@`-precedence tab-completion / 
 
 ## Deferred Verification
 
-_RESOLVED 2026-06-29._ Phase 72 (Unsupported Render Token) UAT passed: the
-live-TUI visual check confirmed `⊖ <name> (unsupported)` renders correctly
-(distinct from `⊘`/`◉`) for both hooks-bearing and LSP-only force-installable
-plugins, with structural failures keeping `⊘ (unavailable)`. VERIFICATION.md
-is `status: passed`; the phase is marked complete. The force-install milestone
-is intentionally left OPEN (not audited/archived) pending the operator's
-decision on a possible Phase 73 (cross-surface unification: install-error
-surface still renders `⊘ (unavailable)` + `--force` hint; review finding IN-01).
+_RESOLVED 2026-06-30._ All force-install phases (64-74) are executed, verified
+(`status: passed`), and the milestone audit PASSED (42/42 requirements, 12/12
+phases, cross-phase integration clean, 4/4 E2E flows). Phases 73 (cross-surface
+`⊖`/`⊘` unification) and 74 (bulk-update grammar) closed the UAT findings.
+Audit report: `.planning/vforce-install-MILESTONE-AUDIT.md`.
 
 ## Session Continuity
 
-Last session: 2026-06-30T04:17:18.844Z
-Stopped At: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
+Last session: 2026-06-30T06:22:00.000Z
+Stopped At: Milestone force-install audited + PASSED. Left OPEN by operator
+choice (not archived/tagged) so the release flow can run first. Two pre-existing
+backlog items flagged at the close-audit await resolution (operator chose
+"stop to resolve", not defer).
 Resume File: None
 
 ## Operator Next Steps
 
-- Decide whether to plan Phase 73 (cross-surface `⊖`/`⊘` unification + IN-01) before closing
-- When ready to close force-install: /gsd-complete-milestone (or re-run /gsd-autonomous for audit -> complete -> cleanup)
+- Release flow before closing the GSD milestone (per CLAUDE.md): bump
+  `package.json` + `sonar-project.properties`, update `package-lock.json`,
+  record changes in `CHANGELOG.md`, then open a `--squash` PR for
+  `features/force-install` (264 commits ahead of origin/HEAD).
+- Resolve the two pre-existing open backlog items (operator chose to resolve,
+  not defer):
+  - `260621-kmm` (ENBL-02 enabled-flag quick-task): VERIFIED SHIPPED in v0.6.1
+    (commit 222a7344; `enabled: boolean` + schemaVersion 2 live in state-io.ts).
+    Only the tracking status is stale -- mark complete to clear it.
+  - `2026-06-12-coverage-sweep` todo: GENUINELY OPEN. Targeted test sweep of
+    rare failure/rollback arms in update/reinstall/install/marketplace-update/
+    import orchestrators (~95.9% -> ~97%); plus an explicit decide-tests-vs-
+    sonar-exclusion call on `orchestrators/edge-deps.ts` (49.7%).
+- After release + backlog resolution: `/gsd-complete-milestone` then
+  `/gsd-cleanup` to archive force-install (choose the tag name deliberately --
+  GSD milestones here are `v1.x`, npm releases are `0.6.x`).
