@@ -475,7 +475,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 70. Spec & Documentation Reconcile                                  | force-install | 3/3 | Complete    | 2026-06-28 |
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
 | 72. Unsupported Render Token                                        | force-install | 1/1 | Complete    | 2026-06-29 |
-| 73. Force Cross-Surface Token Unification                           | force-install | 1/1 | Complete   | 2026-06-30 |
+| 73. Force Cross-Surface Token Unification                           | force-install | 1/1 | Complete    | 2026-06-30 |
 | 74. Bulk Update Grammar Refinement                                  | force-install | 0/1 | Planned     | -          |
 
 #### Phase 71: Partial Hook Force-Install
@@ -543,6 +543,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 73-01-PLAN.md — cross-surface (unsupported)/(force-upgradable) token + force-aware update-decline reason, byte-exact catalog reconcile
 
 #### Phase 74: Bulk Update Grammar Refinement
@@ -559,4 +560,5 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [ ] 74-01-PLAN.md — suppress bulk up-to-date rows (UGRM-01), updates-only headline via opt-in tally override (UGRM-02), relock catalog/style-guide/tests
