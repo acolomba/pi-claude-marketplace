@@ -1083,6 +1083,17 @@ export interface CascadeNotificationMessage {
   // trailing tally renders IFF `cardinality === "plural"` -- NOT a render-time
   // row-count heuristic. Absent defaults to no tally.
   readonly cardinality?: "single" | "plural";
+  // UGRM-02 / OUT-03 / D-04: an OPT-IN, update-scoped override of the trailing
+  // tally's SUCCESS category. When present, `composeTally` renders the success
+  // count as `<count> <verb>` (e.g. `2 updated`) instead of deriving it from the
+  // info-severity row count, so the `update` headline reports realized
+  // transitions only. The failure / warning categories are unchanged (still
+  // computed from `countRowsBySeverity`). Absent on every other op
+  // (install / reinstall / marketplace / import), so their summaries stay
+  // byte-identical. Read ONLY by `composeTally`. A `count` of 0 contributes no
+  // success category (the never-silent no-op headline is the orchestrator's job,
+  // not `composeTally`'s).
+  readonly tally?: { readonly verb: string; readonly count: number };
 }
 
 /**
@@ -2232,6 +2243,18 @@ function renderPluginRow(
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 /**
+ * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
+ * realized ZERO transitions (all targets up-to-date, OR the only surviving rows
+ * are benign info skips such as a `(force-upgradable)` decline). Hard-coded so
+ * the byte form cannot drift from `docs/output-catalog.md`'s `all-up-to-date-noop`
+ * / `skip-force-upgradable-bulk` states -- mirrors the `reconcile-pending-empty`
+ * byte-lock precedent. Emitted in PLACE of the `composeTally` success line
+ * (which collapses a `tally {count: 0}` override to `""`), so the summary line
+ * never vanishes.
+ */
+const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
+
+/**
  * SEV-02 / D-69-03 `--force` hint trailer literal, rendered below a
  * force-degradable `unsupported` install-failure row. References the user's
  * own `--force` flag only -- no plugin / marketplace interpolation (T-69-01).
@@ -2589,6 +2612,7 @@ function composeTally(message: {
   readonly label?: string;
   readonly cardinality?: "single" | "plural";
   readonly marketplaces: readonly MarketplaceNotificationMessage[];
+  readonly tally?: { readonly verb: string; readonly count: number };
 }): string {
   if (message.cardinality !== "plural" || message.label === undefined) {
     return "";
@@ -2596,24 +2620,9 @@ function composeTally(message: {
 
   const errorCount = countRowsBySeverity(message.marketplaces, "error");
   const warningCount = countRowsBySeverity(message.marketplaces, "warning");
-  const successCount = countRowsBySeverity(message.marketplaces, "info");
 
   const failures = errorCount.plugins + errorCount.marketplaces;
   const warnings = warningCount.plugins + warningCount.marketplaces;
-  // OUT-03 / OUT-06 / D-03: the tally counts OPERATION rows uniformly across the
-  // plugin and marketplace subjects. A BARE marketplace header -- one carrying
-  // neither a `status` (a realized mp outcome: `added` / `updated` / `removed` /
-  // `failed` / `skipped`) NOR a stamped `severity` -- is a pure grouping label
-  // (bookkeeping, not an operation), so it must not inflate the success count. A
-  // marketplace row WITH a `status` IS a real mp-level operation and counts (an
-  // import `added` block, a `marketplace remove` `removed` block). The `info`
-  // count from `countRowsBySeverity` includes bare headers via its `?? "info"`
-  // default, so subtract them; plugin rows always represent an operation and
-  // always count.
-  const bareHeaders = message.marketplaces.filter(
-    (mp) => mp.severity === undefined && mp.status === undefined,
-  ).length;
-  const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
 
   const parts: string[] = [];
 
@@ -2625,8 +2634,37 @@ function composeTally(message: {
     parts.push(tallyCategory(warnings, "warning", "warnings"));
   }
 
-  if (successes > 0) {
-    parts.push(tallyCategory(successes, "success", "successes"));
+  if (message.tally !== undefined) {
+    // UGRM-02: the update-scoped override OWNS the success category -- the count
+    // is realized transitions only (the orchestrator's `updated`-partition
+    // tally), rendered with a verb that has no plural-s (`1 updated`, `2
+    // updated`). The info-row `successes` math below is SKIPPED entirely so an
+    // at-desired-state `(skipped) {up-to-date}` row never inflates the headline.
+    // A `count` of 0 contributes nothing (the never-silent no-op headline is the
+    // orchestrator's job), so a failure-only cascade stays e.g. `1 failure`.
+    if (message.tally.count > 0) {
+      parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
+    }
+  } else {
+    // OUT-03 / OUT-06 / D-03: the default tally counts OPERATION rows uniformly
+    // across the plugin and marketplace subjects. A BARE marketplace header --
+    // one carrying neither a `status` (a realized mp outcome: `added` /
+    // `updated` / `removed` / `failed` / `skipped`) NOR a stamped `severity` --
+    // is a pure grouping label (bookkeeping, not an operation), so it must not
+    // inflate the success count. A marketplace row WITH a `status` IS a real
+    // mp-level operation and counts (an import `added` block, a `marketplace
+    // remove` `removed` block). The `info` count from `countRowsBySeverity`
+    // includes bare headers via its `?? "info"` default, so subtract them;
+    // plugin rows always represent an operation and always count.
+    const successCount = countRowsBySeverity(message.marketplaces, "info");
+    const bareHeaders = message.marketplaces.filter(
+      (mp) => mp.severity === undefined && mp.status === undefined,
+    ).length;
+    const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
+
+    if (successes > 0) {
+      parts.push(tallyCategory(successes, "success", "successes"));
+    }
   }
 
   if (parts.length === 0) {
@@ -3377,6 +3415,53 @@ export function emitContextCascade(
 ): void {
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
   emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
+}
+
+/**
+ * UGRM-01 / UGRM-02: the never-silent no-op emitter for a bulk `update` that
+ * realized ZERO transitions (0 updated, 0 failures, 0 warnings). Renders the
+ * surviving cascade body (if any) via the caller's render map, then folds the
+ * hard-coded `Plugin update: nothing to update` headline in the SAME tally slot
+ * the normal path uses -- so the line can NEVER vanish (a `tally {count: 0}`
+ * override would collapse to `""` in `composeTally`; this owns the headline
+ * instead). Two cases, both at info severity with NO reload-hint:
+ *   (a) Empty cascade (all up-to-date): no body -> emit ONLY the headline (NOT
+ *       the `(no marketplaces)` sentinel).
+ *   (b) Non-empty cascade (e.g. a benign `(force-upgradable)` decline): render
+ *       the body, then the headline below it.
+ * IL-2: exactly one `ctx.ui.notify` call via `emitWithSummary` (which emits the
+ * body unchanged at info severity -- no summary prefix).
+ */
+export function emitUpdateNoOpCascade(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  message: CascadeNotificationMessage,
+  renderPluginRowBody: (
+    p: PluginNotificationMessage,
+    probe: SoftDepStatus,
+    mpScope: Scope,
+  ) => string,
+): void {
+  const probe = softDepStatus(pi);
+
+  const blocks = message.marketplaces.map((mp) => {
+    const lines: string[] = [renderMpHeader(mp, probe)];
+    for (const p of mp.plugins) {
+      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
+    }
+
+    return lines.join("\n");
+  });
+  // Empty cascade -> "" (NOT the `(no marketplaces)` sentinel): the no-op
+  // headline alone is the never-silent output.
+  const body = blocks.join("\n\n");
+
+  // Fold the fixed headline into the tally slot (`{body}\n\n{headline}` when a
+  // body survives; just `{headline}` when empty). No reload-hint -- nothing
+  // changed on disk.
+  const withHeadline = foldTallyAndHint(body, UPDATE_NO_OP_HEADLINE, "");
+
+  emitWithSummary(ctx, message, withHeadline);
 }
 
 /**

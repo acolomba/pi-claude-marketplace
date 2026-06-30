@@ -1,6 +1,7 @@
 import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
+  emitUpdateNoOpCascade,
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
@@ -146,6 +147,10 @@ export function notifyWithContext<
   rows: readonly MarketplaceRows<Msg>[],
   kind?: "cascade",
   cardinality?: "single" | "plural",
+  // UGRM-02: the OPT-IN, update-scoped success-category override threaded onto
+  // the envelope. Every existing caller omits it (no behavior change); only the
+  // bulk-`update` path passes `{ verb: "updated", count: <updatedCount> }`.
+  tally?: { readonly verb: string; readonly count: number },
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -168,9 +173,43 @@ export function notifyWithContext<
     marketplaces,
     label: context.Messaging.label,
     ...(cardinality !== undefined && { cardinality }),
+    ...(tally !== undefined && { tally }),
   };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
+    dispatchRow(context, p, probe, mpScope),
+  );
+}
+
+/**
+ * UGRM-01 / UGRM-02: the bulk-`update` never-silent no-op emitter. Used when a
+ * bulk update realized ZERO transitions (0 updated, 0 failures, 0 warnings):
+ * either an empty post-suppression cascade (all up-to-date) or a non-empty
+ * cascade whose only surviving rows are benign info skips (e.g. a
+ * `(force-upgradable)` decline). Renders the surviving rows through the command's
+ * render map and folds the hard-coded `Plugin update: nothing to update` headline
+ * below them, so the summary line can never vanish. NO `cardinality` / `tally` --
+ * the headline is a fixed constant owned by `emitUpdateNoOpCascade`, not the
+ * `composeTally` success math.
+ */
+export function notifyUpdateNoOpWithContext<
+  Status extends string,
+  Msg extends PluginNotificationMessage & { status: Status },
+>(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  context: CommandContext<Status, Msg>,
+  rows: readonly MarketplaceRows<Msg>[],
+): void {
+  // Same type-safe widening as `notifyWithContext`: `MarketplaceRows<Msg>` is a
+  // genuine subtype of `MarketplaceNotificationMessage[]` (no cast).
+  const marketplaces: readonly MarketplaceNotificationMessage[] = rows;
+  const message: CascadeNotificationMessage = {
+    marketplaces,
+    label: context.Messaging.label,
+  };
+
+  emitUpdateNoOpCascade(ctx, pi, message, (p, probe, mpScope) =>
     dispatchRow(context, p, probe, mpScope),
   );
 }
