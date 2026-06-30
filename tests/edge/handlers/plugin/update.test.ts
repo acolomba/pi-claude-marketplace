@@ -375,7 +375,7 @@ test("shim :: --force threads force:true into updatePlugins (degrades an unsuppo
   });
 });
 
-test("shim :: without --force the same unsupported candidate blocks", async () => {
+test("shim :: without --force the force-upgradable candidate declines with the force-upgradable token", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedUnsupportedCandidate(cwd);
     const locations = locationsFor("project", cwd);
@@ -385,7 +385,12 @@ test("shim :: without --force the same unsupported candidate blocks", async () =
     await handler("hello@mp", ctx);
 
     const body = notifications.map((n) => n.message).join("\n");
-    assert.match(body, /\(skipped\) \{no longer installable\}/);
+    // XSURF-03: the no-`--force` decline of a force-upgradable candidate renders
+    // the `(force-upgradable)` token + the update-worded `--force` trailer, not
+    // the misleading `(skipped) {no longer installable}`.
+    assert.match(body, /\(force-upgradable\)/);
+    assert.match(body, /Re-run with --force to update with the supported components\./);
+    assert.doesNotMatch(body, /\{no longer installable\}/);
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
   });

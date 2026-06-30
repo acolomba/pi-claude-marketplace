@@ -43,6 +43,7 @@ import {
   notify,
   type NotificationMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { narrowUnsupportedKinds } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 // ---------------------------------------------------------------------------
 // Catalog extraction (D-17-05 + D-17-06)
@@ -892,8 +893,10 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-02 / D-69-03: force-degradable `unsupported` install failure -- the
-    // row carries the `--force` hint trailer and renders at error severity.
+    // SEV-02 / D-69-03 / XSURF-01: force-degradable install failure -- the row
+    // renders the resolver-state-driven `(unsupported)` token (consistent with
+    // list / info), carries the `--force` hint trailer, and renders at error
+    // severity.
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -904,7 +907,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "unavailable",
+                status: "unsupported",
                 name: "helper",
                 reasons: ["unsupported hooks", "lsp"],
                 forceHint: true,
@@ -1666,10 +1669,13 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-04 / D-69-02: a TARGETED `update <plugin>@<marketplace>` that declines
-    // a force-upgradable candidate (no `--force`, reason `no longer installable`)
-    // is actionable -> warning. Single cardinality, so no trailing tally; the
-    // cascade carries the `needs attention` summary line.
+    // SEV-04 / D-69-02 / XSURF-03: a TARGETED `update <plugin>@<marketplace>`
+    // that declines a force-upgradable candidate (no `--force`) is actionable
+    // -> warning. The decline flips to the `force-upgradable` token (consistent
+    // with how `list` describes the same plugin) carrying the list-consistent
+    // degrade reason + the update-worded `--force` trailer (forceHint). Single
+    // cardinality, so no trailing tally; the cascade carries the `needs
+    // attention` summary line.
     "decline-force-upgradable-targeted": {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
@@ -1682,12 +1688,13 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "skipped",
+                status: "force-upgradable",
                 severity: "warning",
                 needsReload: false,
+                forceHint: true,
                 name: "hello",
                 version: "1.0.0",
-                reasons: ["no longer installable"],
+                reasons: ["lsp"],
               },
             ],
           },
@@ -1695,8 +1702,9 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-04 / D-69-02: a BULK `update @<marketplace>` that skips the same
-    // force-upgradable candidate the user did NOT target is benign -> info. No
+    // SEV-04 / D-69-02 / XSURF-03: a BULK `update @<marketplace>` that skips the
+    // same force-upgradable candidate the user did NOT target is benign -> info.
+    // Same `force-upgradable` token + `--force` trailer as the targeted form; no
     // summary line; the plural tally counts the info skip among its successes.
     "skip-force-upgradable-bulk": {
       pi: piWithBothLoaded(),
@@ -1709,12 +1717,13 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "skipped",
+                status: "force-upgradable",
                 severity: "info",
                 needsReload: false,
+                forceHint: true,
                 name: "hello",
                 version: "1.0.0",
-                reasons: ["no longer installable"],
+                reasons: ["lsp"],
               },
             ],
           },
@@ -3679,6 +3688,70 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
       .join("\n\n");
     assert.fail(`catalog UAT failures (${failures.length}):\n${formatted}`);
   }
+});
+
+// XSURF-03 cross-surface byte-parity: the `update`-decline `force-upgradable`
+// reason brace MUST be byte-identical to the `list (force-upgradable)` reason
+// brace for the SAME degrade kinds. This is what justifies sourcing the
+// update-decline reason via the SAME `narrowUnsupportedKinds` seam the `list`
+// row uses (rather than the install-path `narrowResolverReasons`, which also
+// folds in note-derived reasons and could diverge). The assertion renders both
+// rows through `notify()` and compares the `(force-upgradable) {…}` segment.
+test("XSURF-03: update-decline force-upgradable reason brace === list force-upgradable brace (same kinds)", () => {
+  // Both surfaces source the degrade reason from the shared kind-narrowing seam.
+  const kinds = ["lspServers", "themes"];
+  const reasons = narrowUnsupportedKinds(kinds);
+
+  // The list-inventory row (no forceHint -> no trailer).
+  const listCtx = makeCtx();
+  notify(listCtx as never, piWithBothLoaded() as never, {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "project",
+        plugins: [{ status: "force-upgradable", name: "hello", version: "1.0.0", reasons }],
+      },
+    ],
+  });
+
+  // The update-decline row (forceHint -> update trailer + warning severity).
+  const declineCtx = makeCtx();
+  notify(declineCtx as never, piWithBothLoaded() as never, {
+    label: "Plugin update",
+    cardinality: "single",
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "project",
+        plugins: [
+          {
+            status: "force-upgradable",
+            name: "hello",
+            version: "1.0.0",
+            reasons,
+            forceHint: true,
+            severity: "warning",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  });
+
+  const extractBrace = (s: string): string => {
+    const m = /\(force-upgradable\) (\{[^}]*\})/.exec(s);
+    assert.ok(m, `expected a (force-upgradable) {…} brace in:\n${s}`);
+    return m[1]!;
+  };
+
+  const listBody = listCtx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  const declineBody = declineCtx.ui.notify.mock.calls[0]!.arguments[0] as string;
+
+  assert.equal(
+    extractBrace(declineBody),
+    extractBrace(listBody),
+    "the update-decline reason brace must be byte-identical to the list force-upgradable brace",
+  );
 });
 
 test("catalog UAT inverse walk: every FIXTURES (section,state) has a matching catalog annotation (no orphan/stale fixture)", async () => {
