@@ -106,6 +106,7 @@ import {
 } from "../../shared/errors.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import {
+  notifyUpdateNoOpWithContext,
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
@@ -1855,8 +1856,28 @@ function renderUpdateCascadeAndNotify(
   // per-row mapping so the success arms can raise severity on a missing
   // declared companion (mirrors the renderer's single-probe discipline).
   const probe = softDepStatus(pi);
+
+  // UGRM-02 / D-04: the headline counts realized transitions ONLY. The `updated`
+  // partition holds both clean `(updated)` rows AND force-installed degraded
+  // updates (the force-installed arm is emitted from `case "updated"`), so a
+  // single partition filter captures every realized transition. A
+  // `force-upgradable` decline is partition `skipped`, so it contributes 0
+  // (correct). Derived BEFORE row suppression -- independent of UGRM-01
+  // filtering.
+  const updatedCount = outcomes.filter((o) => o.outcome.partition === "updated").length;
+
   const byMp = new Map<string, MpGroup>();
   for (const { target, outcome } of outcomes) {
+    // UGRM-01 suppression (Site A -- at the orchestrator, NOT the renderer): a
+    // BULK (`plural`) update does not render a per-plugin `(skipped)
+    // {up-to-date}` row for each unchanged plugin. The single-target path is
+    // untouched (a user who named one plugin still sees its up-to-date skip
+    // row). Only the `unchanged` partition is suppressed; a `skipped`-partition
+    // row (e.g. the `force-upgradable` decline) survives into the cascade.
+    if (cardinality === "plural" && outcome.partition === "unchanged") {
+      continue;
+    }
+
     const key = `${target.scope}:${target.marketplace}`;
     // WR-01: mirror the reinstall.ts:597-610 get-existing-or-construct-new
     // shape so the in-place mutation invariant does not rely on the
@@ -1887,6 +1908,11 @@ function renderUpdateCascadeAndNotify(
   // `MarketplaceRows<UpdateMsg>` annotation holds without a cast -- a status
   // drift between the producer and the render map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<UpdateMsg>> = [...byMp.values()]
+    // UGRM-01: drop a marketplace group emptied by suppression so no bare
+    // `● mp [scope]` header renders (a group only reaches zero rows if every one
+    // of its plugins was an `unchanged` suppression; the loop `continue` already
+    // prevents creating one, this is the belt-and-braces guard).
+    .filter((g) => g.plugins.length > 0)
     .sort((a, b) =>
       compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
     )
@@ -1915,11 +1941,38 @@ function renderUpdateCascadeAndNotify(
   //  docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
   //  rollback-partial, all-up-to-date-noop, bare-multi-mp,
   //  same-mp-both-scopes).
-  // OUT-04 / D-04: the trailing per-operation tally renders only for the bulk
-  // (`@marketplace` / bare) update forms; a single-target `<plugin>@<mp>` update
-  // omits it (the row embeds the outcome). The structural single-vs-plural
-  // signal is the invocation FORM, threaded from `updatePlugins`.
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, undefined, cardinality);
+  // UGRM-01 / UGRM-02: detect the zero-realized-transition bulk case -- a
+  // `plural` update that updated nothing AND has no surviving error/warning row.
+  // This covers BOTH an empty post-suppression cascade (all up-to-date) and a
+  // non-empty cascade whose only rows are benign info skips (e.g. the
+  // `force-upgradable` decline). The surviving severities are the caller-stamped
+  // per-row `severity` fields (undefined defaults to info).
+  const hasErrorOrWarningRow = marketplaces.some((mp) =>
+    mp.plugins.some((p) => p.severity === "error" || p.severity === "warning"),
+  );
+  if (cardinality === "plural" && updatedCount === 0 && !hasErrorOrWarningRow) {
+    // Never-silent no-op headline. `emitUpdateNoOpCascade` renders the surviving
+    // body (empty for all-up-to-date) and folds the hard-coded `Plugin update:
+    // nothing to update` line below it. The line can NEVER vanish (a
+    // `tally {count: 0}` override would collapse to `""` in composeTally; this
+    // owns the headline instead). Info severity, no reload-hint.
+    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces);
+    return;
+  }
+
+  // OUT-04 / D-04 / UGRM-02: the trailing per-operation tally renders only for
+  // the bulk (`@marketplace` / bare) update forms; a single-target
+  // `<plugin>@<mp>` update omits it (the row embeds the outcome). The structural
+  // single-vs-plural signal is the invocation FORM, threaded from
+  // `updatePlugins`. The updates-only `tally` override owns the success category
+  // (realized transitions only); failure/warning categories still come from the
+  // rows, so a mixed cascade renders `Plugin update: 1 failure, 1 updated`. On a
+  // single-target update the override is unread (`composeTally` returns "" for
+  // `cardinality !== "plural"`).
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, undefined, cardinality, {
+    verb: "updated",
+    count: updatedCount,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
