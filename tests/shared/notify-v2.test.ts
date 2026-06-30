@@ -457,6 +457,126 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
   ]);
 });
 
+test("XSURF-01: unsupported install-failure row with forceHint emits the --force install trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unsupported",
+            name: "hookify",
+            version: "1.0.0",
+            reasons: ["unsupported hooks", "lsp"],
+            severity: "error",
+            forceHint: true,
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  // error severity -> notify passes the severity as a second argument.
+  assert.equal(args[1], "error");
+  assert.equal(
+    args[0],
+    `A plugin operation has failed.\n\n● demo [user]\n  ⊖ hookify v1.0.0 (unsupported) {unsupported hooks, lsp}\n    Re-run with --force to install the supported components.`,
+  );
+});
+
+test("XSURF-01: unsupported row WITHOUT forceHint stays byte-frozen (no trailer)", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "unsupported",
+            name: "hookify",
+            version: "1.0.0",
+            reasons: ["unsupported hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(args[0], `● demo [user]\n  ⊖ hookify v1.0.0 (unsupported) {unsupported hooks}`);
+  assert.ok(!(args[0] as string).includes("--force"));
+});
+
+test("XSURF-03: force-upgradable update-decline row with forceHint emits the --force update trailer", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-upgradable",
+            name: "clean-plugin",
+            version: "1.0.0",
+            reasons: ["lsp"],
+            severity: "warning",
+            forceHint: true,
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args[1], "warning");
+  assert.equal(
+    args[0],
+    `A plugin operation needs attention.\n\n● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {lsp}\n    Re-run with --force to update with the supported components.`,
+  );
+});
+
+test("XSURF-03: list-inventory force-upgradable row WITHOUT forceHint stays byte-frozen (no trailer)", () => {
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        plugins: [
+          {
+            status: "force-upgradable",
+            name: "clean-plugin",
+            version: "1.0.0",
+            reasons: ["unsupported hooks"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+  assert.equal(args.length, 1);
+  assert.equal(
+    args[0],
+    `● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}`,
+  );
+  assert.ok(!(args[0] as string).includes("--force"));
+});
+
 test("notify renders upgradable plugin with version and reasons brace", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();

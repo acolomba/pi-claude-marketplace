@@ -695,16 +695,17 @@ export interface PluginUnavailableMessage extends MessageBase {
 }
 
 /**
- * `(unsupported)` -- list/info-surface row for a not-installed, force-
- * installable plugin (USTAT-01 / D-64-01). The manifest is structurally sound
- * but carries components Pi cannot install (lsp / hooks / unsupported source),
- * so the plugin would degrade-install under `--force`. Mirrors
+ * `(unsupported)` -- row for a not-installed, force-installable plugin
+ * (USTAT-01 / D-64-01 / XSURF-01). The manifest is structurally sound but
+ * carries components Pi cannot install (lsp / hooks / unsupported source), so
+ * the plugin would degrade-install under `--force`. Mirrors
  * `PluginUnavailableMessage` (carries REQUIRED `reasons`; NO `scope` (SNM-11);
- * no `dependencies`; PL-4 optional `description`) but DELIBERATELY OMITS the
- * `forceHint?` field -- that is the install-error surface (out of scope here);
- * the list/info rows render byte-frozen with no `--force` trailer. Uses the
- * dedicated `ICON_UNSUPPORTED` (`⊖`) glyph. `extends MessageBase` (optional
- * severity, defaults to info -- this is a token rename, not a severity change).
+ * no `dependencies`; PL-4 optional `description`). The list / info inventory
+ * rows OMIT `forceHint` and render byte-frozen with no `--force` trailer; the
+ * install-failure surface (XSURF-01) sets `forceHint: true` so the renderer
+ * appends the SEV-02 `--force` hint trailer. Uses the dedicated
+ * `ICON_UNSUPPORTED` (`⊖`) glyph. `extends MessageBase` (optional severity,
+ * defaults to info -- this is a token rename, not a severity change).
  */
 export interface PluginUnsupportedMessage extends MessageBase {
   readonly status: "unsupported";
@@ -712,6 +713,11 @@ export interface PluginUnsupportedMessage extends MessageBase {
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
+  // SEV-02 / XSURF-01: set on the install-failure surface when the resolver
+  // verdict is `unsupported` (force-degradable). The renderer appends a
+  // 4-space-indented `--force` hint trailer below the row. Absent on every
+  // list / info inventory surface, which render byte-frozen.
+  readonly forceHint?: boolean;
 }
 
 /**
@@ -760,13 +766,17 @@ export interface PluginForceInstalledMessage extends MessageBase {
 }
 
 /**
- * `(force-upgradable)` -- FSTAT-04 / D-66-02 / D-66-03 list-surface row for a
- * currently-clean installed plugin whose newer no-network cache candidate would
- * NEWLY degrade it. STRUCTURALLY list-only (an installed plugin is force-
- * installed or installed on every other surface, never force-upgradable).
- * REUSES `ICON_INSTALLED` (`●`) because the row is currently clean, mirroring
- * the `upgradable` arm. Carries REQUIRED `reasons`; no `dependencies`. PL-4:
- * optional `description`, truncated at column 66.
+ * `(force-upgradable)` -- FSTAT-04 / D-66-02 / D-66-03 row for a currently-clean
+ * installed plugin whose newer no-network cache candidate would NEWLY degrade
+ * it. Emitted on the list inventory surface AND, per XSURF-03, on the manual
+ * update-decline surface (a no-`--force` update of a force-upgradable plugin
+ * declines rather than degrading; the declined row reuses this token to read
+ * consistently with `list`). REUSES `ICON_INSTALLED` (`●`) because the row is
+ * currently clean, mirroring the `upgradable` arm. Carries REQUIRED `reasons`;
+ * no `dependencies`. The list inventory row OMITS `forceHint` and renders
+ * byte-frozen; the update-decline row sets `forceHint: true` (and carries the
+ * pre-update version) so the renderer appends the update-worded `--force` hint
+ * trailer. PL-4: optional `description`, truncated at column 66.
  */
 export interface PluginForceUpgradableMessage extends MessageBase {
   readonly status: "force-upgradable";
@@ -775,6 +785,10 @@ export interface PluginForceUpgradableMessage extends MessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
+  // SEV-04 / XSURF-03: set on the manual update-decline surface. The renderer
+  // appends a 4-space-indented update-worded `--force` hint trailer below the
+  // row. Absent on the list inventory row, which renders byte-frozen.
+  readonly forceHint?: boolean;
 }
 
 /**
@@ -2228,6 +2242,17 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 const FORCE_INSTALL_HINT_TRAILER = "Re-run with --force to install the supported components.";
 
 /**
+ * XSURF-03 update-worded `--force` hint trailer literal, rendered below a
+ * force-upgradable manual update-decline row. The update-worded analog of
+ * `FORCE_INSTALL_HINT_TRAILER`. References the user's own `--force` flag only
+ * -- no plugin / marketplace interpolation (T-73-01). This byte form is FROZEN
+ * as a reconciled DOC contract and is locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md. Do not change the
+ * wording.
+ */
+const FORCE_UPDATE_HINT_TRAILER = "Re-run with --force to update with the supported components.";
+
+/**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
  *   - `info`    = the resource reached the desired state (success / steady
  *                 inventory / benign idempotent no-op);
@@ -3412,15 +3437,23 @@ function composePluginLinesWith(
     lines.push(`    ${truncateDescription(p.description)}`);
   }
 
-  // SEV-02 / D-69-03: the force-degradable `unsupported` install-failure row
-  // carries a 4-space-indented `--force` hint trailer (the structural
-  // `unavailable` arm omits it -- force cannot help). The hint references the
-  // user's own flag only and interpolates no plugin / marketplace identifier
-  // (T-69-01). D-70-01: the byte form is FROZEN as the reconciled DOC
-  // contract, locked byte-for-byte in docs/output-catalog.md and
-  // docs/messaging-style-guide.md.
-  if (p.status === "unavailable" && p.forceHint === true) {
+  // SEV-02 / D-69-03 / XSURF-01: the force-degradable install-failure row
+  // carries a 4-space-indented install-worded `--force` hint trailer. The row
+  // surfaces as `unavailable` (Phase-72 structural arm) or `unsupported`
+  // (resolver-state-driven token, XSURF-01); the structural `unavailable` arm
+  // omits `forceHint` -- force cannot help. The hint references the user's own
+  // flag only and interpolates no plugin / marketplace identifier (T-69-01).
+  // D-70-01: the byte form is FROZEN as the reconciled DOC contract, locked
+  // byte-for-byte in docs/output-catalog.md and docs/messaging-style-guide.md.
+  if ((p.status === "unavailable" || p.status === "unsupported") && p.forceHint === true) {
     lines.push(`    ${FORCE_INSTALL_HINT_TRAILER}`);
+  }
+
+  // SEV-04 / XSURF-03: the force-upgradable manual update-decline row carries a
+  // 4-space-indented update-worded `--force` hint trailer. The list inventory
+  // `force-upgradable` row omits `forceHint` and stays byte-frozen.
+  if (p.status === "force-upgradable" && p.forceHint === true) {
+    lines.push(`    ${FORCE_UPDATE_HINT_TRAILER}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {
