@@ -2,19 +2,15 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-current_phase: 74
-current_phase_name: Bulk Update Grammar Refinement
 status: verifying
-stopped_at: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
-last_updated: "2026-06-30T03:50:23.202Z"
+last_updated: "2026-06-30T04:18:37.993Z"
 last_activity: 2026-06-30
-last_activity_desc: Phase 73 complete, transitioned to Phase 74
 progress:
   total_phases: 12
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 33
-  completed_plans: 32
-  percent: 92
+  completed_plans: 33
+  percent: 100
 ---
 
 # Project State
@@ -23,14 +19,14 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 73 — force-cross-surface-token-unification
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 74 — bulk-update-grammar-refinement
 
 ## Current Position
 
-Phase: 74 — Bulk Update Grammar Refinement
-Plan: Not started
+Phase: 74 (bulk-update-grammar-refinement) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
-Last activity: 2026-06-30 — Phase 73 complete, transitioned to Phase 74
+Last activity: 2026-06-30
 
 ## Performance Metrics
 
@@ -151,6 +147,7 @@ Last activity: 2026-06-30 — Phase 73 complete, transitioned to Phase 74
 | Phase 71 P03 | 16min | 2 tasks | 8 files |
 | Phase 71 P4 | 17min | 2 tasks | 4 files |
 | Phase 73 P01 | 28min | 3 tasks | 14 files |
+| Phase 74 P01 | 23min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -315,6 +312,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: Phase 71 complete (PHOOK-01..05): partial-hook plugins blocked solely by a non-bucket-A event or unsupported matcher now force-install, staging a strict-subset hooks.json; {unsupported hooks} renders byte-identically across list/info/force-installed surfaces; no-force install blocks with the --force hint
 - [Phase ?]: XSURF-03 update-decline reason sourced via narrowUnsupportedKinds (list-row seam) for byte-parity, not install-path narrowResolverReasons
 - [Phase ?]: XSURF-03 SEV-04 split moved onto the force-upgradable status arm; cascadeSkipSeverity untouched
+- [Phase 74]: UGRM-02 update tally is an opt-in CascadeNotificationMessage.tally override read only by composeTally; other ops byte-identical
+- [Phase 74]: Bulk-update never-silent no-op headline 'Plugin update: nothing to update' is orchestrator-owned via emitUpdateNoOpCascade, not composeTally (count:0 collapses to empty)
 
 ### Pending Todos
 
@@ -388,7 +387,7 @@ surface still renders `⊘ (unavailable)` + `--force` hint; review finding IN-01
 
 ## Session Continuity
 
-Last session: 2026-06-30T03:32:52.879Z
+Last session: 2026-06-30T04:17:18.844Z
 Stopped At: Phase 72 complete (executed + reviewed + UAT passed); milestone left open by operator choice
 Resume File: None
 

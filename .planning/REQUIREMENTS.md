@@ -101,8 +101,8 @@ Extends the Phase 72 `⊖ (unsupported)` de-collapse to the surfaces it did not 
 
 Pre-existing v1.5 (UXG-05) / v1.11 bulk-update grammar surfaced by the same UAT: a bulk `update` lists every up-to-date plugin and counts at-desired-state rows as "successes". Not force-install-specific; refines the cascade + summary for consistency with the project's benign-no-op suppression philosophy (UXG-02). Target grammar settled in spec/discuss.
 
-- [ ] **UGRM-01**: A bulk `update` does not emit a per-plugin `(skipped) {up-to-date}` row for every unchanged plugin (exact suppress-vs-summarize shape settled in spec); an all-up-to-date bulk update still communicates the no-op clearly.
-- [ ] **UGRM-02**: The bulk-update summary line distinguishes "updated" from "already at desired state" so the headline count reflects operations performed, not unchanged no-ops; `docs/output-catalog.md` / `docs/messaging-style-guide.md` and the byte-exact update tests are reconciled.
+- [x] **UGRM-01**: A bulk `update` does not emit a per-plugin `(skipped) {up-to-date}` row for every unchanged plugin (exact suppress-vs-summarize shape settled in spec); an all-up-to-date bulk update still communicates the no-op clearly.
+- [x] **UGRM-02**: The bulk-update summary line distinguishes "updated" from "already at desired state" so the headline count reflects operations performed, not unchanged no-ops; `docs/output-catalog.md` / `docs/messaging-style-guide.md` and the byte-exact update tests are reconciled.
 
 ## Out of Scope
 
@@ -167,8 +167,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | XSURF-01 | Phase 73 | Complete |
 | XSURF-02 | Phase 73 | Complete |
 | XSURF-03 | Phase 73 | Complete |
-| UGRM-01 | Phase 74 | Pending |
-| UGRM-02 | Phase 74 | Pending |
+| UGRM-01 | Phase 74 | Complete |
+| UGRM-02 | Phase 74 | Complete |
 
 **Coverage:**
 

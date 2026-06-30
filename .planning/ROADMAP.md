@@ -201,7 +201,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 - [x] **Phase 71: Partial Hook Force-Install** - unsupportable hooks degrade under `--force` (install supportable handlers, drop the rest) instead of failing the plugin `unavailable` (completed 2026-06-28)
 - [x] **Phase 72: Unsupported Render Token** - not-installed force-installable plugins render a distinct `(unsupported)` status + `⊖` glyph in `list`/`info` instead of collapsing into `(unavailable)`/`⊘`; structural-unavailable plugins keep `(unavailable)` (completed 2026-06-29)
 - [x] **Phase 73: Force Cross-Surface Token Unification** - the install-error and update-decline surfaces describe a force-installable plugin consistently with `list`/`info` (`⊖ (unsupported)`, force-aware decline reason + `--force` affordance); `info` non-resolvable arm keys on `resolved.state` (IN-01) (completed 2026-06-30)
-- [ ] **Phase 74: Bulk Update Grammar Refinement** - a bulk `update` suppresses up-to-date no-op rows and reports a count that reflects updates performed rather than at-desired-state rows (pre-existing v1.5/v1.11 grammar)
+- [x] **Phase 74: Bulk Update Grammar Refinement** - a bulk `update` suppresses up-to-date no-op rows and reports a count that reflects updates performed rather than at-desired-state rows (pre-existing v1.5/v1.11 grammar) (completed 2026-06-30)
 
 #### Phase 64: Resolver Three-Way State
 
@@ -476,7 +476,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
 | 72. Unsupported Render Token                                        | force-install | 1/1 | Complete    | 2026-06-29 |
 | 73. Force Cross-Surface Token Unification                           | force-install | 1/1 | Complete    | 2026-06-30 |
-| 74. Bulk Update Grammar Refinement                                  | force-install | 0/1 | Planned     | -          |
+| 74. Bulk Update Grammar Refinement                                  | force-install | 1/1 | Complete   | 2026-06-30 |
 
 #### Phase 71: Partial Hook Force-Install
 
@@ -561,4 +561,4 @@ Plans:
 
 Plans:
 
-- [ ] 74-01-PLAN.md — suppress bulk up-to-date rows (UGRM-01), updates-only headline via opt-in tally override (UGRM-02), relock catalog/style-guide/tests
+- [x] 74-01-PLAN.md — suppress bulk up-to-date rows (UGRM-01), updates-only headline via opt-in tally override (UGRM-02), relock catalog/style-guide/tests
