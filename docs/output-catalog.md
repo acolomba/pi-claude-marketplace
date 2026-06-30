@@ -764,15 +764,14 @@ A plugin operation has failed.
 
 ● official [user]
   ● alpha v0.5.0 → v1.0.0 (updated)
-  ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
-Plugin update: 1 failure, 2 successes
+Plugin update: 1 failure, 1 updated
 
 /reload to pick up changes
 ```
 
-OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `updated` + idempotent `(skipped) {up-to-date}` rows as the two successes. The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row for every unchanged plugin, so the `beta` up-to-date row is absent here. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the one `updated` row as `1 failure, 1 updated` (the failure category is the unchanged `countRowsBySeverity` math; the updates-only `tally` override owns the success category, rendered with the verb `updated`, which has no plural-s). The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -792,21 +791,17 @@ A plugin operation has failed.
 Plugin update: 1 failure
 ```
 
-OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint.
+OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint. UGRM-01/UGRM-02: this state is deliberately unaffected -- there are no `unchanged` rows to suppress and zero `updated` rows, so the updates-only `tally` override contributes nothing (its 0-count success category is dropped) and the failure math is unchanged at `1 failure`.
 
 ### All up-to-date (no-op cascade)
 
 <!-- catalog-state: all-up-to-date-noop -->
 
 ```text
-● official [user]
-  ⊘ alpha (skipped) {up-to-date}
-  ⊘ beta (skipped) {up-to-date}
-
-Plugin update: 2 successes
+Plugin update: nothing to update
 ```
 
-Skipped-only cascade. OUT-03/D-04: both `(skipped) {up-to-date}` rows are idempotent (info per D-01), so the plural tally reports two successes even though the operation changed nothing. No reload-hint (no state-changing status). Severity: every reason is the benign `up-to-date` (in the benign closed set), so this all-benign skip cascade computes `info` per UXG-02 / D-28-06 -- the second arg is omitted. (A cascade with any actionable skip such as `{not installed}` would instead route to `warning`.)
+UGRM-01/UGRM-02: a bulk `update` whose targets are ALL up-to-date suppresses every per-plugin `(skipped) {up-to-date}` row (and drops the now-empty marketplace header), so the cascade body is empty. Rather than emit zero output (a perceived hang) or the `(no marketplaces)` sentinel, the orchestrator emits a single never-silent headline `Plugin update: nothing to update`. This is a hard-coded constant (mirroring the `reconcile-pending-empty` no-op byte-lock precedent), at `info` severity, with no reload-hint (nothing changed on disk).
 
 ### Across multiple marketplaces (bare `update` form)
 
@@ -820,15 +815,14 @@ A plugin operation has failed.
 
 ● official [user]
   ● alpha v0.5.0 → v1.0.0 (updated)
-  ⊘ beta (skipped) {up-to-date}
   ⊘ delta (failed) {network unreachable}
 
-Plugin update: 1 failure, 3 successes
+Plugin update: 1 failure, 2 updated
 
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. OUT-03/D-04: the plural tally counts uniformly across both blocks -- one `failed` row and three info rows (two `updated` + one idempotent `(skipped) {up-to-date}`) yield `1 failure, 3 successes`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
+Two marketplace blocks. Severity: `error`. UGRM-01: the `beta` `(skipped) {up-to-date}` row is suppressed. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the two `updated` rows (`helper` + `alpha`) as `1 failure, 2 updated`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
 
 ### Same marketplace name in both scopes
 
@@ -841,12 +835,12 @@ Two marketplace blocks. Severity: `error`. OUT-03/D-04: the plural tally counts 
 ● official [user]
   ● beta v0.5.0 → v1.0.0 (updated)
 
-Plugin update: 2 successes
+Plugin update: 2 updated
 
 /reload to pick up changes
 ```
 
-Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes. OUT-03/D-04: the two `updated` rows across the per-scope blocks are the two successes in the plural tally.
+Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse across scopes. UGRM-02/D-04: the two `updated` rows across the per-scope blocks are the two realized transitions, so the updates-only headline reads `2 updated` (no suppression needed -- there are no up-to-date rows here).
 
 ### Hash-version update arrow (PI-7 short-SHA display, both sides)
 
@@ -856,12 +850,12 @@ Per-scope blocks; identical lock to `reinstall` -- marketplaces never collapse a
 ● official [user]
   ● hashed-plugin v#2ea95f8 → v#1c3d9a0 (updated)
 
-Plugin update: 1 success
+Plugin update: 1 updated
 
 /reload to pick up changes
 ```
 
-OUT-03/D-04: the single `updated` row is the one success in the plural tally. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
+UGRM-02/D-04: the single `updated` row is the one realized transition, so the updates-only headline reads `1 updated`. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
 ### Force-upgradable decline, targeted update (SEV-04 / D-69-02)
 
@@ -886,10 +880,10 @@ A TARGETED `update <plugin>@<marketplace>` (no `--force`) whose candidate re-res
   ● hello v1.0.0 (force-upgradable) {lsp}
     Re-run with --force to update with the supported components.
 
-Plugin update: 1 success
+Plugin update: nothing to update
 ```
 
-The SAME force-upgradable candidate skipped by a BULK `update @<marketplace>` (or bare `update`) the user did NOT individually target is benign -> severity `info` (SEV-04 / D-69-02): no summary line, and the plural tally counts the info skip among its successes (`1 success`). The per-row `(force-upgradable) {lsp}` bytes + the `--force` trailer are identical to the targeted form above; only the stamped severity (and therefore the summary line / tally) moves. No reload-hint.
+The SAME force-upgradable candidate skipped by a BULK `update @<marketplace>` (or bare `update`) the user did NOT individually target is benign -> severity `info` (SEV-04 / D-69-02). The per-row `(force-upgradable) {lsp}` bytes + the `--force` trailer are the Phase-73 lock, identical to the targeted form above; this is a zero-realized-transition bulk cascade -- one info `force-upgradable` decline (partition `skipped`, NOT `updated`), 0 updated, 0 failures/warnings. UGRM-01/UGRM-02: the cascade BODY still renders the declined row + trailer, but the headline is the never-silent no-op constant `Plugin update: nothing to update` (the `force-upgradable` decline contributes 0 to the updated count, so the override's 0-count success category collapses to `""`; the orchestrator owns the headline rather than letting it vanish). No reload-hint.
 
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 

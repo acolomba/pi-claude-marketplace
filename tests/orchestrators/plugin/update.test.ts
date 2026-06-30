@@ -648,25 +648,21 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
       });
 
       const body = notifications[0]?.message ?? "";
-      // V2 byte form combines `single-mp-mixed`
-      // catalog shape (docs/output-catalog.md:495-504): alpha (updated)
-      // + beta (skipped {up-to-date}) under one marketplace header in
-      // caller-order (D-16-06 -- orchestrator iterates in the
-      // enumerateTargets order; notify() does not sort plugin rows).
-      // Plugin-row `[<scope>]` brackets suppressed by orphan-fold. The
-      // (updated) row has no soft-dep markers (plugin declares no agents
-      // / no mcp; PUP-1 @mp fixture sets only `hasSkill: true`).
-      // OUT-03/D-04: the `@mp` form is a bulk (plural) update, so the trailing
-      // per-operation tally renders between the body and the reload-hint -- the
-      // `updated` + idempotent `(skipped) {up-to-date}` rows are the two
-      // successes.
+      // Catalog `single-mp-mixed` shape: alpha (updated) under one marketplace
+      // header. UGRM-01: the `beta (skipped) {up-to-date}` row is suppressed for
+      // the bulk (`@mp`, plural) form -- only the realized transition renders.
+      // Plugin-row `[<scope>]` brackets suppressed by orphan-fold. The (updated)
+      // row has no soft-dep markers (plugin declares no agents / no mcp; the
+      // @mp fixture sets only `hasSkill: true`). UGRM-02: the trailing tally
+      // counts realized transitions only -- one `updated` row -> `1 updated`
+      // (the verb has no plural-s); the suppressed up-to-date row no longer
+      // inflates the count.
       assert.equal(
         body,
         "● mp [project]\n" +
           "  ● alpha v1.0.0 → v1.0.1 (updated)\n" +
-          "  ⊘ beta (skipped) {up-to-date}\n" +
           "\n" +
-          "Plugin update: 2 successes\n" +
+          "Plugin update: 1 updated\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -1697,15 +1693,16 @@ test("bare-form both-scopes: plugins in user + project scopes both appear in upd
         // No scope -> bare form enumerates both user and project scopes
       });
 
-      // Both scopes should be enumerated. Both plugins are up-to-date
-      // (same version in manifest as in state), so we expect an "unchanged"
-      // notification that mentions both alpha and beta.
+      // Both scopes are enumerated and both plugins are up-to-date (same version
+      // in manifest as in state). UGRM-01: a bulk (bare-form, plural) update
+      // suppresses every per-plugin `(skipped) {up-to-date}` row and drops the
+      // now-empty marketplace headers, so the cascade body is empty. UGRM-02:
+      // rather than zero output, the orchestrator emits the never-silent no-op
+      // headline `Plugin update: nothing to update` at info severity.
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // Both plugins are up-to-date -> skipped cascade, info severity
-      assert.match(body, /up-to-date/);
-      assert.match(body, /alpha/);
-      assert.match(body, /beta/);
+      assert.equal(body, "Plugin update: nothing to update");
+      assert.equal(notifications[0]?.severity, undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3234,8 +3231,21 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(force-upgradable\)/);
-      assert.match(body, /Re-run with --force to update with the supported components\./);
+      // UGRM-01/UGRM-02: full-body lock. A bulk update whose only non-`updated`
+      // row is a benign info `(force-upgradable)` decline (0 updated, 0
+      // failures/warnings) renders the cascade BODY (the Phase-73 row +
+      // `--force` trailer) AND the never-silent `Plugin update: nothing to
+      // update` headline below it -- the summary line does NOT vanish. The
+      // degrade reason `{unsupported source}` is the `makeCandidateUnsupported`
+      // (experimental manifest) form sourced through `narrowUnsupportedKinds`.
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ● hello v1.0.0 (force-upgradable) {unsupported source}\n" +
+          "    Re-run with --force to update with the supported components.\n" +
+          "\n" +
+          "Plugin update: nothing to update",
+      );
       assert.doesNotMatch(body, /\{no longer installable\}/);
       // SEV-04: a bulk (untargeted) decline is benign -> info (severity unset).
       assert.equal(notifications[0]?.severity, undefined);

@@ -39,6 +39,8 @@ import path from "node:path";
 import test, { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { notifyUpdateNoOpWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import {
   notify,
   type NotificationMessage,
@@ -201,6 +203,15 @@ interface CatalogFixture {
   readonly message: NotificationMessage;
   readonly pi: MockPi;
   readonly expectedSeverity?: "warning" | "error";
+  // UGRM-01/UGRM-02: an optional emit override for catalog states whose
+  // user-visible output is produced by the ORCHESTRATOR, not by `notify()`. The
+  // bulk-`update` never-silent no-op headline (`all-up-to-date-noop`,
+  // `skip-force-upgradable-bulk`) is emitted via `emitUpdateNoOpCascade` -- the
+  // `notify()` renderer alone (with a `tally {count: 0}` override) would collapse
+  // the headline to `""`. When `emit` is present the driver calls it instead of
+  // `notify()`, then byte-pairs the resulting `ctx.ui.notify` call against the
+  // catalog block exactly as it does for the renderer path.
+  readonly emit?: (ctx: MockCtx, pi: MockPi) => void;
 }
 
 type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture>>>>;
@@ -1441,12 +1452,17 @@ const FIXTURES: FixtureMap = {
   // /claude:plugin update -- multi-plugin cascade; version-arrow rows.
   // -------------------------------------------------------------------------
   "/claude:plugin update": {
+    // UGRM-01: the bulk-update up-to-date `beta` row is suppressed at the
+    // orchestrator, so the fixture omits it. UGRM-02: the `tally` override owns
+    // the success category (one realized `updated` row -> `1 updated`); the
+    // failure category still folds in from the rows -> `1 failure, 1 updated`.
     "single-mp-mixed": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
         cardinality: "plural",
+        tally: { verb: "updated", count: 1 },
         marketplaces: [
           {
             name: "official",
@@ -1462,13 +1478,6 @@ const FIXTURES: FixtureMap = {
                 dependencies: [],
               },
               {
-                status: "skipped",
-                name: "beta",
-                reasons: ["up-to-date"],
-                severity: "info",
-                needsReload: false,
-              },
-              {
                 status: "failed",
                 severity: "error",
                 needsReload: false,
@@ -1481,12 +1490,17 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // UGRM-02: the override carries a 0 success count (zero `updated` rows), so
+    // `composeTally` drops the success category and the failure math is
+    // unchanged -- the summary stays byte-identical at `Plugin update: 1
+    // failure`. Proves the override does not perturb a failure-only cascade.
     "failed-with-rollback-partial": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
         cardinality: "plural",
+        tally: { verb: "updated", count: 0 },
         marketplaces: [
           {
             name: "official",
@@ -1514,44 +1528,35 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // UGRM-01/UGRM-02: an all-up-to-date bulk update suppresses every per-plugin
+    // row (and drops the now-empty marketplace headers), leaving an empty
+    // cascade. The never-silent `Plugin update: nothing to update` headline is
+    // emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext` ->
+    // `emitUpdateNoOpCascade`), NOT the `notify()` renderer -- so this fixture
+    // drives the orchestrator no-op seam via `emit`. Info severity, no
+    // reload-hint.
     "all-up-to-date-noop": {
       pi: piWithBothLoaded(),
-      // UXG-02 / D-28-06: every reason is `up-to-date` (in BENIGN_REASONS), so
-      // this all-benign skip cascade computes INFO -- no `expectedSeverity`.
       message: {
         label: "Plugin update",
         cardinality: "plural",
-        marketplaces: [
-          {
-            name: "official",
-            scope: "user",
-            plugins: [
-              {
-                status: "skipped",
-                name: "alpha",
-                reasons: ["up-to-date"],
-                severity: "info",
-                needsReload: false,
-              },
-              {
-                status: "skipped",
-                name: "beta",
-                reasons: ["up-to-date"],
-                severity: "info",
-                needsReload: false,
-              },
-            ],
-          },
-        ],
+        marketplaces: [],
+      },
+      emit: (ctx, pi) => {
+        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, []);
       },
     },
 
+    // UGRM-01: the up-to-date `beta` row is suppressed. UGRM-02: two realized
+    // `updated` rows (`helper` + `alpha`) -> `tally` count 2; the one `failed`
+    // row composes ahead -> `1 failure, 2 updated`.
     "bare-multi-mp": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
         cardinality: "plural",
+        tally: { verb: "updated", count: 2 },
         marketplaces: [
           {
             name: "local-mp",
@@ -1582,13 +1587,6 @@ const FIXTURES: FixtureMap = {
                 dependencies: [],
               },
               {
-                status: "skipped",
-                name: "beta",
-                reasons: ["up-to-date"],
-                severity: "info",
-                needsReload: false,
-              },
-              {
                 status: "failed",
                 severity: "error",
                 needsReload: false,
@@ -1601,11 +1599,15 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // UGRM-02: two realized `updated` rows across the per-scope blocks -> `tally`
+    // count 2 -> `Plugin update: 2 updated` (no suppression -- no up-to-date
+    // rows here; only the verb/count grammar changes).
     "same-mp-both-scopes": {
       pi: piWithBothLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "plural",
+        tally: { verb: "updated", count: 2 },
         marketplaces: [
           {
             name: "official",
@@ -1646,9 +1648,12 @@ const FIXTURES: FixtureMap = {
     // to per composeVersionArrow's asymmetry; D-23-05).
     "hash-version-arrow": {
       pi: piWithBothLoaded(),
+      // UGRM-02: one realized `updated` row -> `tally` count 1 -> `Plugin
+      // update: 1 updated`.
       message: {
         label: "Plugin update",
         cardinality: "plural",
+        tally: { verb: "updated", count: 1 },
         marketplaces: [
           {
             name: "official",
@@ -1706,6 +1711,16 @@ const FIXTURES: FixtureMap = {
     // same force-upgradable candidate the user did NOT target is benign -> info.
     // Same `force-upgradable` token + `--force` trailer as the targeted form; no
     // summary line; the plural tally counts the info skip among its successes.
+    // UGRM-01/UGRM-02: a bulk update whose only non-`updated` row is a benign
+    // info `(force-upgradable)` decline (partition `skipped`, 0 updated, 0
+    // failures/warnings) is a zero-realized-transition cascade. The Phase-73
+    // `(force-upgradable) {lsp}` body row + `--force` trailer still render, but
+    // the headline is the never-silent `Plugin update: nothing to update`
+    // constant -- emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext`),
+    // NOT by composeTally (which would collapse a `tally {count: 0}` override to
+    // `""`, dropping the line = the byte-drift defect). So this fixture drives
+    // the orchestrator no-op seam via `emit`, keeping the Phase-73 row as the
+    // body. Info severity, no reload-hint.
     "skip-force-upgradable-bulk": {
       pi: piWithBothLoaded(),
       message: {
@@ -1728,6 +1743,25 @@ const FIXTURES: FixtureMap = {
             ],
           },
         ],
+      },
+      emit: (ctx, pi) => {
+        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "force-upgradable",
+                severity: "info",
+                needsReload: false,
+                forceHint: true,
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["lsp"],
+              },
+            ],
+          },
+        ]);
       },
     },
 
@@ -3618,7 +3652,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
     // Fresh ctx per iteration -- mock.fn() accumulates calls across
     // invocations, so reusing it would leak state across fixtures.
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    // UGRM-01/UGRM-02: orchestrator-emitted no-op states route through the
+    // fixture's `emit` override (`emitUpdateNoOpCascade`); every other state
+    // drives the `notify()` renderer directly.
+    if (fixture.emit !== undefined) {
+      fixture.emit(ctx, fixture.pi);
+    } else {
+      notify(ctx as never, fixture.pi as never, fixture.message);
+    }
 
     assert.equal(
       ctx.ui.notify.mock.calls.length,
@@ -3751,6 +3792,62 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
     extractBrace(declineBody),
     extractBrace(listBody),
     "the update-decline reason brace must be byte-identical to the list force-upgradable brace",
+  );
+});
+
+test("UGRM-02 scope discipline: a non-update bulk cascade keeps `N successes` (no tally override)", () => {
+  // A reinstall cascade carries NO `tally` override, so `composeTally` runs the
+  // legacy info-row success math: two `reinstalled` rows + one idempotent
+  // `(skipped) {up-to-date}` row are the three at-desired-state successes. The
+  // update-scoped UGRM-02 override must NOT leak into other ops -- this proves
+  // install / reinstall / marketplace / import keep `N success(es)`.
+  const ctx = makeCtx();
+  notify(ctx as never, piWithBothLoaded() as never, {
+    label: "Plugin reinstall",
+    cardinality: "plural",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "reinstalled",
+            severity: "info",
+            needsReload: true,
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+          },
+          {
+            status: "reinstalled",
+            severity: "info",
+            needsReload: true,
+            name: "gamma",
+            version: "1.0.0",
+            dependencies: [],
+          },
+          {
+            status: "skipped",
+            name: "beta",
+            reasons: ["up-to-date"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  });
+
+  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  assert.match(
+    body,
+    /Plugin reinstall: 3 successes/,
+    "reinstall must keep the at-desired-state `N successes` grammar (no UGRM-02 override)",
+  );
+  assert.doesNotMatch(
+    body,
+    /\bupdated\b/,
+    "the update-scoped `updated` verb must not leak into a reinstall summary",
   );
 });
 

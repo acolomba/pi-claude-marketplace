@@ -111,6 +111,12 @@ Skipped plugin with the benign `{up-to-date}` reason, **info** severity (per the
   ⊘ commit-commands v1.0.0 (skipped) {up-to-date}
 ```
 
+**Bulk `update` grammar (UGRM-01 / UGRM-02, update-scoped).** The `update` operation refines the two rules above for its BULK (`@<marketplace>` / bare) forms:
+
+- **No per-plugin up-to-date row (UGRM-01).** A bulk `update` does NOT render a `(skipped) {up-to-date}` row for each unchanged plugin; only the plugins it actually changed appear. (A single-target `update <plugin>@<marketplace>` the user explicitly named STILL shows its `(skipped) {up-to-date}` row.)
+- **Updates-only headline (UGRM-02).** The bulk-`update` trailing tally counts realized transitions only -- `Plugin update: N updated` (the verb `updated` has no plural-s, so `1 updated` / `3 updated`), composing with any failure/warning categories ahead of it (`Plugin update: 1 failure, 1 updated`). This is the ONLY operation that overrides the success category; install / reinstall / marketplace / import keep the at-desired-state count grammar `N success(es)`.
+- **Never-silent no-op line.** A bulk `update` that realized ZERO transitions (all targets up-to-date, OR the only surviving rows are benign info skips such as a `(force-upgradable)` decline) emits a single hard-coded headline `Plugin update: nothing to update` (info severity, no reload-hint) -- never zero output and never a vanished summary line. When a benign info row survives, the cascade body still renders above the headline.
+
 ## Severity Routing
 
 `notify()` computes severity from contents via a first-match-wins ladder (D-16-11, refined by UXG-02 / D-28-06):
