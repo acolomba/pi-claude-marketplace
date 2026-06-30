@@ -540,7 +540,10 @@ Plans:
   3. A manual `update` decline of a force-upgradable plugin surfaces a force-aware reason (not the misleading `{no longer installable}`) and points the user at `--force`; the SEV-04 severity split (targeted=warning, bulk=info) is preserved.
   4. The byte-exact catalog/style-guide and the install/update notify tests reflect the reconciled cross-surface tokens; `npm run check` stays green.
 
-**Plans**: TBD (planner)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 73-01-PLAN.md — cross-surface (unsupported)/(force-upgradable) token + force-aware update-decline reason, byte-exact catalog reconcile
 
 #### Phase 74: Bulk Update Grammar Refinement
 
