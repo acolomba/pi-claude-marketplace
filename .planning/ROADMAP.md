@@ -553,4 +553,7 @@ Plans:
   2. The bulk-update summary line distinguishes "updated" from "already at desired state" so the headline count reflects operations performed, not unchanged no-ops.
   3. `docs/output-catalog.md` / `docs/messaging-style-guide.md` and the byte-exact update tests are reconciled to the new grammar; `npm run check` stays green.
 
-**Plans**: TBD (planner)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 74-01-PLAN.md — suppress bulk up-to-date rows (UGRM-01), updates-only headline via opt-in tally override (UGRM-02), relock catalog/style-guide/tests
