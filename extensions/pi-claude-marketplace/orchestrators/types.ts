@@ -185,12 +185,20 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
  * `not installed` / `invalid manifest` / `no longer installable`
  * values). `notes` carries the free-form cause-chain text consumed by
  * the notify trailer.
+ *
+ * XSURF-03: `forceUpgradable` marks the force-upgradable manual update-decline
+ * (the resolver verdict was `unsupported`, so `--force` could degrade-update
+ * it). The projection flips ONLY this arm to the `force-upgradable` token; the
+ * discriminant is a dedicated field, NOT the reason string, so the degrade
+ * reason can carry the list-consistent kinds instead of `no longer
+ * installable`. Structural declines (force cannot help) leave it unset.
  */
 export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
   readonly partition: "skipped";
   readonly fromVersion?: string;
   readonly notes: readonly string[];
   readonly reasons: readonly ContentReason[];
+  readonly forceUpgradable?: boolean;
 }
 
 /**

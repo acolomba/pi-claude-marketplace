@@ -1038,7 +1038,7 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- a 
   });
 });
 
-test("SEV-03: the manual `update` path (no --force) is UNCHANGED -- an `unsupported` candidate still declines with `(skipped) {no longer installable}`", async () => {
+test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgradable candidate declines with `(force-upgradable) {lsp}` + the --force trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-manual-"));
     try {
@@ -1063,13 +1063,15 @@ test("SEV-03: the manual `update` path (no --force) is UNCHANGED -- an `unsuppor
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // The manual path only takes the force path when the user passes
-      // `--force`; without it the decline byte form is unchanged (SEV-04 targeted
-      // decline -> warning, the same row Plan 02 locked).
+      // XSURF-03: the manual no-`--force` decline of a force-upgradable
+      // candidate flips to the resolver-state-driven `(force-upgradable)` token
+      // (consistent with how `list` describes the same plugin) carrying the
+      // list-consistent `{lsp}` degrade reason + the update-worded `--force`
+      // trailer. SEV-04: a targeted decline stays warning.
       assert.equal(notifications.length, 1);
       assert.equal(
         notifications[0]?.message ?? "",
-        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (force-upgradable) {lsp}\n    Re-run with --force to update with the supported components.",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
@@ -3158,7 +3160,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
   });
 });
 
-test("FORCE-03: without --force the same unsupported candidate still blocks `(skipped) {no longer installable}`", async () => {
+test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declines `(force-upgradable)` + the --force trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force03-"));
     try {
@@ -3184,7 +3186,12 @@ test("FORCE-03: without --force the same unsupported candidate still blocks `(sk
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(skipped\) \{no longer installable\}/);
+      // XSURF-03: the targeted no-`--force` decline of a force-upgradable
+      // candidate renders the `(force-upgradable)` token + the update-worded
+      // `--force` trailer; SEV-04 keeps the targeted decline at warning.
+      assert.match(body, /\(force-upgradable\)/);
+      assert.match(body, /Re-run with --force to update with the supported components\./);
+      assert.doesNotMatch(body, /\{no longer installable\}/);
       assert.equal(notifications[0]?.severity, "warning");
 
       // State untouched -- the block left the installed version in place.
@@ -3196,11 +3203,13 @@ test("FORCE-03: without --force the same unsupported candidate still blocks `(sk
   });
 });
 
-// SEV-04 / D-69-02: a BULK (`@marketplace`) update that skips a force-upgradable
-// candidate the user did not target is benign -> info (contrast PUP-4 / FORCE-03,
-// the TARGETED decline that stays warning). Same `(skipped) {no longer
-// installable}` per-row bytes; only the severity (and the summary tally) move.
-test("SEV-04: bulk update skipping a force-upgradable candidate -> info (untargeted decline)", async () => {
+// SEV-04 / D-69-02 / XSURF-03: a BULK (`@marketplace`) update that skips a
+// force-upgradable candidate the user did not target is benign -> info (contrast
+// FORCE-03, the TARGETED decline that stays warning). Same `(force-upgradable)`
+// per-row token + `--force` trailer; only the severity (and the summary tally)
+// move. The SEV-04 split is now keyed on the force-upgradable STATUS arm, NOT
+// the reason string -- this pair (warning here vs FORCE-03) proves it holds.
+test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> info (untargeted decline)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev04-bulk-"));
     try {
@@ -3225,7 +3234,10 @@ test("SEV-04: bulk update skipping a force-upgradable candidate -> info (untarge
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(skipped\) \{no longer installable\}/);
+      assert.match(body, /\(force-upgradable\)/);
+      assert.match(body, /Re-run with --force to update with the supported components\./);
+      assert.doesNotMatch(body, /\{no longer installable\}/);
+      // SEV-04: a bulk (untargeted) decline is benign -> info (severity unset).
       assert.equal(notifications[0]?.severity, undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });

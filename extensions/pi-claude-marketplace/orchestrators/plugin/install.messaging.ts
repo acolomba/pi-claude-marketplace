@@ -1,6 +1,7 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
+  ICON_UNSUPPORTED,
   composeReasons,
   forceInstalledRow,
   installedLikeRow,
@@ -12,6 +13,7 @@ import {
   type PluginForceInstalledMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
+  type PluginUnsupportedMessage,
 } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -33,10 +35,17 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 /**
  * install's private status set. A single-target install emits exactly one of
  * these: a success `installed` row, a `failed` row, or -- when the
- * entity-shape classifier narrows an unsupported-feature error -- an
- * `unavailable` row.
+ * entity-shape classifier narrows a not-installable error -- an `unavailable`
+ * row (structural defect) or, per XSURF-01, an `unsupported` row (the
+ * force-degradable arm, consistent with `list` / `info`).
  */
-export const INSTALL_STATUSES = ["installed", "force-installed", "failed", "unavailable"] as const;
+export const INSTALL_STATUSES = [
+  "installed",
+  "force-installed",
+  "failed",
+  "unavailable",
+  "unsupported",
+] as const;
 export type InstallStatus = (typeof INSTALL_STATUSES)[number];
 
 /**
@@ -49,7 +58,8 @@ export type InstallMsg =
   | PluginInstalledMessage
   | PluginForceInstalledMessage
   | PluginFailedMessage
-  | PluginUnavailableMessage;
+  | PluginUnavailableMessage
+  | PluginUnsupportedMessage;
 
 /**
  * install's command-private reason. `orphan rewake` surfaces a hook-config bug
@@ -90,6 +100,19 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
       "(unavailable)",
+      composeReasons(p.reasons, false, false, probe),
+    ]),
+  // XSURF-01: the force-degradable install-failure arm. Byte-identical to the
+  // `unavailable` arm but with the `⊖` glyph + `(unsupported)` token; the
+  // `--force` hint trailer is composed centrally by the renderer, not here.
+  unsupported: (p, probe, mpScope) =>
+    joinTokens([
+      ICON_UNSUPPORTED,
+      p.name,
+      // MSG-PL-6 / SNM-11 carve-out: `unsupported` has NO `scope?` field.
+      renderScopeBracket(undefined, mpScope),
+      renderVersion(p.version),
+      "(unsupported)",
       composeReasons(p.reasons, false, false, probe),
     ]),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),

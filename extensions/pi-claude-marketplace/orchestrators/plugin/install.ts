@@ -152,6 +152,7 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginUnavailableMessage,
+  PluginUnsupportedMessage,
   StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1504,27 +1505,42 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // across marketplaces), add it back here with a comment marking the
 // dependency.
 /**
- * SEV-02 / D-69-03 / D-70-02: build the `(unavailable)` install-failure row,
+ * SEV-02 / D-69-03 / D-70-02 / XSURF-01: build the install-failure row,
  * branching on the three-way `forceable` discriminant the resolver stamped on
  * the throw. BOTH arms render at error severity (so the leading summary line
  * fires) -- an install failure must read as an error, not a benign info row.
- * The force-degradable `unsupported` arm ALSO carries the `--force` hint trailer
- * (force can degrade-install it); the structural `unavailable` arm carries NO
- * hint (force cannot degrade-install a structural defect). PluginUnavailableMessage
- * has no `cause?` field per D-15-01 -- the reason text carries the explanation.
+ * The force-degradable arm surfaces as the resolver-state-driven `unsupported`
+ * token (XSURF-01: consistent with how `list` / `info` describe the same
+ * plugin) and ALSO carries the `--force` hint trailer (force can degrade-install
+ * it). The structural arm stays the `unavailable` token with NO hint (force
+ * cannot degrade-install a structural defect). The split keys on
+ * `entityErrorRow.forceable`, NOT the reason brace -- `{unsupported source}`
+ * appears on both arms; only the resolver verdict distinguishes them. Neither
+ * message carries a `cause?` field per D-15-01 -- the reason text carries the
+ * explanation.
  */
-function composeUnavailableMessage(
+function composeNotInstallableMessage(
   plugin: string,
   version: string | undefined,
   entityErrorRow: EntityErrorRow,
-): PluginUnavailableMessage {
+): PluginUnavailableMessage | PluginUnsupportedMessage {
+  if (entityErrorRow.forceable === true) {
+    return {
+      status: "unsupported",
+      name: plugin,
+      reasons: entityErrorRow.reasons,
+      ...(version !== undefined && version !== "" && { version }),
+      severity: "error" as const,
+      forceHint: true,
+    };
+  }
+
   return {
     status: "unavailable",
     name: plugin,
     reasons: entityErrorRow.reasons,
     ...(version !== undefined && version !== "" && { version }),
     severity: "error" as const,
-    ...(entityErrorRow.forceable === true && { forceHint: true }),
   };
 }
 
@@ -1586,7 +1602,7 @@ function composeInstallFailureMessage(args: {
   // field per D-15-01 -- the reason text carries the explanation.
   if (entityErrorRow !== undefined) {
     if (entityErrorRow.status === "unavailable") {
-      return composeUnavailableMessage(plugin, version, entityErrorRow);
+      return composeNotInstallableMessage(plugin, version, entityErrorRow);
     }
 
     const failed: PluginFailedMessage = {

@@ -7,6 +7,7 @@ import {
   pluginRow,
   type PluginFailedMessage,
   type PluginForceInstalledMessage,
+  type PluginForceUpgradableMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notify.ts";
@@ -25,9 +26,16 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 /**
  * update's private status set. The update cascade emits `updated` rows
  * (carrying the `v<from> → v<to>` arrow), `skipped` rows (up-to-date / benign
- * no-ops), and `failed` rows.
+ * no-ops), `failed` rows, and -- per XSURF-03 -- a `force-upgradable` row for a
+ * manual no-`--force` decline of a force-upgradable plugin.
  */
-export const UPDATE_STATUSES = ["updated", "force-installed", "skipped", "failed"] as const;
+export const UPDATE_STATUSES = [
+  "updated",
+  "force-installed",
+  "skipped",
+  "force-upgradable",
+  "failed",
+] as const;
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
 
 /**
@@ -38,6 +46,7 @@ export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
 export type UpdateMsg =
   | PluginUpdatedMessage
   | PluginForceInstalledMessage
+  | PluginForceUpgradableMessage
   | PluginSkippedMessage
   | PluginFailedMessage;
 
@@ -66,6 +75,12 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
   // fire on a degraded update exactly as on a clean `(updated)` row.
   "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
+  // XSURF-03: the force-upgradable manual update-decline row. Byte-identical to
+  // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
+  // the installed plugin is currently clean. The `--force` trailer is composed
+  // centrally by the renderer, not here.
+  "force-upgradable": (p, probe, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
 

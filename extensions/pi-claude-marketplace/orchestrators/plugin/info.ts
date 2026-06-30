@@ -1044,13 +1044,24 @@ async function buildNotInstalledRow(
 
   if (resolved.state !== "installable") {
     if (!isLocallyResolvable(parsedSource)) {
-      const resolverReasons = narrowResolverNotes(resolved.notes);
+      // XSURF-02 / IN-01: derive the token AND its reason source from
+      // `resolved.state`, mirroring the path-source arm and the list surface,
+      // instead of hardcoding `unavailable`. The `resolved.state !==
+      // "installable"` guard above narrows to `unsupported | unavailable`, so
+      // `resolved.unsupported` is reachable on the `unsupported` arm. Today
+      // non-path sources never resolve `unsupported` (no-network), so this is
+      // latent-divergence repair -- existing non-path `unavailable` rows stay
+      // byte-unchanged.
+      const reasons =
+        resolved.state === "unsupported"
+          ? narrowUnsupportedKinds(resolved.unsupported)
+          : narrowResolverNotes(resolved.notes);
       return {
-        status: "unavailable",
+        status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
         name: pluginName,
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),
-        ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+        ...(reasons.length > 0 && { reasons }),
         componentsResolved: false,
       };
     }

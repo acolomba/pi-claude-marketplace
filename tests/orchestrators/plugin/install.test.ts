@@ -2309,8 +2309,9 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  // Force-degradable `unsupported` arm -> the unavailable row carries the
-  // `--force` hint and renders at error severity.
+  // XSURF-01: force-degradable arm -> the resolver-state-driven `unsupported`
+  // row carries the `--force` hint and renders at error severity (consistent
+  // with how `list` / `info` describe the same plugin).
   const forceableErr = new PluginShapeError({
     kind: "not-installable",
     plugin: "helper",
@@ -2330,8 +2331,8 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
       scope: "project",
     }),
   });
-  assert.equal(forceableMsg.status, "unavailable");
-  assert.ok(forceableMsg.status === "unavailable");
+  assert.equal(forceableMsg.status, "unsupported");
+  assert.ok(forceableMsg.status === "unsupported");
   assert.equal(forceableMsg.forceHint, true);
   assert.equal(forceableMsg.severity, "error");
 
@@ -2513,17 +2514,19 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       });
       assert.equal(noForce.notifications.length, 1);
       assert.equal(noForce.notifications[0]?.severity, "error");
-      // SEV-02 contract: the force-degradable verdict renders the `(unavailable)`
-      // row at error severity and carries the `--force` hint trailer. IN-02 /
-      // RSTATE-05: the no-force failure row now renders the typed
-      // `{unsupported hooks}` marker -- byte-identical to the success / list /
-      // info surfaces -- because the resolver threads its typed `unsupported[]`
-      // list onto the thrown `PluginShapeError` and the composer narrows it via
-      // the shared `narrowUnsupportedKinds` path (the `hooks` kind carries no
-      // structural `notes` entry, so the typed list is its only reason source).
+      // SEV-02 / XSURF-01 contract: the force-degradable verdict renders the
+      // resolver-state-driven `(unsupported)` row at error severity and carries
+      // the `--force` hint trailer (consistent with how `list` / `info`
+      // describe the same plugin). IN-02 / RSTATE-05: the no-force failure row
+      // renders the typed `{unsupported hooks}` marker -- byte-identical to the
+      // success / list / info surfaces -- because the resolver threads its typed
+      // `unsupported[]` list onto the thrown `PluginShapeError` and the composer
+      // narrows it via the shared `narrowUnsupportedKinds` path (the `hooks`
+      // kind carries no structural `notes` entry, so the typed list is its only
+      // reason source).
       assert.match(
         noForce.notifications[0]?.message ?? "",
-        /hook-plugin \(unavailable\) \{unsupported hooks\}/,
+        /hook-plugin \(unsupported\) \{unsupported hooks\}/,
       );
       assert.match(
         noForce.notifications[0]?.message ?? "",

@@ -139,7 +139,7 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platfo
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // updatePlugins -- direct entrypoint (PUP-1 three forms)
@@ -760,11 +760,37 @@ async function preflightUpdate(
     installable = resolved;
   } catch (err) {
     // `requireInstallable` throws `PluginShapeError` with
-    // `kind === "no-longer-installable"`. Pre-narrow to the closed Reason
-    // so the cascade row renders `(skipped) {no longer installable}`
-    // without substring-matching. `resolveStrict` itself never throws
-    // (returns a not-installable variant), so the only
-    // typed-throw producer in this block is `requireInstallable`.
+    // `kind === "no-longer-installable"`. `resolveStrict` itself never throws
+    // (returns a not-installable variant), so the only typed-throw producer in
+    // this block is `requireInstallable`.
+    //
+    // XSURF-03: source the decline discriminant from the thrown `err.shape`
+    // (`resolved` is out of scope here -- it is declared inside the `try`).
+    // `err.shape.forceable === true` ⇔ the resolver verdict was `unsupported`,
+    // i.e. a force-upgradable decline: `--force` could degrade-update it. For
+    // that arm carry the list-consistent degrade kinds via the SAME
+    // `narrowUnsupportedKinds` helper the `list (force-upgradable)` row uses
+    // (byte-parity, pinned by catalog-uat) and mark `forceUpgradable: true` so
+    // the projection flips ONLY this arm to the `force-upgradable` token. A
+    // structural decline (`forceable !== true` -- force cannot help) keeps the
+    // `no longer installable` reason and the plain skipped path.
+    if (
+      err instanceof PluginShapeError &&
+      err.shape.kind === "no-longer-installable" &&
+      err.shape.forceable
+    ) {
+      return {
+        partition: "skipped",
+        name: plugin,
+        fromVersion: record.version,
+        notes: [errorMessage(err)],
+        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
+        forceUpgradable: true,
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    }
+
     return {
       partition: "skipped",
       name: plugin,
@@ -1591,6 +1617,62 @@ function cascadeSkipSeverity(
 }
 
 /**
+ * Project a `skipped` outcome to its cascade row. Split out of
+ * `outcomeToCascadePluginMessage` so the parent switch stays within the
+ * cognitive-complexity budget.
+ *
+ * XSURF-03: the force-upgradable manual update-decline (`outcome.forceUpgradable`)
+ * flips to the `force-upgradable` token (consistent with how `list` describes
+ * the same plugin) + the update-worded `--force` trailer. The SEV-04 split
+ * (targeted=warning / bulk=info) moves onto this status arm directly -- it is no
+ * longer keyed on the reason string (the reason now carries the list-consistent
+ * degrade kinds, not `no longer installable`). Every other skipped reason keeps
+ * `status: "skipped"` + the unchanged `cascadeSkipSeverity` judgment.
+ */
+function projectSkippedOutcome(
+  target: ResolvedTarget,
+  outcome: PluginUpdateSkippedOutcome,
+  cardinality: "single" | "plural",
+): UpdateMsg {
+  // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over the
+  // legacy notes-substring parse; empty `reasons` opts into the back-compat
+  // fallback path.
+  const reasons = outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes);
+  const version =
+    outcome.fromVersion !== undefined && outcome.fromVersion !== ""
+      ? { version: outcome.fromVersion }
+      : {};
+
+  if (outcome.forceUpgradable === true) {
+    return {
+      status: "force-upgradable",
+      name: outcome.name,
+      scope: target.scope,
+      ...version,
+      reasons,
+      forceHint: true,
+      severity: cardinality === "single" ? "warning" : "info",
+      needsReload: false,
+    };
+  }
+
+  return {
+    status: "skipped",
+    name: outcome.name,
+    scope: target.scope,
+    ...version,
+    reasons,
+    // D-01: an absent-target update (the named plugin is not installed / not
+    // found) cannot be carried out -> error (severity-only flip; the `(skipped)
+    // {not installed}` per-row grammar is preserved). Otherwise the
+    // benign/idempotent case stays info; an actionable (targeted) decline routes
+    // to warning (SEV-04); never reloads.
+    severity: cascadeSkipSeverity(reasons, cardinality),
+    needsReload: false,
+  };
+}
+
+/**
  * Map an outcome to a `PluginNotificationMessage`. Returns `undefined`
  * for outcomes the cascade should skip rendering entirely (currently
  * none -- the `unchanged` partition maps to a `(skipped) {up-to-date}`
@@ -1672,30 +1754,8 @@ function outcomeToCascadePluginMessage(
         severity: "info",
         needsReload: false,
       };
-    case "skipped": {
-      // Producer-narrowed `outcome.reasons` (CR-06) takes precedence over
-      // the legacy notes-substring parse; empty `reasons` opts into the
-      // back-compat fallback path.
-      const reasons =
-        outcome.reasons.length > 0 ? outcome.reasons : narrowSkipReasons(outcome.notes);
-      return {
-        status: "skipped",
-        name: outcome.name,
-        scope: target.scope,
-        ...(outcome.fromVersion !== undefined &&
-          outcome.fromVersion !== "" && { version: outcome.fromVersion }),
-        reasons,
-        // D-01: an absent-target update (the named plugin is not installed /
-        // not found) cannot be carried out -> error (severity-only flip; the
-        // `(skipped) {not installed}` per-row grammar is preserved). Otherwise
-        // the benign/idempotent case stays info; an actionable (targeted)
-        // decline routes to warning (SEV-04); never reloads. SEV-04 / D-69-02:
-        // a `no longer installable` force-upgradable decline follows the
-        // invocation cardinality (targeted warning / bulk info).
-        severity: cascadeSkipSeverity(reasons, cardinality),
-        needsReload: false,
-      };
-    }
+    case "skipped":
+      return projectSkippedOutcome(target, outcome, cardinality);
 
     case "failed": {
       const phaseFailures = outcome.phaseFailures ?? [];
