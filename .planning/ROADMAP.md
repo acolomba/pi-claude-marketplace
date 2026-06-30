@@ -476,7 +476,7 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 71. Partial Hook Force-Install                                      | force-install | 4/4 | Complete    | 2026-06-28 |
 | 72. Unsupported Render Token                                        | force-install | 1/1 | Complete    | 2026-06-29 |
 | 73. Force Cross-Surface Token Unification                           | force-install | 1/1 | Complete    | 2026-06-30 |
-| 74. Bulk Update Grammar Refinement                                  | force-install | 1/1 | Complete   | 2026-06-30 |
+| 74. Bulk Update Grammar Refinement                                  | force-install | 1/1 | Complete    | 2026-06-30 |
 
 #### Phase 71: Partial Hook Force-Install
 
