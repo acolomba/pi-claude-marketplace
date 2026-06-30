@@ -14,8 +14,23 @@ findings:
   warning: 3
   info: 2
   total: 5
-status: issues_found
+status: resolved
+disposition:
+  WR-01: fixed (commit 5e4f923e)
+  WR-02: fixed (commit 36aa546e)
+  WR-03: deferred (pre-existing dispatchRow seam; not introduced by Phase 74)
+  IN-01: deferred (info-level hardening)
+  IN-02: deferred (info-level maintainability)
 ---
+
+> **Fix disposition (2026-06-30):** WR-01 (spurious no-op headline after a
+> phase-3a abort) and WR-02 (tally-override seam hardened to a dedicated
+> `notifyUpdateWithContext` wrapper) were fixed with a regression test;
+> `npm run check` stayed green. WR-03 is pre-existing (the `dispatchRow`
+> `readonly`-mutation + empty `catch {}` predates Phase 74, which only widened
+> reachability) and was deferred per the surgical-changes guideline. IN-01 and
+> IN-02 are info-level polish, deferred to a follow-up.
+
 
 # Phase 74: Code Review Report
 
