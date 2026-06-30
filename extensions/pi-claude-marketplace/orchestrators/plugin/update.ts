@@ -107,6 +107,7 @@ import {
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import {
   notifyUpdateNoOpWithContext,
+  notifyUpdateWithContext,
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
@@ -1969,7 +1970,7 @@ function renderUpdateCascadeAndNotify(
   // rows, so a mixed cascade renders `Plugin update: 1 failure, 1 updated`. On a
   // single-target update the override is unread (`composeTally` returns "" for
   // `cardinality !== "plural"`).
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, undefined, cardinality, {
+  notifyUpdateWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality, {
     verb: "updated",
     count: updatedCount,
   });

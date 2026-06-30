@@ -147,10 +147,6 @@ export function notifyWithContext<
   rows: readonly MarketplaceRows<Msg>[],
   kind?: "cascade",
   cardinality?: "single" | "plural",
-  // UGRM-02: the OPT-IN, update-scoped success-category override threaded onto
-  // the envelope. Every existing caller omits it (no behavior change); only the
-  // bulk-`update` path passes `{ verb: "updated", count: <updatedCount> }`.
-  tally?: { readonly verb: string; readonly count: number },
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -173,7 +169,46 @@ export function notifyWithContext<
     marketplaces,
     label: context.Messaging.label,
     ...(cardinality !== undefined && { cardinality }),
-    ...(tally !== undefined && { tally }),
+  };
+
+  emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
+    dispatchRow(context, p, probe, mpScope),
+  );
+}
+
+/**
+ * UGRM-02 / WR-02: the bulk-`update` cascade emitter that owns the OPT-IN,
+ * update-scoped `tally` success-category override. Mirrors `notifyWithContext`
+ * but additionally threads `{ verb: "updated", count: <updatedCount> }` onto the
+ * envelope, where `composeTally` reads it in place of the legacy info-row
+ * success math.
+ *
+ * The override lives on a dedicated wrapper -- NOT a trailing positional param
+ * on `notifyWithContext` -- so it is structurally unreachable from every other
+ * op (install / reinstall / marketplace / import). A non-update caller cannot
+ * mis-position an argument into the `tally` slot, because the slot does not
+ * exist on the seam those callers use. This keeps their byte-frozen summaries
+ * safe by construction rather than by convention.
+ */
+export function notifyUpdateWithContext<
+  Status extends string,
+  Msg extends PluginNotificationMessage & { status: Status },
+>(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  context: CommandContext<Status, Msg>,
+  rows: readonly MarketplaceRows<Msg>[],
+  cardinality: "single" | "plural",
+  tally: { readonly verb: string; readonly count: number },
+): void {
+  // Same type-safe widening as `notifyWithContext`: `MarketplaceRows<Msg>` is a
+  // genuine subtype of `MarketplaceNotificationMessage[]` (no cast).
+  const marketplaces: readonly MarketplaceNotificationMessage[] = rows;
+  const message: CascadeNotificationMessage = {
+    marketplaces,
+    label: context.Messaging.label,
+    cardinality,
+    tally,
   };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
