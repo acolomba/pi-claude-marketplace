@@ -899,6 +899,76 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
   });
 });
 
+// ─── WR-01: phase-3a abort with up-to-date predecessors -> no spurious no-op ──
+
+test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure does NOT emit 'nothing to update'", async () => {
+  // A bulk (`@mp`, plural) update enumerates `aaa` (up-to-date, partition
+  // `unchanged`) BEFORE `zzz` (bumped, but phase-3a-fails on a skill-target
+  // collision). State insertion order (`Object.keys(mp.plugins)`) is the
+  // `installedVersions` key order, so `aaa` is accumulated into `outcomes`
+  // (then bulk-suppressed) before `zzz` aborts the batch.
+  //
+  // The failing plugin fires its own `notifyDirectFailure` and is withheld from
+  // `outcomes`, so the abort path renders a cascade for the already-accumulated
+  // `aaa` outcome. Pre-fix, that all-`unchanged` accumulator passed the no-op
+  // gate (0 updated, 0 error/warning rows in the cascade) and emitted a SECOND
+  // notification reading `Plugin update: nothing to update` -- contradictory,
+  // directly after a failure for the same invocation. The `abortedByFailure`
+  // flag now suppresses that headline.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-abort-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          // aaa: manifest version == installed version -> unchanged.
+          aaa: { version: "1.0.0", hasSkill: true },
+          // zzz: bumped -> realized transition attempted, but phase-3a fails.
+          zzz: { version: "1.0.1", hasSkill: true },
+        },
+        // Insertion order seeds state.plugins as [aaa, zzz] so enumeration
+        // accumulates the unchanged `aaa` outcome before `zzz` aborts.
+        installedVersions: { aaa: "1.0.0", zzz: "1.0.0" },
+      });
+
+      // Force the phase-3a failure for `zzz` only: pre-create its skill TARGET
+      // as a FILE so the bridge's `rename(stagingDir -> target)` returns ENOTDIR
+      // (the PUP-6 mechanism). The generated skill name is `<plugin>-<skillDir>`
+      // = `zzz-tool`. `aaa` has no obstacle, so it cleanly partitions unchanged.
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // Exactly one notification: the `zzz` phase-3a failure. The spurious
+      // `nothing to update` headline must NOT be emitted on the abort path.
+      assert.equal(
+        notifications.length,
+        1,
+        `expected exactly one (failure) notification, got ${notifications.length.toString()}: ${notifications.map((n) => n.message).join("\n---\n")}`,
+      );
+      const allText = notifications.map((n) => n.message).join("\n");
+      assert.equal(
+        allText.includes("Plugin update: nothing to update"),
+        false,
+        `must NOT emit the no-op headline after a phase-3a abort:\n${allText}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── PUP-7 / WR-04: success populates stagedAgents + stagedMcpServers ─────────
 
 test("WR-04: successful update populates stagedAgents + stagedMcpServers on outcome", async () => {

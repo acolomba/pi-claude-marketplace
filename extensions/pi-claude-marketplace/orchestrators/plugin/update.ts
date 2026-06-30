@@ -367,7 +367,13 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality);
+      // WR-01: the failing plugin already fired its own `notifyDirectFailure`
+      // and is NOT pushed into `outcomes`. Flag the cascade as aborted-by-failure
+      // so the never-silent no-op headline is suppressed: if every accumulated
+      // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
+      // headline would otherwise emit a contradictory `nothing to update` line
+      // directly after the failure notification.
+      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, true);
       return;
     }
 
@@ -459,9 +465,12 @@ function renderUpdateCascadeIfAny(
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
   cardinality: "single" | "plural",
+  // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
+  // is suppressed when the accumulated outcomes contain no realized transition.
+  abortedByFailure = false,
 ): void {
   if (outcomes.length > 0) {
-    renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
+    renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality, abortedByFailure);
   }
 }
 
@@ -1842,6 +1851,13 @@ function renderUpdateCascadeAndNotify(
   pi: ExtensionAPI,
   outcomes: readonly TargetedOutcome[],
   cardinality: "single" | "plural",
+  // WR-01: set on the phase-3a abort path. The failing plugin fired its own
+  // failure notification and is absent from `outcomes`, so the never-silent
+  // no-op headline must be suppressed here -- otherwise an all-`unchanged`
+  // accumulator emits a contradictory `nothing to update` line right after the
+  // failure. The empty/suppressed body renders nothing, which is acceptable
+  // since the failure was already reported.
+  abortedByFailure = false,
 ): void {
   // Group by (scope, marketplace) per CMC-21. Insertion order tracks the
   // first occurrence of each (scope, marketplace) pair -- the post-grouping
@@ -1951,13 +1967,27 @@ function renderUpdateCascadeAndNotify(
   const hasErrorOrWarningRow = marketplaces.some((mp) =>
     mp.plugins.some((p) => p.severity === "error" || p.severity === "warning"),
   );
-  if (cardinality === "plural" && updatedCount === 0 && !hasErrorOrWarningRow) {
+  if (
+    cardinality === "plural" &&
+    updatedCount === 0 &&
+    !hasErrorOrWarningRow &&
+    !abortedByFailure
+  ) {
     // Never-silent no-op headline. `emitUpdateNoOpCascade` renders the surviving
     // body (empty for all-up-to-date) and folds the hard-coded `Plugin update:
     // nothing to update` line below it. The line can NEVER vanish (a
     // `tally {count: 0}` override would collapse to `""` in composeTally; this
     // owns the headline instead). Info severity, no reload-hint.
     notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces);
+    return;
+  }
+
+  // WR-01: on the phase-3a abort path the failure is already reported and the
+  // no-op headline is suppressed above. If suppression also emptied the cascade
+  // body (every accumulated predecessor was `unchanged`), there is nothing left
+  // to render -- emit nothing rather than routing an empty `marketplaces` through
+  // `notifyUpdateWithContext`, which would render `(no marketplaces)`.
+  if (abortedByFailure && marketplaces.length === 0) {
     return;
   }
 
