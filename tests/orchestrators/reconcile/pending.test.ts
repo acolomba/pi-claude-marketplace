@@ -598,3 +598,91 @@ test("FSTAT-06: a planned install whose candidate resolves installable renders p
     );
   });
 });
+
+// FSTAT-06 fallback: a planned install whose marketplace is DECLARED-but-not-
+// RECORDED (no state.json entry) has no cached clone to resolve against, so
+// `locateCandidate` finds no `recordedMarketplaces` entry (record === undefined)
+// and the row stays a plain `(will install)` -- the preview cannot truthfully
+// assert a degrade it cannot resolve.
+test("FSTAT-06 fallback: an install under a declared-but-not-recorded marketplace renders plain (will install)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Config declares `newmp` + `pp@newmp`, but there is NO state.json -> the
+    // marketplace is not recorded, so no cached manifest to resolve the candidate.
+    const projectScopeRoot = path.join(cwd, ".pi");
+    await mkdir(projectScopeRoot, { recursive: true });
+    await writeFile(
+      path.join(projectScopeRoot, "claude-plugins.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { newmp: { source: "acme/new" } },
+        plugins: { "pp@newmp": { enabled: true } },
+      }),
+      "utf8",
+    );
+
+    const ctx = makeCtx(cwd);
+    await pendingReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(emitted.includes("pp"), "expected the pp plugin row; got:\n" + emitted);
+    assert.ok(
+      emitted.includes("(will install)"),
+      "an unresolvable candidate must render plain (will install); got:\n" + emitted,
+    );
+    assert.ok(
+      !emitted.includes("(will force install)"),
+      "an unrecorded marketplace must NOT render the force modifier; got:\n" + emitted,
+    );
+  });
+});
+
+// FSTAT-06 fallback: a RECORDED marketplace whose cached manifest is corrupt.
+// `locateCandidate` calls loadMarketplaceManifest, which THROWS on unparseable
+// JSON; `resolvePendingForceInstalls` catches the throw and degrades the row to
+// a plain `(will install)`. The read-only pending surface must never let the
+// throw escape (IL-2 single-notify discipline).
+test("FSTAT-06 fallback: a corrupt recorded manifest degrades the force preview to plain (will install), no throw", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Stage the degrading scenario (cr resolves unsupported -> would be
+    // `(will force install)`), then corrupt the recorded manifest so the
+    // force-preview resolve throws and is caught.
+    await stageForceInstallScenario(cwd, true);
+    const manifestPath = path.join(
+      cwd,
+      ".pi",
+      "pi-claude-marketplace",
+      "marketplaces",
+      "mp-github",
+      ".claude-plugin",
+      "marketplace.json",
+    );
+    await writeFile(manifestPath, "{ not valid json at all", "utf8");
+
+    const ctx = makeCtx(cwd);
+    // Must NOT throw despite the corrupt manifest.
+    await pendingReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(emitted.includes("cr"), "expected the cr plugin row; got:\n" + emitted);
+    assert.ok(
+      emitted.includes("(will install)"),
+      "a caught force-preview throw must degrade to plain (will install); got:\n" + emitted,
+    );
+    assert.ok(
+      !emitted.includes("(will force install)"),
+      "a caught force-preview throw must NOT render the force modifier; got:\n" + emitted,
+    );
+  });
+});

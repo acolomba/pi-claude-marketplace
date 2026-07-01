@@ -526,6 +526,97 @@ test("pi_claude_marketplace_plugin_list :: unsupported row projects to unavailab
   assert.equal(projectRowStatus("unsupported"), "unavailable");
 });
 
+// FSTAT-02 / FSTAT-04 / D-66-03: both derived force states flatten to the
+// coarse `installed` tool bucket. A force-installed plugin is recorded-installed
+// (degraded, but present); a force-upgradable plugin is a currently-clean
+// install. The LLM-tool surface has no distinct force buckets.
+test("pi_claude_marketplace_plugin_list :: force-installed row projects to installed tool bucket", () => {
+  assert.equal(projectRowStatus("force-installed"), "installed");
+});
+
+test("pi_claude_marketplace_plugin_list :: force-upgradable row projects to installed tool bucket", () => {
+  assert.equal(projectRowStatus("force-upgradable"), "installed");
+});
+
+// FSTAT-02 / D-66-03: drive the full tool execute path with a seeded
+// force-installed plugin (a recorded plugin whose persisted
+// `compatibility.unsupported` is non-empty and `installable` is false). The
+// list orchestrator classifies it `force-installed`; `projectRowStatus` flattens
+// it to the coarse `installed` bucket and `pluginVersion` carries the recorded
+// version through. `pluginReasons` OMITS the force-installed row's reasons on
+// the tool surface (only unavailable / unsupported / upgradable carry reasons).
+test("pi_claude_marketplace_plugin_list :: force-installed plugin projects [installed] with version through execute", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-force-"));
+    await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    // The force-installed plugin is NOT declared in the manifest -> no upgrade
+    // candidate -> the classifier reads the persisted unsupported set only.
+    await writeFile(manifestPath, JSON.stringify({ name: "force-mkt", plugins: [] }));
+
+    const nowIso = new Date().toISOString();
+    const locations = locationsFor("project", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 2,
+      marketplaces: {
+        "force-mkt": {
+          name: "force-mkt",
+          scope: "project",
+          source: pathSource("./force-mkt"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {
+            pforce: {
+              version: "2.0.0",
+              resolvedSource: path.join(mpRoot, "plugins", "pforce"),
+              // Persisted force-install: installable false, non-empty unsupported.
+              compatibility: {
+                installable: false,
+                notes: [],
+                supported: ["skills"],
+                unsupported: ["themes"],
+              },
+              resources: {
+                skills: ["pforce-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: nowIso,
+              updatedAt: nowIso,
+            },
+          },
+        },
+      },
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
+
+    // Force-installed flattens to the [installed] tool line.
+    assert.match(out.content[0]!.text, /\[installed\] pforce/);
+    const details = out.details as {
+      plugins: { name: string; status: string; version?: string; scope: string }[];
+    };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "pforce");
+    assert.equal(details.plugins[0]!.status, "installed");
+    // pluginVersion carries the recorded version through the force arm.
+    assert.equal(details.plugins[0]!.version, "2.0.0");
+    // pluginScopeOrFallback returns the row scope for the force arm.
+    assert.equal(details.plugins[0]!.scope, "project");
+
+    await rm(mpRoot, { recursive: true, force: true });
+  });
+});
+
 // Lines 175+195+238+315+207-208: projectRowStatus 'unavailable' arm,
 // statusLabel '[unavailable]', statusKey 'u', reasons trailer,
 // pluginScopeOrFallback fallback for unavailable.

@@ -626,3 +626,216 @@ test("WR-03: a plugin already touched by applyPlan this load is not double-emitt
     assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
   });
 });
+
+test("SF-01: a grown force-installed plugin whose re-materialize FAILS surfaces a (failed) row and stays force-installed", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is force-installed with a grown on-disk supported set (skills +
+    // commands; recorded supported only skills) -> a backfill candidate that
+    // re-resolves installable. But a SIBLING recorded plugin already owns the
+    // generated skill name `hello-tool`, so the re-materialize's
+    // assertNoCrossPluginConflicts trips -> reinstallPlugin (render: "none")
+    // CATCHES its own throw and RETURNS a `failed` partition. SF-01: maybeBackfill
+    // surfaces that as a plugin-scoped (failed) row on the same cascade instead
+    // of silently dropping it, and the record stays force-installed.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+        // A clean installed plugin whose recorded resources already own the
+        // `hello-tool` generated skill name -> cross-plugin conflict on backfill.
+        conflictor: {
+          version: "1.0.0",
+          resolvedSource: path.join(cwd, "mp-src", "plugins", "conflictor"),
+          compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+          resources: {
+            skills: ["hello-tool"],
+            prompts: [],
+            agents: [],
+            mcpServers: [],
+            hooks: [],
+          },
+          enabled: true,
+          installedAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // SF-01: the failure surfaced as a single cascade carrying a (failed) row.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(body.includes("hello") && body.includes("(failed)"), `got:\n${body}`);
+
+    // The record was NOT promoted -- it stays force-installed.
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.equal(record.compatibility.installable, false);
+
+    // SF-02: a genuine re-materialize failure leaves the version gate OPEN so the
+    // scan retries next load -- the stamp is NOT advanced.
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
+  });
+});
+
+test("BFILL-01: a concurrent uninstall (skipped partition) emits no promotion row", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is force-installed with a grown on-disk supported set -> a backfill
+    // candidate. The read-pass snapshot still carries hello, but by the time the
+    // re-materialize acquires its own lock the record is GONE (a concurrent
+    // process uninstalled it), so reinstallPlugin returns `skipped`. That benign
+    // skip must NOT emit an (installed)/(force-installed) promotion row.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      },
+    });
+    // Snapshot (still carries hello) drives the scan; the on-disk state.json is
+    // then rewritten to drop hello (marketplace kept), simulating the race.
+    const snapshot = await loadState(extensionRoot);
+    const concurrent = structuredClone(snapshot);
+    delete concurrent.marketplaces["mp"]!.plugins["hello"];
+    await saveState(extensionRoot, concurrent);
+
+    const ctx = makeCtx();
+    const outcomes: PerEntryOutcome[] = [];
+    await __test_scanForceInstalledBackfills(
+      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+      "project",
+      snapshot,
+      outcomes,
+    );
+
+    // Concurrent uninstall -> skipped -> no promotion row of any kind.
+    assert.equal(outcomes.length, 0);
+    assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
+  });
+});
+
+test("SF-02: an offline-unresolvable force-installed plugin (manifest omits the entry) is a silent skip and still stamps", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is recorded force-installed but is NOT declared in the marketplace
+    // manifest (empty trees -> `plugins: []`). The offline re-resolve finds no
+    // entry -> resolveRecordedPluginOffline returns undefined -> a benign silent
+    // skip (NOT a failure). Zero notifications, record untouched, and -- because
+    // this is a benign skip, not a genuine failure -- the version gate still
+    // closes (SF-02: only an unreadable-manifest I/O throw keeps it open).
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["themes"],
+        }),
+      },
+    });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // Silent skip -> zero notifications.
+    assert.equal(ctx.ui.notify.mock.calls.length, 0);
+    // Record untouched -- still force-installed with its recorded unsupported set.
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.equal(record.compatibility.installable, false);
+    assert.deepEqual(record.compatibility.unsupported, ["themes"]);
+    // The gate closed: an absent/invalid ENTRY is benign, so the stamp still writes.
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  });
+});
+
+test("SF-02: an UNREADABLE manifest I/O throw propagates to a surfaced row and leaves the version gate OPEN", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello is recorded force-installed AND declared in the manifest, but the
+    // manifest file is then corrupted. resolveRecordedPluginOffline's
+    // loadMarketplaceManifest THROWS (unparseable JSON); SF-02 lets it propagate
+    // to the WR-02 isolation wrapper -> a surfaced (failed) row on `state.json`,
+    // and the version gate stays OPEN (stamp NOT advanced) so the scan retries.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["themes"],
+        }),
+      },
+    });
+    // Corrupt the cached marketplace manifest so the offline re-resolve throws.
+    const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // WR-02: the throw is coerced into a surfaced structured row (never aborts
+    // the cascade); the row subject is state.json.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(body.includes("state.json") && body.includes("(failed)"), `got:\n${body}`);
+    // SF-02: the gate stays OPEN so the scan self-heals next load -- stamp untouched.
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
+  });
+});
+
+test("D-68-03: a length-grown-but-not-superset resolved set does NOT backfill (strict superset only)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Recorded supported is ["skills"], but the on-disk plugin now advertises
+    // commands + agents and NO skills dir -> resolved supported ["commands",
+    // "agents"]. That is LONGER (2 > 1) but NOT a superset (it drops "skills"),
+    // so supportedSetGrew must reject it: no re-materialize, no promotion row.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { command: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["themes"],
+        }),
+      },
+    });
+    // Add an agents dir so the on-disk resolve grows to ["commands", "agents"].
+    await mkdir(path.join(cwd, "mp-src", "plugins", "hello", "agents"), { recursive: true });
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    // Not a strict superset -> no re-materialize: the record is untouched.
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.equal(record.compatibility.installable, false);
+    assert.deepEqual(record.compatibility.supported, ["skills"]);
+    assert.deepEqual(record.resources.skills, []);
+    // No promotion row -> silent (the gate still stamped: gate-open, no failure).
+    assert.equal(ctx.ui.notify.mock.calls.length, 0);
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  });
+});

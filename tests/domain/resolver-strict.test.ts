@@ -16,6 +16,7 @@ import {
   requireInstallable,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
@@ -812,4 +813,156 @@ test("RSTATE-04 requireForceInstallable(r, 'update') throws with 'is no longer i
     },
     (err: unknown) => err instanceof Error && err.message.includes("is no longer installable"),
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SEV-02 / IN-02 / D-69-03 / RSTATE-05: requireInstallable on the `unsupported`
+// arm carries the force hint + typed unsupported-kind list
+// ──────────────────────────────────────────────────────────────────────────
+
+// requireInstallable throws on an `unsupported` (force-degradable) plugin, and
+// the thrown PluginShapeError pins the force-hint ternaries:
+// `forceable: r.state === "unsupported"` (true here) and
+// `unsupportedKinds: r.state === "unsupported" ? r.unsupported : []` (the typed
+// component-kind list, NOT the empty structural default). A regression that
+// dropped either would silently suppress the `--force` hint on the render row.
+test("SEV-02 / IN-02: requireInstallable on unsupported throws forceable with the typed unsupportedKinds", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", themes: { dark: {} } }), ctx);
+  assert.equal(r.state, "unsupported");
+  assert.throws(
+    () => {
+      requireInstallable(r);
+    },
+    (err: unknown) => {
+      assert.ok(err instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.equal(err.shape.kind, "not-installable");
+      if (err.shape.kind === "not-installable") {
+        assert.equal(err.shape.forceable, true);
+        assert.deepEqual(err.shape.unsupportedKinds, ["themes"]);
+      }
+
+      return true;
+    },
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SURF-05 / D-63-08 / D-71-03: detectOrphanRewake runs over the FILTERED kept
+// subset, so a DROPPED group's orphan-rewake field cannot raise a false marker
+// ──────────────────────────────────────────────────────────────────────────
+
+// A hooks config with one KEPT supported group (matcher "Bash") and one DROPPED
+// unsupportable group (regex matcher ".*") whose only handler declares
+// `rewakeMessage` WITHOUT `asyncRewake:true`. The orphan lives in the dropped
+// group, so it never enters the filtered subset `detectOrphanRewake` scans ->
+// `orphanRewake` stays absent even though the plugin resolves `unsupported`.
+test("SURF-05 / D-71-03: orphan in a DROPPED group does not flag orphanRewake -> unsupported, orphanRewake absent", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          { matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] },
+          {
+            matcher: ".*",
+            hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "unsupported") {
+    assert.equal(r.orphanRewake, undefined);
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.deepEqual(r.droppedHooks, [
+      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+    ]);
+  }
+});
+
+// Converse: the orphan lives in the KEPT group (matcher "Bash") while the regex
+// group drops. The kept group IS in the filtered subset, so `orphanRewake`
+// still flags true even though the plugin resolves `unsupported`.
+test("SURF-05 / D-71-03: orphan in the KEPT group still flags orphanRewake -> unsupported, orphanRewake true", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
+          },
+          { matcher: ".*", hooks: [{ type: "command", command: "echo drop" }] },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "unsupported") {
+    assert.equal(r.orphanRewake, true);
+    assert.deepEqual(r.droppedHooks, [
+      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+    ]);
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// PHOOK-01 / D-71-01: droppedHooks carries the `kind:"handler"` and non-regex
+// `cond` group shapes
+// ──────────────────────────────────────────────────────────────────────────
+
+// A `kind:"handler"` drop: a non-`command` handler in an otherwise-supportable
+// group. The `command` handler survives (group + event kept, "hooks" supported),
+// and the dropped handler is enumerated at HANDLER granularity.
+test("PHOOK-01: a non-command handler in a kept group drops at handler granularity -> unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "echo ok" }, { type: "notification" }],
+          },
+        ],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "unsupported") {
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.deepEqual(r.droppedHooks, [
+      { kind: "handler", event: "PreToolUse", matcher: "Bash", handlerType: "notification" },
+    ]);
+  }
+});
+
+// A non-regex `cond`: an unmapped Claude tool (`MultiEdit`) has no Pi TOOL-01
+// reverse-map entry, so its matcher group drops with `cond:"unmapped-tool"`.
+test("PHOOK-01: an unmapped-tool matcher drops the group with cond unmapped-tool -> unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "echo x" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "unsupported") {
+    assert.deepEqual(r.droppedHooks, [
+      { kind: "group", event: "PreToolUse", matcher: "MultiEdit", cond: "unmapped-tool" },
+    ]);
+  }
 });
