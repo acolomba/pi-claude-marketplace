@@ -2654,7 +2654,7 @@ function composeTally(message: {
     if (successes > 0) {
       parts.push(tallyCategory(successes, "success", "successes"));
     }
-  } else {
+  } else if (message.tally.count > 0) {
     // UGRM-02: the update-scoped override OWNS the success category -- the count
     // is realized transitions only (the orchestrator's `updated`-partition
     // tally), rendered with a verb that has no plural-s (`1 updated`, `2
@@ -2662,9 +2662,7 @@ function composeTally(message: {
     // at-desired-state `(skipped) {up-to-date}` row never inflates the headline.
     // A `count` of 0 contributes nothing (the never-silent no-op headline is the
     // orchestrator's job), so a failure-only cascade stays e.g. `1 failure`.
-    if (message.tally.count > 0) {
-      parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
-    }
+    parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
   }
 
   if (parts.length === 0) {
