@@ -105,9 +105,12 @@ const DroppedHookSchema = Type.Union([
 // assignable to it) nor a source-side additive FIELD on an existing arm (excess
 // properties stay assignable). The per-kind key-parity guard below closes the
 // source-side-field gap.
-type _DroppedHookDrift = DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : never;
-const _assertDroppedHookDrift: _DroppedHookDrift = true;
-void _assertDroppedHookDrift;
+type _AssertTrue<T extends true> = T;
+// Exported so `noUnusedLocals` treats this compile-time drift guard as consumed
+// without a runtime `void`; the alias is never imported.
+export type _DroppedHookDriftCheck = _AssertTrue<
+  DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
+>;
 
 // TD-2 (strengthening): per-kind KEY parity. For each `kind`, the source arm and
 // the schema arm must carry EXACTLY the same field names -- checked in both
@@ -116,8 +119,9 @@ void _assertDroppedHookDrift;
 // schema-side extra arm both change the key set of some arm. Because it compares
 // KEY names only (not value types), the intentional `event` widening
 // (`BucketAEvent` vs `string`) is invisible to it -- no fight. A mismatched arm
-// yields `false`; the nested check below then collapses to `never`, erroring the
-// `= true` assignment. (`false` -- not `never` -- on mismatch so the `extends
+// yields `false`; the nested check below then collapses to `never`, so the
+// tuple-wrapped `_AssertTrue` check below (`[true] extends [never]` -> `false`)
+// fails `npm run check`. (`false` -- not `never` -- on mismatch so the `extends
 // true` chaining stays sound: `never extends true` would spuriously pass.)
 type _DroppedHookArmKeysMatch<K extends DroppedHook["kind"]> = [
   keyof Extract<DroppedHook, { kind: K }>,
@@ -136,8 +140,10 @@ type _DroppedHookArmKeysDrift =
         : never
       : never
     : never;
-const _assertDroppedHookArmKeys: _DroppedHookArmKeysDrift = true;
-void _assertDroppedHookArmKeys;
+// Exported for the same `noUnusedLocals` reason as `_DroppedHookDriftCheck`.
+export type _DroppedHookArmKeysCheck = _AssertTrue<
+  [true] extends [_DroppedHookArmKeysDrift] ? true : false
+>;
 
 // The field set shared by the two force-materializable arms -- `installable`
 // and the force-degradable `unsupported` (D-64-06). Both carry `pluginRoot`

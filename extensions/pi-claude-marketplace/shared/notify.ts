@@ -2634,18 +2634,7 @@ function composeTally(message: {
     parts.push(tallyCategory(warnings, "warning", "warnings"));
   }
 
-  if (message.tally !== undefined) {
-    // UGRM-02: the update-scoped override OWNS the success category -- the count
-    // is realized transitions only (the orchestrator's `updated`-partition
-    // tally), rendered with a verb that has no plural-s (`1 updated`, `2
-    // updated`). The info-row `successes` math below is SKIPPED entirely so an
-    // at-desired-state `(skipped) {up-to-date}` row never inflates the headline.
-    // A `count` of 0 contributes nothing (the never-silent no-op headline is the
-    // orchestrator's job), so a failure-only cascade stays e.g. `1 failure`.
-    if (message.tally.count > 0) {
-      parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
-    }
-  } else {
+  if (message.tally === undefined) {
     // OUT-03 / OUT-06 / D-03: the default tally counts OPERATION rows uniformly
     // across the plugin and marketplace subjects. A BARE marketplace header --
     // one carrying neither a `status` (a realized mp outcome: `added` /
@@ -2664,6 +2653,17 @@ function composeTally(message: {
 
     if (successes > 0) {
       parts.push(tallyCategory(successes, "success", "successes"));
+    }
+  } else {
+    // UGRM-02: the update-scoped override OWNS the success category -- the count
+    // is realized transitions only (the orchestrator's `updated`-partition
+    // tally), rendered with a verb that has no plural-s (`1 updated`, `2
+    // updated`). The info-row `successes` math above is SKIPPED entirely so an
+    // at-desired-state `(skipped) {up-to-date}` row never inflates the headline.
+    // A `count` of 0 contributes nothing (the never-silent no-op headline is the
+    // orchestrator's job), so a failure-only cascade stays e.g. `1 failure`.
+    if (message.tally.count > 0) {
+      parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
     }
   }
 

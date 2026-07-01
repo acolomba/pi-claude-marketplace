@@ -66,6 +66,14 @@ export function narrowProbeError(
 }
 
 /**
+ * Closed-set REASONS vocabulary shared by the unsupported-classification
+ * helpers below (`narrowResolverNotes`, `narrowUnsupportedKinds`,
+ * `kindToReason`). Extracted so the three sites reference one alias instead of
+ * re-declaring the union.
+ */
+type UnsupportedReason = "unsupported hooks" | "lsp" | "unsupported source";
+
+/**
  * Narrow resolver `notes` strings to closed-set REASONS members.
  *
  * HOOK-04 detection is anchored on the three reason-prefix tokens emitted
@@ -84,10 +92,8 @@ export function narrowProbeError(
  * pushed, repeated notes for the same bucket are no-ops (and crucially do
  * NOT fall through to the catch-all `unsupported source` arm -- WR-01).
  */
-export function narrowResolverNotes(
-  notes: readonly string[],
-): readonly ("unsupported hooks" | "lsp" | "unsupported source")[] {
-  const out: ("unsupported hooks" | "lsp" | "unsupported source")[] = [];
+export function narrowResolverNotes(notes: readonly string[]): readonly UnsupportedReason[] {
+  const out: UnsupportedReason[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
     const isHooksNote =
@@ -150,8 +156,8 @@ export function narrowResolverNotes(
  */
 export function narrowUnsupportedKinds(
   unsupported: readonly string[],
-): readonly ("lsp" | "unsupported hooks" | "unsupported source")[] {
-  const out: ("lsp" | "unsupported hooks" | "unsupported source")[] = [];
+): readonly UnsupportedReason[] {
+  const out: UnsupportedReason[] = [];
   const seen = new Set<string>();
   for (const kind of unsupported) {
     const reason = kindToReason(kind);
@@ -170,7 +176,7 @@ export function narrowUnsupportedKinds(
 // the `UnsupportedKind` literals, so no closed union spans the real input. Any
 // kind outside the two recognized markers intentionally collapses to the generic
 // `"unsupported source"` reason rather than forcing an unsafe cast at the callers.
-function kindToReason(kind: string): "lsp" | "unsupported hooks" | "unsupported source" {
+function kindToReason(kind: string): UnsupportedReason {
   if (kind === "lspServers") {
     return "lsp";
   }

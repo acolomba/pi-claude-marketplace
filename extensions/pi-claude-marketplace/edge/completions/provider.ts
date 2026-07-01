@@ -108,17 +108,19 @@ function flagCompletions(
     // AG-7 opt-in: surface `--map-model` as a completion suggestion under
     // the install and update positional heads, mirroring the existing
     // list-flag pattern.
-    flags.push({
-      name: "--map-model",
-      description: "Enable model field mapping in generated agents (default: omit)",
-    });
     // LIST-02 / D-67-02: `--force` widens the install/update candidate set
     // (install -> available + unsupported; update -> upgradable +
     // force-upgradable). FORCE-05: never admits `unavailable`.
-    flags.push({
-      name: "--force",
-      description: "Force over collisions and unsupported components (not unavailable)",
-    });
+    flags.push(
+      {
+        name: "--map-model",
+        description: "Enable model field mapping in generated agents (default: omit)",
+      },
+      {
+        name: "--force",
+        description: "Force over collisions and unsupported components (not unavailable)",
+      },
+    );
   }
 
   return flags

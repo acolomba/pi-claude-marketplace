@@ -646,16 +646,16 @@ async function buildBlock(
 
   // (c) Installed bucket.
   if (installed !== undefined) {
-    const row = await buildInstalledRow(
+    const row = await buildInstalledRow({
       pluginName,
-      installedVersion ?? manifestVersion,
+      version: installedVersion ?? manifestVersion,
       description,
       dependencies,
       entry,
       mpRecord,
-      installed,
+      installedRecord: installed,
       parsedSource,
-    );
+    });
     return wrapBlock(marketplace, scope, marketplaceDetails, row);
   }
 
@@ -878,16 +878,26 @@ function buildNonPathInstalledRow(
  * disk so the row exposes the `{<reason>}` brace alongside the per-kind
  * component lines instead of `not resolved`.
  */
-async function buildInstalledRow(
-  pluginName: string,
-  version: string | undefined,
-  description: string | undefined,
-  dependencies: readonly string[] | undefined,
-  entry: MarketplaceManifest["plugins"][number],
-  mpRecord: MarketplaceRecord,
-  installedRecord: MarketplaceRecord["plugins"][string],
-  parsedSource: ParsedSource,
-): Promise<PluginInfoRow> {
+async function buildInstalledRow(opts: {
+  pluginName: string;
+  version: string | undefined;
+  description: string | undefined;
+  dependencies: readonly string[] | undefined;
+  entry: MarketplaceManifest["plugins"][number];
+  mpRecord: MarketplaceRecord;
+  installedRecord: MarketplaceRecord["plugins"][string];
+  parsedSource: ParsedSource;
+}): Promise<PluginInfoRow> {
+  const {
+    pluginName,
+    version,
+    description,
+    dependencies,
+    entry,
+    mpRecord,
+    installedRecord,
+    parsedSource,
+  } = opts;
   if (!isLocallyResolvable(parsedSource)) {
     return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
   }

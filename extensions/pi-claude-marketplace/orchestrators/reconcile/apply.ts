@@ -980,11 +980,7 @@ async function scanForceInstalledBackfills(
     for (const [plugin, record] of Object.entries(mp.plugins)) {
       const failed = await backfillOnePluginIsolated(
         opts,
-        scope,
-        marketplace,
-        mp,
-        plugin,
-        record,
+        { scope, marketplace, mp, plugin, record },
         alreadyTouched,
         outcomes,
       );
@@ -1013,14 +1009,17 @@ async function scanForceInstalledBackfills(
  */
 async function backfillOnePluginIsolated(
   opts: ApplyReconcileOptions,
-  scope: Scope,
-  marketplace: string,
-  mp: StateMarketplaceRecord,
-  plugin: string,
-  record: StatePluginRecord,
+  target: {
+    scope: Scope;
+    marketplace: string;
+    mp: StateMarketplaceRecord;
+    plugin: string;
+    record: StatePluginRecord;
+  },
   alreadyTouched: ReadonlySet<string>,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
+  const { scope, marketplace, mp, plugin, record } = target;
   // D-68-03: scan ONLY force-installed plugins.
   if (record.compatibility.installable) {
     return false;
