@@ -857,12 +857,12 @@ async function applyBackfillForScope(
   // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
   const anyFailure = await scanForceInstalledBackfills(opts, scope, state, outcomes);
 
-  // SF-02: a force-installed plugin was scanned but its re-materialize FAILED (a
-  // genuine failure, not a benign no-growth / concurrent-uninstall). Leave the
-  // version gate OPEN so the next load retries -- symmetric with the WR-02
-  // self-heal (a THROW from the stamp write, or from an unreadable manifest, also
-  // keeps the gate open). Skipping the stamp leaves state.json untouched
-  // (RECON-05 mtime invariant preserved).
+  // SF-02: a force-installed plugin was scanned but its backfill FAILED -- a
+  // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
+  // the scan; not a benign no-growth / concurrent-uninstall. Leave the version
+  // gate OPEN so the next load retries -- symmetric with the WR-02 self-heal (a
+  // THROW from the stamp write also keeps the gate open). Skipping the stamp
+  // leaves state.json untouched (RECON-05 mtime invariant preserved).
   if (anyFailure) {
     return;
   }
@@ -947,9 +947,20 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * accumulated outcomes so a single load can never emit two rows for one plugin
  * (nor clobber a just-applied transition with a redundant overwrite).
  *
- * SF-02: returns `true` iff at least one scanned plugin's re-materialize FAILED
- * (a genuine failure surfaced by `maybeBackfillPlugin`, not a benign no-growth /
- * concurrent-uninstall), so the caller can keep the version gate OPEN and retry.
+ * SF-02: returns `true` iff at least one scanned plugin's backfill FAILED -- a
+ * genuine `failed` partition surfaced by `maybeBackfillPlugin`, OR a THROW out of
+ * `maybeBackfillPlugin` (e.g. a corrupt / permission-denied cached marketplace
+ * manifest), not a benign no-growth / concurrent-uninstall -- so the caller can
+ * keep the version gate OPEN and retry.
+ *
+ * Per-plugin fault isolation: each `maybeBackfillPlugin` call is wrapped in
+ * try/catch. A throw from ONE plugin (SF-02 lets a manifest I/O error propagate)
+ * is surfaced as a plugin-scoped `(failed)` row and flips `anyFailure`, then the
+ * loop CONTINUES so healthy SIBLING plugins -- including ones under a different,
+ * readable marketplace -- are still scanned and promoted. Without this guard a
+ * single corrupt manifest would unwind the whole loop into the outer WR-02
+ * wrapper's single generic `state.json (failed)` row and block every still-
+ * unscanned sibling on every load.
  */
 async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
@@ -967,24 +978,14 @@ async function scanForceInstalledBackfills(
   let anyFailure = false;
   for (const [marketplace, mp] of Object.entries(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
-      // D-68-03: scan ONLY force-installed plugins.
-      if (record.compatibility.installable) {
-        continue;
-      }
-
-      // WR-03: applyPlan already touched this plugin this load -- don't
-      // double-emit / re-materialize over it.
-      if (alreadyTouched.has(`${marketplace} ${plugin}`)) {
-        continue;
-      }
-
-      const failed = await maybeBackfillPlugin(
+      const failed = await backfillOnePluginIsolated(
         opts,
         scope,
         marketplace,
         mp,
         plugin,
         record,
+        alreadyTouched,
         outcomes,
       );
       anyFailure = anyFailure || failed;
@@ -992,6 +993,57 @@ async function scanForceInstalledBackfills(
   }
 
   return anyFailure;
+}
+
+/**
+ * Per-plugin fault isolation for one scanned record. Applies the D-68-03
+ * force-installed filter + the WR-03 already-touched dedupe (both benign skips
+ * returning `false`), then runs `maybeBackfillPlugin` inside a try/catch.
+ *
+ * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
+ * manifest) propagate out of `maybeBackfillPlugin`. Without this guard that throw
+ * unwinds the whole scan loop into the outer WR-02 wrapper, coercing the WHOLE
+ * scope to a single generic `state.json (failed)` row and skipping promotion of
+ * every still-unscanned SIBLING (including healthy ones under other marketplaces).
+ * Instead surface a plugin-scoped `(failed)` row -- the same outcome shape + reason
+ * classifier as the SF-01 `failed`-partition branch in `maybeBackfillPlugin` -- and
+ * return `true` so the caller keeps the version gate OPEN (this plugin retries next
+ * load) while still scanning its siblings. The WR-02 wrapper stays as the net for
+ * throws OUTSIDE the loop (e.g. the stamp write).
+ */
+async function backfillOnePluginIsolated(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  marketplace: string,
+  mp: StateMarketplaceRecord,
+  plugin: string,
+  record: StatePluginRecord,
+  alreadyTouched: ReadonlySet<string>,
+  outcomes: PerEntryOutcome[],
+): Promise<boolean> {
+  // D-68-03: scan ONLY force-installed plugins.
+  if (record.compatibility.installable) {
+    return false;
+  }
+
+  // WR-03: applyPlan already touched this plugin this load -- don't double-emit /
+  // re-materialize over it.
+  if (alreadyTouched.has(`${marketplace} ${plugin}`)) {
+    return false;
+  }
+
+  try {
+    return await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
+  } catch (err) {
+    outcomes.push({
+      kind: "plugin-install-failed",
+      scope,
+      marketplace,
+      plugin,
+      reason: classifyOrchestratorThrow(err),
+    });
+    return true;
+  }
 }
 
 /**
@@ -1034,9 +1086,10 @@ async function maybeBackfillPlugin(
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
     // a resolve failure is the truthful "skip" default, never a crash). A
     // manifest-unreadable I/O throw never reaches here -- SF-02 lets it propagate
-    // out of resolveRecordedPluginOffline to the WR-02 wrapper, which keeps the
-    // gate open. A legitimately absent/invalid entry is benign, NOT a failure, so
-    // this scan may still close the gate.
+    // out of resolveRecordedPluginOffline to the per-plugin catch in
+    // scanForceInstalledBackfills, which surfaces a plugin-scoped (failed) row and
+    // keeps the gate open. A legitimately absent/invalid entry is benign, NOT a
+    // failure, so this scan may still close the gate.
     return false;
   }
 
@@ -1112,10 +1165,12 @@ async function maybeBackfillPlugin(
  * fails the per-entry validator -- a benign "not backfillable this load".
  *
  * SF-02: a genuine I/O throw (manifest unreadable/corrupt) or a resolver throw
- * is NOT swallowed here. It propagates to the WR-02 isolation wrapper, which
- * surfaces an invalid-block row AND keeps the version gate OPEN so the scan
- * self-heals on the next load -- rather than being silently indistinguishable
- * from a legitimately-absent entry (which would wrongly close the gate).
+ * is NOT swallowed here. It propagates to the per-plugin catch in
+ * `scanForceInstalledBackfills`, which surfaces a plugin-scoped `(failed)` row
+ * AND keeps the version gate OPEN so the scan self-heals on the next load --
+ * rather than being silently indistinguishable from a legitimately-absent entry
+ * (which would wrongly close the gate). Per-plugin isolation there means the throw
+ * does not unwind the scan past its healthy siblings.
  */
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,

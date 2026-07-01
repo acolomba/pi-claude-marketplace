@@ -658,7 +658,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // path (`updateSinglePlugin` sets `force: true`), so a candidate that
       // re-resolved `unsupported` degraded in place. Report `(force-installed)`
       // with the dropped-component detail instead of `(updated)`. A clean
-      // candidate keeps `(updated)` (no `unsupportedKinds`). force-installed is
+      // candidate keeps `(updated)` (no `forceDegrade`). force-installed is
       // a realized transition -> reloads Pi resources.
       //
       // SEV-03 / D-69-01: an autoupdate that NEWLY degrades a previously-clean

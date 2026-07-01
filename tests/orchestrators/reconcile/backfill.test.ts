@@ -765,13 +765,14 @@ test("SF-02: an offline-unresolvable force-installed plugin (manifest omits the 
   });
 });
 
-test("SF-02: an UNREADABLE manifest I/O throw propagates to a surfaced row and leaves the version gate OPEN", async () => {
+test("SF-02: an UNREADABLE manifest I/O throw surfaces a plugin-scoped (failed) row and leaves the version gate OPEN", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // hello is recorded force-installed AND declared in the manifest, but the
     // manifest file is then corrupted. resolveRecordedPluginOffline's
     // loadMarketplaceManifest THROWS (unparseable JSON); SF-02 lets it propagate
-    // to the WR-02 isolation wrapper -> a surfaced (failed) row on `state.json`,
-    // and the version gate stays OPEN (stamp NOT advanced) so the scan retries.
+    // to the per-plugin catch in scanForceInstalledBackfills, which surfaces a
+    // plugin-scoped (failed) row naming hello (NOT a generic state.json row) and
+    // keeps the version gate OPEN (stamp NOT advanced) so the scan retries.
     const { extensionRoot } = await seedScope({
       cwd,
       stamp: "0.0.0",
@@ -792,13 +793,104 @@ test("SF-02: an UNREADABLE manifest I/O throw propagates to a surfaced row and l
 
     await runReconcile(cwd, ctx);
 
-    // WR-02: the throw is coerced into a surfaced structured row (never aborts
-    // the cascade); the row subject is state.json.
+    // Per-plugin isolation: the throw is surfaced as a single plugin-scoped
+    // (failed) row for hello (never aborts the cascade), not a state.json row.
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("state.json") && body.includes("(failed)"), `got:\n${body}`);
+    assert.ok(body.includes("hello") && body.includes("(failed)"), `got:\n${body}`);
+    assert.ok(!body.includes("state.json"), `expected no generic state.json row:\n${body}`);
     // SF-02: the gate stays OPEN so the scan self-heals next load -- stamp untouched.
     const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
+  });
+});
+
+test("per-plugin isolation: a corrupt-manifest plugin surfaces its own (failed) row while a healthy sibling under another marketplace is still promoted", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Two force-installed plugins under two marketplaces. `bad`'s cached manifest
+    // is corrupt, so alpha's offline re-resolve THROWS. `good`'s bravo has grown
+    // (skills + commands on disk; recorded supported only skills), so it is a
+    // promotable backfill candidate. Per-plugin isolation: alpha's throw must
+    // surface its OWN plugin-scoped (failed) row and keep the gate OPEN, while
+    // bravo is still promoted to (installed) on the SAME cascade -- proving one
+    // corrupt manifest does not block a healthy sibling under another marketplace.
+    const badRoot = path.join(cwd, "bad-src");
+    const goodRoot = path.join(cwd, "good-src");
+    await writePluginTree(badRoot, "alpha", { skill: true });
+    await writePluginTree(goodRoot, "bravo", { skill: true, command: true });
+    const badManifest = await writeManifest(badRoot, "bad", ["alpha"]);
+    const goodManifest = await writeManifest(goodRoot, "good", ["bravo"]);
+    // Corrupt the `bad` marketplace manifest so alpha's offline re-resolve throws.
+    await writeFile(badManifest, "{ this is not valid json at all", "utf8");
+
+    const loc = locationsFor("project", cwd);
+    await mkdir(loc.extensionRoot, { recursive: true });
+    // `bad` is inserted BEFORE `good` so the corrupt marketplace is scanned first
+    // -- proving the throw does not unwind the loop before `good` is reached.
+    const state: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: "0.0.0",
+      marketplaces: {
+        bad: {
+          name: "bad",
+          scope: "project",
+          source: pathSource("./bad-src"),
+          addedFromCwd: cwd,
+          manifestPath: badManifest,
+          marketplaceRoot: badRoot,
+          plugins: {
+            alpha: pluginRecord({
+              pluginRoot: path.join(badRoot, "plugins", "alpha"),
+              installable: false,
+              supported: ["skills"],
+              unsupported: ["themes"],
+            }),
+          },
+        },
+        good: {
+          name: "good",
+          scope: "project",
+          source: pathSource("./good-src"),
+          addedFromCwd: cwd,
+          manifestPath: goodManifest,
+          marketplaceRoot: goodRoot,
+          plugins: {
+            bravo: pluginRecord({
+              pluginRoot: path.join(goodRoot, "plugins", "bravo"),
+              installable: false,
+              supported: ["skills"],
+              unsupported: ["commands"],
+            }),
+          },
+        },
+      },
+    };
+    await saveState(loc.extensionRoot, state);
+    const ctx = makeCtx();
+
+    await runReconcile(cwd, ctx);
+
+    const persisted = await loadState(loc.extensionRoot);
+    // The healthy sibling was promoted despite the corrupt-manifest sibling being
+    // scanned first: bravo flips installable -> true.
+    assert.equal(pluginRecordOf(persisted, "good", "bravo").compatibility.installable, true);
+    // The corrupt-manifest plugin was NOT promoted -- still force-installed.
+    assert.equal(pluginRecordOf(persisted, "bad", "alpha").compatibility.installable, false);
+
+    // Exactly one cascade carrying BOTH the promotion row for bravo and a
+    // plugin-scoped (failed) row for alpha.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+    assert.ok(
+      body.includes("bravo") && body.includes("(installed)"),
+      `expected bravo promotion:\n${body}`,
+    );
+    assert.ok(
+      body.includes("alpha") && body.includes("(failed)"),
+      `expected alpha failure:\n${body}`,
+    );
+
+    // A per-plugin failure keeps the version gate OPEN -- stamp NOT advanced.
     assert.equal(persisted.lastReconciledExtensionVersion, "0.0.0");
   });
 });

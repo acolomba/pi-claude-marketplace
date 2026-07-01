@@ -94,12 +94,50 @@ const DroppedHookSchema = Type.Union([
 // `event: BucketAEvent` on the group/handler arms) must stay assignable to the
 // schema's static type (wider -- `event: string`). The reverse never holds
 // because the schema intentionally widens `event`, so this is the only direction
-// that compiles today; a schema-side field/arm the union lacks breaks the
-// `extends`, collapsing `_DroppedHookDrift` to `never` so the `= true`
-// assignment errors.
+// that compiles today.
+//
+// This `extends` alone CATCHES: a schema-side required-field addition to an
+// existing arm (the source arm then lacks that field -> not assignable), a
+// schema-side enum NARROWING (e.g. dropping a `cond` literal -> the wider source
+// `cond` is no longer assignable), and a source-side NEW arm (a union member with
+// no schema counterpart is not assignable to the schema union). It does NOT catch
+// a schema-side EXTRA arm (the schema union merely widens; `DroppedHook` stays
+// assignable to it) nor a source-side additive FIELD on an existing arm (excess
+// properties stay assignable). The per-kind key-parity guard below closes the
+// source-side-field gap.
 type _DroppedHookDrift = DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : never;
 const _assertDroppedHookDrift: _DroppedHookDrift = true;
 void _assertDroppedHookDrift;
+
+// TD-2 (strengthening): per-kind KEY parity. For each `kind`, the source arm and
+// the schema arm must carry EXACTLY the same field names -- checked in both
+// directions with tuple-wrapped `keyof` to defeat union distribution. This closes
+// the two gaps the `extends` above misses: a source-side additive field and a
+// schema-side extra arm both change the key set of some arm. Because it compares
+// KEY names only (not value types), the intentional `event` widening
+// (`BucketAEvent` vs `string`) is invisible to it -- no fight. A mismatched arm
+// yields `false`; the nested check below then collapses to `never`, erroring the
+// `= true` assignment. (`false` -- not `never` -- on mismatch so the `extends
+// true` chaining stays sound: `never extends true` would spuriously pass.)
+type _DroppedHookArmKeysMatch<K extends DroppedHook["kind"]> = [
+  keyof Extract<DroppedHook, { kind: K }>,
+] extends [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>]
+  ? [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>] extends [
+      keyof Extract<DroppedHook, { kind: K }>,
+    ]
+    ? true
+    : false
+  : false;
+type _DroppedHookArmKeysDrift =
+  _DroppedHookArmKeysMatch<"event"> extends true
+    ? _DroppedHookArmKeysMatch<"group"> extends true
+      ? _DroppedHookArmKeysMatch<"handler"> extends true
+        ? true
+        : never
+      : never
+    : never;
+const _assertDroppedHookArmKeys: _DroppedHookArmKeysDrift = true;
+void _assertDroppedHookArmKeys;
 
 const ResolvedPluginInstallableSchema = Type.Object({
   state: Type.Literal("installable"),
