@@ -686,3 +686,84 @@ test("FSTAT-06 fallback: a corrupt recorded manifest degrades the force preview 
     );
   });
 });
+
+// FSTAT-06 fallback: a RECORDED marketplace whose cached manifest is VALID but
+// does NOT list the planned plugin. `locateCandidate` loads the manifest
+// successfully, then `manifest.plugins.find` returns undefined
+// (manifestEntry === undefined) -> no candidate -> plain `(will install)`.
+// This is the distinct twin of the `record === undefined` (unrecorded
+// marketplace) fallback above: here the marketplace IS recorded and the
+// manifest IS readable, but the plugin name is absent from it.
+test("FSTAT-06 fallback: a recorded manifest that omits the planned plugin renders plain (will install), no throw", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    const marketplaceRoot = path.join(extensionRoot, "marketplaces", "mp-github");
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+
+    // Valid manifest that lists a DIFFERENT plugin -- the planned `ghost`
+    // install has no manifest entry to resolve its force preview against.
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp-github",
+        plugins: [{ name: "other", source: "./other", version: "1.0.0" }],
+      }),
+      "utf8",
+    );
+
+    // Recorded marketplace, NO recorded plugin -> `ghost` is a planned install.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: {
+          "mp-github": {
+            name: "mp-github",
+            scope: "project",
+            source: "acme/tools",
+            addedFromCwd: cwd,
+            manifestPath,
+            marketplaceRoot,
+            plugins: {},
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    // Declared+enabled `ghost@mp-github`; the marketplace source matches the
+    // record so the planner produces an install (not a source mismatch).
+    await writeFile(
+      path.join(projectScopeRoot, "claude-plugins.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { "mp-github": { source: "acme/tools" } },
+        plugins: { "ghost@mp-github": { enabled: true } },
+      }),
+      "utf8",
+    );
+
+    const ctx = makeCtx(cwd);
+    // Must NOT throw despite the manifest omitting the plugin.
+    await pendingReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+    assert.ok(emitted.includes("ghost"), "expected the ghost plugin row; got:\n" + emitted);
+    assert.ok(
+      emitted.includes("(will install)"),
+      "a manifest that omits the plugin must render plain (will install); got:\n" + emitted,
+    );
+    assert.ok(
+      !emitted.includes("(will force install)"),
+      "a missing manifest entry must NOT render the force modifier; got:\n" + emitted,
+    );
+  });
+});

@@ -394,6 +394,65 @@ test("INFO-02: single-scope unavailable (malformed hooks/hooks.json) renders `âŠ
 });
 
 // ---------------------------------------------------------------------------
+// (c2) D-64-05: the `unavailable` arm re-derives the component search paths
+// from the RAW manifest entry via `deriveLenientComponentPaths`. An
+// ARRAY-form component field (`skills: ["skills", "extra", "extra"]`)
+// exercises the array-normalize branch (`asDeclaredList` returns the array
+// as-is) AND both sides of the `!out[kind].includes(d)` dedup guard: the
+// default "skills" search path is skipped, "extra" is pushed once, and the
+// repeat "extra" is skipped. The declared "extra" path is enumerated from
+// disk alongside the conventional "skills" dir.
+// ---------------------------------------------------------------------------
+
+test("D-64-05: unavailable arm derives lenient component paths from an array-form component field (array normalize + dedup push/skip)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "legacy",
+            source: "./legacy",
+            version: "0.1.0",
+            // Array-form component field carrying the default search path
+            // ("skills") AND a duplicated declared path ("extra"). This is
+            // the only shape that drives both the array branch of
+            // `asDeclaredList` and the push/skip arms of the dedup guard.
+            skills: ["skills", "extra", "extra"],
+          },
+        ],
+      },
+      installablePluginDirs: ["legacy"],
+      // A skill under the DECLARED "extra" search path so the lenient
+      // enumeration surfaces it on the (unavailable) row.
+      componentDirs: { legacy: ["extra/es1"] },
+    });
+
+    // A malformed hooks/hooks.json flips resolveStrict to the structural
+    // `unavailable` arm -- the sole arm that calls deriveLenientComponentPaths
+    // (D-64-05); the other arms carry `componentPaths` directly.
+    const pluginDir = path.join(mpRoot, "legacy");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "unavailable is info, not error");
+    const msg = notifications[0]!.message;
+    assert.match(msg, /âŠ˜ legacy v0\.1\.0 \(unavailable\) \{unsupported hooks\}/, msg);
+    // The DECLARED "extra" search path is enumerated from disk (D-64-05) so
+    // the es1 skill surfaces -- proving the array path was read.
+    assert.match(msg, /skills: es1/, msg);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (d) external source (github / npm / git-subdir / url) -> components not resolved (INFO-05).
 // ---------------------------------------------------------------------------
 

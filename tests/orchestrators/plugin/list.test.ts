@@ -618,6 +618,147 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
   });
 });
 
+// FSTAT-02 / FSTAT-04 / D-66-03 / SNM-11: the in-block plugin sort's `scopeOf`
+// only runs when two rows share a name (byName === 0). The orphan fold is the
+// producer: a plugin installed in BOTH scopes under a CLONED marketplace
+// (same marketplaceRoot) yields the user-side row PLUS the folded project-side
+// row, both same-named, in one block. Seeding the derived force statuses into
+// that pair drives the `force-installed` / `force-upgradable` sort arms.
+test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows across scopes exercise the force scope-sort arms", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+
+    // User scope: `fi` force-installed (persisted unsupported) + `fu` clean
+    // installed whose newer manifest candidate resolves `unsupported`
+    // (force-upgradable). The seed writes the shared manifest + plugin dirs.
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "fi", source: "./fi", version: "1.0.0" },
+          // Newer candidate declaring an unsupported kind -> a CLEAN installed
+          // record derives force-upgradable.
+          { name: "fu", source: "./fu", version: "1.0.1", lspServers: { ls: {} } },
+        ],
+      },
+      installed: {
+        fi: { version: "1.0.0", unsupported: ["lspServers"] },
+        fu: { version: "1.0.0" },
+      },
+      installablePluginDirs: ["fi", "fu"],
+    });
+
+    // Project scope: a CLONE (same marketplaceRoot + manifestPath) with the
+    // SAME two plugins installed, so the fold carries them under the user
+    // header, producing same-name pairs the in-block sort must compare.
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const sharedManifestPath = path.join(sharedMpRoot, ".claude-plugin", "marketplace.json");
+    const projectLocations = locationsFor("project", cwd);
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await saveState(projectLocations.extensionRoot, {
+      schemaVersion: 2,
+      marketplaces: {
+        mp1: {
+          name: "mp1",
+          scope: "project",
+          source: pathSource("./mp1-src"),
+          addedFromCwd: cwd,
+          manifestPath: sharedManifestPath,
+          marketplaceRoot: sharedMpRoot,
+          plugins: {
+            fi: {
+              version: "1.0.0",
+              resolvedSource: "./placeholder",
+              // Persisted unsupported -> force-installed (installable: false).
+              compatibility: {
+                installable: false,
+                notes: [],
+                supported: [],
+                unsupported: ["lspServers"],
+              },
+              resources: {
+                skills: ["fi-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            fu: {
+              version: "1.0.0",
+              resolvedSource: "./placeholder",
+              // Clean record; the newer manifest candidate resolves
+              // `unsupported` -> force-upgradable.
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: ["fu-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    } as unknown as Parameters<typeof saveState>[1]);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    const out = notifications[0]!.message;
+    // Both the user-side row (no bracket) AND the folded project-side row
+    // ([project]) appear for each name -> the same-name pair the sort's
+    // `scopeOf` compares.
+    assert.match(out, /◉ fi v1\.0\.0 \(force-installed\)/, out);
+    assert.match(out, /◉ fi \[project\] v1\.0\.0 \(force-installed\)/, out);
+    assert.match(out, /● fu v1\.0\.0 \(force-upgradable\)/, out);
+    assert.match(out, /● fu \[project\] v1\.0\.0 \(force-upgradable\)/, out);
+  });
+});
+
+// USTAT-01 / SNM-11 / D-64-01: two NOT-installed manifest entries that share a
+// name (the manifest schema carries no name-uniqueness constraint) both
+// resolve `unsupported`, so two `(unsupported)` rows land in one block. The
+// in-block sort compares them (byName === 0), invoking `scopeOf` on the
+// `unsupported` status -- the only list-surface producer of that sort arm.
+test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise the unsupported scope-sort arm", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "dup", source: "./dup", version: "1.0.0", lspServers: { ls: {} } },
+          { name: "dup", source: "./dup", version: "1.0.0", lspServers: { ls: {} } },
+        ],
+      },
+      installablePluginDirs: ["dup"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    const out = notifications[0]!.message;
+    const matches = out.match(/⊖ dup v1\.0\.0 \(unsupported\) \{lsp\}/g) ?? [];
+    assert.equal(matches.length, 2, out);
+  });
+});
+
 test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row renders the `(unsupported)` byte form", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

@@ -305,6 +305,52 @@ test("makeLocationsResolver: loadManifestForMarketplace wraps manifest-read fail
   });
 });
 
+test("makeLocationsResolver: an unsafe-named not-installed entry degrades to `unavailable` (resolveStrict throws, classifyNotInstalledPluginRow catch)", async () => {
+  await withHermeticProjectScope(async ({ cwd }) => {
+    // A plugin name containing a path separator passes the string-typed
+    // manifest schema but makes resolveStrict's `assertSafeName` throw with
+    // no I/O. `classifyNotInstalledPluginRow`'s catch degrades the row to
+    // `unavailable` -- the defensive path distinct from a structural
+    // (missing-dir) `unavailable` resolution, which returns without throwing.
+    const srcRoot = await mkdtemp(path.join(tmpdir(), "edge-deps-badname-"));
+    const manifestDir = path.join(srcRoot, ".claude-plugin");
+    await mkdir(manifestDir, { recursive: true });
+    const manifestPath = path.join(manifestDir, "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "bad-mp",
+        plugins: [{ name: "bad/name", source: "./bad" }],
+      }),
+      "utf8",
+    );
+
+    const projectLoc = locationsFor("project", cwd);
+    await mkdir(projectLoc.extensionRoot, { recursive: true });
+    const state: ExtensionState = {
+      schemaVersion: 1,
+      marketplaces: {
+        "bad-mp": {
+          name: "bad-mp",
+          scope: "project",
+          source: { kind: "path", raw: srcRoot },
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: srcRoot,
+          plugins: {},
+        },
+      },
+    };
+    await saveState(projectLoc.extensionRoot, state);
+
+    const resolver = makeLocationsResolver(cwd);
+    const rows = await resolver.loadManifestForMarketplace("project", "bad-mp");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.name, "bad/name");
+    assert.equal(rows[0]?.status, "unavailable");
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // LIST-02 / D-67-02: the bucketizer emits the FINER derived statuses via the
 // SHARED classifier (installed | upgradable | force-installed |
