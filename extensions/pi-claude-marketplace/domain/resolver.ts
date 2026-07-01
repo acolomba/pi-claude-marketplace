@@ -139,10 +139,17 @@ type _DroppedHookArmKeysDrift =
 const _assertDroppedHookArmKeys: _DroppedHookArmKeysDrift = true;
 void _assertDroppedHookArmKeys;
 
-const ResolvedPluginInstallableSchema = Type.Object({
-  state: Type.Literal("installable"),
+// The field set shared by the two force-materializable arms -- `installable`
+// and the force-degradable `unsupported` (D-64-06). Both carry `pluginRoot`
+// plus the full component payload; only the `state` discriminant differs.
+// Extracted into one bag and spread into both schemas so the two arms stay
+// token-identical by construction (spreading `state` first keeps the literal
+// discriminant on each arm; TypeBox key order does not affect the static type).
+const MATERIALIZABLE_FIELDS = {
   name: Type.String(),
-  pluginRoot: Type.String(), // on installable + unsupported only (NFR-7)
+  // pluginRoot is present on installable + unsupported only (NFR-7); D-64-06
+  // lets force degrade the unsupported parts, so both arms expose it.
+  pluginRoot: Type.String(),
   supported: Type.Array(Type.String()),
   unsupported: Type.Array(Type.String()),
   notes: Type.Array(Type.String()),
@@ -164,6 +171,11 @@ const ResolvedPluginInstallableSchema = Type.Object({
   // unsupportable. Threaded for the `info` enumeration (D-71-05). Absent when
   // no hooks.json exists, the parse failed structurally, or nothing dropped.
   droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
+} as const;
+
+const ResolvedPluginInstallableSchema = Type.Object({
+  state: Type.Literal("installable"),
+  ...MATERIALIZABLE_FIELDS,
 });
 
 // D-64-06: the force-degradable arm. Shape-identical to `installable` (carries
@@ -174,16 +186,7 @@ const ResolvedPluginInstallableSchema = Type.Object({
 // <kind>` markers in `notes[]`.
 const ResolvedPluginUnsupportedSchema = Type.Object({
   state: Type.Literal("unsupported"),
-  name: Type.String(),
-  pluginRoot: Type.String(), // D-64-06: force can degrade the unsupported parts
-  supported: Type.Array(Type.String()),
-  unsupported: Type.Array(Type.String()),
-  notes: Type.Array(Type.String()),
-  componentPaths: ComponentPathsSchema,
-  mcpServers: McpServersFieldSchema,
-  hooksConfigPath: Type.Optional(Type.String()),
-  orphanRewake: Type.Optional(Type.Boolean()),
-  droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
+  ...MATERIALIZABLE_FIELDS,
 });
 
 // D-64-05: the minimal structural-defect arm. Carries ONLY `state`, `name`,
@@ -369,13 +372,17 @@ function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   };
 }
 
-function installable(
+// The non-discriminant payload shared by the two force-materializable arms.
+// Because `ResolvedPluginInstallable` and `ResolvedPluginUnsupported` differ
+// ONLY in `state`, `Omit<..., "state">` is the same structural type for both,
+// so each constructor re-adds its own `state` literal and keeps its precise
+// discriminated-union return type with no cast.
+function materializableFields(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
-): ResolvedPluginInstallable {
+): Omit<ResolvedPluginInstallable, "state"> {
   return {
-    state: "installable",
     name,
     pluginRoot,
     supported: partial.supported,
@@ -389,6 +396,14 @@ function installable(
   };
 }
 
+function installable(
+  name: string,
+  pluginRoot: string,
+  partial: PartialResolution,
+): ResolvedPluginInstallable {
+  return { state: "installable", ...materializableFields(name, pluginRoot, partial) };
+}
+
 // D-64-06: the force-degradable arm. Identical payload to `installable`
 // (including `pluginRoot`); only the `state` tag differs.
 function unsupported(
@@ -396,19 +411,7 @@ function unsupported(
   pluginRoot: string,
   partial: PartialResolution,
 ): ResolvedPluginUnsupported {
-  return {
-    state: "unsupported",
-    name,
-    pluginRoot,
-    supported: partial.supported,
-    unsupported: partial.unsupported,
-    notes: partial.notes,
-    componentPaths: partial.componentPaths,
-    mcpServers: partial.mcpServers,
-    ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
-    ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
-    ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
-  };
+  return { state: "unsupported", ...materializableFields(name, pluginRoot, partial) };
 }
 
 function nestedExperimentalValue(
