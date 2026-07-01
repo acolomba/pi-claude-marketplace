@@ -340,9 +340,9 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  * value (it only records `hooksConfigPath`), so the info renderer must
  * re-open the file at info-render time. Returns `undefined` when the
  * file has no `hooksConfigPath` (the plugin declares no hooks), or
- * when the re-parse fails (the resolver would also have flipped
- * `installable: false`, so this branch is defensive only -- the file
- * was parseable at resolve time).
+ * when the re-parse fails (the resolver would then have resolved
+ * `unavailable`, which carries no `hooksConfigPath`, so this branch is
+ * defensive only -- the file was parseable at resolve time).
  *
  * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
  * subset as `value` plus the `dropped` enumeration. For a force-degradable

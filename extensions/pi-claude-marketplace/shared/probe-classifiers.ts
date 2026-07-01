@@ -164,6 +164,12 @@ export function narrowUnsupportedKinds(
   return out;
 }
 
+// TD-3: `kind` is deliberately typed `string`, NOT the closed `UnsupportedKind`
+// union. The resolver's `unsupported` array is `Type.Array(Type.String())` and
+// legitimately carries `hooks` (a SUPPORTED kind flagged as dropped) alongside
+// the `UnsupportedKind` literals, so no closed union spans the real input. Any
+// kind outside the two recognized markers intentionally collapses to the generic
+// `"unsupported source"` reason rather than forcing an unsafe cast at the callers.
 function kindToReason(kind: string): "lsp" | "unsupported hooks" | "unsupported source" {
   if (kind === "lspServers") {
     return "lsp";

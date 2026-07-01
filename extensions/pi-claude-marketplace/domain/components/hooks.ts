@@ -1,8 +1,11 @@
 // domain/components/hooks.ts
 //
 // TypeBox schema for Claude `hooks/hooks.json` files + `parseHooksConfig`
-// discriminated parser. Consumed by `domain/resolver.ts` to flip
-// `installable: false` on parse failure per D-57-04.
+// discriminated parser. Consumed by `domain/resolver.ts`: a structural parse
+// failure (`{ ok: false }`) resolves `state: "unavailable"` per D-57-04; a
+// successful parse whose partition dropped unsupportable events / matcher groups
+// / handlers resolves `state: "unsupported"` (force-degradable) carrying the
+// `{unsupported hooks}` reason.
 //
 // HOOK-03: `additionalProperties: true` at EVERY nesting level. Unknown
 // extension field names on a hook entry, unknown top-level event keys, and
@@ -17,10 +20,13 @@
 // and -- conditionally -- the REQUIRED `command` field on a `type: "command"`
 // handler entry (Claude's Discretion locked in 57-CONTEXT.md).
 //
-// D-57-04: parse failures (invalid JSON, structural shape mismatch,
+// D-57-04: structural parse failures (invalid JSON, structural shape mismatch,
 // missing REQUIRED `command` on a `type: "command"` handler) surface through
-// `parseHooksConfig` as `{ ok: false, reason }`. The resolver consumes this
-// to flip `installable: false` with the `{unsupported hooks}` reason.
+// `parseHooksConfig` as `{ ok: false, reason }`. The resolver routes these to
+// the `state: "unavailable"` arm. A parseable config that merely drops
+// unsupportable entries instead resolves `state: "unsupported"` with the
+// `{unsupported hooks}` reason (the `{ ok: true }` arm carries
+// `dropped: readonly DroppedHook[]`).
 // `hookDebugLog` is the OBS-01 debug-output seam (imported from
 // shared/debug-log.ts); env-gated on `PI_CLAUDE_MARKETPLACE_DEBUG === "1"`,
 // the sanctioned IL-2 / IL-3 escape lives at the seam's canonical home and
@@ -345,10 +351,12 @@ export type HookConfigParseResult<P> =
   | { ok: false; reason: string };
 
 /**
- * D-57-04 parse path. Returns the discriminated `{ok:true,value}` on
- * success; on failure returns `{ok:false,reason}` and forwards the
- * detail through `hookDebugLog`. The resolver maps the failure to
- * `installable: false` with the `{unsupported hooks}` reason. No throws.
+ * D-57-04 parse path. Returns the discriminated `{ok:true, value, dropped}` on
+ * success; on failure returns `{ok:false, reason}` and forwards the detail
+ * through `hookDebugLog`. The resolver maps a structural `{ok:false}` failure to
+ * `state: "unavailable"`; a `{ok:true}` parse with a non-empty
+ * `dropped: readonly DroppedHook[]` list resolves `state: "unsupported"` with the
+ * `{unsupported hooks}` reason. No throws.
  *
  * HOOK-03 / LIFE-01 wrapper-detection arm: if the parsed JSON looks like
  * the upstream PLUGIN-format wrapper `{description?, hooks: {<event>:

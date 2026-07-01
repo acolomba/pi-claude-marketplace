@@ -489,11 +489,13 @@ export async function runInstallLedger(
 
   const entry: PluginEntry = entryRaw;
 
-  // PI-4: resolveStrict + requireInstallable. Per D-04, the
-  // strict resolver consumes the array-shape componentPaths (D-07 /
-  // COMP-01) and either returns an installable variant or surfaces
-  // disqualification notes. requireInstallable narrows the discriminated
-  // union and throws on the not-installable variant.
+  // PI-4: resolveStrict + gate. Per D-04, the strict resolver consumes the
+  // array-shape componentPaths (D-07 / COMP-01) and either returns an
+  // installable variant or surfaces disqualification notes. The gate below
+  // branches on `opts.force`: the default path calls `requireInstallable`
+  // (admits only `installable`); `--force` calls `requireForceInstallable`
+  // (also admits the force-degradable `unsupported` arm). Both narrow the
+  // discriminated union and throw on the structural `unavailable` variant.
   const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
   // D-65-03 / FORCE-01/03/05: `--force` widens the gate to admit the
   // force-degradable `unsupported` arm; the default gate still blocks it. Both
@@ -804,7 +806,14 @@ export async function runInstallLedger(
         version: c.version,
         resolvedSource: c.resolved.pluginRoot,
         compatibility: {
-          installable: true,
+          // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
+          // resolve, not a hardcoded `true`. A `--force` install of an
+          // `unsupported` plugin persists `installable: false` with the still-
+          // unsupported set (mirrors reinstall.ts::updateStateRecord), so the
+          // force-installed derivation stays truthful AND load-time backfill
+          // (which keys on `!compatibility.installable`) can later promote it
+          // when its supported set grows. A clean install persists `true`.
+          installable: c.resolved.state === "installable",
           notes: [...c.resolved.notes],
           supported: [...c.resolved.supported],
           unsupported: [...c.resolved.unsupported],
@@ -1419,8 +1428,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // companion -- keeps the info stamp. Applies to BOTH the clean `installed`
     // and degraded `force-installed` success arms.
     const successSeverity = companionSeverity(
-      installCtx.stagedAgentNames.length > 0,
-      installCtx.stagedMcpServerNames.length > 0,
+      {
+        declaresAgents: installCtx.stagedAgentNames.length > 0,
+        declaresMcp: installCtx.stagedMcpServerNames.length > 0,
+      },
       softDepStatus(pi),
     );
     const installedRow: InstallMsg =

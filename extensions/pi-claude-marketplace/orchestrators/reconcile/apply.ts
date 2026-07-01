@@ -855,7 +855,17 @@ async function applyBackfillForScope(
 
   // Gate OPEN. Scan every force-installed plugin and re-materialize the ones
   // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
-  await scanForceInstalledBackfills(opts, scope, state, outcomes);
+  const anyFailure = await scanForceInstalledBackfills(opts, scope, state, outcomes);
+
+  // SF-02: a force-installed plugin was scanned but its re-materialize FAILED (a
+  // genuine failure, not a benign no-growth / concurrent-uninstall). Leave the
+  // version gate OPEN so the next load retries -- symmetric with the WR-02
+  // self-heal (a THROW from the stamp write, or from an unreadable manifest, also
+  // keeps the gate open). Skipping the stamp leaves state.json untouched
+  // (RECON-05 mtime invariant preserved).
+  if (anyFailure) {
+    return;
+  }
 
   // D-68-03 (stamp-on-gate-open): close the gate even when nothing was
   // backfilled. SPLIT-02 / NFR-1: route through withStateGuard -> saveState,
@@ -936,13 +946,17 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * own transition row). Skip any plugin already represented in this scope's
  * accumulated outcomes so a single load can never emit two rows for one plugin
  * (nor clobber a just-applied transition with a redundant overwrite).
+ *
+ * SF-02: returns `true` iff at least one scanned plugin's re-materialize FAILED
+ * (a genuine failure surfaced by `maybeBackfillPlugin`, not a benign no-growth /
+ * concurrent-uninstall), so the caller can keep the version gate OPEN and retry.
  */
 async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
   scope: Scope,
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
-): Promise<void> {
+): Promise<boolean> {
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {
@@ -950,6 +964,7 @@ async function scanForceInstalledBackfills(
     }
   }
 
+  let anyFailure = false;
   for (const [marketplace, mp] of Object.entries(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
       // D-68-03: scan ONLY force-installed plugins.
@@ -963,9 +978,20 @@ async function scanForceInstalledBackfills(
         continue;
       }
 
-      await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
+      const failed = await maybeBackfillPlugin(
+        opts,
+        scope,
+        marketplace,
+        mp,
+        plugin,
+        record,
+        outcomes,
+      );
+      anyFailure = anyFailure || failed;
     }
   }
+
+  return anyFailure;
 }
 
 /**
@@ -988,6 +1014,11 @@ type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
  * D-68-02). The promotion folds into the single cascade as a
  * `PluginBackfilledOutcome` whose `installable` boolean drives the
  * (installed)-vs-(force-installed) projection.
+ *
+ * SF-01 / SF-02: returns `true` iff the re-materialize FAILED (a genuine
+ * failure, surfaced as a plugin-scoped (failed) row), so the caller keeps the
+ * version gate OPEN and retries next load. Benign outcomes (no growth,
+ * concurrent uninstall, successful promotion) return `false`.
  */
 async function maybeBackfillPlugin(
   opts: ApplyReconcileOptions,
@@ -997,16 +1028,20 @@ async function maybeBackfillPlugin(
   plugin: string,
   record: StatePluginRecord,
   outcomes: PerEntryOutcome[],
-): Promise<void> {
+): Promise<boolean> {
   const resolved = await resolveRecordedPluginOffline(mp, plugin);
   if (resolved === undefined || resolved.state === "unavailable") {
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
-    // a resolve failure is the truthful "skip" default, never a crash).
-    return;
+    // a resolve failure is the truthful "skip" default, never a crash). A
+    // manifest-unreadable I/O throw never reaches here -- SF-02 lets it propagate
+    // out of resolveRecordedPluginOffline to the WR-02 wrapper, which keeps the
+    // gate open. A legitimately absent/invalid entry is benign, NOT a failure, so
+    // this scan may still close the gate.
+    return false;
   }
 
   if (!supportedSetGrew(record.compatibility.supported, resolved.supported)) {
-    return;
+    return false;
   }
 
   // CR-01: render: "none" self-locking re-materialize. The recorded version is
@@ -1021,10 +1056,33 @@ async function maybeBackfillPlugin(
     render: "none",
   });
 
-  if (outcome.partition !== "reinstalled") {
-    // A concurrent uninstall (skipped) or a re-materialize failure renders no
-    // promotion row -- the reconcile did not actually promote this plugin.
-    return;
+  if (outcome.partition === "skipped") {
+    // Benign concurrent uninstall: the record was removed under us, so there is
+    // no promotion row and nothing to retry -- NOT a failure. The gate may still
+    // close.
+    return false;
+  }
+
+  if (outcome.partition === "failed") {
+    // SF-01: render: "none" makes reinstallPlugin CATCH its own throw and RETURN
+    // a `failed` outcome (reinstall.ts handleSinglePluginFailure), so a genuine
+    // re-materialize failure (EACCES / EIO / bridge failure) never throws and the
+    // WR-02 wrapper -- which only catches THROWS -- never sees it. Surface a
+    // plugin-scoped (failed) row on the same cascade instead of silently dropping
+    // it, mirroring the applyPluginInstalls failure arm (T-55-02-02: carry ONLY
+    // the closed-set reason, never the raw notes text). Prefer the pre-narrowed
+    // `reasons[0]`; absent it, classify the composed notes. Return `true` so the
+    // caller keeps the version gate OPEN and the scan retries this plugin next
+    // load (symmetric with the WR-02 self-heal).
+    outcomes.push({
+      kind: "plugin-install-failed",
+      scope,
+      marketplace,
+      plugin,
+      reason:
+        outcome.reasons?.[0] ?? classifyOrchestratorThrow(new Error(outcome.notes.join("; "))),
+    });
+    return true;
   }
 
   outcomes.push({
@@ -1044,29 +1102,32 @@ async function maybeBackfillPlugin(
     // the brace-less `(installed)` row, so its unsupported set is empty.
     unsupported: resolved.state === "unsupported" ? resolved.unsupported : [],
   });
+  return false;
 }
 
 /**
  * BFILL-01 / NFR-5: re-resolve a recorded plugin from its cached marketplace
  * manifest with NO network (resolveStrict). Returns the resolved plugin, or
- * `undefined` when the manifest is unreadable / the entry is missing or invalid
- * -- in which case the plugin is simply not backfilled this load.
+ * `undefined` ONLY when the entry is legitimately absent from the manifest or
+ * fails the per-entry validator -- a benign "not backfillable this load".
+ *
+ * SF-02: a genuine I/O throw (manifest unreadable/corrupt) or a resolver throw
+ * is NOT swallowed here. It propagates to the WR-02 isolation wrapper, which
+ * surfaces an invalid-block row AND keeps the version gate OPEN so the scan
+ * self-heals on the next load -- rather than being silently indistinguishable
+ * from a legitimately-absent entry (which would wrongly close the gate).
  */
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,
   plugin: string,
 ): Promise<import("../../domain/resolver.ts").ResolvedPlugin | undefined> {
-  try {
-    const manifest = await loadMarketplaceManifest(mp.manifestPath);
-    const entry = manifest.plugins.find((p) => p.name === plugin);
-    if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
-      return undefined;
-    }
-
-    return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
-  } catch {
+  const manifest = await loadMarketplaceManifest(mp.manifestPath);
+  const entry = manifest.plugins.find((p) => p.name === plugin);
+  if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
     return undefined;
   }
+
+  return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
 }
 
 /**

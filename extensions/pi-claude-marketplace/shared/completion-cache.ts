@@ -73,11 +73,10 @@ const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 // without a second classifier. WR-02 adds `force-installed-upgradable` -- a
 // force-installed row that ALSO has a meaningful (newer, non-unavailable)
 // candidate, so it is offered under `update --force` (rendered `(force-installed)`
-// on `list`). The schemaVersion bump (2 -> 3) makes every stale 2-status cache
-// (which flattened that case to plain `force-installed`) drop+rebuild on next
-// read via the existing mismatch path -- no manual migration (T-67-07: the
-// plugin-index cache is an ephemeral optimization cache, NOT the persisted state
-// model).
+// on `list`). The schemaVersion bump (1 -> 3) makes every stale prior-shape cache
+// (any `schemaVersion !== 3`) mismatch and drop+rebuild on next read via the
+// existing mismatch path -- no manual migration (T-67-07: the plugin-index cache
+// is an ephemeral optimization cache, NOT the persisted state model).
 export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
   schemaVersion: Type.Literal(3),
   lastRefreshedAt: Type.String(),

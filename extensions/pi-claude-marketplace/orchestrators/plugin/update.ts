@@ -1708,7 +1708,10 @@ function outcomeToCascadePluginMessage(
   // SEV-01: an otherwise-successful update whose DECLARED soft-dep companion is
   // unloaded silently degrades a clean update -> raise the desired-state
   // severity from info to warning (symmetric with the install success arm).
-  const successSeverity = companionSeverity(outcome.declaresAgents, outcome.declaresMcp, probe);
+  const successSeverity = companionSeverity(
+    { declaresAgents: outcome.declaresAgents, declaresMcp: outcome.declaresMcp },
+    probe,
+  );
   switch (outcome.partition) {
     case "updated":
       // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved

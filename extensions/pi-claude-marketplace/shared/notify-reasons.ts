@@ -69,8 +69,7 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * desired-state severity moves.
  */
 export function companionSeverity(
-  declaresAgents: boolean,
-  declaresMcp: boolean,
+  { declaresAgents, declaresMcp }: { declaresAgents: boolean; declaresMcp: boolean },
   probe: SoftDepStatus,
 ): "info" | "warning" {
   return (declaresAgents && !probe.piSubagentsLoaded) || (declaresMcp && !probe.piMcpAdapterLoaded)

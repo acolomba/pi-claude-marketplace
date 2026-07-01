@@ -88,6 +88,19 @@ const DroppedHookSchema = Type.Union([
   }),
 ]);
 
+// TD-2: compile-time drift guard. `DroppedHookSchema` hand-redeclares the
+// `DroppedHook` union from `domain/components/hooks.ts`; this assertion fails
+// `npm run check` if the two diverge. Direction: `DroppedHook` (narrower --
+// `event: BucketAEvent` on the group/handler arms) must stay assignable to the
+// schema's static type (wider -- `event: string`). The reverse never holds
+// because the schema intentionally widens `event`, so this is the only direction
+// that compiles today; a schema-side field/arm the union lacks breaks the
+// `extends`, collapsing `_DroppedHookDrift` to `never` so the `= true`
+// assignment errors.
+type _DroppedHookDrift = DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : never;
+const _assertDroppedHookDrift: _DroppedHookDrift = true;
+void _assertDroppedHookDrift;
+
 const ResolvedPluginInstallableSchema = Type.Object({
   state: Type.Literal("installable"),
   name: Type.String(),
@@ -588,7 +601,8 @@ function readPathOrArray(value: unknown): readonly unknown[] {
 /**
  * Validate a single component-path ELEMENT. Returns `{ ok: true, relative }`
  * on success (caller adds to componentPaths + supported), or
- * `{ ok: false, reason }` on failure (caller adds note + flips notInstallable).
+ * `{ ok: false, reason }` on failure (caller adds note + feeds the structural
+ * `dirty` accumulator, so `decideResolution` resolves `unavailable`).
  *
  * D-07 narrowing: the resolver accepts a top-level array of strings as
  * legal input (the schema is `Type.Array(Type.String())`). Callers MUST

@@ -475,16 +475,19 @@ function narrowProbeError(err: unknown): ListReason {
 }
 
 /**
- * Resolve a not-yet-installed manifest entry into a
- * `PluginAvailableMessage` or `PluginUnavailableMessage`.
+ * Resolve a not-yet-installed manifest entry into a `{ message, bucket }` pair
+ * whose `message` is a `PluginAvailableMessage`, `PluginUnsupportedMessage`, or
+ * `PluginUnavailableMessage`.
  *
- * `resolveStrict` succeeds + `installable: true` -> `(available)`; the
- * resolver returns `installable: false` (or throws) -> `(unavailable)` with
- * the failure reasons narrowed to closed-set REASONS.
+ * The row de-collapses by `resolved.state`: `installable` -> `(available)`;
+ * `unsupported` -> `(unsupported)` with the dropped-component reasons narrowed
+ * via the shared kind helper (force-installable); structural `unavailable` (or a
+ * resolveStrict throw) -> `(unavailable)` with the failure reasons narrowed to
+ * closed-set REASONS.
  *
- * SNM-11: both `available` and `unavailable` variants OMIT `scope` (the
- * list surface does not emit `[<scope>]` brackets for these rows per
- * MSG-PL-6).
+ * SNM-11: the `available`, `unsupported`, and `unavailable` variants all OMIT
+ * `scope` (the list surface does not emit `[<scope>]` brackets for these rows
+ * per MSG-PL-6).
  *
  * Probe failures (resolveStrict throws): the thrown error is classified
  * via `narrowProbeError` into a closed-set Reason and threaded onto the
@@ -578,12 +581,14 @@ async function availableRowMessage(
     // `reasons[]` and decides whether to act. There is no module-level
     // capture-buffer or summary warning.
     //
-    // Resolver notes route through `narrowResolverNotes` (the path that
-    // produces them is `resolveStrict` returning NotInstallable with
-    // structured notes -- handled above on the `installable === false`
-    // branch); thrown probe failures route through `narrowProbeError` so
-    // the row reports the actual cause class (EACCES, JSON parse failures,
-    // and programming bugs are not hidden behind `{unsupported source}`).
+    // Resolver notes route through `narrowResolverNotes` (the path that produces
+    // them is `resolveStrict` returning the structural `unavailable` arm with
+    // structured notes -- handled above on the `case "unavailable"` arm of
+    // `switch (resolved.state)`; the `case "unsupported"` arm instead narrows its
+    // typed component kinds via `narrowUnsupportedKinds`). Thrown probe failures
+    // route through `narrowProbeError` so the row reports the actual cause class
+    // (EACCES, JSON parse failures, and programming bugs are not hidden behind
+    // `{unsupported source}`).
     //
     // TR-08 architecture test at tests/orchestrators/plugin/list.test.ts
     // asserts no module-level `PROBE_FAILURES`-style state may reappear.
@@ -1035,6 +1040,13 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
         // `/claude:plugin pending`, which does not flow through this list
         // orchestrator.
         return marketplaceScope;
+      default:
+        // Exhaustiveness guard (matches `assertNever(resolved)` at list.ts:572):
+        // when the switch is total, `p` narrows to `never` here and compiles; a
+        // future PluginNotificationMessage status variant that is not handled
+        // above makes `p` non-`never` and fails `npm run check`, instead of
+        // silently relying on noImplicitReturns.
+        return assertNever(p);
     }
   };
 
