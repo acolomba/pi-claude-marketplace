@@ -669,15 +669,15 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // plugin that was ALREADY force-installed (prior `unsupported` non-empty)
       // is benign -> `info`. The manual `update --force` opt-in stays info on its
       // own renderer; the warning fires ONLY on this autoupdate surface.
-      if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
+      if (outcome.forceDegrade !== undefined && outcome.forceDegrade.kinds.length > 0) {
         return {
           status: "force-installed",
           name: outcome.name,
           scope,
           version: outcome.toVersion,
           dependencies,
-          reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
-          severity: outcome.newlyDegraded === true ? "warning" : "info",
+          reasons: narrowUnsupportedKinds(outcome.forceDegrade.kinds),
+          severity: outcome.forceDegrade.newlyDegraded ? "warning" : "info",
           needsReload: true,
         };
       }

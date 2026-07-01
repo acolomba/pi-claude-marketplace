@@ -1162,7 +1162,7 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForce
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    unsupportedKinds: ["lspServers"],
+    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1192,8 +1192,7 @@ test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stam
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    unsupportedKinds: ["lspServers"],
-    newlyDegraded: true,
+    forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1212,8 +1211,7 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    unsupportedKinds: ["lspServers"],
-    newlyDegraded: false,
+    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1234,6 +1232,67 @@ test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updat
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "updated");
+});
+
+test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child row (◉ v.. (force-installed) {lsp}) and raises the summary to `needs attention` on a newly-degraded plugin", async () => {
+  // The object-shape tests above assert `__test_outcomeToCascadePluginMessage`
+  // only; this drives the whole `updateMarketplace` cascade so the render map's
+  // `force-installed` arm (UPDATE_CONTEXT -> `forceInstalledRow`) is exercised to
+  // a byte-exact string. A candidate re-resolving `unsupported` degrades in place
+  // on the autoupdate force path -- carried on the `updated` outcome as
+  // `forceDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
+  // raises the row to warning, so the envelope summary reads `needs attention`.
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "auto-mp",
+      ref: "main",
+      autoupdate: true,
+      plugins: { hello: makePluginRecord() },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000042" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve<PluginUpdateOutcome>({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgents: [],
+        stagedMcpServers: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+      });
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "auto-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    const body = first.message;
+    // Byte-exact force-installed child row under the marketplace header. The ◉
+    // glyph, single realized version, `(force-installed)` token, and `{lsp}`
+    // dropped-component brace mirror the plugin-surface force-installed byte lock
+    // (`narrowUnsupportedKinds(["lspServers"]) -> "lsp"`). The `[project]` scope
+    // bracket is orphan-folded (plugin.scope === mp.scope).
+    const headerIdx = body.indexOf("● auto-mp [project]");
+    const rowIdx = body.indexOf("  ◉ hello v0.0.2 (force-installed) {lsp}");
+    assert.ok(headerIdx >= 0, `marketplace header missing:\n${body}`);
+    assert.ok(rowIdx > headerIdx, `force-installed child row missing/misplaced:\n${body}`);
+    // newlyDegraded -> warning envelope -> the degraded summary variant.
+    assert.equal(first.severity, "warning");
+    assert.match(body, /needs attention/);
+  });
 });
 
 test('outcomeToCascadePluginMessage: unchanged outcome -> PluginSkippedMessage with ["up-to-date"] (glyph flips to ⊘ at render time)', () => {

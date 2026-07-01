@@ -139,29 +139,34 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
   readonly stagedAgents: readonly string[];
   readonly stagedMcpServers: readonly string[];
   /**
-   * FSTAT-07 / D-66-04: the unsupported component kinds carried on the
-   * candidate's `unsupported` resolver arm when a `--force` update degraded it.
-   * Empty (or absent) when the candidate resolved fully `installable` -- the
-   * cascade then renders the normal `(updated)` row. Non-empty flips the
-   * success row to `(force-installed)` with the dropped-component detail (the
-   * same derived signal the list deriver reads), so a force update reports its
-   * true realized state.
-   */
-  readonly unsupportedKinds?: readonly string[];
-  /**
-   * SEV-03 / D-69-01: `true` when this force-degrading update NEWLY degrades a
+   * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the force-degrade signal for a
+   * `--force` update whose candidate re-resolved `unsupported`. Present
+   * atomically -- both fields travel together or the whole sub-object is absent
+   * -- so a consumer can never see a `newlyDegraded` flag without the `kinds`
+   * that make it meaningful. Absent when the candidate resolved fully
+   * `installable`; the cascade then renders the normal `(updated)` row.
+   *
+   * `kinds` are the unsupported component kinds carried on the candidate's
+   * `unsupported` resolver arm. Non-empty flips the success row to
+   * `(force-installed)` with the dropped-component detail (the same derived
+   * signal the list deriver reads), so a force update reports its true realized
+   * state.
+   *
+   * `newlyDegraded` is `true` when this force-degrading update NEWLY degrades a
    * previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported`
    * was EMPTY before the update applied. Read from the prior install record in
-   * `preflightUpdate` (no new tracking, no schema change). Only meaningful
-   * alongside `unsupportedKinds` (a degrade actually happened). The marketplace
-   * autoupdate cascade renderer reads this to raise the `(force-installed)` row
-   * to `warning` (a silent auto-update degradation is actionable); an
+   * `preflightUpdate` (no new tracking, no schema change). The marketplace
+   * autoupdate cascade renderer reads it to raise the `(force-installed)` row to
+   * `warning` (a silent auto-update degradation is actionable); an
    * already-degraded re-degrade (prior `unsupported` non-empty) stays `info`.
    * The manual `update --force` renderer ignores it -- the explicit opt-in stays
    * info unconditionally (SEV-01), so the warning fires ONLY on the autoupdate
    * surface.
    */
-  readonly newlyDegraded?: boolean;
+  readonly forceDegrade?: {
+    readonly kinds: readonly string[];
+    readonly newlyDegraded: boolean;
+  };
 }
 
 /**

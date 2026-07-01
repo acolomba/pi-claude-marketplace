@@ -1567,8 +1567,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // the manual `update --force` renderer ignores it (explicit opt-in stays
     // info). No schema change -- the field already exists on the record.
     ...(installable.state === "unsupported" && {
-      unsupportedKinds: [...installable.unsupported],
-      newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
+      forceDegrade: {
+        kinds: [...installable.unsupported],
+        newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
+      },
     }),
   };
 }
@@ -1727,14 +1729,14 @@ function outcomeToCascadePluginMessage(
       // declared-kinds gate the `(updated)` row uses) so the soft-dep
       // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a
       // degraded update exactly as on a clean one.
-      if (outcome.unsupportedKinds !== undefined && outcome.unsupportedKinds.length > 0) {
+      if (outcome.forceDegrade !== undefined && outcome.forceDegrade.kinds.length > 0) {
         return {
           status: "force-installed",
           name: outcome.name,
           scope: target.scope,
           version: outcome.toVersion,
           dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-          reasons: narrowUnsupportedKinds(outcome.unsupportedKinds),
+          reasons: narrowUnsupportedKinds(outcome.forceDegrade.kinds),
           // SEV-01: info, raised to warning on a missing declared companion.
           severity: successSeverity,
           needsReload: true,
