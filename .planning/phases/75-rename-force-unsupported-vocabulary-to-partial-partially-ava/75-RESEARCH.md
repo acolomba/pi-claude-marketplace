@@ -631,7 +631,12 @@ is the sole gate.
 | A5 | `narrowUnsupportedKinds`/`unsupportedKinds` are OUT of scope (component-kind mappers) | §4b | Borderline: their NAME contains "unsupported" but they map component KINDS to reason tokens (out of scope). If renamed, blast radius grows. Recommend OUT; flagged as borderline. |
 | A6 | The rename ships behavior-identical (no version-gated migration, no new decision beyond token forms) | throughout | Verified: no behavior change; only a routine release version bump at PR time. |
 
-## Open Questions
+## Open Questions (RESOLVED — locked in 75-CONTEXT.md)
+
+> All questions below were resolved by operator decision at plan-phase; the locked
+> answers live in `75-CONTEXT.md` `<decisions>` (hyphen token form, `--partial` for both
+> flags, full internal rename, keep glyph chars, `D-75-01`/`RVOC-*` minted, README
+> out-of-scope).
 
 1. **Exact render-token forms.** `(partially available)` vs `(partially-available)`; `(partially
    installed)` vs `(partially-installed)`. *Recommendation:* space-form to match the `(manual

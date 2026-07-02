@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: force-install
-milestone_name: "Force Install"
+milestone_name: Force Install
 status: Awaiting next milestone
-stopped_at: force-install milestone closed and archived 2026-07-02; shipped as 0.7.0 via PR #77
-last_updated: "2026-07-02T02:05:50.034Z"
+stopped_at: "force-install milestone closed and archived 2026-07-02; shipped as 0.7.0 via PR #77"
+last_updated: "2026-07-02T15:49:33.298Z"
 last_activity: 2026-07-02
 last_activity_desc: Milestone force-install completed and archived
 progress:

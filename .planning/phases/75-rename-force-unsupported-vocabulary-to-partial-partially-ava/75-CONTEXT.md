@@ -30,8 +30,10 @@ replace**.
 <decisions>
 ## Implementation Decisions
 
-All rows below are **LOCKED** (captured from the operator at plan-phase). The byte gate turns each
-render-string choice into a hard contract.
+- **D-75-01:** Rename the force / top-level-`unsupported` vocabulary to partial / partially-available across `extensions/pi-claude-marketplace/`, tests, and docs — a single atomic, behavior-preserving decision comprising every LOCKED sub-facet below (hyphen render-token forms; `--force`/`--unsupported` → `--partial` with no alias; full internal rename incl. the resolver discriminant + degrade-`force` plumbing; keep glyph characters and rename only their constant names; `forceHint`→`partialHint` + hint-trailer constants/bodies; `(will partially install)`; completion-cache-only `schemaVersion 3→4` migration; atomic byte-supersession of the renderer + `output-catalog.md` + catalog-uat fixtures). Implemented across plans 75-01 and 75-02; `D-75-01` is also the code-comment traceability anchor.
+
+All sub-facets below are **LOCKED** (captured from the operator at plan-phase) and are the detailed
+elaboration of D-75-01. The byte gate turns each render-string choice into a hard contract.
 
 ### Render-token form — HYPHEN
 User-visible verdict/status render tokens use the **hyphen** form:

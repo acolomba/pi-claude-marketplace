@@ -291,6 +291,10 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 **Plans:** 2 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 75-01-PLAN.md — Rename the `--partial` flag + internal degrade-force plumbing (byte-gate-free; output vocabulary unchanged)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 75-02-PLAN.md — Atomic output-vocabulary rename (verdict + force-state render tokens/literals + glyphs + hint-trailers) + completion-cache schemaVersion 3→4 + docs + grep-absence guard
