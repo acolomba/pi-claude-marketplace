@@ -286,10 +286,11 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 ### Phase 75: Rename force/unsupported vocabulary to partial/partially-available
 
 **Goal:** Rename the force-install / unsupported feature vocabulary to partial / partially-available across code, tests, and docs. The top-level plugin verdict `unsupported` becomes "partially available"; the `--force` install/update flag becomes `--partial` (no alias); and the force-family (`force-installed`, `force-installed-upgradable`, `force-upgradable`, `forceHint`, `FORCE_UPDATE_HINT_TRAILER`, "force installed" prose) moves to the partial vocabulary. Persisted status literals are migrated with a `schemaVersion` bump. Explicitly OUT of scope: unrelated `force` uses (`git push --force`, `forceGithub`) and the component-level classification — the `compatibility.supported`/`unsupported` state arrays and the `unsupported hooks` / `unsupported source` reason tokens stay byte-identical (a plugin is partially available *because* some component kinds are unsupported).
-**Requirements**: TBD
+**Requirements**: RVOC-01..04 (minted for traceability; no formal IDs required — completeness is encoded in each plan's must_haves)
 **Depends on:** Phase 74
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 75 to break down)
+- [ ] 75-01-PLAN.md — Rename the `--partial` flag + internal degrade-force plumbing (byte-gate-free; output vocabulary unchanged)
+- [ ] 75-02-PLAN.md — Atomic output-vocabulary rename (verdict + force-state render tokens/literals + glyphs + hint-trailers) + completion-cache schemaVersion 3→4 + docs + grep-absence guard
