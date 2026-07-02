@@ -1171,7 +1171,7 @@ test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force 
 
         // The dropped kind rides the outcome so the cascade mapper renders
         // `(force-installed) {lsp}`.
-        assert.deepEqual([...(outcome.forceDegrade?.kinds ?? [])], ["lspServers"]);
+        assert.deepEqual([...(outcome.partialDegrade?.kinds ?? [])], ["lspServers"]);
       } finally {
         process.chdir(prevCwd);
       }
@@ -1286,7 +1286,7 @@ test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted
           throw new Error("unreachable: narrowed above");
         }
 
-        assert.equal(outcome.forceDegrade?.newlyDegraded, true);
+        assert.equal(outcome.partialDegrade?.newlyDegraded, true);
       } finally {
         process.chdir(prevCwd);
       }
@@ -1330,7 +1330,7 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY force-installed plugin (p
           throw new Error("unreachable: narrowed above");
         }
 
-        assert.equal(outcome.forceDegrade?.newlyDegraded, false);
+        assert.equal(outcome.partialDegrade?.newlyDegraded, false);
       } finally {
         process.chdir(prevCwd);
       }
@@ -3304,7 +3304,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       // The degraded update committed: state reflects the new version and the
@@ -3458,7 +3458,7 @@ test("FORCE-04: the force-degrade update path emits no warning severity and no `
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       const warnings = notifications.filter((n) => n.severity === "warning");
@@ -3503,7 +3503,7 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       assert.equal(notifications.length, 1);
@@ -3529,7 +3529,7 @@ test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
-        force: true,
+        partial: true,
       });
 
       // The missing-marketplace short-circuit fires BEFORE the candidate gate,
@@ -3620,7 +3620,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       const body = notifications[0]?.message ?? "";

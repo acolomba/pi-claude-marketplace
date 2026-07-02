@@ -655,10 +655,10 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // this asymmetry is owned by the final severity/output reconcile, not by
       // the producer-stamp wiring.
       // SEV-03 / D-69-01 / FSTAT-07: the autoupdate cascade now TAKES the force
-      // path (`updateSinglePlugin` sets `force: true`), so a candidate that
+      // path (`updateSinglePlugin` sets `partial: true`), so a candidate that
       // re-resolved `unsupported` degraded in place. Report `(force-installed)`
       // with the dropped-component detail instead of `(updated)`. A clean
-      // candidate keeps `(updated)` (no `forceDegrade`). force-installed is
+      // candidate keeps `(updated)` (no `partialDegrade`). force-installed is
       // a realized transition -> reloads Pi resources.
       //
       // SEV-03 / D-69-01: an autoupdate that NEWLY degrades a previously-clean
@@ -667,17 +667,17 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // opt into -> the row is actionable -> `warning` (prepends the
       // `A plugin operation needs attention.` summary line). Re-degrading a
       // plugin that was ALREADY force-installed (prior `unsupported` non-empty)
-      // is benign -> `info`. The manual `update --force` opt-in stays info on its
+      // is benign -> `info`. The manual `update --partial` opt-in stays info on its
       // own renderer; the warning fires ONLY on this autoupdate surface.
-      if (outcome.forceDegrade !== undefined && outcome.forceDegrade.kinds.length > 0) {
+      if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
         return {
           status: "force-installed",
           name: outcome.name,
           scope,
           version: outcome.toVersion,
           dependencies,
-          reasons: narrowUnsupportedKinds(outcome.forceDegrade.kinds),
-          severity: outcome.forceDegrade.newlyDegraded ? "warning" : "info",
+          reasons: narrowUnsupportedKinds(outcome.partialDegrade.kinds),
+          severity: outcome.partialDegrade.newlyDegraded ? "warning" : "info",
           needsReload: true,
         };
       }

@@ -101,7 +101,7 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import {
-  requireForceInstallable,
+  requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../domain/resolver.ts";
@@ -173,10 +173,10 @@ interface EntityErrorRow {
   readonly scope?: Scope;
   readonly status: Extract<StatusToken, "failed" | "unavailable">;
   readonly reasons: readonly ContentReason[];
-  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `forceable`
+  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `partialable`
   // discriminant on the `unavailable` arm -- `true` when the resolver verdict
-  // is force-degradable `unsupported`, so the composed row points at `--force`.
-  readonly forceable?: boolean;
+  // is force-degradable `unsupported`, so the composed row points at `--partial`.
+  readonly partialable?: boolean;
 }
 
 /**
@@ -266,13 +266,13 @@ export interface InstallPluginOptions {
    */
   readonly mapModel?: boolean;
   /**
-   * D-65-03: when true, the install preflight selects `requireForceInstallable`
+   * D-65-03: when true, the install preflight selects `requirePartialInstallable`
    * instead of `requireInstallable`, widening the gate to admit the
    * `unsupported` arm so its supported components materialize (the unsupported
    * ones are skipped naturally; FORCE-01). The edge handler sets this when the
-   * user supplies `--force`. Both gates still reject `unavailable` (FORCE-05).
+   * user supplies `--partial`. Both gates still reject `unavailable` (FORCE-05).
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
   /**
    * D-54-01 / ENBL-02: when set, bypasses `resolvePluginVersion` and pins
    * the install ledger to this exact version string. Used ONLY by
@@ -308,7 +308,7 @@ interface InstallCtx {
   readonly marketplace: string;
   readonly plugin: string;
   // NFR-7 / D-65-03: widened to the force-materializable union so the
-  // `unsupported` arm (admitted under --force) flows through the same
+  // `unsupported` arm (admitted under --partial) flows through the same
   // materialize phases. Excludes `unavailable` (no pluginRoot).
   readonly resolved: MaterializablePlugin;
   readonly version: string;
@@ -364,8 +364,8 @@ export interface InstallLedgerOptions {
   readonly plugin: string;
   /** AG-7 opt-in `--map-model` flag (see InstallPluginOptions.mapModel). */
   readonly mapModel?: boolean;
-  /** D-65-03 `--force` gate-selection flag (see InstallPluginOptions.force). */
-  readonly force?: boolean;
+  /** D-65-03 `--partial` gate-selection flag (see InstallPluginOptions.force). */
+  readonly partial?: boolean;
   /** ENBL-02 version pin (see InstallPluginOptions.pinVersionOverride). */
   readonly pinVersionOverride?: string;
   /**
@@ -492,17 +492,17 @@ export async function runInstallLedger(
   // PI-4: resolveStrict + gate. Per D-04, the strict resolver consumes the
   // array-shape componentPaths (D-07 / COMP-01) and either returns an
   // installable variant or surfaces disqualification notes. The gate below
-  // branches on `opts.force`: the default path calls `requireInstallable`
-  // (admits only `installable`); `--force` calls `requireForceInstallable`
+  // branches on `opts.partial`: the default path calls `requireInstallable`
+  // (admits only `installable`); `--partial` calls `requirePartialInstallable`
   // (also admits the force-degradable `unsupported` arm). Both narrow the
   // discriminated union and throw on the structural `unavailable` variant.
   const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
-  // D-65-03 / FORCE-01/03/05: `--force` widens the gate to admit the
+  // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
   // force-degradable `unsupported` arm; the default gate still blocks it. Both
-  // gates reject `unavailable` (FORCE-05), so `--force` never bypasses a hard
+  // gates reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
   // structural failure.
-  if (opts.force === true) {
-    requireForceInstallable(resolved, "install");
+  if (opts.partial === true) {
+    requirePartialInstallable(resolved, "install");
   } else {
     requireInstallable(resolved, "install");
   }
@@ -807,7 +807,7 @@ export async function runInstallLedger(
         resolvedSource: c.resolved.pluginRoot,
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
-          // resolve, not a hardcoded `true`. A `--force` install of an
+          // resolve, not a hardcoded `true`. A `--partial` install of an
           // `unsupported` plugin persists `installable: false` with the still-
           // unsupported set (mirrors reinstall.ts::updateStateRecord), so the
           // force-installed derivation stays truthful AND load-time backfill
@@ -990,7 +990,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           marketplace,
           plugin,
           ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
-          ...(opts.force !== undefined && { force: opts.force }),
+          ...(opts.partial !== undefined && { partial: opts.partial }),
           ...(opts.pinVersionOverride !== undefined && {
             pinVersionOverride: opts.pinVersionOverride,
           }),
@@ -1517,15 +1517,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // dependency.
 /**
  * SEV-02 / D-69-03 / D-70-02 / XSURF-01: build the install-failure row,
- * branching on the three-way `forceable` discriminant the resolver stamped on
+ * branching on the three-way `partialable` discriminant the resolver stamped on
  * the throw. BOTH arms render at error severity (so the leading summary line
  * fires) -- an install failure must read as an error, not a benign info row.
  * The force-degradable arm surfaces as the resolver-state-driven `unsupported`
  * token (XSURF-01: consistent with how `list` / `info` describe the same
- * plugin) and ALSO carries the `--force` hint trailer (force can degrade-install
+ * plugin) and ALSO carries the `--partial` hint trailer (force can degrade-install
  * it). The structural arm stays the `unavailable` token with NO hint (force
  * cannot degrade-install a structural defect). The split keys on
- * `entityErrorRow.forceable`, NOT the reason brace -- `{unsupported source}`
+ * `entityErrorRow.partialable`, NOT the reason brace -- `{unsupported source}`
  * appears on both arms; only the resolver verdict distinguishes them. Neither
  * message carries a `cause?` field per D-15-01 -- the reason text carries the
  * explanation.
@@ -1535,7 +1535,7 @@ function composeNotInstallableMessage(
   version: string | undefined,
   entityErrorRow: EntityErrorRow,
 ): PluginUnavailableMessage | PluginUnsupportedMessage {
-  if (entityErrorRow.forceable === true) {
+  if (entityErrorRow.partialable === true) {
     return {
       status: "unsupported",
       name: plugin,
@@ -1727,8 +1727,8 @@ function classifyEntityShapeError(
         // needed.
         reasons: narrowResolverReasons(err.shape.reasons, err.shape.unsupportedKinds),
         // SEV-02 / D-69-03: thread the three-way distinction the resolver
-        // stamped on the throw so the composer conditions the `--force` hint.
-        forceable: err.shape.forceable,
+        // stamped on the throw so the composer conditions the `--partial` hint.
+        partialable: err.shape.partialable,
       };
     default:
       return assertNever(err.shape);

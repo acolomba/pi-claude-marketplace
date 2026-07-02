@@ -87,7 +87,7 @@ import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/component
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import {
-  requireForceInstallable,
+  requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../domain/resolver.ts";
@@ -197,7 +197,7 @@ export interface UpdatePluginsOptions {
    * structural candidate (FORCE-05). The cascade entrypoint
    * (`updateSinglePlugin`) does NOT accept this flag.
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
 }
 
 /**
@@ -319,11 +319,11 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
-        // FORCE-02: thread `--force` from the user-facing options bag into
+        // FORCE-02: thread `--partial` from the user-facing options bag into
         // the per-plugin candidate gate (D-65-04). The cascade entrypoint
         // (`updateSinglePlugin`) never sets this, so cascade re-installs
         // resolve to false and keep the `requireInstallable` block.
-        force: opts.force ?? false,
+        partial: opts.partial ?? false,
         // WB-01: thread `--local` for the direct-path
         // write-back target selection.
         ...(opts.local === true && { local: true }),
@@ -506,12 +506,12 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       // automatically. A force-upgradable candidate (re-resolves `unsupported`)
       // degrades in place -- supported components materialize, unsupported kinds
       // skip -- and renders `(force-installed) {dropped kinds}` instead of
-      // declining with `(skipped) {no longer installable}`. `requireForceInstallable`
+      // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
       // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
       // automatic force path can never materialize a structurally-broken plugin.
       // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
-      // directly) is unaffected; it sets `force` from the user's `--force` flag.
-      force: true,
+      // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
+      partial: true,
     });
   } catch (err) {
     // Cascade-safe: capture throws into a partition='failed' outcome so the
@@ -640,12 +640,12 @@ interface ThreePhaseArgs {
   readonly local?: boolean;
   /**
    * FORCE-02 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.force`
-   * (which the edge handler populates from `--force`). Gates the candidate
+   * (which the edge handler populates from `--partial`). Gates the candidate
    * resolve in `preflightUpdate` (D-65-04). The cascade entrypoint
    * `updateSinglePlugin` intentionally NEVER sets this; cascade-driven
    * re-installs resolve to false at the gate.
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
 }
 
 interface PrepHandles {
@@ -756,14 +756,14 @@ async function preflightUpdate(
   let installable: MaterializablePlugin;
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
-    // FORCE-02/FORCE-05 (D-65-04): `--force` widens the gate at the CANDIDATE
+    // FORCE-02/FORCE-05 (D-65-04): `--partial` widens the gate at the CANDIDATE
     // resolve so an `unsupported` target degrades (supported components
     // materialize, unsupported kinds skip) instead of blocking. Without
-    // `--force` the candidate still blocks via `requireInstallable` (the catch
+    // `--partial` the candidate still blocks via `requireInstallable` (the catch
     // arm below renders `(skipped) {no longer installable}`). Both gates still
     // reject an `unavailable`/structural candidate (FORCE-05).
-    if (args.force === true) {
-      requireForceInstallable(resolved, "update");
+    if (args.partial === true) {
+      requirePartialInstallable(resolved, "update");
     } else {
       requireInstallable(resolved, "update");
     }
@@ -777,18 +777,18 @@ async function preflightUpdate(
     //
     // XSURF-03: source the decline discriminant from the thrown `err.shape`
     // (`resolved` is out of scope here -- it is declared inside the `try`).
-    // `err.shape.forceable === true` ⇔ the resolver verdict was `unsupported`,
-    // i.e. a force-upgradable decline: `--force` could degrade-update it. For
+    // `err.shape.partialable === true` ⇔ the resolver verdict was `unsupported`,
+    // i.e. a force-upgradable decline: `--partial` could degrade-update it. For
     // that arm carry the list-consistent degrade kinds via the SAME
     // `narrowUnsupportedKinds` helper the `list (force-upgradable)` row uses
-    // (byte-parity, pinned by catalog-uat) and mark `forceUpgradable: true` so
+    // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true` so
     // the projection flips ONLY this arm to the `force-upgradable` token. A
-    // structural decline (`forceable !== true` -- force cannot help) keeps the
+    // structural decline (`partialable !== true` -- force cannot help) keeps the
     // `no longer installable` reason and the plain skipped path.
     if (
       err instanceof PluginShapeError &&
       err.shape.kind === "no-longer-installable" &&
-      err.shape.forceable
+      err.shape.partialable
     ) {
       return {
         partition: "skipped",
@@ -796,7 +796,7 @@ async function preflightUpdate(
         fromVersion: record.version,
         notes: [errorMessage(err)],
         reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
-        forceUpgradable: true,
+        partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
       };
@@ -1554,7 +1554,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     stagedMcpServers,
     declaresAgents: stagedAgents.length > 0,
     declaresMcp: stagedMcpServers.length > 0,
-    // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
+    // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
     // `unsupported` degraded it -- carry the dropped kinds so the cascade
     // renders `(force-installed)` instead of `(updated)`. Empty for a clean
     // candidate (FSTAT-03 -- no lingering force state).
@@ -1564,10 +1564,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // from the prior install record (`preflight.record`, loaded BEFORE the
     // update applied) was empty. The autoupdate cascade renderer reads it to
     // raise the row to `warning` (newly degraded) vs `info` (already degraded);
-    // the manual `update --force` renderer ignores it (explicit opt-in stays
+    // the manual `update --partial` renderer ignores it (explicit opt-in stays
     // info). No schema change -- the field already exists on the record.
     ...(installable.state === "unsupported" && {
-      forceDegrade: {
+      partialDegrade: {
         kinds: [...installable.unsupported],
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
@@ -1606,7 +1606,7 @@ interface TargetedOutcome {
 /**
  * SEV-04 / D-69-02: severity for a `skipped` update row. An absent-target skip
  * (`not installed` / `not found`) is always error (D-01). A force-upgradable
- * decline (`no longer installable`, no `--force`) follows the invocation shape:
+ * decline (`no longer installable`, no `--partial`) follows the invocation shape:
  * a targeted `<plugin>@<marketplace>` update the user explicitly opted into is
  * actionable -> warning; a bulk / untargeted update that skips one the user did
  * not name is benign -> info. This threads the EXISTING `cardinality`
@@ -1634,9 +1634,9 @@ function cascadeSkipSeverity(
  * `outcomeToCascadePluginMessage` so the parent switch stays within the
  * cognitive-complexity budget.
  *
- * XSURF-03: the force-upgradable manual update-decline (`outcome.forceUpgradable`)
+ * XSURF-03: the force-upgradable manual update-decline (`outcome.partialUpgradable`)
  * flips to the `force-upgradable` token (consistent with how `list` describes
- * the same plugin) + the update-worded `--force` trailer. The SEV-04 split
+ * the same plugin) + the update-worded `--partial` trailer. The SEV-04 split
  * (targeted=warning / bulk=info) moves onto this status arm directly -- it is no
  * longer keyed on the reason string (the reason now carries the list-consistent
  * degrade kinds, not `no longer installable`). Every other skipped reason keeps
@@ -1656,7 +1656,7 @@ function projectSkippedOutcome(
       ? { version: outcome.fromVersion }
       : {};
 
-  if (outcome.forceUpgradable === true) {
+  if (outcome.partialUpgradable === true) {
     return {
       status: "force-upgradable",
       name: outcome.name,
@@ -1716,7 +1716,7 @@ function outcomeToCascadePluginMessage(
   );
   switch (outcome.partition) {
     case "updated":
-      // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
+      // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
       // `unsupported` degraded it -- report `(force-installed)` with the
       // dropped-component detail instead of `(updated)`. This reads the LIVE
       // candidate resolution of the just-completed update -- NOT the persisted
@@ -1729,14 +1729,14 @@ function outcomeToCascadePluginMessage(
       // declared-kinds gate the `(updated)` row uses) so the soft-dep
       // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a
       // degraded update exactly as on a clean one.
-      if (outcome.forceDegrade !== undefined && outcome.forceDegrade.kinds.length > 0) {
+      if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
         return {
           status: "force-installed",
           name: outcome.name,
           scope: target.scope,
           version: outcome.toVersion,
           dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-          reasons: narrowUnsupportedKinds(outcome.forceDegrade.kinds),
+          reasons: narrowUnsupportedKinds(outcome.partialDegrade.kinds),
           // SEV-01: info, raised to warning on a missing declared companion.
           severity: successSeverity,
           needsReload: true,

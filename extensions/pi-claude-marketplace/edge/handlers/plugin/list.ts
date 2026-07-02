@@ -19,9 +19,9 @@ import { parseArgs } from "../../args.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--unsupported] [--scope user|project]";
+  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--scope user|project]";
 
-const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable", "--unsupported"]);
+const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable", "--partial"]);
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -44,7 +44,7 @@ export function makeListHandler(
     // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
     // any other `--` token is an unknown long flag; everything else is a
     // positional. Driving the recognized set from BOOLEAN_FLAGS keeps each new
-    // filter (e.g. LIST-01's `--unsupported`) a one-line set + spread change
+    // filter (e.g. LIST-01's `--partial`) a one-line set + spread change
     // instead of another parse-loop branch.
     const filterFlags = new Set<string>();
     const nonFlagPositionals: string[] = [];
@@ -74,7 +74,7 @@ export function makeListHandler(
       ...(filterFlags.has("--installed") && { installed: true }),
       ...(filterFlags.has("--available") && { available: true }),
       ...(filterFlags.has("--unavailable") && { unavailable: true }),
-      ...(filterFlags.has("--unsupported") && { unsupported: true }),
+      ...(filterFlags.has("--partial") && { partial: true }),
     });
   };
 }

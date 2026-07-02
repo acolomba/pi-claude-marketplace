@@ -470,7 +470,7 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
     // `(unsupported)` / `⊖` token (USTAT-01). clean/gone are excluded.
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊖ unsup v1\.0\.0 \(unsupported\) \{lsp\}/, out);
       assert.equal(out.includes("clean"), false, out);
@@ -525,7 +525,7 @@ test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavail
 
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.equal(out.includes("gone"), false, out);
     }
@@ -558,7 +558,7 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
 
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.equal(out.includes("forced"), false, out);
     }

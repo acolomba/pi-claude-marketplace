@@ -39,5 +39,5 @@ export {
   resolveStrict,
   resolveLoose,
   requireInstallable,
-  requireForceInstallable,
+  requirePartialInstallable,
 } from "./resolver.ts";

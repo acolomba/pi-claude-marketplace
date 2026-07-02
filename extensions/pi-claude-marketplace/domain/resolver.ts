@@ -224,7 +224,7 @@ export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
 // carry `pluginRoot` + the full component payload -- `installable` and the
 // force-degradable `unsupported` (D-64-06) -- and EXCLUDES `unavailable`, so
 // no consumer that widens a holder to this union can read `pluginRoot` off a
-// structurally-broken plugin. This is exactly the type `requireForceInstallable`
+// structurally-broken plugin. This is exactly the type `requirePartialInstallable`
 // narrows to, and the type the force install/update holders accept.
 export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginUnsupported;
 type StatKind = "file" | "dir" | null;
@@ -1234,8 +1234,8 @@ export function requireInstallable(
     reasons: r.notes,
     // SEV-02 / D-69-03: `unsupported` is force-degradable; `unavailable` is
     // a structural defect force cannot help -- carry the distinction the
-    // render row uses to condition the `--force` hint.
-    forceable: r.state === "unsupported",
+    // render row uses to condition the `--partial` hint.
+    partialable: r.state === "unsupported",
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
@@ -1246,7 +1246,7 @@ export function requireInstallable(
 }
 
 /**
- * D-64-04 (RSTATE-04): the `--force` narrowing gate. Admits both
+ * D-64-04 (RSTATE-04): the `--partial` narrowing gate. Admits both
  * `installable` and `unsupported` (force can degrade the unsupported parts)
  * but still rejects `unavailable` (structural defect -- force cannot help,
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
@@ -1254,10 +1254,10 @@ export function requireInstallable(
  *
  * BFILL-01: the reinstall primitive (orchestrators/plugin/reinstall.ts) resolves
  * through this gate so it can re-materialize a force-installed (`unsupported`)
- * plugin in place. The `--force` install/update flag plumbing lands in a
+ * plugin in place. The `--partial` install/update flag plumbing lands in a
  * later phase.
  */
-export function requireForceInstallable(
+export function requirePartialInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
 ): asserts r is ResolvedPluginInstallable | ResolvedPluginUnsupported {
@@ -1271,7 +1271,7 @@ export function requireForceInstallable(
     reasons: r.notes,
     // SEV-02 / D-69-03: this gate only ever throws for `unavailable`
     // (`installable`/`unsupported` return above), which force cannot help --
-    // never forceable.
-    forceable: false,
+    // never partialable.
+    partialable: false,
   });
 }

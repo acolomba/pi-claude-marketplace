@@ -140,7 +140,7 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
   readonly stagedMcpServers: readonly string[];
   /**
    * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the force-degrade signal for a
-   * `--force` update whose candidate re-resolved `unsupported`. Present
+   * `--partial` update whose candidate re-resolved `unsupported`. Present
    * atomically -- both fields travel together or the whole sub-object is absent
    * -- so a consumer can never see a `newlyDegraded` flag without the `kinds`
    * that make it meaningful. Absent when the candidate resolved fully
@@ -159,11 +159,11 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
    * autoupdate cascade renderer reads it to raise the `(force-installed)` row to
    * `warning` (a silent auto-update degradation is actionable); an
    * already-degraded re-degrade (prior `unsupported` non-empty) stays `info`.
-   * The manual `update --force` renderer ignores it -- the explicit opt-in stays
+   * The manual `update --partial` renderer ignores it -- the explicit opt-in stays
    * info unconditionally (SEV-01), so the warning fires ONLY on the autoupdate
    * surface.
    */
-  readonly forceDegrade?: {
+  readonly partialDegrade?: {
     readonly kinds: readonly string[];
     readonly newlyDegraded: boolean;
   };
@@ -191,8 +191,8 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
  * values). `notes` carries the free-form cause-chain text consumed by
  * the notify trailer.
  *
- * XSURF-03: `forceUpgradable` marks the force-upgradable manual update-decline
- * (the resolver verdict was `unsupported`, so `--force` could degrade-update
+ * XSURF-03: `partialUpgradable` marks the force-upgradable manual update-decline
+ * (the resolver verdict was `unsupported`, so `--partial` could degrade-update
  * it). The projection flips ONLY this arm to the `force-upgradable` token; the
  * discriminant is a dedicated field, NOT the reason string, so the degrade
  * reason can carry the list-consistent kinds instead of `no longer
@@ -203,7 +203,7 @@ export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
   readonly fromVersion?: string;
   readonly notes: readonly string[];
   readonly reasons: readonly ContentReason[];
-  readonly forceUpgradable?: boolean;
+  readonly partialUpgradable?: boolean;
 }
 
 /**

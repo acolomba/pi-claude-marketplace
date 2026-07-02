@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   type ResolveContext,
   type ResolvedPlugin,
-  requireForceInstallable,
+  requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
@@ -765,37 +765,37 @@ test("RSTATE-02: structural defect + unsupported kind -> unavailable (structural
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RSTATE-04 / D-64-04: requireForceInstallable gate
+// RSTATE-04 / D-64-04: requirePartialInstallable gate
 // ──────────────────────────────────────────────────────────────────────────
 
-test("RSTATE-04 requireForceInstallable admits installable and exposes pluginRoot", async () => {
+test("RSTATE-04 requirePartialInstallable admits installable and exposes pluginRoot", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r: ResolvedPlugin = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.state, "installable");
-  requireForceInstallable(r);
+  requirePartialInstallable(r);
   // After the assertion r is ResolvedPluginInstallable | ResolvedPluginUnsupported.
   assert.equal(typeof r.pluginRoot, "string");
 });
 
-test("RSTATE-04 requireForceInstallable admits unsupported and exposes pluginRoot", async () => {
+test("RSTATE-04 requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r: ResolvedPlugin = await resolveStrict(
     basicEntry({ source: "./local", themes: { dark: {} } }),
     ctx,
   );
   assert.equal(r.state, "unsupported");
-  requireForceInstallable(r);
+  requirePartialInstallable(r);
   // D-64-06: the unsupported arm keeps pluginRoot, so force can degrade it.
   assert.equal(typeof r.pluginRoot, "string");
 });
 
-test("RSTATE-04 requireForceInstallable throws on unavailable with 'is not installable'", async () => {
+test("RSTATE-04 requirePartialInstallable throws on unavailable with 'is not installable'", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.throws(
     () => {
-      requireForceInstallable(r);
+      requirePartialInstallable(r);
     },
     (err: unknown) =>
       err instanceof Error &&
@@ -804,12 +804,12 @@ test("RSTATE-04 requireForceInstallable throws on unavailable with 'is not insta
   );
 });
 
-test("RSTATE-04 requireForceInstallable(r, 'update') throws with 'is no longer installable'", async () => {
+test("RSTATE-04 requirePartialInstallable(r, 'update') throws with 'is no longer installable'", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
   assert.throws(
     () => {
-      requireForceInstallable(r, "update");
+      requirePartialInstallable(r, "update");
     },
     (err: unknown) => err instanceof Error && err.message.includes("is no longer installable"),
   );
@@ -822,11 +822,11 @@ test("RSTATE-04 requireForceInstallable(r, 'update') throws with 'is no longer i
 
 // requireInstallable throws on an `unsupported` (force-degradable) plugin, and
 // the thrown PluginShapeError pins the force-hint ternaries:
-// `forceable: r.state === "unsupported"` (true here) and
+// `partialable: r.state === "unsupported"` (true here) and
 // `unsupportedKinds: r.state === "unsupported" ? r.unsupported : []` (the typed
 // component-kind list, NOT the empty structural default). A regression that
 // dropped either would silently suppress the `--force` hint on the render row.
-test("SEV-02 / IN-02: requireInstallable on unsupported throws forceable with the typed unsupportedKinds", async () => {
+test("SEV-02 / IN-02: requireInstallable on unsupported throws partialable with the typed unsupportedKinds", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", themes: { dark: {} } }), ctx);
   assert.equal(r.state, "unsupported");
@@ -838,7 +838,7 @@ test("SEV-02 / IN-02: requireInstallable on unsupported throws forceable with th
       assert.ok(err instanceof PluginShapeError, "must throw PluginShapeError");
       assert.equal(err.shape.kind, "not-installable");
       if (err.shape.kind === "not-installable") {
-        assert.equal(err.shape.forceable, true);
+        assert.equal(err.shape.partialable, true);
         assert.deepEqual(err.shape.unsupportedKinds, ["themes"]);
       }
 

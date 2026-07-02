@@ -1162,7 +1162,7 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForce
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1192,7 +1192,7 @@ test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stam
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1211,7 +1211,7 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
   assert.equal(msg.status, "force-installed");
@@ -1240,7 +1240,7 @@ test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child r
   // `force-installed` arm (UPDATE_CONTEXT -> `forceInstalledRow`) is exercised to
   // a byte-exact string. A candidate re-resolving `unsupported` degrades in place
   // on the autoupdate force path -- carried on the `updated` outcome as
-  // `forceDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
+  // `partialDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
   // raises the row to warning, so the envelope summary reads `needs attention`.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
@@ -1264,7 +1264,7 @@ test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child r
         stagedMcpServers: [],
         declaresAgents: false,
         declaresMcp: false,
-        forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+        partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
       });
 
     await updateMarketplace({

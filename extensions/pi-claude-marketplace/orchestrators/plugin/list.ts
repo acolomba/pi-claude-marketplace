@@ -122,7 +122,7 @@ type PluginRenderStatus =
  * even though USTAT-01 / D-64-01 now de-collapses the render tokens (resolver
  * `unsupported` renders `(unsupported)` / `⊖`, structural `unavailable` renders
  * `(unavailable)` / `⊘`): the filter keys on this pre-collapse bucket so
- * `--unsupported` (not-installed plugins resolving `unsupported` -- the
+ * `--partial` (not-installed plugins resolving `unsupported` -- the
  * force-installable candidates) partitions cleanly from `--unavailable`
  * (structural-unavailable only, A2) regardless of the render token.
  * Installed-inventory rows
@@ -163,7 +163,7 @@ export interface ListPluginsOptions {
   /** LIST-01 / D-67-01 union filter: include NOT-installed plugins that resolve
    *  `unsupported` (the force-installable candidates). Keys on the internal
    *  resolver bucket, not the `(unavailable)` render token. */
-  readonly unsupported?: boolean;
+  readonly partial?: boolean;
 }
 
 /**
@@ -175,7 +175,7 @@ function filtersPassive(opts: ListPluginsOptions): boolean {
     opts.installed !== true &&
     opts.available !== true &&
     opts.unavailable !== true &&
-    opts.unsupported !== true
+    opts.partial !== true
   );
 }
 
@@ -197,7 +197,7 @@ function shouldShow(
 
   // A1: `--installed` spans the full installed inventory -- the steady-state
   // `installed`/`upgradable`/`disabled` rows PLUS the derived force states
-  // (force-installed reached here, NOT via `--unsupported`, per D-67-01). This
+  // (force-installed reached here, NOT via `--partial`, per D-67-01). This
   // mirrors the fold-carryover filter's installed-inventory set.
   if (
     opts.installed === true &&
@@ -214,10 +214,10 @@ function shouldShow(
     return true;
   }
 
-  // D-67-01: `--unsupported` selects not-installed plugins that resolve
+  // D-67-01: `--partial` selects not-installed plugins that resolve
   // `unsupported`, keyed on the pre-collapse resolver bucket (the row renders
   // the de-collapsed `(unsupported)` / `⊖` token per USTAT-01).
-  if (opts.unsupported === true && bucket === "unsupported") {
+  if (opts.partial === true && bucket === "unsupported") {
     return true;
   }
 
@@ -397,7 +397,7 @@ async function installedRowMessage(
   // `force-installed-upgradable` record (a force-installed row that also carries
   // a meaningful upgrade candidate) renders IDENTICALLY to `(force-installed)`
   // here -- the upgrade affordance is a completion-only distinction (offered
-  // under `update --force`); the list row reflects the CURRENT degraded state.
+  // under `update --partial`); the list row reflects the CURRENT degraded state.
   if (status === "force-installed" || status === "force-installed-upgradable") {
     return {
       status: "force-installed",
@@ -512,7 +512,7 @@ async function availableRowMessage(
     // D-67-02 / LIST-02: the filter BUCKET is derived by the SHARED
     // `classifyManifestEntry` (the same classifier the completion bucketizer
     // consumes) -- the `available | unsupported | unavailable` member maps
-    // 1:1 onto a {@link FilterBucket}, so the `--unsupported` / `--unavailable`
+    // 1:1 onto a {@link FilterBucket}, so the `--partial` / `--unavailable`
     // partition keys on the pre-collapse classification without a second
     // classifier on this surface.
     const bucket = classifyManifestEntry(resolved);
@@ -520,11 +520,11 @@ async function availableRowMessage(
     // USTAT-01 / D-64-01: the render now de-collapses by resolver STATE. The
     // `installable` arm is `(available)`; the `unsupported` arm emits the
     // distinct `(unsupported)` / `⊖` row (force-installable: components would be
-    // dropped under `--force`); the structural `unavailable` arm keeps
+    // dropped under `--partial`); the structural `unavailable` arm keeps
     // `(unavailable)` / `⊘`. The split follows `resolved.state`, NEVER the
     // reason brace (the same `{unsupported hooks}` brace can appear on both
     // arms). The filter `bucket` is unchanged -- `classifyManifestEntry` keeps
-    // `--unsupported` / `--unavailable` partitioning on the pre-collapse class.
+    // `--partial` / `--unavailable` partitioning on the pre-collapse class.
     //
     // WR-03: discriminate the three-way union with an exhaustive
     // `switch (resolved.state)` + `assertNever` so a future fourth

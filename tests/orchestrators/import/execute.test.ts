@@ -711,7 +711,7 @@ test("importClaudeSettings classifies uninstallable plugins as warnings without 
               kind: "not-installable",
               plugin: opts.plugin,
               reasons: ["requires unsupported tool"],
-              forceable: false,
+              partialable: false,
             }),
             cause: "requires unsupported tool",
           };
