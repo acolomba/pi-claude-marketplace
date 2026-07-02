@@ -26,8 +26,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 /**
  * update's private status set. The update cascade emits `updated` rows
  * (carrying the `v<from> → v<to>` arrow), `skipped` rows (up-to-date / benign
- * no-ops), `failed` rows, and -- per XSURF-03 -- a `force-upgradable` row for a
- * manual no-`--partial` decline of a force-upgradable plugin.
+ * no-ops), `failed` rows, and -- per XSURF-03 -- a `partially-upgradable` row for a
+ * manual no-`--partial` decline of a partially-upgradable plugin.
  */
 export const UPDATE_STATUSES = [
   "updated",
@@ -69,13 +69,13 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       undefined,
       probe,
     ),
-  // FSTAT-07 / D-66-04: a force update whose candidate re-resolved `unsupported`
+  // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`
   // reports (partially-installed) with the dropped-component detail. WR-03: the
   // shared `partiallyInstalledRow` threads `dependencies` so the soft-dep markers
   // fire on a degraded update exactly as on a clean `(updated)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  // XSURF-03: the force-upgradable manual update-decline row. Byte-identical to
+  // XSURF-03: the partially-upgradable manual update-decline row. Byte-identical to
   // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
   // the installed plugin is currently clean. The `--partial` trailer is composed
   // centrally by the renderer, not here.

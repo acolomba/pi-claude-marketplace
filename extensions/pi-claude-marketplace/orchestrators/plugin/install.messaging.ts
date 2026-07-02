@@ -36,8 +36,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * install's private status set. A single-target install emits exactly one of
  * these: a success `installed` row, a `failed` row, or -- when the
  * entity-shape classifier narrows a not-installable error -- an `unavailable`
- * row (structural defect) or, per XSURF-01, an `unsupported` row (the
- * force-degradable arm, consistent with `list` / `info`).
+ * row (structural defect) or, per XSURF-01, a `partially-available` row (the
+ * partially-available arm, consistent with `list` / `info`).
  */
 export const INSTALL_STATUSES = [
   "installed",
@@ -87,7 +87,7 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       p.reasons,
       probe,
     ),
-  // FSTAT-07 / D-66-04: a force install that re-resolves `unsupported` reports
+  // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
   // (partially-installed) with the dropped-component detail. WR-03: the shared
   // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
   // degraded install exactly as on a clean `(installed)` row.
@@ -102,7 +102,7 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       "(unavailable)",
       composeReasons(p.reasons, false, false, probe),
     ]),
-  // XSURF-01: the force-degradable install-failure arm. Byte-identical to the
+  // XSURF-01: the partially-available install-failure arm. Byte-identical to the
   // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
   // `--partial` hint trailer is composed centrally by the renderer, not here.
   "partially-available": (p, probe, mpScope) =>

@@ -83,9 +83,9 @@ export type PendingMsg =
 
 /**
  * `(will install)` -- lifted verbatim from the central `renderPluginRow` arm.
- * FSTAT-06 / D-66-04: the `force` modifier renders `(will partially install)` in
+ * FSTAT-06 / D-66-04: the `partial` modifier renders `(will partially install)` in
  * place of `(will install)` when the planned install would degrade (candidate
- * resolves `unsupported`). D-66-05: there is no `will force update` analog --
+ * resolves `partially-available`). D-66-05: there is no `will partially update` analog --
  * the reconcile plan has no update bucket.
  */
 const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, _probe, mpScope) =>
@@ -141,11 +141,11 @@ export const PENDING_CONTEXT = {
  * enable re-materializes via install, so it surfaces as `installed`
  * (RECON-04); there is no separate `enabled` row status.
  *
- * BFILL-01 / D-68-04: `force-installed` widens this reconcile-local closed set
+ * BFILL-01 / D-68-04: `partially-installed` widens this reconcile-local closed set
  * so a load-time backfill that only PARTIALLY re-materializes a plugin (its
  * re-resolved unsupported set is still non-empty) surfaces as a
  * `(partially-installed)` row. A FULLY promoted backfill reuses the `installed`
- * row. The `force-installed` literal already exists in the global
+ * row. The `partially-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
  */
 export const RECONCILE_APPLIED_STATUSES = [

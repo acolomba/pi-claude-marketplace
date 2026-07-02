@@ -161,9 +161,9 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
     // RLD-04 / D-08: the list orchestrator emits the steady-state inventory
     // row as `installed`; it projects to the same `installed` tool surface as
     // the cascade transition and the `upgradable` list row.
-    // FSTAT-02 / FSTAT-04 / D-66-03: both derived force states flatten to the
-    // `installed` tool surface -- a force-installed plugin is recorded-installed
-    // (degraded, but present), and a force-upgradable plugin is currently a
+    // FSTAT-02 / FSTAT-04 / D-66-03: both derived partial states flatten to the
+    // `installed` tool surface -- a partially-installed plugin is recorded-installed
+    // (degraded, but present), and a partially-upgradable plugin is currently a
     // clean install, so the LLM-tool projection treats both as installed.
     case "installed":
     case "upgradable":
@@ -175,9 +175,9 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
     case "unavailable":
       return "unavailable";
     case "partially-available":
-      // USTAT-02 / D-64-01: a not-installed, force-installable plugin projects
+      // USTAT-02 / D-64-01: a not-installed, partially-available plugin projects
       // onto the coarse `unavailable` tool bucket -- the LLM-tool surface has no
-      // distinct `unsupported` bucket (mirrors `disabled` -> `unavailable`).
+      // distinct `partially-available` bucket (mirrors `disabled` -> `unavailable`).
       return "unavailable";
     case "disabled":
       // D-54-01 / ENBL-04: a disabled plugin is recorded but its artefacts
@@ -321,7 +321,7 @@ function pluginScopeOrFallback(
   switch (p.status) {
     // RLD-04 / D-08: the `installed` inventory row joins `upgradable` as a
     // scope-bearing list-surface variant.
-    // FSTAT-02 / FSTAT-04 / D-66-03: the derived force states are scope-bearing
+    // FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are scope-bearing
     // list-surface variants (each carries the optional `scope?`), so they join
     // the orphan-fold scope arm.
     case "installed":
@@ -335,8 +335,8 @@ function pluginScopeOrFallback(
     case "available":
     case "unavailable":
     case "partially-available":
-      // USTAT-01 / SNM-11: the `unsupported` row carries no `scope` field (the
-      // carve-out applies to `available` / `unavailable` / `unsupported`).
+      // USTAT-01 / SNM-11: the `partially-available` row carries no `scope` field (the
+      // carve-out applies to `available` / `unavailable` / `partially-available`).
       return marketplaceScope;
     case "updated":
     case "reinstalled":
@@ -366,7 +366,7 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
     p.status === "partially-available" ||
     p.status === "upgradable"
   ) {
-    // USTAT-01: the `unsupported` row carries the same per-kind reason braces as
+    // USTAT-01: the `partially-available` row carries the same per-kind reason braces as
     // the `unavailable` row, so surface them on the tool details too.
     return p.reasons.length > 0 ? p.reasons : undefined;
   }
@@ -399,9 +399,9 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "partially-upgradable":
       // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
       // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
-      // FSTAT-04 / D-66-03: the derived force states carry the same optional
+      // FSTAT-04 / D-66-03: the derived partial states carry the same optional
       // `version?` slot as the other list-surface inventory variants. USTAT-01:
-      // the `unsupported` row carries the same optional `version?` slot.
+      // the `partially-available` row carries the same optional `version?` slot.
       return p.version;
     case "updated":
       // The updated variant has `from`/`to` instead of a single `version`;

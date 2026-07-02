@@ -96,7 +96,7 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
 
 /**
  * Plugin re-materialized in place by load-time backfill (BFILL-01). A
- * force-installed plugin is re-resolved offline (NFR-5) and its now-fuller
+ * partially-installed plugin is re-resolved offline (NFR-5) and its now-fuller
  * supported set is materialized via the reinstall primitive; this outcome folds
  * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
  * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
@@ -112,7 +112,7 @@ export interface PluginBackfilledOutcome extends PluginOutcomeBase {
   readonly installable: boolean;
   /**
    * SEV-05 / D-69-04: the re-resolved dropped-component kinds (the
-   * `unsupported` arm's component list) so the `(partially-installed)` projection
+   * `partially-available` arm's component list) so the `(partially-installed)` projection
    * can populate a factual `{reasons}` brace through the shared
    * `narrowUnsupportedKinds` seam -- exactly as the `install` success row does.
    * Empty on a fully-promoted (`installable`) backfill, where the row drops to

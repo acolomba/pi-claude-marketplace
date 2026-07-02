@@ -21,14 +21,14 @@
 // Status filtering per (mode, --partial) -- LIST-02 / D-67-02:
 //   - install,  no partial -> keep only `available` (exclude plugins already
 //                             installed in the target scope).
-//   - install,  partial    -> admit `available` + `unsupported` (the
-//                             force-installable candidates; `unavailable`
+//   - install,  partial    -> admit `available` + `partially-available` (the
+//                             partially-available candidates; `unavailable`
 //                             excluded -- FORCE-05).
 //   - update,   no partial -> keep the full installed inventory
-//                             (`installed` | `upgradable` | `force-installed` |
-//                             `force-upgradable`).
-//   - update,   partial    -> narrow to `upgradable` + `force-upgradable` (the
-//                             force-upgrade candidates).
+//                             (`installed` | `upgradable` | `partially-installed` |
+//                             `partially-upgradable`).
+//   - update,   partial    -> narrow to `upgradable` + `partially-upgradable` (the
+//                             partial-upgrade candidates).
 //   - uninstall/reinstall/enable/disable -> keep the full installed inventory
 //                             (these never carry `--partial`).
 //   - info      -> union of every plugin row across BOTH scopes, NO
@@ -63,9 +63,9 @@ const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new 
 const INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set(["available"]);
 
 /**
- * D-67-02 / LIST-02: with `--partial`, install offers the force-INSTALLABLE
+ * D-67-02 / LIST-02: with `--partial`, install offers the partial-install
  * candidates -- plugins not yet installed that resolve `available` or
- * `unsupported`. `unavailable` stays excluded (FORCE-05).
+ * `partially-available`. `unavailable` stays excluded (FORCE-05).
  */
 const PARTIAL_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "available",
@@ -73,14 +73,14 @@ const PARTIAL_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set(
 ]);
 
 /**
- * D-67-02 / LIST-02: with `--partial`, update offers the force-UPGRADE
+ * D-67-02 / LIST-02: with `--partial`, update offers the partial-upgrade
  * candidates -- installed plugins whose newest candidate would re-resolve to a
  * meaningful change. This spans `upgradable` (clean -> newer clean),
- * `force-upgradable` (clean -> newer degrades), and -- WR-02 / FSTAT-03 --
- * `force-installed-upgradable` (a force-installed row with a newer,
+ * `partially-upgradable` (clean -> newer degrades), and -- WR-02 / FSTAT-03 --
+ * `partially-installed-upgradable` (a partially-installed row with a newer,
  * NON-unavailable candidate, where `update --partial` either promotes it back to
- * `installed` or re-applies the force-install). Plain `installed` /
- * `force-installed` are excluded (no newer candidate -- nothing to upgrade; a
+ * `installed` or re-applies the partial install). Plain `installed` /
+ * `partially-installed` are excluded (no newer candidate -- nothing to upgrade; a
  * same-version force re-apply is `reinstall`'s job, RINST-01).
  */
 const PARTIAL_UPDATE_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
@@ -359,7 +359,7 @@ async function getInstallPluginToMarketplacesMap(
   partial: boolean,
 ): Promise<Map<string, string[]>> {
   // LIST-02 / D-67-02: `--partial` widens the install candidate set to the
-  // force-installable statuses (`available` + `unsupported`); the no-`--partial`
+  // partially-available statuses (`available` + `partially-available`); the no-`--partial`
   // set stays `available`-only (byte-identical to today). `unavailable` is
   // never admitted (FORCE-05).
   const allowed = partial ? PARTIAL_INSTALL_STATUSES : INSTALL_STATUSES;
@@ -391,12 +391,12 @@ async function getInstalledPluginToMarketplacesMap(
 ): Promise<Map<string, string[]>> {
   // D-67-02: the no-`--partial` installed-modes candidate set spans the full
   // installed inventory. The cache carries the finer derived states
-  // (`upgradable` / `force-installed` / `force-upgradable`) where it once
+  // (`upgradable` / `partially-installed` / `partially-upgradable`) where it once
   // flattened every state-present plugin to `installed`; admitting them all
   // keeps the no-`--partial` completion BYTE-IDENTICAL to today. With `--partial`
-  // (only ever reached via `update`), narrow to the force-upgrade candidates
-  // (`upgradable` + `force-upgradable` + `force-installed-upgradable`) -- plain
-  // `installed` / `force-installed` have no newer candidate to upgrade to.
+  // (only ever reached via `update`), narrow to the partial-upgrade candidates
+  // (`upgradable` + `partially-upgradable` + `partially-installed-upgradable`) -- plain
+  // `installed` / `partially-installed` have no newer candidate to upgrade to.
   const allowed = partial ? PARTIAL_UPDATE_STATUSES : INSTALLED_INVENTORY_STATUSES;
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =

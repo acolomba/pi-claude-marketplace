@@ -1259,9 +1259,9 @@ async function loadCachedEntry(
   return entryRaw;
 }
 
-// BFILL-01 / D-68-02: reinstall is force-capable. It resolves through the
+// BFILL-01 / D-68-02: reinstall is partial-capable. It resolves through the
 // `requirePartialInstallable` gate (admitting both `installable` and the
-// force-degradable `unsupported` arm) so backfill can re-materialize a
+// partially-available arm) so backfill can re-materialize a
 // still-partial plugin in place without throwing `{not-installable}`. The
 // `unavailable` arm is still rejected (NFR-7). Resolution stays cache-only via
 // `resolveStrict` -- no network (NFR-5).
@@ -1440,9 +1440,9 @@ function updateStateRecord(
     version: oldRecord.version,
     resolvedSource: installable.pluginRoot,
     // BFILL-01: record the REAL compatibility from the resolve, not a hardcoded
-    // `installable: true`. A partial re-materialize (resolved `unsupported`)
+    // `installable: true`. A partial re-materialize (resolved `partially-available`)
     // persists `installable: false` with the still-unsupported set, so the
-    // force-installed derivation (D-66-01) stays truthful; a full one records
+    // partially-installed derivation (D-66-01) stays truthful; a full one records
     // `installable: true` with an empty unsupported set.
     compatibility: {
       installable: installable.state === "installable",

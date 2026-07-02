@@ -48,16 +48,16 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 export const LIST_STATUSES = [
   "installed",
   "available",
-  // USTAT-01 / D-64-01: not-installed, force-installable row -- distinct from
+  // USTAT-01 / D-64-01: not-installed, partially-available row -- distinct from
   // structural `unavailable` (renders `(partially-available)` / `⊖`).
   "partially-available",
   "unavailable",
   "upgradable",
   "disabled",
   "failed",
-  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
-  // rows. `force-installed` is a recorded-installed plugin currently resolving
-  // `unsupported`; `force-upgradable` is a currently-clean plugin whose newer
+  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived partial-state inventory
+  // rows. `partially-installed` is a recorded-installed plugin currently resolving
+  // `partially-available`; `partially-upgradable` is a currently-clean plugin whose newer
   // candidate would newly degrade it.
   "partially-installed",
   "partially-upgradable",
@@ -118,7 +118,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       "(unavailable)",
       composeReasons(p.reasons, false, false, probe),
     ]),
-  // USTAT-01 / D-64-01: not-installed, force-installable row -- the dedicated
+  // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. Body cloned from the
   // `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out and reasons
   // composition); only the glyph and token differ.

@@ -108,7 +108,7 @@ async function classifyInstalledPluginRow(
 
 /**
  * LIST-02 / D-67-02: build the cache row for ONE not-installed manifest entry
- * via the shared `classifyManifestEntry`. `unsupported` is emitted DISTINCTLY
+ * via the shared `classifyManifestEntry`. `partially-available` is emitted DISTINCTLY
  * from structural `unavailable` (the old `installable ? available : unavailable`
  * collapse is gone) so the `--partial`-gated candidate sets can offer
  * `available + unsupported`. A probe failure is structural unavailability; the
@@ -196,7 +196,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         const rows: PluginIndexRow[] = [];
 
         // Installed entries first. LIST-02 / D-67-02: the finer state
-        // (installed | upgradable | force-installed | force-upgradable) is
+        // (installed | upgradable | partially-installed | partially-upgradable) is
         // derived by the SHARED classifier -- the same one the `list`
         // orchestrator consumes -- so the completion cache never diverges from
         // `list` (no provider-local reclassification).

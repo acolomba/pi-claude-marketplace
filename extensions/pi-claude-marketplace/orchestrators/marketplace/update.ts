@@ -639,7 +639,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // The renderer narrows on `dependencies` membership ("agents" / "mcp") +
       // the notify-time probe; we forward the boolean flags as the conventional
       // Dependency[] representation. Shared by the `(updated)` and the degraded
-      // `(partially-installed)` arms (WR-03: a force-installed row carries
+      // `(partially-installed)` arms (WR-03: a partially-installed row carries
       // dependencies exactly like a clean update row).
       const dependencies = [
         ...(outcome.declaresAgents ? (["agents"] as const) : []),
@@ -656,9 +656,9 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // the producer-stamp wiring.
       // SEV-03 / D-69-01 / FSTAT-07: the autoupdate cascade now TAKES the force
       // path (`updateSinglePlugin` sets `partial: true`), so a candidate that
-      // re-resolved `unsupported` degraded in place. Report `(partially-installed)`
+      // re-resolved `partially-available` degraded in place. Report `(partially-installed)`
       // with the dropped-component detail instead of `(updated)`. A clean
-      // candidate keeps `(updated)` (no `partialDegrade`). force-installed is
+      // candidate keeps `(updated)` (no `partialDegrade`). partially-installed is
       // a realized transition -> reloads Pi resources.
       //
       // SEV-03 / D-69-01: an autoupdate that NEWLY degrades a previously-clean
@@ -666,7 +666,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // before the update applied) silently dropped components the user did not
       // opt into -> the row is actionable -> `warning` (prepends the
       // `A plugin operation needs attention.` summary line). Re-degrading a
-      // plugin that was ALREADY force-installed (prior `unsupported` non-empty)
+      // plugin that was ALREADY partially-installed (prior `partially-available` non-empty)
       // is benign -> `info`. The manual `update --partial` opt-in stays info on its
       // own renderer; the warning fires ONLY on this autoupdate surface.
       if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {

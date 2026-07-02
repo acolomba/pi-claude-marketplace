@@ -175,7 +175,7 @@ interface EntityErrorRow {
   readonly reasons: readonly ContentReason[];
   // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `partialable`
   // discriminant on the `unavailable` arm -- `true` when the resolver verdict
-  // is force-degradable `unsupported`, so the composed row points at `--partial`.
+  // is partially-available, so the composed row points at `--partial`.
   readonly partialable?: boolean;
 }
 
@@ -268,7 +268,7 @@ export interface InstallPluginOptions {
   /**
    * D-65-03: when true, the install preflight selects `requirePartialInstallable`
    * instead of `requireInstallable`, widening the gate to admit the
-   * `unsupported` arm so its supported components materialize (the unsupported
+   * `partially-available` arm so its supported components materialize (the unsupported
    * ones are skipped naturally; FORCE-01). The edge handler sets this when the
    * user supplies `--partial`. Both gates still reject `unavailable` (FORCE-05).
    */
@@ -307,8 +307,8 @@ interface InstallCtx {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
-  // NFR-7 / D-65-03: widened to the force-materializable union so the
-  // `unsupported` arm (admitted under --partial) flows through the same
+  // NFR-7 / D-65-03: widened to the materializable union so the
+  // `partially-available` arm (admitted under --partial) flows through the same
   // materialize phases. Excludes `unavailable` (no pluginRoot).
   readonly resolved: MaterializablePlugin;
   readonly version: string;
@@ -364,7 +364,7 @@ export interface InstallLedgerOptions {
   readonly plugin: string;
   /** AG-7 opt-in `--map-model` flag (see InstallPluginOptions.mapModel). */
   readonly mapModel?: boolean;
-  /** D-65-03 `--partial` gate-selection flag (see InstallPluginOptions.force). */
+  /** D-65-03 `--partial` gate-selection flag (see InstallPluginOptions.partial). */
   readonly partial?: boolean;
   /** ENBL-02 version pin (see InstallPluginOptions.pinVersionOverride). */
   readonly pinVersionOverride?: string;
@@ -494,11 +494,11 @@ export async function runInstallLedger(
   // installable variant or surfaces disqualification notes. The gate below
   // branches on `opts.partial`: the default path calls `requireInstallable`
   // (admits only `installable`); `--partial` calls `requirePartialInstallable`
-  // (also admits the force-degradable `unsupported` arm). Both narrow the
+  // (also admits the partially-available arm). Both narrow the
   // discriminated union and throw on the structural `unavailable` variant.
   const resolved = await resolveStrict(entry, { marketplaceRoot: sourceMp.marketplaceRoot });
   // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
-  // force-degradable `unsupported` arm; the default gate still blocks it. Both
+  // partially-available arm; the default gate still blocks it. Both
   // gates reject `unavailable` (FORCE-05), so `--partial` never bypasses a hard
   // structural failure.
   if (opts.partial === true) {
@@ -507,10 +507,10 @@ export async function runInstallLedger(
     requireInstallable(resolved, "install");
   }
 
-  // After the gate, `resolved` is narrowed to the force-materializable union
+  // After the gate, `resolved` is narrowed to the materializable union
   // (`installable | unsupported`); pluginRoot etc. are reachable. The
-  // `unsupported` arm carries only supported kinds in componentPaths, so the
-  // shared materialize phases degrade it naturally (D-65-02, no force branch).
+  // `partially-available` arm carries only supported kinds in componentPaths, so the
+  // shared materialize phases degrade it naturally (D-65-02, no partial branch).
   const installable: MaterializablePlugin = resolved;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
@@ -808,9 +808,9 @@ export async function runInstallLedger(
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
           // resolve, not a hardcoded `true`. A `--partial` install of an
-          // `unsupported` plugin persists `installable: false` with the still-
+          // `partially-available` plugin persists `installable: false` with the still-
           // unsupported set (mirrors reinstall.ts::updateStateRecord), so the
-          // force-installed derivation stays truthful AND load-time backfill
+          // partially-installed derivation stays truthful AND load-time backfill
           // (which keys on `!compatibility.installable`) can later promote it
           // when its supported set grows. A clean install persists `true`.
           installable: c.resolved.state === "installable",
@@ -1403,17 +1403,17 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       reasons.push("orphan rewake");
     }
 
-    // FSTAT-07 / D-66-04: when the live resolved state is `unsupported`, the
-    // install was force-completed with one or more components dropped -- the
+    // FSTAT-07 / D-66-04: when the live resolved state is `partially-available`, the
+    // install was partially completed with one or more components dropped -- the
     // success row reports `(partially-installed)` carrying the dropped-component
     // detail via the shared `narrowUnsupportedKinds` helper. This reads the
     // LIVE resolved state of the just-completed install -- NOT the persisted
     // `compatibility.unsupported` record the `list` / non-path `info` derivers
     // read; the two agree here only because the install just wrote that record.
     // A fully-supported install stays `(installed)` (FSTAT-03 -- no lingering
-    // force state). force-installed is a realized transition
+    // partial state). partially-installed is a realized transition
     // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload as
-    // installed. WR-03: the force-degradable `unsupported` arm still stages the
+    // installed. WR-03: the partially-available arm still stages the
     // SUPPORTED components, so the row threads `dependencies` -- the soft-dep
     // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a degraded
     // install exactly as on a clean one (where the signal is most relevant).
@@ -1426,7 +1426,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // is a metadata-only stamp (the per-row bytes do not change; the cascade
     // gains the warning summary line). A loaded companion -- or no declared
     // companion -- keeps the info stamp. Applies to BOTH the clean `installed`
-    // and degraded `force-installed` success arms.
+    // and degraded `partially-installed` success arms.
     const successSeverity = companionSeverity(
       {
         declaresAgents: installCtx.stagedAgentNames.length > 0,
@@ -1520,9 +1520,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
  * branching on the three-way `partialable` discriminant the resolver stamped on
  * the throw. BOTH arms render at error severity (so the leading summary line
  * fires) -- an install failure must read as an error, not a benign info row.
- * The force-degradable arm surfaces as the resolver-state-driven `unsupported`
+ * The partially-available arm surfaces as the resolver-state-driven `partially-available`
  * token (XSURF-01: consistent with how `list` / `info` describe the same
- * plugin) and ALSO carries the `--partial` hint trailer (force can degrade-install
+ * plugin) and ALSO carries the `--partial` hint trailer (`--partial` can degrade-install
  * it). The structural arm stays the `unavailable` token with NO hint (force
  * cannot degrade-install a structural defect). The split keys on
  * `entityErrorRow.partialable`, NOT the reason brace -- `{unsupported source}`
@@ -1863,7 +1863,7 @@ function narrowResolverReasons(
     // the `lspServers` carve-out handled above (e.g. `monitors`, `themes`) is
     // still a per-kind unsupported component marker. Route its bare token
     // through the SAME shared helper `list`/`info` consume so a multi-kind
-    // `unsupported` plugin emits a byte-identical marker set on every surface.
+    // `partially-available` plugin emits a byte-identical marker set on every surface.
     // Previously these notes were dropped here whenever an earlier note had
     // already populated `out` (the empty-array fallback then did not fire), so
     // `install` rendered fewer markers than `list`/`info` for the same plugin.

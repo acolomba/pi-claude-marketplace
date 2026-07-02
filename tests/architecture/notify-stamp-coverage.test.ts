@@ -59,9 +59,9 @@ const TRANSITION_STATUS_LIST = [
   "uninstalled",
   "disabled",
   // FSTAT-02 / D-66-04: the install/update success cascade emits
-  // `force-installed` as a realized transition (severity "info" + needsReload
+  // `partially-installed` as a realized transition (severity "info" + needsReload
   // true, identical to `installed`), so it joins the stamp-coverage set.
-  // `force-upgradable` is deliberately EXCLUDED -- it is a list-inventory-only
+  // `partially-upgradable` is deliberately EXCLUDED -- it is a list-inventory-only
   // row (needsReload false), never a realized transition.
   "partially-installed",
 ] as const satisfies readonly PluginStatus[];

@@ -181,7 +181,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
     },
   },
   {
-    label: "FSTAT-06 / will force install plugin row (force modifier set)",
+    label: "FSTAT-06 / will partially install plugin row (partial modifier set)",
     pi: piWithBothLoaded(),
     message: {
       marketplaces: [

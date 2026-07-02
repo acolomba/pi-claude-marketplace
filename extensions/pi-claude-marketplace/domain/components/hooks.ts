@@ -4,7 +4,7 @@
 // discriminated parser. Consumed by `domain/resolver.ts`: a structural parse
 // failure (`{ ok: false }`) resolves `state: "unavailable"` per D-57-04; a
 // successful parse whose partition dropped unsupportable events / matcher groups
-// / handlers resolves `state: "partially-available"` (force-degradable) carrying the
+// / handlers resolves `state: "partially-available"` (partially-available) carrying the
 // `{unsupported hooks}` reason.
 //
 // HOOK-03: `additionalProperties: true` at EVERY nesting level. Unknown

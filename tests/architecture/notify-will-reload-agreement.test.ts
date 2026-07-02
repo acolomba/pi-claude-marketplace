@@ -194,10 +194,10 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     // FSTAT-02 / D-66-03: a degrading install materializes the supported
     // components, so the realized (partially-installed) cascade row stamps
-    // `needsReload: true` -- the pending `will force install` row therefore
+    // `needsReload: true` -- the pending `will partially install` row therefore
     // correctly keeps its `will` token.
-    label: "plugin force install -- realized (partially-installed) row",
-    pendingToken: "will force install",
+    label: "plugin partial install -- realized (partially-installed) row",
+    pendingToken: "will partially install",
     pi: piWithBothLoaded(),
     message: {
       marketplaces: [

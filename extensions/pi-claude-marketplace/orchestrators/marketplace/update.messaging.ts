@@ -44,10 +44,10 @@ export type UpdateMpStatus = (typeof UPDATE_MP_STATUSES)[number];
 
 /**
  * The plugin-child-row statuses `marketplace update`'s autoupdate-ON cascade
- * emits: `updated`, `force-installed`, `skipped`, `failed`. This is the Status
+ * emits: `updated`, `partially-installed`, `skipped`, `failed`. This is the Status
  * set the render map below is total over (D-10: a missing arm is a TS2741
- * compile error). SEV-03 / D-69-01: `force-installed` joins the set because the
- * autoupdate cascade now TAKES the force path, so a degrading candidate renders
+ * compile error). SEV-03 / D-69-01: `partially-installed` joins the set because the
+ * autoupdate cascade now TAKES the partial path, so a degrading candidate renders
  * `(partially-installed) {dropped kinds}` instead of `(skipped) {no longer installable}`.
  */
 type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
@@ -81,7 +81,7 @@ export const UPDATE_CONTEXT = {
         ),
       ]),
     // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
-    // `unsupported` degraded via the force path. Reuse `partiallyInstalledRow` --
+    // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
     // the SOLE composition site (D-11 "call, never duplicate") -- so the
     // `◉ <name> v<version> (partially-installed) {dropped kinds[, requires pi-...]}`
     // bytes stay identical to the install / update success surfaces.

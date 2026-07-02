@@ -139,26 +139,26 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
   readonly stagedAgents: readonly string[];
   readonly stagedMcpServers: readonly string[];
   /**
-   * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the force-degrade signal for a
-   * `--partial` update whose candidate re-resolved `unsupported`. Present
+   * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the partial-degrade signal for a
+   * `--partial` update whose candidate re-resolved `partially-available`. Present
    * atomically -- both fields travel together or the whole sub-object is absent
    * -- so a consumer can never see a `newlyDegraded` flag without the `kinds`
    * that make it meaningful. Absent when the candidate resolved fully
    * `installable`; the cascade then renders the normal `(updated)` row.
    *
    * `kinds` are the unsupported component kinds carried on the candidate's
-   * `unsupported` resolver arm. Non-empty flips the success row to
+   * `partially-available` resolver arm. Non-empty flips the success row to
    * `(partially-installed)` with the dropped-component detail (the same derived
-   * signal the list deriver reads), so a force update reports its true realized
+   * signal the list deriver reads), so a partial update reports its true realized
    * state.
    *
-   * `newlyDegraded` is `true` when this force-degrading update NEWLY degrades a
+   * `newlyDegraded` is `true` when this partially-degrading update NEWLY degrades a
    * previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported`
    * was EMPTY before the update applied. Read from the prior install record in
    * `preflightUpdate` (no new tracking, no schema change). The marketplace
    * autoupdate cascade renderer reads it to raise the `(partially-installed)` row to
    * `warning` (a silent auto-update degradation is actionable); an
-   * already-degraded re-degrade (prior `unsupported` non-empty) stays `info`.
+   * already-degraded re-degrade (prior `partially-available` non-empty) stays `info`.
    * The manual `update --partial` renderer ignores it -- the explicit opt-in stays
    * info unconditionally (SEV-01), so the warning fires ONLY on the autoupdate
    * surface.
@@ -191,12 +191,12 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
  * values). `notes` carries the free-form cause-chain text consumed by
  * the notify trailer.
  *
- * XSURF-03: `partialUpgradable` marks the force-upgradable manual update-decline
- * (the resolver verdict was `unsupported`, so `--partial` could degrade-update
- * it). The projection flips ONLY this arm to the `force-upgradable` token; the
+ * XSURF-03: `partialUpgradable` marks the partially-upgradable manual update-decline
+ * (the resolver verdict was `partially-available`, so `--partial` could degrade-update
+ * it). The projection flips ONLY this arm to the `partially-upgradable` token; the
  * discriminant is a dedicated field, NOT the reason string, so the degrade
  * reason can carry the list-consistent kinds instead of `no longer
- * installable`. Structural declines (force cannot help) leave it unset.
+ * installable`. Structural declines (`--partial` cannot help) leave it unset.
  */
 export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
   readonly partition: "skipped";

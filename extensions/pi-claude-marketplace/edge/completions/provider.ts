@@ -95,7 +95,7 @@ function flagCompletions(
 
   if (positionalHead === "list" || positionalHead === "ls") {
     flags.push(
-      // LIST-01 / D-67-01: `--installed` spans installed + force-installed;
+      // LIST-01 / D-67-01: `--installed` spans installed + partially-installed;
       // `--partial` selects not-installed plugins that resolve unsupported.
       { name: "--installed", description: "Show installed plugins" },
       { name: "--available", description: "Show available plugins" },
@@ -110,7 +110,7 @@ function flagCompletions(
     // list-flag pattern.
     // LIST-02 / D-67-02: `--partial` widens the install/update candidate set
     // (install -> available + unsupported; update -> upgradable +
-    // force-upgradable). FORCE-05: never admits `unavailable`.
+    // partially-upgradable). FORCE-05: never admits `unavailable`.
     flags.push(
       {
         name: "--map-model",
@@ -194,7 +194,7 @@ interface PluginRefBranchConfig {
   /**
    * LIST-02 / D-67-02: `--partial` preceded the plugin positional. Narrows the
    * candidate set (install -> available + unsupported; update -> upgradable +
-   * force-upgradable). Only ever set for the install/update heads.
+   * partially-upgradable). Only ever set for the install/update heads.
    */
   readonly partial?: boolean;
 }

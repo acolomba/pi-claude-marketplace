@@ -272,7 +272,7 @@ export type PendingInstallCandidateLocator = (
 ) => Promise<PendingInstallCandidate | undefined>;
 
 /**
- * Canonical force-install key over the `(scope, marketplace, plugin)` tuple
+ * Canonical partial-install key over the `(scope, marketplace, plugin)` tuple
  * shared between the async resolver (`resolvePendingForceInstalls`) and the
  * pure projection (`buildReconcilePendingNotification`). NUL-delimited so a
  * name carrying a delimiter character cannot collide two distinct installs.
@@ -285,16 +285,16 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
  * FSTAT-06 / D-66-04 / NFR-5: resolve every planned install candidate
  * no-network via `resolveStrict` and collect the `(scope, marketplace, plugin)`
  * keys whose candidate resolves `state === "partially-available"` -- the planned
- * install would degrade and proceed under the force path, so its pending row
+ * install would degrade and proceed under the partial path, so its pending row
  * renders `(will partially install)`. The resolve is the cache/no-network resolver
  * (guarded by the `no-orchestrator-network` architecture test); a probe throw
  * or an unlocatable candidate degrades to NO force (the safe, truthful preview
  * default), never a crash on this read-only surface (IL-2).
  *
- * D-66-05: there is deliberately NO `will force update` analog. The
+ * D-66-05: there is deliberately NO `will partially update` analog. The
  * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable +
  * marketplace add/remove + sourceMismatches only), so only `pluginsToInstall`
- * is resolved here -- the will-force-update token is vacuous.
+ * is resolved here -- the will-partially-update token is vacuous.
  */
 export async function resolvePendingForceInstalls(
   plans: readonly ReconcilePlan[],
@@ -354,14 +354,14 @@ export function buildReconcilePendingNotification(
 
     for (const o of plan.pluginsToInstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      // FSTAT-06 / D-66-04: stamp the force modifier when the planned install
-      // candidate resolved `unsupported` (no-network resolveStrict, computed
+      // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
+      // candidate resolved `partially-available` (no-network resolveStrict, computed
       // ahead of time by resolvePendingForceInstalls). The modifier renders
       // `(will partially install)` in place of `(will install)`. D-66-05: there is
-      // deliberately NO `will force update` analog -- the ReconcilePlan has no
+      // deliberately NO `will partially update` analog -- the ReconcilePlan has no
       // update bucket (only install/uninstall/enable/disable + marketplace
-      // add/remove + sourceMismatches), so no force-update row is ever
-      // constructed here; the will-force-update token is vacuous.
+      // add/remove + sourceMismatches), so no partial-update row is ever
+      // constructed here; the will-partially-update token is vacuous.
       const force = forceInstallKeys.has(forceInstallKey(o.scope, o.marketplace, o.plugin));
       block.plugins.push({
         status: "will install",
@@ -501,7 +501,7 @@ function applyOutcomeToBlock(
       // place. The re-resolved `installable` selects the row: a fully promoted
       // plugin (unsupported set now empty) reuses the `installed` row including
       // `dependencies` for the soft-dep markers; a partial re-materialize (still
-      // degraded) renders a `force-installed` row. Both fold into THIS single
+      // degraded) renders a `partially-installed` row. Both fold into THIS single
       // applied cascade -- no second notify() (RECON-04).
       if (outcome.installable) {
         block.plugins.push({
