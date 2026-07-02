@@ -2,14 +2,17 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Force Install
+current_phase: 75
 status: verifying
-last_updated: "2026-07-02T18:38:50.617Z"
+stopped_at: Completed 75-01-PLAN.md
+last_updated: "2026-07-02T19:58:03.494Z"
 last_activity: 2026-07-02
+last_activity_desc: Phase 75 complete
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 33
-  completed_plans: 33
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 35
+  completed_plans: 35
   percent: 100
 ---
 
@@ -23,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 75 (Rename force/unsupported vocabulary to partial/partially-available) — EXECUTING
-Plan: 2 of 2
+Phase: 75
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-02
+Last activity: 2026-07-02 — Phase 75 complete
 
 ## Performance Metrics
 
