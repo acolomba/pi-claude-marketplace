@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: force-install
-milestone_name: "**Goal**: A plugin whose `hooks.json` parses but contains unsupportable hooks"
-current_phase: 74
-status: milestone_complete_pending_close
-stopped_at: All 12 phases complete + verified; milestone audit PASSED; left OPEN (not archived/tagged) by operator choice pending release flow
-last_updated: "2026-06-30T09:59:08.385Z"
-last_activity: 2026-06-30
-last_activity_desc: Phase 74 complete
+milestone_name: "Force Install"
+status: Awaiting next milestone
+stopped_at: force-install milestone closed and archived 2026-07-02; shipped as 0.7.0 via PR #77
+last_updated: "2026-07-02T02:05:50.034Z"
+last_activity: 2026-07-02
+last_activity_desc: Milestone force-install completed and archived
 progress:
   total_phases: 12
   completed_phases: 12
   total_plans: 33
   completed_plans: 33
   percent: 100
+current_phase: 74
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 ## Current Position
 
-Phase: 74
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-06-30 — Phase 74 complete
+Phase: Milestone force-install complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-02 — Milestone force-install completed and archived
 
 ## Performance Metrics
 
@@ -366,6 +366,13 @@ Genuinely-open deferral (v1.4.1 scope):
 | state_migration    | Migration tooling for already-installed `hash-<12hex>` plugins whose plugin.json declares a SemVer                                                                                                                                                                                                                                                                                      | out of scope v1.4.1; marketplace update will naturally surface as upgradable post-SNM-34                                                                                                                       | 2026-05-28  |
 | testing            | Coverage sweep: rare failure arms in update/reinstall/install ([.planning/todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md](./todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md))                                                                                                                       | acknowledged at v1.13 close 2026-06-19; deferred to v1.14+; testing-only, no runtime impact                                                                                                                   | 2026-06-19  |
 
+Acknowledged at force-install close (2026-07-02):
+
+| Category | Item | Status |
+|----------|------|--------|
+| quick_task | 260621-kmm-add-explicit-enabled-boolean-field-to-pl | stale (shipped in 0.6.1) |
+| todo | 2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall | deferred (testing) |
+
 Resolved / no longer open:
 
 - _v1.3 quick-task frontmatter (7 tasks: 260515-bkt/cmp/tqx/wpe, 260516-02r/08j, 260522-c80): **RESOLVED 2026-06-08.** All seven were archived to `.planning/milestones/v1.4-quick-tasks/` at v1.4 close; `audit-open` no longer scans them and reports clear. The pre-canonical SUMMARY frontmatter is a historical-record detail with no live flag -- no follow-up work._
@@ -383,32 +390,17 @@ _RESOLVED 2026-06-30._ All force-install phases (64-74) are executed, verified
 (`status: passed`), and the milestone audit PASSED (42/42 requirements, 12/12
 phases, cross-phase integration clean, 4/4 E2E flows). Phases 73 (cross-surface
 `⊖`/`⊘` unification) and 74 (bulk-update grammar) closed the UAT findings.
-Audit report: `.planning/vforce-install-MILESTONE-AUDIT.md`.
+Audit report: `.planning/milestones/force-install-MILESTONE-AUDIT.md`.
 
 ## Session Continuity
 
 Last session: 2026-06-30T06:22:00.000Z
-Stopped At: Milestone force-install audited + PASSED. Left OPEN by operator
-choice (not archived/tagged) so the release flow can run first. Two pre-existing
-backlog items flagged at the close-audit await resolution (operator chose
-"stop to resolve", not defer).
+Stopped At: force-install milestone closed and archived 2026-07-02; shipped as
+0.7.0 via PR #77. Two pre-existing backlog items acknowledged at close (quick_task
+260621-kmm -- stale, shipped in 0.6.1; coverage-sweep todo -- deferred, testing);
+see the Deferred Items section.
 Resume File: None
 
 ## Operator Next Steps
 
-- Release flow before closing the GSD milestone (per CLAUDE.md): bump
-  `package.json` + `sonar-project.properties`, update `package-lock.json`,
-  record changes in `CHANGELOG.md`, then open a `--squash` PR for
-  `features/force-install` (264 commits ahead of origin/HEAD).
-- Resolve the two pre-existing open backlog items (operator chose to resolve,
-  not defer):
-  - `260621-kmm` (ENBL-02 enabled-flag quick-task): VERIFIED SHIPPED in v0.6.1
-    (commit 222a7344; `enabled: boolean` + schemaVersion 2 live in state-io.ts).
-    Only the tracking status is stale -- mark complete to clear it.
-  - `2026-06-12-coverage-sweep` todo: GENUINELY OPEN. Targeted test sweep of
-    rare failure/rollback arms in update/reinstall/install/marketplace-update/
-    import orchestrators (~95.9% -> ~97%); plus an explicit decide-tests-vs-
-    sonar-exclusion call on `orchestrators/edge-deps.ts` (49.7%).
-- After release + backlog resolution: `/gsd-complete-milestone` then
-  `/gsd-cleanup` to archive force-install (choose the tag name deliberately --
-  GSD milestones here are `v1.x`, npm releases are `0.6.x`).
+- Start the next milestone with /gsd-new-milestone

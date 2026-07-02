@@ -2,6 +2,28 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: force-install
+
+**Shipped:** 2026-07-02 as `pi-claude-marketplace@0.7.0` (PR #77)
+**Phases:** 12 (Phases 64-74, incl. inserted 65.1) | **Plans:** 33 | **Tasks:** 71 | **Requirements:** 42/42
+
+### What Was Built
+- A **three-way resolver state** (`installable` / `unsupported` / `unavailable`) replacing the binary `installable: true|false`, with `requireInstallable` / `requireForceInstallable` narrowing gates. `unavailable` (structural defects: bad manifest/hooks, NFR-10 path violation) exposes `pluginRoot` to no consumer, so `--force` can degrade components but never rescue a hard failure -- NFR-7 refined, not weakened.
+- `install` / `update --force` degrade-not-block on partially-supported plugins, with **derived** force-state (`force-installed` ◉ / `force-upgradable` ●) -- no persisted flag, no migration. A force-installed plugin returns to `(installed)` automatically once its components become supported; a version-gated load-time backfill (`lastReconciledExtensionVersion` stamp) re-materializes it when the extension gains a new bridge.
+- Cross-surface consistency: an `--unsupported` list filter, force-aware completion, reinstall demoted to an unconditional repair primitive, partial-hook degradation (install the supportable handlers, drop the rest), and a distinct `⊖ (unsupported)` token unified across list / info / install-error / update-decline via the shared `narrowUnsupportedKinds` anchor.
+- SEV-01..05 desired-state severity: direct force degrade at info, missing soft-dep / reinstall-recovery at warning, no-force unsupported install at error with a `--force` hint, structural unavailable at error with no hint.
+
+### What Worked
+- Foundation-first sequencing (Phase 64 three-way state before every downstream surface) meant each later phase composed a frozen resolver seam -- the same load-bearing-primitive-lands-first pattern proven across prior milestones.
+- Deriving force-state instead of persisting a sticky flag (the earlier attempt was built and removed) eliminated the migration + drift cost and gave the auto-promotion-to-`(installed)` path for free.
+- Atomic catalog-lockstep amendments held across the new tokens (`force-installed`, `⊖ (unsupported)`, `force-upgradable`) -- byte fixtures landed in the same commit as the renderer arm.
+- Post-"final-phase" UAT (2026-06-29) surfaced two real gaps, and Phases 72-74 were inserted to close them rather than deferring: install-error / update-decline still said `⊘ (unavailable)`, and bulk `update` inflated its "successes" count with up-to-date no-ops.
+
+### Key Lessons
+1. **Derive state that can be recomputed from the source of truth rather than persisting it.** The removed sticky-flag attempt confirmed the migration/drift tax of persistence; the derived model needed neither a schema bump nor a backfill migration.
+2. **One cross-surface byte-parity anchor makes "consistent everywhere" verifiable.** `narrowUnsupportedKinds`, imported by all four surfaces, is what let the audit assert token/reason parity and regression-lock it -- mirroring v1.10's cross-op convergence matrix lesson.
+3. **UAT after the "last" phase still earns its keep.** The `⊖`/`⊘` cross-surface inconsistency and the inflated bulk-update count were only visible against real command output, not notify-boundary fixtures -- three phases (72-74) came out of that hands-on pass.
+
 ## Milestone: v1.13 -- Claude Hook Bridge
 
 **Shipped:** 2026-06-19 as `pi-claude-marketplace@0.6.0`

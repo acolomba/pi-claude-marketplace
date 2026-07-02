@@ -1,3 +1,12 @@
+# Requirements Archive: force-install Force Install
+
+**Archived:** 2026-07-02
+**Status:** SHIPPED
+
+For current requirements, see `.planning/REQUIREMENTS.md`.
+
+---
+
 # Requirements: pi-claude-marketplace — force-install
 
 **Defined:** 2026-06-26
