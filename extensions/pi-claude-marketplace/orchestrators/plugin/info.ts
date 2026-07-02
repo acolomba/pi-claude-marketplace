@@ -836,14 +836,14 @@ function buildNonInstallableRowFields(
 }
 
 /**
- * WR-02 / D-66-01: build the `(installed)` / `(force-installed)` row for a
+ * WR-02 / D-66-01: build the `(installed)` / `(partially-installed)` row for a
  * NON-PATH source (github / npm / url / git-subdir). INFO-05 defers LIVE
  * component resolution for these sources to preserve NFR-5 (never fetch), so
  * `componentsResolved: false` is always emitted. The install-time
  * `compatibility.unsupported` record, however, was persisted AT INSTALL and is
  * read OFFLINE here -- the SAME single deriver `list` reads (list.ts
  * force-installed branch). A recorded-installed non-path plugin whose install
- * dropped one or more components therefore reports `(force-installed)` here too,
+ * dropped one or more components therefore reports `(partially-installed)` here too,
  * so `info` and `list` never diverge on the derived force state for non-path
  * sources.
  */
@@ -921,11 +921,11 @@ async function buildInstalledRow(opts: {
     // declares an unsupported field (`lspServers`) or a structural defect
     // (malformed hooks/manifest). FSTAT-07 / D-66-04: an `unsupported`
     // re-resolve of a recorded-installed plugin is the derived
-    // `force-installed` state -- the install was force-completed with one or
-    // more components dropped, so it reports `(force-installed)` with the
+    // `partially-installed` state -- the install was force-completed with one or
+    // more components dropped, so it reports `(partially-installed)` with the
     // dropped-component detail. `unavailable` keeps `(installed)` (D-64-05:
     // only `unsupported` maps to force-installed); info never emits
-    // `force-upgradable` (that is a list-inventory-only concept).
+    // `partially-upgradable` (that is a list-inventory-only concept).
     // `unsupported` reads its component payload directly; `unavailable`
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
