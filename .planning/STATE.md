@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: force-install
 milestone_name: Force Install
-status: executing
-last_updated: "2026-07-02T17:44:51.201Z"
+status: verifying
+last_updated: "2026-07-02T18:38:50.617Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 12
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-08)
 
 Phase: 75 (Rename force/unsupported vocabulary to partial/partially-available) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-02
 
 ## Performance Metrics
@@ -149,6 +149,7 @@ Last activity: 2026-07-02
 | Phase 73 P01 | 28min | 3 tasks | 14 files |
 | Phase 74 P01 | 23min | 3 tasks | 7 files |
 | Phase 75 P01 | 56min | 2 tasks | 31 files |
+| Phase 75 P02 | 45min | 3 tasks | 52 files |
 
 ## Accumulated Context
 
@@ -318,6 +319,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 74]: Bulk-update never-silent no-op headline 'Plugin update: nothing to update' is orchestrator-owned via emitUpdateNoOpCascade, not composeTally (count:0 collapses to empty)
 - [Phase ?]: Phase 75 Plan 01: renamed --force/--unsupported user flags to --partial (no alias) and internal degrade plumbing (requirePartialInstallable, partialable, .partial, partialDegrade, partialUpgradable, PARTIAL_*_STATUSES, list opts.partial); OUTPUT byte-identical, output-vocabulary flip deferred to Plan 02.
 - [Phase ?]: Landed Plan 75-01 as one commit (525e57ed): data.ts + edge install/update handlers carry edits from both tasks, so a per-task split needs interactive staging (disabled); plan <verification> also mandated a single commit.
+- [Phase ?]: Phase 75-02: force/unsupported output vocabulary renamed to partial/partially-available as one atomic byte-supersession (Task 1+2 merged: renderPluginInfo derives its token via status literal); completion-cache schemaVersion 4 self-heals stale v3 caches
 
 ### Pending Todos
 
@@ -395,7 +397,7 @@ Audit report: `.planning/milestones/force-install-MILESTONE-AUDIT.md`.
 
 ## Session Continuity
 
-Last session: 2026-07-02T17:44:40.758Z
+Last session: 2026-07-02T18:38:06.380Z
 Stopped At: Completed 75-01-PLAN.md
 0.7.0 via PR #77. Two pre-existing backlog items acknowledged at close (quick_task
 260621-kmm -- stale, shipped in 0.6.1; coverage-sweep todo -- deferred, testing);
