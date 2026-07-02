@@ -148,7 +148,7 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
    *
    * `kinds` are the unsupported component kinds carried on the candidate's
    * `unsupported` resolver arm. Non-empty flips the success row to
-   * `(force-installed)` with the dropped-component detail (the same derived
+   * `(partially-installed)` with the dropped-component detail (the same derived
    * signal the list deriver reads), so a force update reports its true realized
    * state.
    *
@@ -156,7 +156,7 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
    * previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported`
    * was EMPTY before the update applied. Read from the prior install record in
    * `preflightUpdate` (no new tracking, no schema change). The marketplace
-   * autoupdate cascade renderer reads it to raise the `(force-installed)` row to
+   * autoupdate cascade renderer reads it to raise the `(partially-installed)` row to
    * `warning` (a silent auto-update degradation is actionable); an
    * already-degraded re-degrade (prior `unsupported` non-empty) stays `info`.
    * The manual `update --partial` renderer ignores it -- the explicit opt-in stays

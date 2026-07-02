@@ -226,7 +226,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // scope -- a scope can be EITHER in `plans` OR in `invalidBlocks`, never
   // both.
   // FSTAT-06 / D-66-04 / NFR-5: resolve each planned install candidate
-  // no-network so the pending row renders `(will force install)` when the
+  // no-network so the pending row renders `(will partially install)` when the
   // install would degrade (candidate resolves `unsupported`). The locator reads
   // only the recorded marketplace's on-disk manifest (cache; no network sync) +
   // delegates the resolve to resolvePendingForceInstalls (which owns the

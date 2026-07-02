@@ -135,7 +135,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   pluginJsonVersion?: string | null;
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
-   * plugin.json so `resolveStrict` returns `state: "unsupported"` with NO
+   * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
    * structural defect (force-degradable). E.g.
    * `{ themes: "./themes", monitors: "./monitors.json" }`. The referenced paths
    * need not exist -- the declaration alone drives the `unsupported` arm.
@@ -2331,9 +2331,9 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
       scope: "project",
     }),
   });
-  assert.equal(partialableMsg.status, "unsupported");
-  assert.ok(partialableMsg.status === "unsupported");
-  assert.equal(partialableMsg.forceHint, true);
+  assert.equal(partialableMsg.status, "partially-available");
+  assert.ok(partialableMsg.status === "partially-available");
+  assert.equal(partialableMsg.partialHint, true);
   assert.equal(partialableMsg.severity, "error");
 
   // D-70-02: structural `unavailable` arm -> error severity, but NO `--force`
@@ -2359,7 +2359,7 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   });
   assert.equal(structuralMsg.status, "unavailable");
   assert.ok(structuralMsg.status === "unavailable");
-  assert.equal(structuralMsg.forceHint, undefined);
+  assert.equal(structuralMsg.partialHint, undefined);
   assert.equal(structuralMsg.severity, "error");
 });
 
@@ -2526,11 +2526,11 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       // reason source).
       assert.match(
         noForce.notifications[0]?.message ?? "",
-        /hook-plugin \(unsupported\) \{unsupported hooks\}/,
+        /hook-plugin \(partially-available\) \{unsupported hooks\}/,
       );
       assert.match(
         noForce.notifications[0]?.message ?? "",
-        /Re-run with --force to install the supported components\./,
+        /Re-run with --partial to install the supported components\./,
       );
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
       await assert.rejects(readFile(stagedPath, "utf8"), "no-force install must stage nothing");
@@ -2542,7 +2542,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       );
 
       // SEV-01 / D-71-06: with `--force` the supported components install, the
-      // Stop event degrades, and the success row reads `(force-installed)
+      // Stop event degrades, and the success row reads `(partially-installed)
       // {unsupported hooks}` at info severity with NO summary line (the body
       // begins at the marketplace header, not a `... failed.` / `... attention.`
       // summary). FSTAT-07: the row reads `force-installed`.
@@ -2560,7 +2560,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       const forcedMsg = forced.notifications[0]?.message ?? "";
       assert.notEqual(forced.notifications[0]?.severity, "error");
       assert.notEqual(forced.notifications[0]?.severity, "warning");
-      assert.match(forcedMsg, /\(force-installed\)/);
+      assert.match(forcedMsg, /\(partially-installed\)/);
       assert.match(forcedMsg, /\{unsupported hooks\}/);
       assert.ok(
         forcedMsg.startsWith("●"),
@@ -3483,7 +3483,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
   });
 });
 
-test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-installed) success row", async () => {
+test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partially-installed) success row", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-installed-"));
     try {
@@ -3496,7 +3496,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
         pluginJsonVersion: "1.0.0",
         skills: [{ sourceName: "tool" }],
         // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm; the success row reports (force-installed) with the
+        // `unsupported` arm; the success row reports (partially-installed) with the
         // dropped-component detail rather than (installed).
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
@@ -3520,7 +3520,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (force-installed) {unsupported source}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3530,7 +3530,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
   });
 });
 
-test("WR-03: a (force-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
+test("WR-03: a (partially-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));
     try {
@@ -3546,7 +3546,7 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         skills: [{ sourceName: "tool" }],
         agents: [{ sourceName: "bot" }],
         // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm -> the row is (force-installed) {unsupported source}.
+        // `unsupported` arm -> the row is (partially-installed) {unsupported source}.
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
@@ -3576,7 +3576,7 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (force-installed) {unsupported source, requires pi-subagents}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source, requires pi-subagents}\n" +
           "\n" +
           "/reload to pick up changes",
       );

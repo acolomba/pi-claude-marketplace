@@ -80,12 +80,12 @@ import type {
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
-  PluginForceInstalledMessage,
-  PluginForceUpgradableMessage,
+  PluginPartiallyInstalledMessage,
+  PluginPartiallyUpgradableMessage,
   PluginInstalledMessage,
   PluginNotificationMessage,
   PluginUnavailableMessage,
-  PluginUnsupportedMessage,
+  PluginPartiallyAvailableMessage,
   PluginUpgradableMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -106,21 +106,21 @@ type PluginRenderStatus =
   | "installed"
   | "upgradable"
   | "available"
-  | "unsupported"
+  | "partially-available"
   | "unavailable"
   | "disabled"
   // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
   // rows. LIST-01 / D-67-01 / A1: the `--installed` filter now spans them --
   // both are installed-inventory rows, so `shouldShow` admits them under an
   // active `--installed` filter (precedent: the fold-carryover filter below).
-  | "force-installed"
-  | "force-upgradable";
+  | "partially-installed"
+  | "partially-upgradable";
 
 /**
  * LIST-01 / D-67-01: the internal resolver-state bucket the filter predicate
  * keys on. It is retained as a concept DISTINCT from {@link PluginRenderStatus}
  * even though USTAT-01 / D-64-01 now de-collapses the render tokens (resolver
- * `unsupported` renders `(unsupported)` / `⊖`, structural `unavailable` renders
+ * `unsupported` renders `(partially-available)` / `⊖`, structural `unavailable` renders
  * `(unavailable)` / `⊘`): the filter keys on this pre-collapse bucket so
  * `--partial` (not-installed plugins resolving `unsupported` -- the
  * force-installable candidates) partitions cleanly from `--unavailable`
@@ -130,7 +130,7 @@ type PluginRenderStatus =
  * not resolver-classified here -- they carry the `installed-inventory` bucket
  * and the filter keys on their render status instead.
  */
-type FilterBucket = "installed-inventory" | "available" | "unsupported" | "unavailable";
+type FilterBucket = "installed-inventory" | "available" | "partially-available" | "unavailable";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -204,8 +204,8 @@ function shouldShow(
     (status === "installed" ||
       status === "upgradable" ||
       status === "disabled" ||
-      status === "force-installed" ||
-      status === "force-upgradable")
+      status === "partially-installed" ||
+      status === "partially-upgradable")
   ) {
     return true;
   }
@@ -216,13 +216,13 @@ function shouldShow(
 
   // D-67-01: `--partial` selects not-installed plugins that resolve
   // `unsupported`, keyed on the pre-collapse resolver bucket (the row renders
-  // the de-collapsed `(unsupported)` / `⊖` token per USTAT-01).
-  if (opts.partial === true && bucket === "unsupported") {
+  // the de-collapsed `(partially-available)` / `⊖` token per USTAT-01).
+  if (opts.partial === true && bucket === "partially-available") {
     return true;
   }
 
   // A2: `--unavailable` narrows to the structural `unavailable` bucket only --
-  // the not-installed `unsupported` rows (now a distinct `(unsupported)` token)
+  // the not-installed `unsupported` rows (now a distinct `(partially-available)` token)
   // are excluded.
   if (opts.unavailable === true && bucket === "unavailable") {
     return true;
@@ -312,8 +312,8 @@ async function installedRowMessage(
   | PluginInstalledMessage
   | PluginUpgradableMessage
   | PluginDisabledMessage
-  | PluginForceInstalledMessage
-  | PluginForceUpgradableMessage
+  | PluginPartiallyInstalledMessage
+  | PluginPartiallyUpgradableMessage
 > {
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
@@ -358,7 +358,7 @@ async function installedRowMessage(
   // CR-01 degrade live inside the classifier.
   //
   // D-66-02 / FSTAT-04 / FSTAT-05: an upgradable clean record's `(upgradable)`
-  // vs `(force-upgradable)` split turns on a NO-NETWORK `resolveStrict` of the
+  // vs `(partially-upgradable)` split turns on a NO-NETWORK `resolveStrict` of the
   // CANDIDATE manifest entry. `resolveStrict` is the cache/no-network resolver
   // (NFR-5), guarded by the no-orchestrator-network architecture test. The
   // probe runs only when `upgradable` (no force-installed/installed wasted
@@ -395,12 +395,12 @@ async function installedRowMessage(
   // dropped-component detail uses the shared `narrowUnsupportedKinds` render
   // helper (D-64-02) for cross-surface marker parity. WR-02: a
   // `force-installed-upgradable` record (a force-installed row that also carries
-  // a meaningful upgrade candidate) renders IDENTICALLY to `(force-installed)`
+  // a meaningful upgrade candidate) renders IDENTICALLY to `(partially-installed)`
   // here -- the upgrade affordance is a completion-only distinction (offered
   // under `update --partial`); the list row reflects the CURRENT degraded state.
-  if (status === "force-installed" || status === "force-installed-upgradable") {
+  if (status === "partially-installed" || status === "partially-installed-upgradable") {
     return {
-      status: "force-installed",
+      status: "partially-installed",
       name: pluginName,
       reasons: narrowUnsupportedKinds(record.compatibility.unsupported),
       version: record.version,
@@ -409,15 +409,15 @@ async function installedRowMessage(
     };
   }
 
-  if (status === "force-upgradable") {
+  if (status === "partially-upgradable") {
     // The classifier returns `force-upgradable` ONLY when the candidate
     // resolved `unsupported`; narrow on the same condition to read its
     // dropped-component kinds for the row reasons.
     return {
-      status: "force-upgradable",
+      status: "partially-upgradable",
       name: pluginName,
       reasons:
-        candidateResolved?.state === "unsupported"
+        candidateResolved?.state === "partially-available"
           ? narrowUnsupportedKinds(candidateResolved.unsupported)
           : [],
       version: record.version,
@@ -476,11 +476,11 @@ function narrowProbeError(err: unknown): ListReason {
 
 /**
  * Resolve a not-yet-installed manifest entry into a `{ message, bucket }` pair
- * whose `message` is a `PluginAvailableMessage`, `PluginUnsupportedMessage`, or
+ * whose `message` is a `PluginAvailableMessage`, `PluginPartiallyAvailableMessage`, or
  * `PluginUnavailableMessage`.
  *
  * The row de-collapses by `resolved.state`: `installable` -> `(available)`;
- * `unsupported` -> `(unsupported)` with the dropped-component reasons narrowed
+ * `unsupported` -> `(partially-available)` with the dropped-component reasons narrowed
  * via the shared kind helper (force-installable); structural `unavailable` (or a
  * resolveStrict throw) -> `(unavailable)` with the failure reasons narrowed to
  * closed-set REASONS.
@@ -499,7 +499,7 @@ async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
 ): Promise<{
-  message: PluginAvailableMessage | PluginUnsupportedMessage | PluginUnavailableMessage;
+  message: PluginAvailableMessage | PluginPartiallyAvailableMessage | PluginUnavailableMessage;
   bucket: FilterBucket;
 }> {
   // PL-4: description flows from the manifest entry onto the row for both
@@ -519,7 +519,7 @@ async function availableRowMessage(
 
     // USTAT-01 / D-64-01: the render now de-collapses by resolver STATE. The
     // `installable` arm is `(available)`; the `unsupported` arm emits the
-    // distinct `(unsupported)` / `⊖` row (force-installable: components would be
+    // distinct `(partially-available)` / `⊖` row (force-installable: components would be
     // dropped under `--partial`); the structural `unavailable` arm keeps
     // `(unavailable)` / `⊘`. The split follows `resolved.state`, NEVER the
     // reason brace (the same `{unsupported hooks}` brace can appear on both
@@ -541,13 +541,13 @@ async function availableRowMessage(
           },
           bucket,
         };
-      case "unsupported":
+      case "partially-available":
         // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the
         // typed `unsupported[]` component-kind list via the shared render
         // helper.
         return {
           message: {
-            status: "unsupported",
+            status: "partially-available",
             name: manifestEntry.name,
             reasons: narrowUnsupportedKinds(resolved.unsupported),
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
@@ -584,7 +584,7 @@ async function availableRowMessage(
     // Resolver notes route through `narrowResolverNotes` (the path that produces
     // them is `resolveStrict` returning the structural `unavailable` arm with
     // structured notes -- handled above on the `case "unavailable"` arm of
-    // `switch (resolved.state)`; the `case "unsupported"` arm instead narrows its
+    // `switch (resolved.state)`; the `case "partially-available"` arm instead narrows its
     // typed component kinds via `narrowUnsupportedKinds`). Thrown probe failures
     // route through `narrowProbeError` so the row reports the actual cause class
     // (EACCES, JSON parse failures, and programming bugs are not hidden behind
@@ -918,8 +918,8 @@ export async function loadPluginListPayload(
           r.status === "installed" ||
           r.status === "upgradable" ||
           r.status === "disabled" ||
-          r.status === "force-installed" ||
-          r.status === "force-upgradable",
+          r.status === "partially-installed" ||
+          r.status === "partially-upgradable",
       );
       // Record the folded plugin names so the user-scope manifest's
       // available-bucket enumeration skips them (catalog
@@ -1013,15 +1013,15 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
       case "upgradable":
       case "installed":
       case "disabled":
-      case "force-installed":
-      case "force-upgradable":
+      case "partially-installed":
+      case "partially-upgradable":
         // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` and
         // join the scope-bearing list-surface variants. The SNM-11 carve-out
         // applies only to `available` / `unavailable`.
         return p.scope ?? marketplaceScope;
       case "available":
       case "unavailable":
-      case "unsupported":
+      case "partially-available":
         // USTAT-01 / SNM-11: the `unsupported` row has no `scope` field (the
         // carve-out covers `available` / `unavailable` / `unsupported`).
         return marketplaceScope;

@@ -20,14 +20,14 @@ import { requirePartialInstallable } from "../../extensions/pi-claude-marketplac
 import type {
   ResolvedPlugin,
   ResolvedPluginInstallable,
-  ResolvedPluginUnsupported,
+  ResolvedPluginPartiallyAvailable,
   ResolvedPluginUnavailable,
   MaterializablePlugin,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 declare const r: ResolvedPlugin;
 declare const inst: ResolvedPluginInstallable;
-declare const unsup: ResolvedPluginUnsupported;
+declare const unsup: ResolvedPluginPartiallyAvailable;
 declare const unavail: ResolvedPluginUnavailable;
 declare const materializable: MaterializablePlugin;
 
@@ -45,7 +45,7 @@ function consumeUnsupported(): string {
 }
 
 function narrowOnDiscriminator(): string | undefined {
-  if (r.state === "installable" || r.state === "unsupported") {
+  if (r.state === "installable" || r.state === "partially-available") {
     return r.pluginRoot; // OK -- narrowed to installable | unsupported (NFR-7)
   }
 
@@ -75,7 +75,7 @@ function narrowOnDiscriminatorNegative(): void {
 
 function gateNarrowsForce(): string {
   requirePartialInstallable(r);
-  // r is now ResolvedPluginInstallable | ResolvedPluginUnsupported -- pluginRoot readable.
+  // r is now ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable -- pluginRoot readable.
   return r.pluginRoot;
 }
 

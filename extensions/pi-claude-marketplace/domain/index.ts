@@ -29,7 +29,7 @@ export { computeHashVersion, HASH_WALK_SKIP } from "./version.ts";
 export type {
   ResolvedPlugin,
   ResolvedPluginInstallable,
-  ResolvedPluginUnsupported,
+  ResolvedPluginPartiallyAvailable,
   ResolvedPluginUnavailable,
   MaterializablePlugin,
   ResolveContext,

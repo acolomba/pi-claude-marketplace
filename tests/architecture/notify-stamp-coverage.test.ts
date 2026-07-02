@@ -63,7 +63,7 @@ const TRANSITION_STATUS_LIST = [
   // true, identical to `installed`), so it joins the stamp-coverage set.
   // `force-upgradable` is deliberately EXCLUDED -- it is a list-inventory-only
   // row (needsReload false), never a realized transition.
-  "force-installed",
+  "partially-installed",
 ] as const satisfies readonly PluginStatus[];
 
 const TRANSITION_STATUSES: ReadonlySet<PluginStatus> = new Set(TRANSITION_STATUS_LIST);

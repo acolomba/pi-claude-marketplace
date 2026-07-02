@@ -266,7 +266,7 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 // appear on both arms (the structural arm via `narrowResolverNotes`, the
 // force-degradable arm via `narrowUnsupportedKinds`):
 //   - list `single-mp-mixed`: `epsilon` carries `lsp` -> unambiguously resolver
-//     `unsupported` -> modeled as `status: "unsupported"` -> `⊖ (unsupported)`;
+//     `unsupported` -> modeled as `status: "partially-available"` -> `⊖ (unsupported)`;
 //     `delta` models the structural malformed-`hooks.json` arm -> stays
 //     `status: "unavailable"` -> `⊘ (unavailable)`. The catalog thus documents
 //     BOTH de-collapsed byte forms on the list surface.
@@ -312,7 +312,7 @@ const FIXTURES: FixtureMap = {
               },
               { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
               {
-                status: "unsupported",
+                status: "partially-available",
                 name: "epsilon",
                 reasons: ["unsupported hooks", "lsp"],
               },
@@ -688,7 +688,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -718,7 +718,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hook-plugin",
                 version: "1.0.0",
                 reasons: ["unsupported hooks"],
@@ -743,7 +743,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 name: "clean-plugin",
                 version: "1.0.0",
                 reasons: ["unsupported source"],
@@ -870,7 +870,7 @@ const FIXTURES: FixtureMap = {
 
     // WR-03: a `--force` install succeeds with one or more components dropped
     // (the resolver's `unsupported` arm) -- the success row is
-    // `(force-installed)`. The force-degradable arm still stages the SUPPORTED
+    // `(partially-installed)`. The force-degradable arm still stages the SUPPORTED
     // components, so the row carries `dependencies`; with the `agents` companion
     // extension unloaded the soft-dep marker fires in the SAME brace AFTER the
     // dropped-component reason (MSG-GR-4), rendering `{lsp, requires
@@ -890,7 +890,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 severity: "warning",
                 needsReload: true,
                 name: "helper",
@@ -918,10 +918,10 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "unsupported",
+                status: "partially-available",
                 name: "helper",
                 reasons: ["unsupported hooks", "lsp"],
-                forceHint: true,
+                partialHint: true,
                 severity: "error",
               },
             ],
@@ -1678,7 +1678,7 @@ const FIXTURES: FixtureMap = {
     // that declines a force-upgradable candidate (no `--force`) is actionable
     // -> warning. The decline flips to the `force-upgradable` token (consistent
     // with how `list` describes the same plugin) carrying the list-consistent
-    // degrade reason + the update-worded `--force` trailer (forceHint). Single
+    // degrade reason + the update-worded `--force` trailer (partialHint). Single
     // cardinality, so no trailing tally; the cascade carries the `needs
     // attention` summary line.
     "decline-force-upgradable-targeted": {
@@ -1693,10 +1693,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "warning",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -1712,9 +1712,9 @@ const FIXTURES: FixtureMap = {
     // Same `force-upgradable` token + `--force` trailer as the targeted form; no
     // summary line; the plural tally counts the info skip among its successes.
     // UGRM-01/UGRM-02: a bulk update whose only non-`updated` row is a benign
-    // info `(force-upgradable)` decline (partition `skipped`, 0 updated, 0
+    // info `(partially-upgradable)` decline (partition `skipped`, 0 updated, 0
     // failures/warnings) is a zero-realized-transition cascade. The Phase-73
-    // `(force-upgradable) {lsp}` body row + `--force` trailer still render, but
+    // `(partially-upgradable) {lsp}` body row + `--force` trailer still render, but
     // the headline is the never-silent `Plugin update: nothing to update`
     // constant -- emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext`),
     // NOT by composeTally (which would collapse a `tally {count: 0}` override to
@@ -1732,10 +1732,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "info",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -1751,10 +1751,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "info",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -2756,8 +2756,8 @@ const FIXTURES: FixtureMap = {
     },
 
     // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path, so a
-    // candidate re-resolving `unsupported` renders `(force-installed) {dropped
-    // kinds}` (◉ glyph, via the shared `forceInstalledRow`) instead of
+    // candidate re-resolving `unsupported` renders `(partially-installed) {dropped
+    // kinds}` (◉ glyph, via the shared `partiallyInstalledRow`) instead of
     // declining with `(skipped) {no longer installable}`. ALREADY-degraded case:
     // the persisted `compatibility.unsupported` was non-empty before the
     // auto-update, so re-degrading is benign -> INFO (no `expectedSeverity`).
@@ -2772,7 +2772,7 @@ const FIXTURES: FixtureMap = {
             status: "updated",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 scope: "user",
                 version: "1.0.0",
@@ -2787,7 +2787,7 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-03 / D-69-01: the SAME `(force-installed)` autoupdate row, but the
+    // SEV-03 / D-69-01: the SAME `(partially-installed)` autoupdate row, but the
     // auto-update NEWLY degrades a previously-clean plugin (the persisted
     // `compatibility.unsupported` was empty before the update). A silent
     // automatic degradation is actionable -> `warning` + the `needs attention`
@@ -2804,7 +2804,7 @@ const FIXTURES: FixtureMap = {
             status: "updated",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 scope: "user",
                 version: "1.0.0",
@@ -3259,7 +3259,7 @@ const FIXTURES: FixtureMap = {
     },
     // FSTAT-06 / D-66-04: a pending child install whose no-network candidate
     // resolves `unsupported` carries the `force` modifier, rendering
-    // `(will force install)` in place of `(will install)`. A render modifier,
+    // `(will partially install)` in place of `(will install)`. A render modifier,
     // not a new token; no `will force update` analog exists (D-66-05).
     "mp-add-plugin-force-install": {
       pi: piWithBothLoaded(),
@@ -3268,7 +3268,7 @@ const FIXTURES: FixtureMap = {
           {
             name: "new-mp",
             scope: "user",
-            plugins: [{ status: "will install", name: "degraded-plugin", force: true }],
+            plugins: [{ status: "will install", name: "degraded-plugin", partial: true }],
           },
         ],
       },
@@ -3558,7 +3558,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
@@ -3587,7 +3587,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
@@ -3732,30 +3732,30 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
 });
 
 // XSURF-03 cross-surface byte-parity: the `update`-decline `force-upgradable`
-// reason brace MUST be byte-identical to the `list (force-upgradable)` reason
+// reason brace MUST be byte-identical to the `list (partially-upgradable)` reason
 // brace for the SAME degrade kinds. This is what justifies sourcing the
 // update-decline reason via the SAME `narrowUnsupportedKinds` seam the `list`
 // row uses (rather than the install-path `narrowResolverReasons`, which also
 // folds in note-derived reasons and could diverge). The assertion renders both
-// rows through `notify()` and compares the `(force-upgradable) {…}` segment.
+// rows through `notify()` and compares the `(partially-upgradable) {…}` segment.
 test("XSURF-03: update-decline force-upgradable reason brace === list force-upgradable brace (same kinds)", () => {
   // Both surfaces source the degrade reason from the shared kind-narrowing seam.
   const kinds = ["lspServers", "themes"];
   const reasons = narrowUnsupportedKinds(kinds);
 
-  // The list-inventory row (no forceHint -> no trailer).
+  // The list-inventory row (no partialHint -> no trailer).
   const listCtx = makeCtx();
   notify(listCtx as never, piWithBothLoaded() as never, {
     marketplaces: [
       {
         name: "mp",
         scope: "project",
-        plugins: [{ status: "force-upgradable", name: "hello", version: "1.0.0", reasons }],
+        plugins: [{ status: "partially-upgradable", name: "hello", version: "1.0.0", reasons }],
       },
     ],
   });
 
-  // The update-decline row (forceHint -> update trailer + warning severity).
+  // The update-decline row (partialHint -> update trailer + warning severity).
   const declineCtx = makeCtx();
   notify(declineCtx as never, piWithBothLoaded() as never, {
     label: "Plugin update",
@@ -3766,11 +3766,11 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
         scope: "project",
         plugins: [
           {
-            status: "force-upgradable",
+            status: "partially-upgradable",
             name: "hello",
             version: "1.0.0",
             reasons,
-            forceHint: true,
+            partialHint: true,
             severity: "warning",
             needsReload: false,
           },
@@ -3780,8 +3780,8 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
   });
 
   const extractBrace = (s: string): string => {
-    const m = /\(force-upgradable\) (\{[^}]*\})/.exec(s);
-    assert.ok(m, `expected a (force-upgradable) {…} brace in:\n${s}`);
+    const m = /\(partially-upgradable\) (\{[^}]*\})/.exec(s);
+    assert.ok(m, `expected a (partially-upgradable) {…} brace in:\n${s}`);
     return m[1]!;
   };
 

@@ -639,7 +639,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // The renderer narrows on `dependencies` membership ("agents" / "mcp") +
       // the notify-time probe; we forward the boolean flags as the conventional
       // Dependency[] representation. Shared by the `(updated)` and the degraded
-      // `(force-installed)` arms (WR-03: a force-installed row carries
+      // `(partially-installed)` arms (WR-03: a force-installed row carries
       // dependencies exactly like a clean update row).
       const dependencies = [
         ...(outcome.declaresAgents ? (["agents"] as const) : []),
@@ -656,7 +656,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // the producer-stamp wiring.
       // SEV-03 / D-69-01 / FSTAT-07: the autoupdate cascade now TAKES the force
       // path (`updateSinglePlugin` sets `partial: true`), so a candidate that
-      // re-resolved `unsupported` degraded in place. Report `(force-installed)`
+      // re-resolved `unsupported` degraded in place. Report `(partially-installed)`
       // with the dropped-component detail instead of `(updated)`. A clean
       // candidate keeps `(updated)` (no `partialDegrade`). force-installed is
       // a realized transition -> reloads Pi resources.
@@ -671,7 +671,7 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // own renderer; the warning fires ONLY on this autoupdate surface.
       if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
         return {
-          status: "force-installed",
+          status: "partially-installed",
           name: outcome.name,
           scope,
           version: outcome.toVersion,

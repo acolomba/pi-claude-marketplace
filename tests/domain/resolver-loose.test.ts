@@ -173,7 +173,7 @@ test("PR-3 loose: entry declares unsupported component -> notInstallable", async
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveLoose(basicEntry({ source: "./local", themes: ["dark"] }), ctx);
   // D-64-06: unsupported component kind, no structural defect -> unsupported.
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   assert.ok(r.notes.some((n) => n === "contains themes"));
 });
 
@@ -254,7 +254,7 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     });
     const r = await resolveLoose(basicEntry({ source: `./local-${c.kind}` }), ctx);
     // D-64-06: unsupported component kind, no structural defect -> unsupported.
-    assert.equal(r.state, "unsupported", `${c.kind} should be unsupported`);
+    assert.equal(r.state, "partially-available", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
   }
 });
@@ -361,7 +361,7 @@ test("RSTATE-04 loose: requirePartialInstallable admits unsupported and exposes 
     basicEntry({ source: "./local", themes: ["dark"] }),
     ctx,
   );
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   requirePartialInstallable(r);
   assert.equal(typeof r.pluginRoot, "string");
 });

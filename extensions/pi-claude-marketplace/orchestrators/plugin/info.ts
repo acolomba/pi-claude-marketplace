@@ -36,7 +36,7 @@ import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/
 import {
   resolveStrict,
   type ResolvedPluginUnavailable,
-  type ResolvedPluginUnsupported,
+  type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
@@ -803,7 +803,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  * path via `narrowResolverNotes`.
  */
 function buildNonInstallableRowFields(
-  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
   parsedSource: ParsedSource,
@@ -813,7 +813,7 @@ function buildNonInstallableRowFields(
   // compile-time error here rather than silently falling through to the
   // `unavailable`/`notes` path.
   switch (resolved.state) {
-    case "unsupported":
+    case "partially-available":
       return buildNotInstallablePathRowFields(
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
@@ -854,13 +854,13 @@ function buildNonPathInstalledRow(
   installedRecord: MarketplaceRecord["plugins"][string],
 ): PluginInfoRow {
   const status =
-    installedRecord.compatibility.unsupported.length > 0 ? "force-installed" : "installed";
+    installedRecord.compatibility.unsupported.length > 0 ? "partially-installed" : "installed";
   return {
     status,
     name: pluginName,
     ...(version !== undefined && { version }),
     ...(description !== undefined && { description }),
-    ...(status === "force-installed" && {
+    ...(status === "partially-installed" && {
       reasons: narrowUnsupportedKinds(installedRecord.compatibility.unsupported),
     }),
     componentsResolved: false,
@@ -935,7 +935,7 @@ async function buildInstalledRow(opts: {
       parsedSource,
     );
     return {
-      status: resolved.state === "unsupported" ? "force-installed" : "installed",
+      status: resolved.state === "partially-available" ? "partially-installed" : "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
@@ -978,7 +978,7 @@ async function buildInstalledRow(opts: {
  * instead of throwing uncaught out of `getPluginInfo`.
  */
 async function buildNotInstalledPathRow(
-  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     pluginName: string;
     version: string | undefined;
@@ -997,7 +997,7 @@ async function buildNotInstalledPathRow(
       parsedSource,
     );
     return {
-      status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+      status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
@@ -1063,11 +1063,11 @@ async function buildNotInstalledRow(
       // latent-divergence repair -- existing non-path `unavailable` rows stay
       // byte-unchanged.
       const reasons =
-        resolved.state === "unsupported"
+        resolved.state === "partially-available"
           ? narrowUnsupportedKinds(resolved.unsupported)
           : narrowResolverNotes(resolved.notes);
       return {
-        status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+        status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
         name: pluginName,
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),

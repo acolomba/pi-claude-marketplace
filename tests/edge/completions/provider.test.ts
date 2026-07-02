@@ -1234,7 +1234,7 @@ test("LIST-02 / D-67-02 :: install --partial offers available + unsupported, exc
       user: {
         mp: [
           { name: "p-avail", status: "available" },
-          { name: "p-unsup", status: "unsupported" },
+          { name: "p-unsup", status: "partially-available" },
           { name: "p-unavail", status: "unavailable" },
           { name: "p-inst", status: "installed" },
         ],
@@ -1260,13 +1260,13 @@ test("LIST-02 / D-67-02 / WR-02 :: update --partial offers upgradable + force-up
       user: {
         mp: [
           { name: "p-upg", status: "upgradable" },
-          { name: "p-fupg", status: "force-upgradable" },
+          { name: "p-fupg", status: "partially-upgradable" },
           // WR-02: a force-installed row with a meaningful (newer,
           // non-unavailable) candidate IS a real `update --partial` target.
-          { name: "p-finst-upg", status: "force-installed-upgradable" },
+          { name: "p-finst-upg", status: "partially-installed-upgradable" },
           { name: "p-inst", status: "installed" },
           // Plain force-installed (no newer candidate) stays excluded.
-          { name: "p-finst", status: "force-installed" },
+          { name: "p-finst", status: "partially-installed" },
           { name: "p-unavail", status: "unavailable" },
         ],
       },
@@ -1291,7 +1291,7 @@ test("LIST-02 / D-67-02 :: install (no --partial) offers ONLY available -- byte-
       user: {
         mp: [
           { name: "p-avail", status: "available" },
-          { name: "p-unsup", status: "unsupported" },
+          { name: "p-unsup", status: "partially-available" },
           { name: "p-unavail", status: "unavailable" },
         ],
       },
@@ -1319,9 +1319,9 @@ test("LIST-02 / D-67-02 :: update (no --partial) offers ALL installed-family sta
         mp: [
           { name: "p-inst", status: "installed" },
           { name: "p-upg", status: "upgradable" },
-          { name: "p-finst", status: "force-installed" },
-          { name: "p-finst-upg", status: "force-installed-upgradable" },
-          { name: "p-fupg", status: "force-upgradable" },
+          { name: "p-finst", status: "partially-installed" },
+          { name: "p-finst-upg", status: "partially-installed-upgradable" },
+          { name: "p-fupg", status: "partially-upgradable" },
           { name: "p-avail", status: "available" },
           { name: "p-unavail", status: "unavailable" },
         ],

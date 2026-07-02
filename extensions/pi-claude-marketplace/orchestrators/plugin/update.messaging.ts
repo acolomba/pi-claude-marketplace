@@ -2,12 +2,12 @@ import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeVersionArrow,
-  forceInstalledRow,
+  partiallyInstalledRow,
   installedLikeRow,
   pluginRow,
   type PluginFailedMessage,
-  type PluginForceInstalledMessage,
-  type PluginForceUpgradableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notify.ts";
@@ -27,13 +27,13 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * update's private status set. The update cascade emits `updated` rows
  * (carrying the `v<from> → v<to>` arrow), `skipped` rows (up-to-date / benign
  * no-ops), `failed` rows, and -- per XSURF-03 -- a `force-upgradable` row for a
- * manual no-`--force` decline of a force-upgradable plugin.
+ * manual no-`--partial` decline of a force-upgradable plugin.
  */
 export const UPDATE_STATUSES = [
   "updated",
-  "force-installed",
+  "partially-installed",
   "skipped",
-  "force-upgradable",
+  "partially-upgradable",
   "failed",
 ] as const;
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
@@ -45,8 +45,8 @@ export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
  */
 export type UpdateMsg =
   | PluginUpdatedMessage
-  | PluginForceInstalledMessage
-  | PluginForceUpgradableMessage
+  | PluginPartiallyInstalledMessage
+  | PluginPartiallyUpgradableMessage
   | PluginSkippedMessage
   | PluginFailedMessage;
 
@@ -70,17 +70,17 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       probe,
     ),
   // FSTAT-07 / D-66-04: a force update whose candidate re-resolved `unsupported`
-  // reports (force-installed) with the dropped-component detail. WR-03: the
-  // shared `forceInstalledRow` threads `dependencies` so the soft-dep markers
+  // reports (partially-installed) with the dropped-component detail. WR-03: the
+  // shared `partiallyInstalledRow` threads `dependencies` so the soft-dep markers
   // fire on a degraded update exactly as on a clean `(updated)` row.
-  "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
+  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   // XSURF-03: the force-upgradable manual update-decline row. Byte-identical to
   // the central `renderPluginRow` arm -- reuses `ICON_INSTALLED` (`●`) because
-  // the installed plugin is currently clean. The `--force` trailer is composed
+  // the installed plugin is currently clean. The `--partial` trailer is composed
   // centrally by the renderer, not here.
-  "force-upgradable": (p, probe, mpScope) =>
-    pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe),
+  "partially-upgradable": (p, probe, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
 

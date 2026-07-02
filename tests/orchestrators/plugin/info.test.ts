@@ -167,7 +167,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
     // resolution dropped components persists `unsupported` (and
     // `installable: false`). The deriver reads this to render
-    // `(force-installed)` -- no separate persisted flag.
+    // `(partially-installed)` -- no separate persisted flag.
     const unsupported = info.unsupported ?? [];
     plugins[name] = {
       version: info.version,
@@ -823,14 +823,14 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
 // ---------------------------------------------------------------------------
 // FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves `unsupported`
 // (manifest declares an unsupported component kind such as `lspServers`)
-// is reported as `(force-installed)` with the dropped-component detail
+// is reported as `(partially-installed)` with the dropped-component detail
 // from `narrowUnsupportedKinds` -- NOT `(installed)`. The `unavailable`
 // arm keeps `(installed)` (D-64-05, covered by WR-01 above) and the
 // `installable` arm keeps `(installed)` (INFO-02 above); info never emits
 // `force-upgradable` (that is a list-inventory-only concept).
 // ---------------------------------------------------------------------------
 
-test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers) renders `◉ ... (force-installed) {lsp}`", async () => {
+test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers) renders `◉ ... (partially-installed) {lsp}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -862,7 +862,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
     assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (force-installed) {lsp}"].join("\n"),
+      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (partially-installed) {lsp}"].join("\n"),
     );
   });
 });
@@ -873,12 +873,12 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
 // sources to preserve NFR-5, but the install-time `compatibility.unsupported`
 // record is read OFFLINE -- the SAME single deriver `list` reads. A
 // recorded-installed non-path plugin whose install dropped components must
-// therefore render `◉ ... (force-installed)` on `info`, exactly as on `list`,
+// therefore render `◉ ... (partially-installed)` on `info`, exactly as on `list`,
 // never `● ... (installed)`. `componentsResolved: false` is preserved (the
 // external plugin.json is still not fetched).
 // ---------------------------------------------------------------------------
 
-test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported renders `◉ ... (force-installed)` on info (parity with list)", async () => {
+test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported renders `◉ ... (partially-installed)` on info (parity with list)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -910,8 +910,8 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        // ◉ (force-installed), NOT ● (installed) -- the WR-02 regression.
-        "  ◉ remote v1.0.0 (force-installed) {lsp}",
+        // ◉ (partially-installed), NOT ● (installed) -- the WR-02 regression.
+        "  ◉ remote v1.0.0 (partially-installed) {lsp}",
         // NFR-5: the external plugin.json is still not fetched.
         "    components: not resolved",
       ].join("\n"),
@@ -2019,11 +2019,11 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
 // the declared events with a `(unsupported)` suffix on each non-bucket-A
 // one. The strict resolver-side parser (HOOK-01) remains unchanged; the
 // lenient reader runs ONLY on the path-resolvable
-// `(unsupported) {unsupported hooks}` carrier row (USTAT-01 / D-64-01: the
+// `(partially-available) {unsupported hooks}` carrier row (USTAT-01 / D-64-01: the
 // row resolves `unsupported`, so it renders the de-collapsed `⊖` token).
 // ---------------------------------------------------------------------------
 
-test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(unsupported) {unsupported hooks}` row", async () => {
+test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(partially-available) {unsupported hooks}` row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
@@ -2057,7 +2057,7 @@ test("INFO-05: lenient reader lists `Stop (unsupported)` on a path-resolvable `(
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
+    assert.match(msg, /\(partially-available\) \{unsupported hooks\}/);
     // The hooks: block lists Stop with the (unsupported) suffix.
     assert.match(msg, /\n {4}hooks:\n {6}Stop \(unsupported\)/);
   });
@@ -2101,7 +2101,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "mixed", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
+    assert.match(msg, /\(partially-available\) \{unsupported hooks\}/);
     // Kept group first (with its matcher, via the strict reader), then the
     // dropped Stop event carrying the (unsupported) suffix.
     assert.match(msg, /\n {4}hooks:\n {6}PostToolUse\(Bash\)\n {6}Stop \(unsupported\)/);
@@ -2148,7 +2148,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "grouped", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
-    assert.match(msg, /\(unsupported\) \{unsupported hooks\}/);
+    assert.match(msg, /\(partially-available\) \{unsupported hooks\}/);
     // Kept group plain, dropped regex group at matcher-group granularity.
     assert.match(
       msg,

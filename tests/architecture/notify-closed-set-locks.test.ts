@@ -43,7 +43,7 @@ test("SNM-02: PLUGIN_STATUSES is the closed 18-entry plugin-status set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: +2 for `force-installed` / `force-upgradable`.
   // USTAT-02 / D-64-01: +1 for `unsupported` (17 -> 18). Both tuples gain the
   // member; `PLUGIN_STATUSES` MUST because `PluginInfoRowBase.status` derives via
-  // `Extract<PluginStatus, "unsupported">`.
+  // `Extract<PluginStatus, "partially-available">`.
   assert.equal(PLUGIN_STATUSES.length, 18);
 });
 

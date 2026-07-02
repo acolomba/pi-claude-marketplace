@@ -193,10 +193,10 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   },
   {
     // FSTAT-02 / D-66-03: a degrading install materializes the supported
-    // components, so the realized (force-installed) cascade row stamps
+    // components, so the realized (partially-installed) cascade row stamps
     // `needsReload: true` -- the pending `will force install` row therefore
     // correctly keeps its `will` token.
-    label: "plugin force install -- realized (force-installed) row",
+    label: "plugin force install -- realized (partially-installed) row",
     pendingToken: "will force install",
     pi: piWithBothLoaded(),
     message: {
@@ -206,7 +206,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
           scope: "user",
           plugins: [
             {
-              status: "force-installed",
+              status: "partially-installed",
               name: "helper",
               version: "1.0.0",
               reasons: ["lsp"],

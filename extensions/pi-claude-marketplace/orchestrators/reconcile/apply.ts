@@ -1064,7 +1064,7 @@ type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
  * force-capable reinstall primitive at the SAME recorded version (no upgrade --
  * D-68-02). The promotion folds into the single cascade as a
  * `PluginBackfilledOutcome` whose `installable` boolean drives the
- * (installed)-vs-(force-installed) projection.
+ * (installed)-vs-(partially-installed) projection.
  *
  * SF-01 / SF-02: returns `true` iff the re-materialize FAILED (a genuine
  * failure, surfaced as a plugin-scoped (failed) row), so the caller keeps the
@@ -1146,13 +1146,13 @@ async function maybeBackfillPlugin(
     dependencies: dependenciesFromInstall(outcome),
     // The re-resolved installability selects the row: a fully promoted plugin
     // (unsupported now empty) -> `installable` -> (installed); a partial
-    // re-materialize stays `unsupported` -> (force-installed).
+    // re-materialize stays `unsupported` -> (partially-installed).
     installable: resolved.state === "installable",
     // SEV-05 / D-69-04: carry the re-resolved dropped-component kinds so the
-    // `(force-installed)` row composes a factual `{reasons}` brace through the
+    // `(partially-installed)` row composes a factual `{reasons}` brace through the
     // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
     // the brace-less `(installed)` row, so its unsupported set is empty.
-    unsupported: resolved.state === "unsupported" ? resolved.unsupported : [],
+    unsupported: resolved.state === "partially-available" ? resolved.unsupported : [],
   });
   return false;
 }

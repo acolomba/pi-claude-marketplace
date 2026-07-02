@@ -1341,7 +1341,7 @@ async function replaceAll(
     replacements.push({ phase: "commands", handle: commands });
     // RINST-01 / D-67-03: reinstall is a pure repair primitive -- overwrite of
     // collisions and foreign content is UNCONDITIONAL. The agents bridge's
-    // `{ force: true }` gate is always set; there is no command-local `--force`
+    // `{ force: true }` gate is always set; there is no command-local `--partial`
     // option to relay. Containment is unchanged (NFR-10): the overwrite is
     // scoped to this plugin's own staged agent handles.
     const agents = await replacePreparedAgents(handles.agents, { force: true });

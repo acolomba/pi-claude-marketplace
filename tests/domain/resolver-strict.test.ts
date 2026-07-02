@@ -231,9 +231,9 @@ test("PHOOK-02 / D-71-03: hooks.json with a kept group + dropped Stop event -> u
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.state === "unsupported") {
+  if (r.state === "partially-available") {
     assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
     assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
     assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
@@ -253,9 +253,9 @@ test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex gr
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.state === "unsupported") {
+  if (r.state === "partially-available") {
     assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
     assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
     assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
@@ -278,9 +278,9 @@ test("D-71-03 / Q2: Stop-only config (empty subset) -> unsupported, no hooksConf
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
 
-  if (r.state === "unsupported") {
+  if (r.state === "partially-available") {
     assert.ok(r.unsupported.includes("hooks"), `unsupported: ${r.unsupported.join(" / ")}`);
     assert.ok(
       !r.supported.includes("hooks"),
@@ -524,9 +524,9 @@ test("PR-4 discovers unsupported default component locations", async () => {
     const r = await resolveStrict(basicEntry({ source: `./local-${c.kind}` }), ctx);
     // D-64-06: an unsupported component kind with no structural defect
     // resolves the `unsupported` (force-degradable) arm.
-    assert.equal(r.state, "unsupported", `${c.kind} should be unsupported`);
+    assert.equal(r.state, "partially-available", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
-    if (r.state === "unsupported") {
+    if (r.state === "partially-available") {
       assert.ok(r.unsupported.includes(c.kind), `unsupported: ${r.unsupported.join(" / ")}`);
     }
   }
@@ -546,7 +546,7 @@ test("PR-3 experimental themes/monitors declarations are unsupported", async () 
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   // D-64-06: unsupported component kinds, no structural defect -> unsupported.
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   assert.ok(r.notes.includes("contains themes"), `notes: ${r.notes.join(" / ")}`);
   assert.ok(r.notes.includes("contains monitors"), `notes: ${r.notes.join(" / ")}`);
 });
@@ -616,7 +616,7 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
     ctx,
   );
   // D-64-06: multiple unsupported kinds, no structural defect -> unsupported.
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   assert.ok(
     r.notes.includes("contains themes"),
     `themes note missing; got: ${r.notes.join(" / ")}`,
@@ -773,7 +773,7 @@ test("RSTATE-04 requirePartialInstallable admits installable and exposes pluginR
   const r: ResolvedPlugin = await resolveStrict(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.state, "installable");
   requirePartialInstallable(r);
-  // After the assertion r is ResolvedPluginInstallable | ResolvedPluginUnsupported.
+  // After the assertion r is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable.
   assert.equal(typeof r.pluginRoot, "string");
 });
 
@@ -783,7 +783,7 @@ test("RSTATE-04 requirePartialInstallable admits unsupported and exposes pluginR
     basicEntry({ source: "./local", themes: { dark: {} } }),
     ctx,
   );
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   requirePartialInstallable(r);
   // D-64-06: the unsupported arm keeps pluginRoot, so force can degrade it.
   assert.equal(typeof r.pluginRoot, "string");
@@ -822,14 +822,14 @@ test("RSTATE-04 requirePartialInstallable(r, 'update') throws with 'is no longer
 
 // requireInstallable throws on an `unsupported` (force-degradable) plugin, and
 // the thrown PluginShapeError pins the force-hint ternaries:
-// `partialable: r.state === "unsupported"` (true here) and
-// `unsupportedKinds: r.state === "unsupported" ? r.unsupported : []` (the typed
+// `partialable: r.state === "partially-available"` (true here) and
+// `unsupportedKinds: r.state === "partially-available" ? r.unsupported : []` (the typed
 // component-kind list, NOT the empty structural default). A regression that
 // dropped either would silently suppress the `--force` hint on the render row.
 test("SEV-02 / IN-02: requireInstallable on unsupported throws partialable with the typed unsupportedKinds", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", themes: { dark: {} } }), ctx);
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   assert.throws(
     () => {
       requireInstallable(r);
@@ -874,8 +874,8 @@ test("SURF-05 / D-71-03: orphan in a DROPPED group does not flag orphanRewake ->
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
-  if (r.state === "unsupported") {
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "partially-available") {
     assert.equal(r.orphanRewake, undefined);
     assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
     assert.deepEqual(r.droppedHooks, [
@@ -904,8 +904,8 @@ test("SURF-05 / D-71-03: orphan in the KEPT group still flags orphanRewake -> un
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
-  if (r.state === "unsupported") {
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "partially-available") {
     assert.equal(r.orphanRewake, true);
     assert.deepEqual(r.droppedHooks, [
       { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
@@ -937,8 +937,8 @@ test("PHOOK-01: a non-command handler in a kept group drops at handler granulari
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
-  if (r.state === "unsupported") {
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "partially-available") {
     assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
     assert.deepEqual(r.droppedHooks, [
       { kind: "handler", event: "PreToolUse", matcher: "Bash", handlerType: "notification" },
@@ -959,8 +959,8 @@ test("PHOOK-01: an unmapped-tool matcher drops the group with cond unmapped-tool
     },
   });
   const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
-  assert.equal(r.state, "unsupported", `notes: ${r.notes.join(" / ")}`);
-  if (r.state === "unsupported") {
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "partially-available") {
     assert.deepEqual(r.droppedHooks, [
       { kind: "group", event: "PreToolUse", matcher: "MultiEdit", cond: "unmapped-tool" },
     ]);

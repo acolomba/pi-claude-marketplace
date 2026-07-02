@@ -103,7 +103,7 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
  * `dependencies` drives the soft-dep markers like the install arm. The required
  * `installable` is the RE-RESOLVED installability: `true` selects the
  * `(installed)` row (unsupported set now empty -> fully promoted), `false`
- * selects the `(force-installed)` row (partial re-materialize, still degraded).
+ * selects the `(partially-installed)` row (partial re-materialize, still degraded).
  */
 export interface PluginBackfilledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-backfilled";
@@ -112,7 +112,7 @@ export interface PluginBackfilledOutcome extends PluginOutcomeBase {
   readonly installable: boolean;
   /**
    * SEV-05 / D-69-04: the re-resolved dropped-component kinds (the
-   * `unsupported` arm's component list) so the `(force-installed)` projection
+   * `unsupported` arm's component list) so the `(partially-installed)` projection
    * can populate a factual `{reasons}` brace through the shared
    * `narrowUnsupportedKinds` seam -- exactly as the `install` success row does.
    * Empty on a fully-promoted (`installable`) backfill, where the row drops to

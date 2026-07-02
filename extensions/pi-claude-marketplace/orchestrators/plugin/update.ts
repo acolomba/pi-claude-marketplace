@@ -505,7 +505,7 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path
       // automatically. A force-upgradable candidate (re-resolves `unsupported`)
       // degrades in place -- supported components materialize, unsupported kinds
-      // skip -- and renders `(force-installed) {dropped kinds}` instead of
+      // skip -- and renders `(partially-installed) {dropped kinds}` instead of
       // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
       // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
       // automatic force path can never materialize a structurally-broken plugin.
@@ -780,7 +780,7 @@ async function preflightUpdate(
     // `err.shape.partialable === true` ⇔ the resolver verdict was `unsupported`,
     // i.e. a force-upgradable decline: `--partial` could degrade-update it. For
     // that arm carry the list-consistent degrade kinds via the SAME
-    // `narrowUnsupportedKinds` helper the `list (force-upgradable)` row uses
+    // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
     // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true` so
     // the projection flips ONLY this arm to the `force-upgradable` token. A
     // structural decline (`partialable !== true` -- force cannot help) keeps the
@@ -1556,7 +1556,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     declaresMcp: stagedMcpServers.length > 0,
     // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
     // `unsupported` degraded it -- carry the dropped kinds so the cascade
-    // renders `(force-installed)` instead of `(updated)`. Empty for a clean
+    // renders `(partially-installed)` instead of `(updated)`. Empty for a clean
     // candidate (FSTAT-03 -- no lingering force state).
     //
     // SEV-03 / D-69-01: `newlyDegraded` records whether this degrade NEWLY
@@ -1566,7 +1566,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // raise the row to `warning` (newly degraded) vs `info` (already degraded);
     // the manual `update --partial` renderer ignores it (explicit opt-in stays
     // info). No schema change -- the field already exists on the record.
-    ...(installable.state === "unsupported" && {
+    ...(installable.state === "partially-available" && {
       partialDegrade: {
         kinds: [...installable.unsupported],
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
@@ -1658,12 +1658,12 @@ function projectSkippedOutcome(
 
   if (outcome.partialUpgradable === true) {
     return {
-      status: "force-upgradable",
+      status: "partially-upgradable",
       name: outcome.name,
       scope: target.scope,
       ...version,
       reasons,
-      forceHint: true,
+      partialHint: true,
       severity: cardinality === "single" ? "warning" : "info",
       needsReload: false,
     };
@@ -1717,7 +1717,7 @@ function outcomeToCascadePluginMessage(
   switch (outcome.partition) {
     case "updated":
       // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
-      // `unsupported` degraded it -- report `(force-installed)` with the
+      // `unsupported` degraded it -- report `(partially-installed)` with the
       // dropped-component detail instead of `(updated)`. This reads the LIVE
       // candidate resolution of the just-completed update -- NOT the persisted
       // `compatibility.unsupported` record the `list` / non-path `info`
@@ -1731,7 +1731,7 @@ function outcomeToCascadePluginMessage(
       // degraded update exactly as on a clean one.
       if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
         return {
-          status: "force-installed",
+          status: "partially-installed",
           name: outcome.name,
           scope: target.scope,
           version: outcome.toVersion,

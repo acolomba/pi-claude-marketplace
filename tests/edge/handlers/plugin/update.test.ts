@@ -357,10 +357,10 @@ test("shim :: --partial is accepted on the bare form; control reaches updatePlug
 
 test("shim :: --partial threads partial:true into updatePlugins (degrades an unsupported candidate)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    // Only the handler is under test, so a `(force-installed)` degrade row can
+    // Only the handler is under test, so a `(partially-installed)` degrade row can
     // ONLY render if the handler forwarded `partial: true` to updatePlugins.
     // FSTAT-07 / D-66-04: a force update whose candidate re-resolved
-    // `unsupported` reports `(force-installed)`, not `(updated)`.
+    // `unsupported` reports `(partially-installed)`, not `(updated)`.
     await seedUnsupportedCandidate(cwd);
     const locations = locationsFor("project", cwd);
 
@@ -369,7 +369,11 @@ test("shim :: --partial threads partial:true into updatePlugins (degrades an uns
     await handler("hello@mp --partial", ctx);
 
     const body = notifications.map((n) => n.message).join("\n");
-    assert.match(body, /\(force-installed\)/, `expected degrade via threaded force; got: ${body}`);
+    assert.match(
+      body,
+      /\(partially-installed\)/,
+      `expected degrade via threaded force; got: ${body}`,
+    );
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.1.0");
   });
@@ -386,10 +390,10 @@ test("shim :: without --partial the force-upgradable candidate declines with the
 
     const body = notifications.map((n) => n.message).join("\n");
     // XSURF-03: the no-`--partial` decline of a force-upgradable candidate renders
-    // the `(force-upgradable)` token + the update-worded `--force` trailer, not
+    // the `(partially-upgradable)` token + the update-worded `--force` trailer, not
     // the misleading `(skipped) {no longer installable}`.
-    assert.match(body, /\(force-upgradable\)/);
-    assert.match(body, /Re-run with --force to update with the supported components\./);
+    assert.match(body, /\(partially-upgradable\)/);
+    assert.match(body, /Re-run with --partial to update with the supported components\./);
     assert.doesNotMatch(body, /\{no longer installable\}/);
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");

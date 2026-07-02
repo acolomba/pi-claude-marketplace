@@ -284,9 +284,9 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
 /**
  * FSTAT-06 / D-66-04 / NFR-5: resolve every planned install candidate
  * no-network via `resolveStrict` and collect the `(scope, marketplace, plugin)`
- * keys whose candidate resolves `state === "unsupported"` -- the planned
+ * keys whose candidate resolves `state === "partially-available"` -- the planned
  * install would degrade and proceed under the force path, so its pending row
- * renders `(will force install)`. The resolve is the cache/no-network resolver
+ * renders `(will partially install)`. The resolve is the cache/no-network resolver
  * (guarded by the `no-orchestrator-network` architecture test); a probe throw
  * or an unlocatable candidate degrades to NO force (the safe, truthful preview
  * default), never a crash on this read-only surface (IL-2).
@@ -313,7 +313,7 @@ export async function resolvePendingForceInstalls(
         const resolved = await resolveStrict(candidate.manifestEntry, {
           marketplaceRoot: candidate.marketplaceRoot,
         });
-        if (resolved.state === "unsupported") {
+        if (resolved.state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));
         }
       } catch {
@@ -357,7 +357,7 @@ export function buildReconcilePendingNotification(
       // FSTAT-06 / D-66-04: stamp the force modifier when the planned install
       // candidate resolved `unsupported` (no-network resolveStrict, computed
       // ahead of time by resolvePendingForceInstalls). The modifier renders
-      // `(will force install)` in place of `(will install)`. D-66-05: there is
+      // `(will partially install)` in place of `(will install)`. D-66-05: there is
       // deliberately NO `will force update` analog -- the ReconcilePlan has no
       // update bucket (only install/uninstall/enable/disable + marketplace
       // add/remove + sourceMismatches), so no force-update row is ever
@@ -366,7 +366,7 @@ export function buildReconcilePendingNotification(
       block.plugins.push({
         status: "will install",
         name: o.plugin,
-        ...(force && { force: true }),
+        ...(force && { partial: true }),
       });
     }
 
@@ -514,7 +514,7 @@ function applyOutcomeToBlock(
         });
       } else {
         block.plugins.push({
-          status: "force-installed",
+          status: "partially-installed",
           name: outcome.plugin,
           ...(outcome.version !== undefined && { version: outcome.version }),
           dependencies: outcome.dependencies,

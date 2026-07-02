@@ -51,9 +51,9 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 const INSTALLED_INVENTORY_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "installed",
   "upgradable",
-  "force-installed",
-  "force-installed-upgradable",
-  "force-upgradable",
+  "partially-installed",
+  "partially-installed-upgradable",
+  "partially-upgradable",
 ]);
 
 /**
@@ -69,7 +69,7 @@ const INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set(["availa
  */
 const PARTIAL_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "available",
-  "unsupported",
+  "partially-available",
 ]);
 
 /**
@@ -85,8 +85,8 @@ const PARTIAL_INSTALL_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set(
  */
 const PARTIAL_UPDATE_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "upgradable",
-  "force-installed-upgradable",
-  "force-upgradable",
+  "partially-installed-upgradable",
+  "partially-upgradable",
 ]);
 
 type PluginRefCompletionMode =

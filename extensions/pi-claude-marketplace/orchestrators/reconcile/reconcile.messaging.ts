@@ -1,6 +1,6 @@
 import {
   composeReasons,
-  forceInstalledRow,
+  partiallyInstalledRow,
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
@@ -12,7 +12,7 @@ import {
   renderVersion,
   type PluginDisabledMessage,
   type PluginFailedMessage,
-  type PluginForceInstalledMessage,
+  type PluginPartiallyInstalledMessage,
   type PluginInstalledMessage,
   type PluginUninstalledMessage,
   type PluginWillDisableMessage,
@@ -83,7 +83,7 @@ export type PendingMsg =
 
 /**
  * `(will install)` -- lifted verbatim from the central `renderPluginRow` arm.
- * FSTAT-06 / D-66-04: the `force` modifier renders `(will force install)` in
+ * FSTAT-06 / D-66-04: the `force` modifier renders `(will partially install)` in
  * place of `(will install)` when the planned install would degrade (candidate
  * resolves `unsupported`). D-66-05: there is no `will force update` analog --
  * the reconcile plan has no update bucket.
@@ -93,7 +93,7 @@ const renderWillInstall: RenderFn<PluginWillInstallMessage> = (p, _probe, mpScop
     ICON_INSTALLED,
     p.name,
     renderScopeBracket(p.scope, mpScope),
-    p.force === true ? "(will force install)" : "(will install)",
+    p.partial === true ? "(will partially install)" : "(will install)",
   ]);
 
 /** `(will uninstall)` -- lifted verbatim; reuses ICON_AVAILABLE (`○`). */
@@ -144,7 +144,7 @@ export const PENDING_CONTEXT = {
  * BFILL-01 / D-68-04: `force-installed` widens this reconcile-local closed set
  * so a load-time backfill that only PARTIALLY re-materializes a plugin (its
  * re-resolved unsupported set is still non-empty) surfaces as a
- * `(force-installed)` row. A FULLY promoted backfill reuses the `installed`
+ * `(partially-installed)` row. A FULLY promoted backfill reuses the `installed`
  * row. The `force-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
  */
@@ -153,7 +153,7 @@ export const RECONCILE_APPLIED_STATUSES = [
   "uninstalled",
   "disabled",
   "failed",
-  "force-installed",
+  "partially-installed",
 ] as const;
 export type ReconcileAppliedStatus = (typeof RECONCILE_APPLIED_STATUSES)[number];
 
@@ -162,7 +162,7 @@ export type ReconcileAppliedMsg =
   | PluginUninstalledMessage
   | PluginDisabledMessage
   | PluginFailedMessage
-  | PluginForceInstalledMessage;
+  | PluginPartiallyInstalledMessage;
 
 /**
  * `(installed)` -- realized install row. Only this arm reads `dependencies` for
@@ -196,16 +196,16 @@ const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, probe, mpScope
   ]);
 
 /**
- * `(force-installed)` -- BFILL-01 / D-68-04 realized partial-backfill row. A
+ * `(partially-installed)` -- BFILL-01 / D-68-04 realized partial-backfill row. A
  * load-time backfill re-materialized the plugin's now-supported components but
  * its re-resolved unsupported set is still non-empty, so it stays degraded.
- * Routes through the SOLE `forceInstalledRow` composition site (the `◉` glyph),
+ * Routes through the SOLE `partiallyInstalledRow` composition site (the `◉` glyph),
  * threading `dependencies` so the soft-dep markers fire exactly as on a clean
  * `(installed)` row. The byte-exact token is frozen later; severity is a
  * sensible default here.
  */
-const renderForceInstalled: RenderFn<PluginForceInstalledMessage> = (p, probe, mpScope) =>
-  forceInstalledRow(p, mpScope, probe);
+const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, probe, mpScope) =>
+  partiallyInstalledRow(p, mpScope, probe);
 
 /**
  * `(disabled)` -- realized disable inventory row. NO reasons / dependencies.
@@ -235,6 +235,6 @@ export const RECONCILE_APPLIED_CONTEXT = {
     uninstalled: renderUninstalled,
     disabled: renderDisabled,
     failed: renderFailed,
-    "force-installed": renderForceInstalled,
+    "partially-installed": renderForceInstalled,
   },
 } as const satisfies CommandContext<ReconcileAppliedStatus, ReconcileAppliedMsg>;

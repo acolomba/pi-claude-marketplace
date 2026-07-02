@@ -492,7 +492,7 @@ const FINER_STATUS_FIXTURE: readonly FixturePlugin[] = [
     disabled: true,
     installed: { version: "1.0.0" },
   },
-  // WR-02: degraded record (force-installed) with a newer candidate that
+  // WR-02: degraded record (partially-installed) with a newer candidate that
   // resolves CLEAN -> force-installed-upgradable (a supported upgrade promotes
   // it back to installed; offerable under `update --force`).
   {
@@ -536,8 +536,8 @@ test("loadManifestForMarketplace: bucketizer emits the finer derived statuses vi
 
     assert.equal(statusByName.get("inst"), "installed");
     assert.equal(statusByName.get("upg"), "upgradable");
-    assert.equal(statusByName.get("fup"), "force-upgradable");
-    assert.equal(statusByName.get("forced"), "force-installed");
+    assert.equal(statusByName.get("fup"), "partially-upgradable");
+    assert.equal(statusByName.get("forced"), "partially-installed");
     // WR-01: a disabled + version-drifted record classifies `installed` (the
     // frozen-pin collapse), never `upgradable` -- so it cannot leak into the
     // `update --force` candidate set while `list` renders it `(disabled)`.
@@ -546,13 +546,13 @@ test("loadManifestForMarketplace: bucketizer emits the finer derived statuses vi
     // derives the distinct `force-installed-upgradable` (offered under
     // `update --force`); a structural-unavailable candidate keeps it plain
     // `force-installed`.
-    assert.equal(statusByName.get("forced-upg"), "force-installed-upgradable");
-    assert.equal(statusByName.get("forced-upg-unsup"), "force-installed-upgradable");
-    assert.equal(statusByName.get("forced-upg-gone"), "force-installed");
+    assert.equal(statusByName.get("forced-upg"), "partially-installed-upgradable");
+    assert.equal(statusByName.get("forced-upg-unsup"), "partially-installed-upgradable");
+    assert.equal(statusByName.get("forced-upg-gone"), "partially-installed");
     assert.equal(statusByName.get("avail"), "available");
     // The old `installable ? available : unavailable` collapse is gone:
     // `unsupported` is now emitted DISTINCTLY from structural `unavailable`.
-    assert.equal(statusByName.get("unsup"), "unsupported");
+    assert.equal(statusByName.get("unsup"), "partially-available");
     assert.equal(statusByName.get("gone"), "unavailable");
   });
 });
@@ -636,7 +636,7 @@ test("WR-01: a disabled + version-drifted plugin -- `list` renders `(disabled)`,
     assert.ok(disabledRow);
     assert.equal(disabledRow.status, "installed");
     assert.notEqual(disabledRow.status, "upgradable");
-    assert.notEqual(disabledRow.status, "force-upgradable");
+    assert.notEqual(disabledRow.status, "partially-upgradable");
 
     // The SAME record satisfies the pre-classifier guard `list` applies, so
     // `list` renders the distinct `(disabled)` token. The two surfaces agree:

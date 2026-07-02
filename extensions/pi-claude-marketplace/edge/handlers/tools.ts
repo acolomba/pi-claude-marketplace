@@ -167,14 +167,14 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
     // clean install, so the LLM-tool projection treats both as installed.
     case "installed":
     case "upgradable":
-    case "force-installed":
-    case "force-upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
       return "installed";
     case "available":
       return "available";
     case "unavailable":
       return "unavailable";
-    case "unsupported":
+    case "partially-available":
       // USTAT-02 / D-64-01: a not-installed, force-installable plugin projects
       // onto the coarse `unavailable` tool bucket -- the LLM-tool surface has no
       // distinct `unsupported` bucket (mirrors `disabled` -> `unavailable`).
@@ -327,14 +327,14 @@ function pluginScopeOrFallback(
     case "installed":
     case "upgradable":
     case "disabled":
-    case "force-installed":
-    case "force-upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
       // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` (the
       // SNM-11 carve-out applies only to `available` / `unavailable`).
       return p.scope ?? marketplaceScope;
     case "available":
     case "unavailable":
-    case "unsupported":
+    case "partially-available":
       // USTAT-01 / SNM-11: the `unsupported` row carries no `scope` field (the
       // carve-out applies to `available` / `unavailable` / `unsupported`).
       return marketplaceScope;
@@ -361,7 +361,11 @@ function pluginScopeOrFallback(
  * omit `reasons` entirely (omit when undefined or empty).
  */
 function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
-  if (p.status === "unavailable" || p.status === "unsupported" || p.status === "upgradable") {
+  if (
+    p.status === "unavailable" ||
+    p.status === "partially-available" ||
+    p.status === "upgradable"
+  ) {
     // USTAT-01: the `unsupported` row carries the same per-kind reason braces as
     // the `unavailable` row, so surface them on the tool details too.
     return p.reasons.length > 0 ? p.reasons : undefined;
@@ -384,15 +388,15 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "upgradable":
     case "available":
     case "unavailable":
-    case "unsupported":
+    case "partially-available":
     case "reinstalled":
     case "uninstalled":
     case "failed":
     case "skipped":
     case "manual recovery":
     case "disabled":
-    case "force-installed":
-    case "force-upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
       // D-54-01 / ENBL-04: disabled row carries optional `version?` -- the
       // recorded state record preserves the pinned version (ENBL-02). FSTAT-02 /
       // FSTAT-04 / D-66-03: the derived force states carry the same optional

@@ -152,7 +152,7 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginUnavailableMessage,
-  PluginUnsupportedMessage,
+  PluginPartiallyAvailableMessage,
   StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1405,7 +1405,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
     // FSTAT-07 / D-66-04: when the live resolved state is `unsupported`, the
     // install was force-completed with one or more components dropped -- the
-    // success row reports `(force-installed)` carrying the dropped-component
+    // success row reports `(partially-installed)` carrying the dropped-component
     // detail via the shared `narrowUnsupportedKinds` helper. This reads the
     // LIVE resolved state of the just-completed install -- NOT the persisted
     // `compatibility.unsupported` record the `list` / non-path `info` derivers
@@ -1435,9 +1435,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       softDepStatus(pi),
     );
     const installedRow: InstallMsg =
-      installCtx.resolved.state === "unsupported"
+      installCtx.resolved.state === "partially-available"
         ? {
-            status: "force-installed",
+            status: "partially-installed",
             name: plugin,
             dependencies,
             version: installCtx.version,
@@ -1534,15 +1534,15 @@ function composeNotInstallableMessage(
   plugin: string,
   version: string | undefined,
   entityErrorRow: EntityErrorRow,
-): PluginUnavailableMessage | PluginUnsupportedMessage {
+): PluginUnavailableMessage | PluginPartiallyAvailableMessage {
   if (entityErrorRow.partialable === true) {
     return {
-      status: "unsupported",
+      status: "partially-available",
       name: plugin,
       reasons: entityErrorRow.reasons,
       ...(version !== undefined && version !== "" && { version }),
       severity: "error" as const,
-      forceHint: true,
+      partialHint: true,
     };
   }
 
