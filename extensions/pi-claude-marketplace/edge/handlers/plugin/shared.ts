@@ -38,7 +38,7 @@ export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | u
 export interface ParsedPositionalsResult {
   readonly nonFlagPositionals: readonly string[];
   readonly mapModel: boolean;
-  readonly force: boolean;
+  readonly partial: boolean;
 }
 
 /**
@@ -53,16 +53,16 @@ export function parsePositionalsWithFlags(
   usage: string,
 ): ParsedPositionalsResult | undefined {
   let mapModel = false;
-  let force = false;
+  let partial = false;
   const nonFlagPositionals: string[] = [];
   for (const token of tokens) {
     if (token === "--map-model") {
       mapModel = true;
-    } else if (token === "--force") {
+    } else if (token === "--partial") {
       // D-65-05: install/update route through this shared scanner, so the
-      // `--force` arm MUST precede the unknown-flag rejection below or the
-      // token falls through to `Unknown flag: "--force".`.
-      force = true;
+      // `--partial` arm MUST precede the unknown-flag rejection below or the
+      // token falls through to `Unknown flag: "--partial".`.
+      partial = true;
     } else if (token.startsWith("--")) {
       notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
@@ -71,14 +71,14 @@ export function parsePositionalsWithFlags(
     }
   }
 
-  return { nonFlagPositionals, mapModel, force };
+  return { nonFlagPositionals, mapModel, partial };
 }
 
 export interface ParsedMapModelArgs {
   readonly scope?: Scope;
   readonly nonFlagPositionals: readonly string[];
   readonly mapModel: boolean;
-  readonly force: boolean;
+  readonly partial: boolean;
 }
 
 /**
@@ -115,7 +115,7 @@ export function parseMapModelArgs(
   return {
     nonFlagPositionals: flagged.nonFlagPositionals,
     mapModel: flagged.mapModel,
-    force: flagged.force,
+    partial: flagged.partial,
     ...(parsed.scope !== undefined && { scope: parsed.scope }),
   };
 }

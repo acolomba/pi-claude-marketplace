@@ -31,7 +31,7 @@
 //     readers for entries the install path will NOT materialize. Two
 //     producers: (1) the lenient reader when the resolver bailed (it did
 //     NOT record `hooksConfigPath`), and (2) the strict reader's
-//     dropped-handler enumeration for a force-degradable plugin
+//     dropped-handler enumeration for a partially-available plugin
 //     (PHOOK-05 / D-71-05) whose parseable hooks.json had one or more
 //     unsupportable events / matcher groups / handlers partitioned out.
 //     Carries an arbitrary `event: string` (may be `Stop`,

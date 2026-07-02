@@ -13,10 +13,10 @@
 // works automatically on `switch (r.state)` / `if (r.state === ...)`.
 //
 // Per D-64-01: a three-way string-literal discriminant
-// `state: "installable" | "unsupported" | "unavailable"` (supersedes D-05's
-// boolean `installable: true | false`). `installable` and `unsupported` both
-// carry `pluginRoot` + component lists (D-64-06: `unsupported` is the
-// force-degradable arm); `unavailable` is the minimal structural-defect arm
+// `state: "installable" | "partially-available" | "unavailable"` (supersedes D-05's
+// boolean `installable: true | false`). `installable` and `partially-available` both
+// carry `pluginRoot` + component lists (D-64-06: `partially-available` is the
+// partially-available arm); `unavailable` is the minimal structural-defect arm
 // and never carries `pluginRoot` (D-64-05, NFR-7). Structural precedence
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
@@ -145,8 +145,8 @@ export type _DroppedHookArmKeysCheck = _AssertTrue<
   [true] extends [_DroppedHookArmKeysDrift] ? true : false
 >;
 
-// The field set shared by the two force-materializable arms -- `installable`
-// and the force-degradable `unsupported` (D-64-06). Both carry `pluginRoot`
+// The field set shared by the two materializable arms -- `installable`
+// and the partially-available (D-64-06). Both carry `pluginRoot`
 // plus the full component payload; only the `state` discriminant differs.
 // Extracted into one bag and spread into both schemas so the two arms stay
 // token-identical by construction (spreading `state` first keeps the literal
@@ -154,7 +154,8 @@ export type _DroppedHookArmKeysCheck = _AssertTrue<
 const MATERIALIZABLE_FIELDS = {
   name: Type.String(),
   // pluginRoot is present on installable + unsupported only (NFR-7); D-64-06
-  // lets force degrade the unsupported parts, so both arms expose it.
+  // lets a partial install degrade past the unsupported parts, so both arms
+  // expose it.
   pluginRoot: Type.String(),
   supported: Type.Array(Type.String()),
   unsupported: Type.Array(Type.String()),
@@ -184,14 +185,14 @@ const ResolvedPluginInstallableSchema = Type.Object({
   ...MATERIALIZABLE_FIELDS,
 });
 
-// D-64-06: the force-degradable arm. Shape-identical to `installable` (carries
-// `pluginRoot` + the full component payload) so the force-install path
+// D-64-06: the partially-available arm. Shape-identical to `installable` (carries
+// `pluginRoot` + the full component payload) so the partial-install path
 // (a later phase) and the info-surface unsupported-row enumeration can read
 // the same fields; only the `state` tag differs. The declared/discovered
 // unsupported component kinds live in `unsupported[]` with their `contains
 // <kind>` markers in `notes[]`.
-const ResolvedPluginUnsupportedSchema = Type.Object({
-  state: Type.Literal("unsupported"),
+const ResolvedPluginPartiallyAvailableSchema = Type.Object({
+  state: Type.Literal("partially-available"),
   ...MATERIALIZABLE_FIELDS,
 });
 
@@ -211,22 +212,24 @@ const ResolvedPluginUnavailableSchema = Type.Object({
 /** Literal-tagged variants ARE the discriminator. NO options arg. */
 export const ResolvedPluginSchema = Type.Union([
   ResolvedPluginInstallableSchema,
-  ResolvedPluginUnsupportedSchema,
+  ResolvedPluginPartiallyAvailableSchema,
   ResolvedPluginUnavailableSchema,
 ]);
 
 export type ResolvedPluginInstallable = Type.Static<typeof ResolvedPluginInstallableSchema>;
-export type ResolvedPluginUnsupported = Type.Static<typeof ResolvedPluginUnsupportedSchema>;
+export type ResolvedPluginPartiallyAvailable = Type.Static<
+  typeof ResolvedPluginPartiallyAvailableSchema
+>;
 export type ResolvedPluginUnavailable = Type.Static<typeof ResolvedPluginUnavailableSchema>;
 export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
 
-// NFR-7: the force-materializable union. It names exactly the two arms that
+// NFR-7: the materializable union. It names exactly the two arms that
 // carry `pluginRoot` + the full component payload -- `installable` and the
-// force-degradable `unsupported` (D-64-06) -- and EXCLUDES `unavailable`, so
+// partially-available (D-64-06) -- and EXCLUDES `unavailable`, so
 // no consumer that widens a holder to this union can read `pluginRoot` off a
-// structurally-broken plugin. This is exactly the type `requireForceInstallable`
-// narrows to, and the type the force install/update holders accept.
-export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginUnsupported;
+// structurally-broken plugin. This is exactly the type `requirePartialInstallable`
+// narrows to, and the type the partial install/update holders accept.
+export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable;
 type StatKind = "file" | "dir" | null;
 type StatKindReader = (p: string) => Promise<StatKind>;
 
@@ -348,7 +351,7 @@ interface PartialResolution {
   // D-71-03 / PHOOK-02: set by `applyHooksConfig` on a successful parse whose
   // partition dropped at least one unsupportable event / matcher group /
   // handler. Routed alongside the `"hooks"` push into `partial.unsupported`,
-  // so a partial-hook plugin resolves `unsupported` (force-degradable) while
+  // so a partial-hook plugin resolves `partially-available` while
   // its supported handlers still materialize. Absent when no hooks.json
   // exists, the parse failed structurally, or nothing dropped.
   droppedHooks?: DroppedHook[];
@@ -378,8 +381,8 @@ function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   };
 }
 
-// The non-discriminant payload shared by the two force-materializable arms.
-// Because `ResolvedPluginInstallable` and `ResolvedPluginUnsupported` differ
+// The non-discriminant payload shared by the two materializable arms.
+// Because `ResolvedPluginInstallable` and `ResolvedPluginPartiallyAvailable` differ
 // ONLY in `state`, `Omit<..., "state">` is the same structural type for both,
 // so each constructor re-adds its own `state` literal and keeps its precise
 // discriminated-union return type with no cast.
@@ -410,14 +413,14 @@ function installable(
   return { state: "installable", ...materializableFields(name, pluginRoot, partial) };
 }
 
-// D-64-06: the force-degradable arm. Identical payload to `installable`
+// D-64-06: the partially-available arm. Identical payload to `installable`
 // (including `pluginRoot`); only the `state` tag differs.
-function unsupported(
+function partiallyAvailable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
-): ResolvedPluginUnsupported {
-  return { state: "unsupported", ...materializableFields(name, pluginRoot, partial) };
+): ResolvedPluginPartiallyAvailable {
+  return { state: "partially-available", ...materializableFields(name, pluginRoot, partial) };
 }
 
 function nestedExperimentalValue(
@@ -910,7 +913,7 @@ function detectOrphanRewake(parsed: HooksConfig): boolean {
  *   - SUPPORTABILITY drops on an otherwise-parseable config -> route the
  *     dropped signal to `partial.unsupported` (kind "hooks") +
  *     `partial.droppedHooks`, NEVER the structural dirty accumulator, so the
- *     plugin resolves `unsupported` (force-degradable).
+ *     plugin resolves `partially-available`.
  *   - The KEPT handlers (the filtered non-empty subset) still materialize:
  *     push "hooks" to `partial.supported` + record `hooksConfigPath`.
  *
@@ -933,7 +936,7 @@ async function applyHooksConfig(
 
   // D-71-03 / PHOOK-02: a successful parse may still carry supportability
   // drops. Route that signal to `partial.unsupported` (kind "hooks") +
-  // `partial.droppedHooks` so `decideResolution` returns `unsupported`. This
+  // `partial.droppedHooks` so `decideResolution` returns `partially-available`. This
   // mirrors `addUnsupportedKindNotes`, which pushes to `partial.unsupported`;
   // the dropped-hooks signal NEVER increments the structural dirty accumulator.
   if (hooksResult.dropped !== undefined && hooksResult.dropped.length > 0) {
@@ -944,7 +947,7 @@ async function applyHooksConfig(
   // D-71-03 / Q2: materialize the KEPT handlers only when the filtered subset
   // is non-empty. A Stop-only config (every handler dropped) filters to `{}`
   // -> stage nothing, set no hooksConfigPath, run no orphan probe; the
-  // `droppedHooks` push above still routes it `unsupported`.
+  // `droppedHooks` push above still routes it `partially-available`.
   if (hooksResult.value !== undefined && Object.keys(hooksResult.value).length > 0) {
     partial.supported.push("hooks");
     if (hooksResult.relativePath !== undefined) {
@@ -1144,7 +1147,7 @@ export async function resolveStrict(
  * D-64-01 / D-64-07: the three-way decision shared by both modes. Structural
  * precedence -- a structural defect (`structuralDirty`) wins over any
  * unsupported-component signal, so a both-defects plugin resolves
- * `unavailable` and never leaks `pluginRoot` through the `unsupported` arm.
+ * `unavailable` and never leaks `pluginRoot` through the `partially-available` arm.
  */
 function decideResolution(
   name: string,
@@ -1157,7 +1160,7 @@ function decideResolution(
   }
 
   if (partial.unsupported.length > 0) {
-    return unsupported(name, pluginRoot, partial);
+    return partiallyAvailable(name, pluginRoot, partial);
   }
 
   return installable(name, pluginRoot, partial);
@@ -1232,36 +1235,37 @@ export function requireInstallable(
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: r.name,
     reasons: r.notes,
-    // SEV-02 / D-69-03: `unsupported` is force-degradable; `unavailable` is
-    // a structural defect force cannot help -- carry the distinction the
-    // render row uses to condition the `--force` hint.
-    forceable: r.state === "unsupported",
+    // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
+    // a structural defect `--partial` cannot help -- carry the distinction the
+    // render row uses to condition the `--partial` hint.
+    partialable: r.state === "partially-available",
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
-    // `unsupported` arm carries the field; `unavailable` keeps an empty list so
+    // `partially-available` arm carries the field; `unavailable` keeps an empty list so
     // its structural reasons stay sourced from `notes` (unchanged).
-    unsupportedKinds: r.state === "unsupported" ? r.unsupported : [],
+    unsupportedKinds: r.state === "partially-available" ? r.unsupported : [],
   });
 }
 
 /**
- * D-64-04 (RSTATE-04): the `--force` narrowing gate. Admits both
- * `installable` and `unsupported` (force can degrade the unsupported parts)
- * but still rejects `unavailable` (structural defect -- force cannot help,
+ * D-64-04 (RSTATE-04): the `--partial` narrowing gate. Admits both
+ * `installable` and `partially-available` (`--partial` can degrade past the
+ * unsupported parts)
+ * but still rejects `unavailable` (structural defect -- `--partial` cannot help,
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
  * three arms so `reasons` compiles.
  *
  * BFILL-01: the reinstall primitive (orchestrators/plugin/reinstall.ts) resolves
- * through this gate so it can re-materialize a force-installed (`unsupported`)
- * plugin in place. The `--force` install/update flag plumbing lands in a
+ * through this gate so it can re-materialize a partially-installed (`partially-available`)
+ * plugin in place. The `--partial` install/update flag plumbing lands in a
  * later phase.
  */
-export function requireForceInstallable(
+export function requirePartialInstallable(
   r: ResolvedPlugin,
   op: "install" | "update" = "install",
-): asserts r is ResolvedPluginInstallable | ResolvedPluginUnsupported {
-  if (r.state === "installable" || r.state === "unsupported") {
+): asserts r is ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable {
+  if (r.state === "installable" || r.state === "partially-available") {
     return;
   }
 
@@ -1270,8 +1274,8 @@ export function requireForceInstallable(
     plugin: r.name,
     reasons: r.notes,
     // SEV-02 / D-69-03: this gate only ever throws for `unavailable`
-    // (`installable`/`unsupported` return above), which force cannot help --
-    // never forceable.
-    forceable: false,
+    // (`installable`/`partially-available` return above), which `--partial` cannot help --
+    // never partialable.
+    partialable: false,
   });
 }

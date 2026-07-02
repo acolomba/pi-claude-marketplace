@@ -3,7 +3,7 @@
 // The load-bearing assertions in this file are the // @ts-expect-error
 // lines below: TypeScript MUST refuse to typecheck a read of `pluginRoot`
 // from the `unavailable` ResolvedPlugin variant (NFR-7, D-64-05), and MUST
-// prove that `requireForceInstallable` can never leave a value as the
+// prove that `requirePartialInstallable` can never leave a value as the
 // `unavailable` arm (RSTATE-04). If any expected error fails to materialize,
 // TypeScript reports "Unused @ts-expect-error directive." and
 // `npm run typecheck` fails.
@@ -15,19 +15,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { requireForceInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import { requirePartialInstallable } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 import type {
   ResolvedPlugin,
   ResolvedPluginInstallable,
-  ResolvedPluginUnsupported,
+  ResolvedPluginPartiallyAvailable,
   ResolvedPluginUnavailable,
   MaterializablePlugin,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 declare const r: ResolvedPlugin;
 declare const inst: ResolvedPluginInstallable;
-declare const unsup: ResolvedPluginUnsupported;
+declare const unsup: ResolvedPluginPartiallyAvailable;
 declare const unavail: ResolvedPluginUnavailable;
 declare const materializable: MaterializablePlugin;
 
@@ -45,7 +45,7 @@ function consumeUnsupported(): string {
 }
 
 function narrowOnDiscriminator(): string | undefined {
-  if (r.state === "installable" || r.state === "unsupported") {
+  if (r.state === "installable" || r.state === "partially-available") {
     return r.pluginRoot; // OK -- narrowed to installable | unsupported (NFR-7)
   }
 
@@ -69,19 +69,19 @@ function narrowOnDiscriminatorNegative(): void {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// RSTATE-04 / D-64-04: requireForceInstallable narrows to
+// RSTATE-04 / D-64-04: requirePartialInstallable narrows to
 // installable | unsupported and can NEVER admit the unavailable arm.
 // ──────────────────────────────────────────────────────────────────────────
 
 function gateNarrowsForce(): string {
-  requireForceInstallable(r);
-  // r is now ResolvedPluginInstallable | ResolvedPluginUnsupported -- pluginRoot readable.
+  requirePartialInstallable(r);
+  // r is now ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable -- pluginRoot readable.
   return r.pluginRoot;
 }
 
 function gateExcludesUnavailable(): void {
-  requireForceInstallable(r);
-  // @ts-expect-error -- RSTATE-04: after requireForceInstallable, r can never be the unavailable arm.
+  requirePartialInstallable(r);
+  // @ts-expect-error -- RSTATE-04: after requirePartialInstallable, r can never be the unavailable arm.
   const bad: ResolvedPluginUnavailable = r;
   void bad;
 }

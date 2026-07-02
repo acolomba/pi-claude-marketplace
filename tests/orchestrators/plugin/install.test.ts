@@ -135,7 +135,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   pluginJsonVersion?: string | null;
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
-   * plugin.json so `resolveStrict` returns `state: "unsupported"` with NO
+   * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
    * structural defect (force-degradable). E.g.
    * `{ themes: "./themes", monitors: "./monitors.json" }`. The referenced paths
    * need not exist -- the declaration alone drives the `unsupported` arm.
@@ -2161,7 +2161,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     kind: "not-installable",
     plugin: "p",
     reasons: ["contains hooks", "contains lspServers"],
-    forceable: false,
+    partialable: false,
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -2183,7 +2183,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable with source no
     kind: "not-installable",
     plugin: "p",
     reasons: ["source dir does not exist"],
-    forceable: false,
+    partialable: false,
   });
   const row = __test_classifyEntityShapeError(err, {
     plugin: "p",
@@ -2216,7 +2216,7 @@ test("IN-02 / RSTATE-05: hooks-only unsupported (typed kind, no notes) renders {
     kind: "not-installable",
     plugin: "p",
     reasons: [],
-    forceable: true,
+    partialable: true,
     unsupportedKinds: ["hooks"],
   });
   const row = __test_classifyEntityShapeError(err, {
@@ -2236,7 +2236,7 @@ test("IN-02 / RSTATE-05: lsp unsupported (typed kind) renders {lsp} on the failu
     kind: "not-installable",
     plugin: "p",
     reasons: ["contains lspServers"],
-    forceable: true,
+    partialable: true,
     unsupportedKinds: ["lspServers"],
   });
   const row = __test_classifyEntityShapeError(err, {
@@ -2261,7 +2261,7 @@ test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their note
     kind: "not-installable",
     plugin: "p",
     reasons: ["source dir does not exist"],
-    forceable: false,
+    partialable: false,
     unsupportedKinds: [],
   });
   const row = __test_classifyEntityShapeError(err, {
@@ -2274,35 +2274,35 @@ test("IN-02 / RSTATE-05: genuinely unavailable (structural) rows keep their note
   assert.deepEqual(row.reasons, ["unsupported source"]);
 });
 
-test("SEV-02 / D-69-03: classifyEntityShapeError threads forceable from the thrown shape", async () => {
+test("SEV-02 / D-69-03: classifyEntityShapeError threads partialable from the thrown shape", async () => {
   const { PluginShapeError } =
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
 
-  const forceable = __test_classifyEntityShapeError(
+  const partialable = __test_classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
       reasons: ["contains lspServers"],
-      forceable: true,
+      partialable: true,
     }),
     { plugin: "p", marketplace: "mp", scope: "project" },
   );
-  assert.ok(forceable);
-  assert.equal(forceable.status, "unavailable");
-  assert.equal(forceable.forceable, true);
+  assert.ok(partialable);
+  assert.equal(partialable.status, "unavailable");
+  assert.equal(partialable.partialable, true);
 
   const structural = __test_classifyEntityShapeError(
     new PluginShapeError({
       kind: "not-installable",
       plugin: "p",
       reasons: ["source dir does not exist"],
-      forceable: false,
+      partialable: false,
     }),
     { plugin: "p", marketplace: "mp", scope: "project" },
   );
   assert.ok(structural);
   assert.equal(structural.status, "unavailable");
-  assert.equal(structural.forceable, false);
+  assert.equal(structural.partialable, false);
 });
 
 test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the verdict is force-degradable", async () => {
@@ -2312,29 +2312,29 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   // XSURF-01: force-degradable arm -> the resolver-state-driven `unsupported`
   // row carries the `--force` hint and renders at error severity (consistent
   // with how `list` / `info` describe the same plugin).
-  const forceableErr = new PluginShapeError({
+  const partialableErr = new PluginShapeError({
     kind: "not-installable",
     plugin: "helper",
     reasons: ["contains lspServers"],
-    forceable: true,
+    partialable: true,
   });
-  const forceableMsg = __test_composeInstallFailureMessage({
-    err: forceableErr,
+  const partialableMsg = __test_composeInstallFailureMessage({
+    err: partialableErr,
     plugin: "helper",
     scope: "project",
     version: undefined,
     rolledBackPartial: false,
     rollbackPartials: [],
-    entityErrorRow: __test_classifyEntityShapeError(forceableErr, {
+    entityErrorRow: __test_classifyEntityShapeError(partialableErr, {
       plugin: "helper",
       marketplace: "mp",
       scope: "project",
     }),
   });
-  assert.equal(forceableMsg.status, "unsupported");
-  assert.ok(forceableMsg.status === "unsupported");
-  assert.equal(forceableMsg.forceHint, true);
-  assert.equal(forceableMsg.severity, "error");
+  assert.equal(partialableMsg.status, "partially-available");
+  assert.ok(partialableMsg.status === "partially-available");
+  assert.equal(partialableMsg.partialHint, true);
+  assert.equal(partialableMsg.severity, "error");
 
   // D-70-02: structural `unavailable` arm -> error severity, but NO `--force`
   // hint (force cannot degrade-install a structural defect).
@@ -2342,7 +2342,7 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
     kind: "not-installable",
     plugin: "helper",
     reasons: ["source dir does not exist"],
-    forceable: false,
+    partialable: false,
   });
   const structuralMsg = __test_composeInstallFailureMessage({
     err: structuralErr,
@@ -2359,7 +2359,7 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   });
   assert.equal(structuralMsg.status, "unavailable");
   assert.ok(structuralMsg.status === "unavailable");
-  assert.equal(structuralMsg.forceHint, undefined);
+  assert.equal(structuralMsg.partialHint, undefined);
   assert.equal(structuralMsg.severity, "error");
 });
 
@@ -2404,7 +2404,7 @@ test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Sto
         cwd,
         marketplace: "mp",
         plugin: "hook-plugin",
-        force: true,
+        partial: true,
       });
 
       // Read the staged file the bridge wrote and assert the strict-subset
@@ -2454,7 +2454,7 @@ test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher g
         cwd,
         marketplace: "mp",
         plugin: "hook-plugin",
-        force: true,
+        partial: true,
       });
 
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
@@ -2526,11 +2526,11 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       // reason source).
       assert.match(
         noForce.notifications[0]?.message ?? "",
-        /hook-plugin \(unsupported\) \{unsupported hooks\}/,
+        /hook-plugin \(partially-available\) \{unsupported hooks\}/,
       );
       assert.match(
         noForce.notifications[0]?.message ?? "",
-        /Re-run with --force to install the supported components\./,
+        /Re-run with --partial to install the supported components\./,
       );
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
       await assert.rejects(readFile(stagedPath, "utf8"), "no-force install must stage nothing");
@@ -2542,7 +2542,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       );
 
       // SEV-01 / D-71-06: with `--force` the supported components install, the
-      // Stop event degrades, and the success row reads `(force-installed)
+      // Stop event degrades, and the success row reads `(partially-installed)
       // {unsupported hooks}` at info severity with NO summary line (the body
       // begins at the marketplace header, not a `... failed.` / `... attention.`
       // summary). FSTAT-07: the row reads `force-installed`.
@@ -2554,13 +2554,13 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         cwd,
         marketplace: "mp",
         plugin: "hook-plugin",
-        force: true,
+        partial: true,
       });
       assert.equal(forced.notifications.length, 1);
       const forcedMsg = forced.notifications[0]?.message ?? "";
       assert.notEqual(forced.notifications[0]?.severity, "error");
       assert.notEqual(forced.notifications[0]?.severity, "warning");
-      assert.match(forcedMsg, /\(force-installed\)/);
+      assert.match(forcedMsg, /\(partially-installed\)/);
       assert.match(forcedMsg, /\{unsupported hooks\}/);
       assert.ok(
         forcedMsg.startsWith("●"),
@@ -2613,7 +2613,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     kind: "not-installable",
     plugin: "p",
     reasons: ["hooks"],
-    forceable: false,
+    partialable: false,
   });
   const notInstallable = __test_classifyInstallFailure(notInstallableErr, "formatted");
   assert.equal(notInstallable.status, "failed");
@@ -2624,7 +2624,7 @@ test('260525-cjr C3: classifyInstallFailure returns the collapsed `status: "fail
     kind: "no-longer-installable",
     plugin: "p",
     reasons: ["unsupported source"],
-    forceable: false,
+    partialable: false,
   });
   const noLongerInstallable = __test_classifyInstallFailure(noLongerInstallableErr, "formatted");
   assert.equal(noLongerInstallable.status, "failed");
@@ -3406,7 +3406,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       // No error notifications: the degrade install succeeded.
@@ -3461,7 +3461,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       const errs = notifications.filter((n) => n.severity === "error");
@@ -3483,7 +3483,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
   });
 });
 
-test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-installed) success row", async () => {
+test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partially-installed) success row", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-installed-"));
     try {
@@ -3496,7 +3496,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
         pluginJsonVersion: "1.0.0",
         skills: [{ sourceName: "tool" }],
         // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm; the success row reports (force-installed) with the
+        // `unsupported` arm; the success row reports (partially-installed) with the
         // dropped-component detail rather than (installed).
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
@@ -3509,7 +3509,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       // FSTAT-07 / D-66-04: force-installed is a realized install transition --
@@ -3520,7 +3520,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (force-installed) {unsupported source}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3530,7 +3530,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (force-
   });
 });
 
-test("WR-03: a (force-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
+test("WR-03: a (partially-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));
     try {
@@ -3546,7 +3546,7 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         skills: [{ sourceName: "tool" }],
         agents: [{ sourceName: "bot" }],
         // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm -> the row is (force-installed) {unsupported source}.
+        // `unsupported` arm -> the row is (partially-installed) {unsupported source}.
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
@@ -3560,7 +3560,7 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       // SEV-01: the force-degraded install stages an agent while `pi-subagents`
@@ -3576,7 +3576,7 @@ test("WR-03: a (force-installed) success row renders soft-dep markers when a sta
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (force-installed) {unsupported source, requires pi-subagents}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source, requires pi-subagents}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3685,7 +3685,7 @@ test("FORCE-04: the force-degrade path emits no warning-severity notification an
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       // FORCE-04: no row stamps `warning` severity, so the MAX-reduce summary
@@ -3727,7 +3727,7 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
         cwd,
         marketplace: "mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       // Still blocks: an `(unavailable)` row surfaced and no record was written.
@@ -3761,7 +3761,7 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
         cwd,
         marketplace: "ghost-mp",
         plugin: "p1",
-        force: true,
+        partial: true,
       });
 
       assert.ok(notifications.length >= 1, "a notification must surface on missing marketplace");

@@ -489,7 +489,7 @@ test("scope routing: explicit --scope user routes to user-scope load only (still
  * DECLARED+enabled and NOT yet installed -- so the planner emits a
  * `pluginsToInstall`. The on-disk `cr` plugin root carries a `.lsp.json`
  * (lspServers) when `degrade` is true, which resolveStrict resolves
- * `unsupported` -> the install would degrade -> `(will force install)`. With
+ * `unsupported` -> the install would degrade -> `(will partially install)`. With
  * `degrade` false the root is clean -> `installable` -> plain `(will install)`.
  */
 async function stageForceInstallScenario(cwd: string, degrade: boolean): Promise<void> {
@@ -547,7 +547,7 @@ async function stageForceInstallScenario(cwd: string, degrade: boolean): Promise
   );
 }
 
-test("FSTAT-06: a planned install whose candidate resolves unsupported renders (will force install) through the pending surface", async () => {
+test("FSTAT-06: a planned install whose candidate resolves unsupported renders (will partially install) through the pending surface", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await stageForceInstallScenario(cwd, true);
 
@@ -562,8 +562,8 @@ test("FSTAT-06: a planned install whose candidate resolves unsupported renders (
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
     assert.ok(
-      emitted.includes("(will force install)"),
-      "expected the degrading planned install to render (will force install); got:\n" + emitted,
+      emitted.includes("(will partially install)"),
+      "expected the degrading planned install to render (will partially install); got:\n" + emitted,
     );
     assert.ok(emitted.includes("cr"), "expected the cr plugin row; got:\n" + emitted);
     // D-66-05: no will-force-update analog is ever produced.
@@ -593,7 +593,7 @@ test("FSTAT-06: a planned install whose candidate resolves installable renders p
       "expected the clean planned install to render (will install); got:\n" + emitted,
     );
     assert.ok(
-      !emitted.includes("(will force install)"),
+      !emitted.includes("(will partially install)"),
       "an installable candidate must NOT render the force modifier; got:\n" + emitted,
     );
   });
@@ -636,7 +636,7 @@ test("FSTAT-06 fallback: an install under a declared-but-not-recorded marketplac
       "an unresolvable candidate must render plain (will install); got:\n" + emitted,
     );
     assert.ok(
-      !emitted.includes("(will force install)"),
+      !emitted.includes("(will partially install)"),
       "an unrecorded marketplace must NOT render the force modifier; got:\n" + emitted,
     );
   });
@@ -650,7 +650,7 @@ test("FSTAT-06 fallback: an install under a declared-but-not-recorded marketplac
 test("FSTAT-06 fallback: a corrupt recorded manifest degrades the force preview to plain (will install), no throw", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // Stage the degrading scenario (cr resolves unsupported -> would be
-    // `(will force install)`), then corrupt the recorded manifest so the
+    // `(will partially install)`), then corrupt the recorded manifest so the
     // force-preview resolve throws and is caught.
     await stageForceInstallScenario(cwd, true);
     const manifestPath = path.join(
@@ -681,7 +681,7 @@ test("FSTAT-06 fallback: a corrupt recorded manifest degrades the force preview 
       "a caught force-preview throw must degrade to plain (will install); got:\n" + emitted,
     );
     assert.ok(
-      !emitted.includes("(will force install)"),
+      !emitted.includes("(will partially install)"),
       "a caught force-preview throw must NOT render the force modifier; got:\n" + emitted,
     );
   });
@@ -762,7 +762,7 @@ test("FSTAT-06 fallback: a recorded manifest that omits the planned plugin rende
       "a manifest that omits the plugin must render plain (will install); got:\n" + emitted,
     );
     assert.ok(
-      !emitted.includes("(will force install)"),
+      !emitted.includes("(will partially install)"),
       "a missing manifest entry must NOT render the force modifier; got:\n" + emitted,
     );
   });

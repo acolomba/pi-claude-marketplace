@@ -203,7 +203,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
     // resolution dropped components persists `unsupported` (and
     // `installable: false`). The deriver reads this to render
-    // `(force-installed)` -- no separate persisted flag.
+    // `(partially-installed)` -- no separate persisted flag.
     const unsupported = info.unsupported ?? [];
     const compatibility = {
       installable: unsupported.length === 0,
@@ -470,9 +470,9 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
     // `(unsupported)` / `⊖` token (USTAT-01). clean/gone are excluded.
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
-      assert.match(out, /⊖ unsup v1\.0\.0 \(unsupported\) \{lsp\}/, out);
+      assert.match(out, /⊖ unsup v1\.0\.0 \(partially-available\) \{lsp\}/, out);
       assert.equal(out.includes("clean"), false, out);
       assert.equal(out.includes("gone"), false, out);
     }
@@ -525,7 +525,7 @@ test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavail
 
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.equal(out.includes("gone"), false, out);
     }
@@ -553,12 +553,12 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
       const out = notifications[0]!.message;
-      assert.match(out, /◉ forced v1\.0\.0 \(force-installed\)/, out);
+      assert.match(out, /◉ forced v1\.0\.0 \(partially-installed\)/, out);
     }
 
     {
       const { ctx, pi, notifications } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unsupported: true });
+      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.equal(out.includes("forced"), false, out);
     }
@@ -589,7 +589,7 @@ test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the sing
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /◉ hookplug v1\.0\.0 \(force-installed\) \{unsupported hooks\}/, out);
+    assert.match(out, /◉ hookplug v1\.0\.0 \(partially-installed\) \{unsupported hooks\}/, out);
   });
 });
 
@@ -614,7 +614,7 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /● fup v1\.0\.0 \(force-upgradable\)/, out);
+    assert.match(out, /● fup v1\.0\.0 \(partially-upgradable\)/, out);
   });
 });
 
@@ -630,7 +630,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
 
     // User scope: `fi` force-installed (persisted unsupported) + `fu` clean
     // installed whose newer manifest candidate resolves `unsupported`
-    // (force-upgradable). The seed writes the shared manifest + plugin dirs.
+    // (partially-upgradable). The seed writes the shared manifest + plugin dirs.
     await seedMarketplace({
       scope: "user",
       scopeRoot: userRoot,
@@ -720,10 +720,10 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
     // Both the user-side row (no bracket) AND the folded project-side row
     // ([project]) appear for each name -> the same-name pair the sort's
     // `scopeOf` compares.
-    assert.match(out, /◉ fi v1\.0\.0 \(force-installed\)/, out);
-    assert.match(out, /◉ fi \[project\] v1\.0\.0 \(force-installed\)/, out);
-    assert.match(out, /● fu v1\.0\.0 \(force-upgradable\)/, out);
-    assert.match(out, /● fu \[project\] v1\.0\.0 \(force-upgradable\)/, out);
+    assert.match(out, /◉ fi v1\.0\.0 \(partially-installed\)/, out);
+    assert.match(out, /◉ fi \[project\] v1\.0\.0 \(partially-installed\)/, out);
+    assert.match(out, /● fu v1\.0\.0 \(partially-upgradable\)/, out);
+    assert.match(out, /● fu \[project\] v1\.0\.0 \(partially-upgradable\)/, out);
   });
 });
 
@@ -754,7 +754,7 @@ test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise t
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    const matches = out.match(/⊖ dup v1\.0\.0 \(unsupported\) \{lsp\}/g) ?? [];
+    const matches = out.match(/⊖ dup v1\.0\.0 \(partially-available\) \{lsp\}/g) ?? [];
     assert.equal(matches.length, 2, out);
   });
 });
@@ -788,7 +788,7 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
     assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
     // USTAT-01 / D-64-01: the not-installed `unsupported` row renders the
     // de-collapsed `(unsupported)` / `⊖` token, distinct from structural `⊘`.
-    assert.match(out, /⊖ unsup v4\.0\.0 \(unsupported\) \{lsp\}/, out);
+    assert.match(out, /⊖ unsup v4\.0\.0 \(partially-available\) \{lsp\}/, out);
   });
 });
 
@@ -1250,7 +1250,7 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
 // no-network candidate split, and auto-return-to-installed.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(force-installed)` with NO state write", async () => {
+test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(partially-installed)` with NO state write", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1275,15 +1275,15 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // ◉ glyph + `(force-installed)`; version is the installed record's version.
-    assert.match(out, /◉ plug v1\.0\.0 \(force-installed\)/);
+    // ◉ glyph + `(partially-installed)`; version is the installed record's version.
+    assert.match(out, /◉ plug v1\.0\.0 \(partially-installed\)/);
 
     const after = await readFile(stateJsonPath, "utf8");
     assert.equal(after, before, "the deriver must not write state.json (FSTAT-01)");
   });
 });
 
-test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported derives `(force-installed)` on list (parity with info)", async () => {
+test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted unsupported derives `(partially-installed)` on list (parity with info)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1312,12 +1312,12 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
       notifications[0]!.message,
       // Byte-identical to the non-path `info` row (sans the info-only
       // `components: not resolved` line) -- the WR-02 cross-surface parity.
-      ["● mp1 [user]", "  ◉ remote v1.0.0 (force-installed) {lsp}"].join("\n"),
+      ["● mp1 [user]", "  ◉ remote v1.0.0 (partially-installed) {lsp}"].join("\n"),
     );
   });
 });
 
-test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives `(force-installed)`, NEVER `(force-upgradable)`", async () => {
+test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives `(partially-installed)`, NEVER `(partially-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1339,12 +1339,12 @@ test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /\(force-installed\)/);
-    assert.equal(out.includes("(force-upgradable)"), false, out);
+    assert.match(out, /\(partially-installed\)/);
+    assert.equal(out.includes("(partially-upgradable)"), false, out);
   });
 });
 
-test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` derives `(force-upgradable)`", async () => {
+test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` derives `(partially-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1365,10 +1365,10 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` deriv
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // ● glyph (clean today) + `(force-upgradable)`; version stays the installed
+    // ● glyph (clean today) + `(partially-upgradable)`; version stays the installed
     // record's version. The reasons brace carries the narrowUnsupportedKinds
     // marker for the degrading candidate kind.
-    assert.match(out, /● plug v1\.0\.0 \(force-upgradable\)/);
+    assert.match(out, /● plug v1\.0\.0 \(partially-upgradable\)/);
     assert.match(out, new RegExp(`\\{${narrowUnsupportedKinds(["lspServers"]).join(", ")}\\}`));
   });
 });
@@ -1489,7 +1489,7 @@ test("FSTAT-01 / D-64-02: the force-installed row's reasons are the narrowUnsupp
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
     const expectedMarkers = narrowUnsupportedKinds(["lspServers", "monitors"]).join(", ");
-    assert.match(out, /\(force-installed\)/);
+    assert.match(out, /\(partially-installed\)/);
     assert.match(out, new RegExp(`\\{${expectedMarkers}\\}`));
   });
 });

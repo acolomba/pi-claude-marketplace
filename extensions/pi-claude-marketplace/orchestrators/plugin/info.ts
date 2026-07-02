@@ -36,7 +36,7 @@ import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/
 import {
   resolveStrict,
   type ResolvedPluginUnavailable,
-  type ResolvedPluginUnsupported,
+  type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
 import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
@@ -303,7 +303,7 @@ function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEnt
 
 /**
  * PHOOK-05 / D-71-05: project the partition's `dropped` enumeration to
- * lenient `HookSummaryEntry` rows so a force-degradable plugin enumerates
+ * lenient `HookSummaryEntry` rows so a partially-available plugin enumerates
  * the handlers the install path WILL drop. A `kind:"event"` drop (a whole
  * non-bucket-A event, P1) renders bare `<event> (unsupported)`; a
  * `kind:"group"` (P2-P5) or `kind:"handler"` (P6) drop renders at
@@ -345,7 +345,7 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  * defensive only -- the file was parseable at resolve time).
  *
  * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
- * subset as `value` plus the `dropped` enumeration. For a force-degradable
+ * subset as `value` plus the `dropped` enumeration. For a partially-available
  * plugin the row records `hooksConfigPath`, so info routes HERE (the strict
  * reader) rather than the lenient bail reader -- the dropped enumeration
  * must therefore render on THIS path or it vanishes. The supported entries
@@ -748,7 +748,7 @@ async function buildNotInstallablePathRowFields(
 
 /**
  * D-64-05: re-derive the component-path map for the MINIMAL `unavailable`
- * arm, which (unlike `installable` / `unsupported`) does not carry
+ * arm, which (unlike `installable` / `partially-available`) does not carry
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
  * `<pluginRoot>/{skills,commands,agents}` locations; `composeResolvedComponents`
@@ -793,17 +793,17 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
 
 /**
  * Build the not-installable row fields for either non-installable arm.
- * `unsupported` carries the full component payload (read directly);
+ * `partially-available` carries the full component payload (read directly);
  * `unavailable` is minimal, so its component paths are re-derived
  * independently via `deriveLenientComponentPaths` (D-64-05).
  *
- * D-64-02 / RSTATE-05: the per-kind unsupported markers for the `unsupported`
+ * D-64-02 / RSTATE-05: the per-kind unsupported markers for the `partially-available`
  * arm derive from the typed `unsupported[]` component-kind list via the shared
  * render helper; the structural `unavailable` arm's reasons stay on the `notes`
  * path via `narrowResolverNotes`.
  */
 function buildNonInstallableRowFields(
-  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
   parsedSource: ParsedSource,
@@ -813,7 +813,7 @@ function buildNonInstallableRowFields(
   // compile-time error here rather than silently falling through to the
   // `unavailable`/`notes` path.
   switch (resolved.state) {
-    case "unsupported":
+    case "partially-available":
       return buildNotInstallablePathRowFields(
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
@@ -836,15 +836,15 @@ function buildNonInstallableRowFields(
 }
 
 /**
- * WR-02 / D-66-01: build the `(installed)` / `(force-installed)` row for a
+ * WR-02 / D-66-01: build the `(installed)` / `(partially-installed)` row for a
  * NON-PATH source (github / npm / url / git-subdir). INFO-05 defers LIVE
  * component resolution for these sources to preserve NFR-5 (never fetch), so
  * `componentsResolved: false` is always emitted. The install-time
  * `compatibility.unsupported` record, however, was persisted AT INSTALL and is
  * read OFFLINE here -- the SAME single deriver `list` reads (list.ts
- * force-installed branch). A recorded-installed non-path plugin whose install
- * dropped one or more components therefore reports `(force-installed)` here too,
- * so `info` and `list` never diverge on the derived force state for non-path
+ * partially-installed branch). A recorded-installed non-path plugin whose install
+ * dropped one or more components therefore reports `(partially-installed)` here too,
+ * so `info` and `list` never diverge on the derived partial state for non-path
  * sources.
  */
 function buildNonPathInstalledRow(
@@ -854,13 +854,13 @@ function buildNonPathInstalledRow(
   installedRecord: MarketplaceRecord["plugins"][string],
 ): PluginInfoRow {
   const status =
-    installedRecord.compatibility.unsupported.length > 0 ? "force-installed" : "installed";
+    installedRecord.compatibility.unsupported.length > 0 ? "partially-installed" : "installed";
   return {
     status,
     name: pluginName,
     ...(version !== undefined && { version }),
     ...(description !== undefined && { description }),
-    ...(status === "force-installed" && {
+    ...(status === "partially-installed" && {
       reasons: narrowUnsupportedKinds(installedRecord.compatibility.unsupported),
     }),
     componentsResolved: false,
@@ -919,14 +919,14 @@ async function buildInstalledRow(opts: {
     // resolveStrict returned a non-installable arm but the state record says
     // installed -- the marketplace clone changed, OR the manifest now
     // declares an unsupported field (`lspServers`) or a structural defect
-    // (malformed hooks/manifest). FSTAT-07 / D-66-04: an `unsupported`
+    // (malformed hooks/manifest). FSTAT-07 / D-66-04: a `partially-available`
     // re-resolve of a recorded-installed plugin is the derived
-    // `force-installed` state -- the install was force-completed with one or
-    // more components dropped, so it reports `(force-installed)` with the
+    // `partially-installed` state -- the install was partially completed with one or
+    // more components dropped, so it reports `(partially-installed)` with the
     // dropped-component detail. `unavailable` keeps `(installed)` (D-64-05:
-    // only `unsupported` maps to force-installed); info never emits
-    // `force-upgradable` (that is a list-inventory-only concept).
-    // `unsupported` reads its component payload directly; `unavailable`
+    // only `partially-available` maps to partially-installed); info never emits
+    // `partially-upgradable` (that is a list-inventory-only concept).
+    // `partially-available` reads its component payload directly; `unavailable`
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
       resolved,
@@ -935,7 +935,7 @@ async function buildInstalledRow(opts: {
       parsedSource,
     );
     return {
-      status: resolved.state === "unsupported" ? "force-installed" : "installed",
+      status: resolved.state === "partially-available" ? "partially-installed" : "installed",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
@@ -961,11 +961,11 @@ async function buildInstalledRow(opts: {
 
 /**
  * Build the not-installed row for a PATH source whose resolver returned a
- * non-installable arm (`unsupported` / `unavailable`). Enumerates components
+ * non-installable arm (`partially-available` / `unavailable`). Enumerates components
  * from disk via `buildNonInstallableRowFields`.
  *
  * USTAT-01 / D-64-01: de-collapse the row status by resolver STATE -- a
- * force-installable `unsupported` plugin renders the distinct `(unsupported)` /
+ * partially-available plugin renders the distinct `(partially-available)` /
  * `⊖` token (byte-consistent with the list surface), while a structural
  * `unavailable` keeps `(unavailable)` / `⊘`. Severity is unchanged (token
  * rename only).
@@ -978,7 +978,7 @@ async function buildInstalledRow(opts: {
  * instead of throwing uncaught out of `getPluginInfo`.
  */
 async function buildNotInstalledPathRow(
-  resolved: ResolvedPluginUnsupported | ResolvedPluginUnavailable,
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     pluginName: string;
     version: string | undefined;
@@ -997,7 +997,7 @@ async function buildNotInstalledPathRow(
       parsedSource,
     );
     return {
-      status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+      status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
@@ -1019,7 +1019,7 @@ async function buildNotInstalledPathRow(
 
 /**
  * Build the row for a plugin that is NOT in the state's installed
- * bucket. `resolveStrict` decides between `(available)`, `(unsupported)`, and
+ * bucket. `resolveStrict` decides between `(available)`, `(partially-available)`, and
  * `(unavailable)`; the per-kind component arrays follow the same
  * INFO-05 source-kind gate as the installed row.
  */
@@ -1058,16 +1058,16 @@ async function buildNotInstalledRow(
       // `resolved.state`, mirroring the path-source arm and the list surface,
       // instead of hardcoding `unavailable`. The `resolved.state !==
       // "installable"` guard above narrows to `unsupported | unavailable`, so
-      // `resolved.unsupported` is reachable on the `unsupported` arm. Today
-      // non-path sources never resolve `unsupported` (no-network), so this is
+      // `resolved.unsupported` is reachable on the `partially-available` arm. Today
+      // non-path sources never resolve `partially-available` (no-network), so this is
       // latent-divergence repair -- existing non-path `unavailable` rows stay
       // byte-unchanged.
       const reasons =
-        resolved.state === "unsupported"
+        resolved.state === "partially-available"
           ? narrowUnsupportedKinds(resolved.unsupported)
           : narrowResolverNotes(resolved.notes);
       return {
-        status: resolved.state === "unsupported" ? "unsupported" : "unavailable",
+        status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
         name: pluginName,
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),
@@ -1077,7 +1077,7 @@ async function buildNotInstalledRow(
     }
 
     // Path source whose resolver returned a non-installable arm: enumerate
-    // components from disk. `unsupported` reads its component payload
+    // components from disk. `partially-available` reads its component payload
     // directly; `unavailable` re-derives independently (D-64-05).
     return buildNotInstalledPathRow(resolved, {
       pluginName,

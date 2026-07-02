@@ -262,7 +262,7 @@ test("Unknown long flag -> USAGE error", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// FORCE-02 (D-65-05): --force is parsed at the edge and threaded into
+// FORCE-02 (D-65-05): --partial is parsed at the edge and threaded into
 // updatePlugins.
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -332,22 +332,22 @@ async function seedUnsupportedCandidate(cwd: string): Promise<void> {
   });
 }
 
-test("USAGE string contains [--force]", async () => {
+test("USAGE string contains [--partial]", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
     await handler("--frobnicate", ctx);
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\[--force\]/);
+    assert.match(notifications[0]!.message, /\[--partial\]/);
   });
 });
 
-test("shim :: --force is accepted on the bare form; control reaches updatePlugins", async () => {
+test("shim :: --partial is accepted on the bare form; control reaches updatePlugins", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
-    await handler("--force", ctx);
-    // No USAGE error -- `--force` is in the allow-list and the shared scanner
+    await handler("--partial", ctx);
+    // No USAGE error -- `--partial` is in the allow-list and the shared scanner
     // recognizes it; control reaches updatePlugins (empty state).
     assert.equal(notifications.length, 1);
     assert.doesNotMatch(notifications[0]!.message, /Usage: \/claude:plugin update/);
@@ -355,27 +355,31 @@ test("shim :: --force is accepted on the bare form; control reaches updatePlugin
   });
 });
 
-test("shim :: --force threads force:true into updatePlugins (degrades an unsupported candidate)", async () => {
+test("shim :: --partial threads partial:true into updatePlugins (degrades an unsupported candidate)", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    // Only the handler is under test, so a `(force-installed)` degrade row can
-    // ONLY render if the handler forwarded `force: true` to updatePlugins.
+    // Only the handler is under test, so a `(partially-installed)` degrade row can
+    // ONLY render if the handler forwarded `partial: true` to updatePlugins.
     // FSTAT-07 / D-66-04: a force update whose candidate re-resolved
-    // `unsupported` reports `(force-installed)`, not `(updated)`.
+    // `unsupported` reports `(partially-installed)`, not `(updated)`.
     await seedUnsupportedCandidate(cwd);
     const locations = locationsFor("project", cwd);
 
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeUpdateHandler(makePi());
-    await handler("hello@mp --force", ctx);
+    await handler("hello@mp --partial", ctx);
 
     const body = notifications.map((n) => n.message).join("\n");
-    assert.match(body, /\(force-installed\)/, `expected degrade via threaded force; got: ${body}`);
+    assert.match(
+      body,
+      /\(partially-installed\)/,
+      `expected degrade via threaded force; got: ${body}`,
+    );
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.1.0");
   });
 });
 
-test("shim :: without --force the force-upgradable candidate declines with the force-upgradable token", async () => {
+test("shim :: without --partial the force-upgradable candidate declines with the force-upgradable token", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedUnsupportedCandidate(cwd);
     const locations = locationsFor("project", cwd);
@@ -385,11 +389,11 @@ test("shim :: without --force the force-upgradable candidate declines with the f
     await handler("hello@mp", ctx);
 
     const body = notifications.map((n) => n.message).join("\n");
-    // XSURF-03: the no-`--force` decline of a force-upgradable candidate renders
-    // the `(force-upgradable)` token + the update-worded `--force` trailer, not
+    // XSURF-03: the no-`--partial` decline of a force-upgradable candidate renders
+    // the `(partially-upgradable)` token + the update-worded `--force` trailer, not
     // the misleading `(skipped) {no longer installable}`.
-    assert.match(body, /\(force-upgradable\)/);
-    assert.match(body, /Re-run with --force to update with the supported components\./);
+    assert.match(body, /\(partially-upgradable\)/);
+    assert.match(body, /Re-run with --partial to update with the supported components\./);
     assert.doesNotMatch(body, /\{no longer installable\}/);
     const after = await loadState(locations.extensionRoot);
     assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");

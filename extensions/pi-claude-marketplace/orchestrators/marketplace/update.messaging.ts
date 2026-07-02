@@ -17,7 +17,7 @@ import {
   ICON_UNINSTALLABLE,
   composeReasons,
   composeVersionArrow,
-  forceInstalledRow,
+  partiallyInstalledRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
@@ -26,7 +26,7 @@ import {
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type {
   PluginFailedMessage,
-  PluginForceInstalledMessage,
+  PluginPartiallyInstalledMessage,
   PluginSkippedMessage,
   PluginUpdatedMessage,
 } from "../../shared/notify.ts";
@@ -44,16 +44,16 @@ export type UpdateMpStatus = (typeof UPDATE_MP_STATUSES)[number];
 
 /**
  * The plugin-child-row statuses `marketplace update`'s autoupdate-ON cascade
- * emits: `updated`, `force-installed`, `skipped`, `failed`. This is the Status
+ * emits: `updated`, `partially-installed`, `skipped`, `failed`. This is the Status
  * set the render map below is total over (D-10: a missing arm is a TS2741
- * compile error). SEV-03 / D-69-01: `force-installed` joins the set because the
- * autoupdate cascade now TAKES the force path, so a degrading candidate renders
- * `(force-installed) {dropped kinds}` instead of `(skipped) {no longer installable}`.
+ * compile error). SEV-03 / D-69-01: `partially-installed` joins the set because the
+ * autoupdate cascade now TAKES the partial path, so a degrading candidate renders
+ * `(partially-installed) {dropped kinds}` instead of `(skipped) {no longer installable}`.
  */
-type UpdateRowStatus = "updated" | "force-installed" | "skipped" | "failed";
+type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
 export type UpdateRowMsg =
   | PluginUpdatedMessage
-  | PluginForceInstalledMessage
+  | PluginPartiallyInstalledMessage
   | PluginSkippedMessage
   | PluginFailedMessage;
 
@@ -81,11 +81,11 @@ export const UPDATE_CONTEXT = {
         ),
       ]),
     // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
-    // `unsupported` degraded via the force path. Reuse `forceInstalledRow` --
+    // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
     // the SOLE composition site (D-11 "call, never duplicate") -- so the
-    // `◉ <name> v<version> (force-installed) {dropped kinds[, requires pi-...]}`
+    // `◉ <name> v<version> (partially-installed) {dropped kinds[, requires pi-...]}`
     // bytes stay identical to the install / update success surfaces.
-    "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
+    "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
     skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   },

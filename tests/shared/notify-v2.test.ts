@@ -411,7 +411,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (
         scope: "user",
         plugins: [
           {
-            status: "unsupported",
+            status: "partially-available",
             name: "hookify",
             reasons: ["unsupported hooks"],
           },
@@ -425,7 +425,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (
   // info severity -> single-arg notify (the row omits `severity`).
   assert.equal(args.length, 1);
   // Variant has no `version` set -> renderVersion("") -> "" slot collapsed.
-  assert.equal(args[0], `● demo [user]\n  ⊖ hookify (unsupported) {unsupported hooks}`);
+  assert.equal(args[0], `● demo [user]\n  ⊖ hookify (partially-available) {unsupported hooks}`);
   // The unsupported glyph ⊖ is byte-distinct from the ⊘ unavailable glyph.
   assert.ok((args[0] as string).includes("⊖ hookify"));
   assert.ok(!(args[0] as string).includes("⊘ hookify"));
@@ -441,7 +441,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
         scope: "user",
         plugins: [
           {
-            status: "unsupported",
+            status: "partially-available",
             name: "clangd-lsp",
             version: "1.0.0",
             reasons: ["lsp"],
@@ -453,11 +453,11 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
   notify(ctx as never, pi as never, msg);
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user]\n  ⊖ clangd-lsp v1.0.0 (unsupported) {lsp}`,
+    `● demo [user]\n  ⊖ clangd-lsp v1.0.0 (partially-available) {lsp}`,
   ]);
 });
 
-test("XSURF-01: unsupported install-failure row with forceHint emits the --force install trailer", () => {
+test("XSURF-01: unsupported install-failure row with partialHint emits the --force install trailer", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -467,12 +467,12 @@ test("XSURF-01: unsupported install-failure row with forceHint emits the --force
         scope: "user",
         plugins: [
           {
-            status: "unsupported",
+            status: "partially-available",
             name: "hookify",
             version: "1.0.0",
             reasons: ["unsupported hooks", "lsp"],
             severity: "error",
-            forceHint: true,
+            partialHint: true,
           },
         ],
       },
@@ -485,11 +485,11 @@ test("XSURF-01: unsupported install-failure row with forceHint emits the --force
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `A plugin operation has failed.\n\n● demo [user]\n  ⊖ hookify v1.0.0 (unsupported) {unsupported hooks, lsp}\n    Re-run with --force to install the supported components.`,
+    `A plugin operation has failed.\n\n● demo [user]\n  ⊖ hookify v1.0.0 (partially-available) {unsupported hooks, lsp}\n    Re-run with --partial to install the supported components.`,
   );
 });
 
-test("XSURF-01: unsupported row WITHOUT forceHint stays byte-frozen (no trailer)", () => {
+test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no trailer)", () => {
   const ctx = makeCtx();
   const pi = piWithNothingLoaded();
   const msg: NotificationMessage = {
@@ -499,7 +499,7 @@ test("XSURF-01: unsupported row WITHOUT forceHint stays byte-frozen (no trailer)
         scope: "user",
         plugins: [
           {
-            status: "unsupported",
+            status: "partially-available",
             name: "hookify",
             version: "1.0.0",
             reasons: ["unsupported hooks"],
@@ -512,11 +512,14 @@ test("XSURF-01: unsupported row WITHOUT forceHint stays byte-frozen (no trailer)
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● demo [user]\n  ⊖ hookify v1.0.0 (unsupported) {unsupported hooks}`);
-  assert.ok(!(args[0] as string).includes("--force"));
+  assert.equal(
+    args[0],
+    `● demo [user]\n  ⊖ hookify v1.0.0 (partially-available) {unsupported hooks}`,
+  );
+  assert.ok(!(args[0] as string).includes("--partial"));
 });
 
-test("XSURF-03: force-upgradable update-decline row with forceHint emits the --force update trailer", () => {
+test("XSURF-03: force-upgradable update-decline row with partialHint emits the --force update trailer", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -526,12 +529,12 @@ test("XSURF-03: force-upgradable update-decline row with forceHint emits the --f
         scope: "user",
         plugins: [
           {
-            status: "force-upgradable",
+            status: "partially-upgradable",
             name: "clean-plugin",
             version: "1.0.0",
             reasons: ["lsp"],
             severity: "warning",
-            forceHint: true,
+            partialHint: true,
           },
         ],
       },
@@ -543,11 +546,11 @@ test("XSURF-03: force-upgradable update-decline row with forceHint emits the --f
   assert.equal(args[1], "warning");
   assert.equal(
     args[0],
-    `A plugin operation needs attention.\n\n● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {lsp}\n    Re-run with --force to update with the supported components.`,
+    `A plugin operation needs attention.\n\n● demo [user]\n  ● clean-plugin v1.0.0 (partially-upgradable) {lsp}\n    Re-run with --partial to update with the supported components.`,
   );
 });
 
-test("XSURF-03: list-inventory force-upgradable row WITHOUT forceHint stays byte-frozen (no trailer)", () => {
+test("XSURF-03: list-inventory force-upgradable row WITHOUT partialHint stays byte-frozen (no trailer)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -557,7 +560,7 @@ test("XSURF-03: list-inventory force-upgradable row WITHOUT forceHint stays byte
         scope: "user",
         plugins: [
           {
-            status: "force-upgradable",
+            status: "partially-upgradable",
             name: "clean-plugin",
             version: "1.0.0",
             reasons: ["unsupported hooks"],
@@ -572,9 +575,9 @@ test("XSURF-03: list-inventory force-upgradable row WITHOUT forceHint stays byte
   assert.equal(args.length, 1);
   assert.equal(
     args[0],
-    `● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}`,
+    `● demo [user]\n  ● clean-plugin v1.0.0 (partially-upgradable) {unsupported hooks}`,
   );
-  assert.ok(!(args[0] as string).includes("--force"));
+  assert.ok(!(args[0] as string).includes("--partial"));
 });
 
 test("notify renders upgradable plugin with version and reasons brace", () => {
@@ -615,7 +618,7 @@ test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from �
         scope: "user",
         plugins: [
           {
-            status: "force-installed",
+            status: "partially-installed",
             name: "degraded-plugin",
             version: "1.0.0",
             reasons: ["unsupported hooks"],
@@ -631,7 +634,7 @@ test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from �
   assert.equal(args.length, 1);
   assert.equal(
     args[0],
-    `● demo [user]\n  ◉ degraded-plugin v1.0.0 (force-installed) {unsupported hooks}`,
+    `● demo [user]\n  ◉ degraded-plugin v1.0.0 (partially-installed) {unsupported hooks}`,
   );
   // The force-installed glyph ◉ is byte-distinct from the ● installed glyph.
   assert.ok((args[0] as string).includes("◉ degraded-plugin"));
@@ -650,7 +653,7 @@ test("WR-03: force-installed success row threads dependencies -> soft-dep marker
         scope: "user",
         plugins: [
           {
-            status: "force-installed",
+            status: "partially-installed",
             name: "helper",
             version: "1.0.0",
             // The force-degradable `unsupported` arm still staged agents.
@@ -670,7 +673,7 @@ test("WR-03: force-installed success row threads dependencies -> soft-dep marker
   // `reasons[]`, so the dropped-component token leads the shared brace.
   assert.equal(
     args[0],
-    `● official [user]\n  ◉ helper v1.0.0 (force-installed) {lsp, requires pi-subagents}\n\n/reload to pick up changes`,
+    `● official [user]\n  ◉ helper v1.0.0 (partially-installed) {lsp, requires pi-subagents}\n\n/reload to pick up changes`,
   );
 });
 
@@ -684,7 +687,7 @@ test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep
         scope: "user",
         plugins: [
           {
-            status: "force-installed",
+            status: "partially-installed",
             name: "degraded-plugin",
             version: "1.0.0",
             // List/info inventory force rows OMIT `dependencies`.
@@ -698,7 +701,10 @@ test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   // No `dependencies` field -> the soft-dep markers never fire; the brace
   // carries only the dropped-component reason (unchanged from before WR-03).
-  assert.equal(args[0], `● official [user]\n  ◉ degraded-plugin v1.0.0 (force-installed) {lsp}`);
+  assert.equal(
+    args[0],
+    `● official [user]\n  ◉ degraded-plugin v1.0.0 (partially-installed) {lsp}`,
+  );
 });
 
 test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgradable arm", () => {
@@ -711,7 +717,7 @@ test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgrada
         scope: "user",
         plugins: [
           {
-            status: "force-upgradable",
+            status: "partially-upgradable",
             name: "clean-plugin",
             version: "1.0.0",
             reasons: ["unsupported hooks"],
@@ -726,11 +732,11 @@ test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgrada
   assert.equal(args.length, 1);
   assert.equal(
     args[0],
-    `● demo [user]\n  ● clean-plugin v1.0.0 (force-upgradable) {unsupported hooks}`,
+    `● demo [user]\n  ● clean-plugin v1.0.0 (partially-upgradable) {unsupported hooks}`,
   );
 });
 
-test("FSTAT-06 / D-66-04: will-install force modifier renders (will force install)", () => {
+test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially install)", () => {
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   const msg: NotificationMessage = {
@@ -738,7 +744,7 @@ test("FSTAT-06 / D-66-04: will-install force modifier renders (will force instal
       {
         name: "new-mp",
         scope: "user",
-        plugins: [{ status: "will install", name: "degraded-plugin", force: true }],
+        plugins: [{ status: "will install", name: "degraded-plugin", partial: true }],
       },
     ],
   };
@@ -746,7 +752,7 @@ test("FSTAT-06 / D-66-04: will-install force modifier renders (will force instal
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● new-mp [user]\n  ● degraded-plugin (will force install)`);
+  assert.equal(args[0], `● new-mp [user]\n  ● degraded-plugin (will partially install)`);
 });
 
 test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will install)", () => {
@@ -757,7 +763,7 @@ test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will 
       {
         name: "new-mp",
         scope: "user",
-        plugins: [{ status: "will install", name: "plain-plugin", force: false }],
+        plugins: [{ status: "will install", name: "plain-plugin", partial: false }],
       },
     ],
   };
@@ -1494,7 +1500,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", ()
         scope: "user",
         plugins: [
           {
-            status: "unsupported",
+            status: "partially-available",
             name: "delta",
             reasons: ["lsp"],
             description: "Unsupported plugin that still surfaces its description.",
@@ -1507,7 +1513,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", ()
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.equal(
     body,
-    "● official [user]\n  ⊖ delta (unsupported) {lsp}\n    Unsupported plugin that still surfaces its description.",
+    "● official [user]\n  ⊖ delta (partially-available) {lsp}\n    Unsupported plugin that still surfaces its description.",
   );
 });
 

@@ -136,7 +136,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   const plans: ReconcilePlan[] = [];
   const invalidBlocks: MarketplaceRows<PendingMsg>[] = [];
   // FSTAT-06: the recorded marketplace clone roots + manifest paths, keyed by
-  // `(scope, marketplace)`, so the will-force-install preview can locate a
+  // `(scope, marketplace)`, so the will-partially-install preview can locate a
   // planned install candidate's on-disk manifest entry and resolve it
   // no-network. Only RECORDED marketplaces are reachable -- a same-run
   // marketplace add is not yet cloned, so its installs stay `(will install)`.
@@ -190,7 +190,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     }
 
     // FSTAT-06: record this scope's marketplace clone roots + manifest paths so
-    // the will-force-install preview can resolve a planned install candidate
+    // the will-partially-install preview can resolve a planned install candidate
     // no-network (NFR-5). Keyed by `(scope, marketplace)` to disambiguate the
     // same marketplace name across scopes.
     for (const [mpName, record] of Object.entries(state.marketplaces)) {
@@ -226,8 +226,8 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // scope -- a scope can be EITHER in `plans` OR in `invalidBlocks`, never
   // both.
   // FSTAT-06 / D-66-04 / NFR-5: resolve each planned install candidate
-  // no-network so the pending row renders `(will force install)` when the
-  // install would degrade (candidate resolves `unsupported`). The locator reads
+  // no-network so the pending row renders `(will partially install)` when the
+  // install would degrade (candidate resolves `partially-available`). The locator reads
   // only the recorded marketplace's on-disk manifest (cache; no network sync) +
   // delegates the resolve to resolvePendingForceInstalls (which owns the
   // resolveStrict call). An unrecorded marketplace or a missing manifest entry

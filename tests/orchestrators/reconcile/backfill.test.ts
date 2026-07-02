@@ -398,7 +398,7 @@ test("BFILL-01: a partial re-materialize stays force-installed and records the r
 
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const body = (ctx.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
-    assert.ok(body.includes("hello") && body.includes("(force-installed)"), `got:\n${body}`);
+    assert.ok(body.includes("hello") && body.includes("(partially-installed)"), `got:\n${body}`);
   });
 });
 
@@ -693,7 +693,7 @@ test("BFILL-01: a concurrent uninstall (skipped partition) emits no promotion ro
     // candidate. The read-pass snapshot still carries hello, but by the time the
     // re-materialize acquires its own lock the record is GONE (a concurrent
     // process uninstalled it), so reinstallPlugin returns `skipped`. That benign
-    // skip must NOT emit an (installed)/(force-installed) promotion row.
+    // skip must NOT emit an (installed)/(partially-installed) promotion row.
     const { extensionRoot } = await seedScope({
       cwd,
       stamp: "0.0.0",

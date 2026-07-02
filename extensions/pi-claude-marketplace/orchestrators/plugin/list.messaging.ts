@@ -1,10 +1,10 @@
 import {
   ICON_AVAILABLE,
   ICON_DISABLED,
-  ICON_FORCE_INSTALLED,
+  ICON_PARTIALLY_INSTALLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  ICON_UNSUPPORTED,
+  ICON_PARTIALLY_AVAILABLE,
   composeReasons,
   installedLikeRow,
   joinTokens,
@@ -14,11 +14,11 @@ import {
   type PluginAvailableMessage,
   type PluginDisabledMessage,
   type PluginFailedMessage,
-  type PluginForceInstalledMessage,
-  type PluginForceUpgradableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
-  type PluginUnsupportedMessage,
+  type PluginPartiallyAvailableMessage,
   type PluginUpgradableMessage,
 } from "../../shared/notify.ts";
 
@@ -48,19 +48,19 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 export const LIST_STATUSES = [
   "installed",
   "available",
-  // USTAT-01 / D-64-01: not-installed, force-installable row -- distinct from
-  // structural `unavailable` (renders `(unsupported)` / `⊖`).
-  "unsupported",
+  // USTAT-01 / D-64-01: not-installed, partially-available row -- distinct from
+  // structural `unavailable` (renders `(partially-available)` / `⊖`).
+  "partially-available",
   "unavailable",
   "upgradable",
   "disabled",
   "failed",
-  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived force-state inventory
-  // rows. `force-installed` is a recorded-installed plugin currently resolving
-  // `unsupported`; `force-upgradable` is a currently-clean plugin whose newer
+  // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived partial-state inventory
+  // rows. `partially-installed` is a recorded-installed plugin currently resolving
+  // `partially-available`; `partially-upgradable` is a currently-clean plugin whose newer
   // candidate would newly degrade it.
-  "force-installed",
-  "force-upgradable",
+  "partially-installed",
+  "partially-upgradable",
 ] as const;
 export type ListStatus = (typeof LIST_STATUSES)[number];
 
@@ -68,13 +68,13 @@ export type ListStatus = (typeof LIST_STATUSES)[number];
 export type ListMsg =
   | PluginInstalledMessage
   | PluginAvailableMessage
-  | PluginUnsupportedMessage
+  | PluginPartiallyAvailableMessage
   | PluginUnavailableMessage
   | PluginUpgradableMessage
   | PluginDisabledMessage
   | PluginFailedMessage
-  | PluginForceInstalledMessage
-  | PluginForceUpgradableMessage;
+  | PluginPartiallyInstalledMessage
+  | PluginPartiallyUpgradableMessage;
 
 /**
  * Render map total over the list surface's OWN statuses (D-10): a missing arm
@@ -118,29 +118,29 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       "(unavailable)",
       composeReasons(p.reasons, false, false, probe),
     ]),
-  // USTAT-01 / D-64-01: not-installed, force-installable row -- the dedicated
-  // ICON_UNSUPPORTED (`⊖`) glyph + `(unsupported)` token. Body cloned from the
+  // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
+  // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. Body cloned from the
   // `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out and reasons
   // composition); only the glyph and token differ.
-  unsupported: (p, probe, mpScope) =>
+  "partially-available": (p, probe, mpScope) =>
     joinTokens([
-      ICON_UNSUPPORTED,
+      ICON_PARTIALLY_AVAILABLE,
       p.name,
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
-      "(unsupported)",
+      "(partially-available)",
       composeReasons(p.reasons, false, false, probe),
     ]),
   upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),
-  // FSTAT-02 / D-66-03: dedicated ICON_FORCE_INSTALLED (`◉`) glyph; the reasons
+  // FSTAT-02 / D-66-03: dedicated ICON_PARTIALLY_INSTALLED (`◉`) glyph; the reasons
   // brace carries the dropped-component detail (mirrors the `upgradable`
   // composition). Body lifted verbatim from the central renderPluginRow arm.
-  "force-installed": (p, probe, mpScope) =>
-    pluginRow(ICON_FORCE_INSTALLED, p, mpScope, "(force-installed)", probe),
+  "partially-installed": (p, probe, mpScope) =>
+    pluginRow(ICON_PARTIALLY_INSTALLED, p, mpScope, "(partially-installed)", probe),
   // FSTAT-04 / D-66-02 / D-66-03: REUSES ICON_INSTALLED (`●`) -- the row is
   // clean today -- exactly like the `upgradable` arm above.
-  "force-upgradable": (p, probe, mpScope) =>
-    pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe),
+  "partially-upgradable": (p, probe, mpScope) =>
+    pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe),
   disabled: (p, probe, mpScope) =>
     joinTokens([
       ICON_DISABLED,

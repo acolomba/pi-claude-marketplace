@@ -21,15 +21,15 @@ import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.t
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--force] [--local]";
+  "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]";
 
 export function makeUpdateHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. `--map-model` and
-    // `--force` are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model", "--force"]);
+    // `--partial` are downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model", "--partial"]);
     if (localFlag === undefined) {
       return;
     }
@@ -39,7 +39,7 @@ export function makeUpdateHandler(
       return;
     }
 
-    const { nonFlagPositionals, mapModel, force } = flagged;
+    const { nonFlagPositionals, mapModel, partial } = flagged;
 
     if (nonFlagPositionals.length > 1) {
       notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
@@ -75,9 +75,9 @@ export function makeUpdateHandler(
       target,
       ...(flagged.scope !== undefined && { scope: flagged.scope }),
       ...(mapModel && { mapModel: true }),
-      // FORCE-02 (D-65-05): thread `--force` so an unsupported candidate
+      // FORCE-02 (D-65-05): thread `--partial` so an unsupported candidate
       // degrades instead of blocking.
-      ...(force && { force: true }),
+      ...(partial && { partial: true }),
       ...(localFlag.local && { local: true }),
     });
   };

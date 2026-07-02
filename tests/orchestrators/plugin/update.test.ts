@@ -1170,8 +1170,8 @@ test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force 
         }
 
         // The dropped kind rides the outcome so the cascade mapper renders
-        // `(force-installed) {lsp}`.
-        assert.deepEqual([...(outcome.forceDegrade?.kinds ?? [])], ["lspServers"]);
+        // `(partially-installed) {lsp}`.
+        assert.deepEqual([...(outcome.partialDegrade?.kinds ?? [])], ["lspServers"]);
       } finally {
         process.chdir(prevCwd);
       }
@@ -1217,7 +1217,7 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- a 
   });
 });
 
-test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgradable candidate declines with `(force-upgradable) {lsp}` + the --force trailer at warning", async () => {
+test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgradable candidate declines with `(partially-upgradable) {lsp}` + the --force trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-manual-"));
     try {
@@ -1243,14 +1243,14 @@ test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgrad
       });
 
       // XSURF-03: the manual no-`--force` decline of a force-upgradable
-      // candidate flips to the resolver-state-driven `(force-upgradable)` token
+      // candidate flips to the resolver-state-driven `(partially-upgradable)` token
       // (consistent with how `list` describes the same plugin) carrying the
       // list-consistent `{lsp}` degrade reason + the update-worded `--force`
       // trailer. SEV-04: a targeted decline stays warning.
       assert.equal(notifications.length, 1);
       assert.equal(
         notifications[0]?.message ?? "",
-        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (force-upgradable) {lsp}\n    Re-run with --force to update with the supported components.",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (partially-upgradable) {lsp}\n    Re-run with --partial to update with the supported components.",
       );
       assert.equal(notifications[0]?.severity, "warning");
     } finally {
@@ -1286,7 +1286,7 @@ test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted
           throw new Error("unreachable: narrowed above");
         }
 
-        assert.equal(outcome.forceDegrade?.newlyDegraded, true);
+        assert.equal(outcome.partialDegrade?.newlyDegraded, true);
       } finally {
         process.chdir(prevCwd);
       }
@@ -1330,7 +1330,7 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY force-installed plugin (p
           throw new Error("unreachable: narrowed above");
         }
 
-        assert.equal(outcome.forceDegrade?.newlyDegraded, false);
+        assert.equal(outcome.partialDegrade?.newlyDegraded, false);
       } finally {
         process.chdir(prevCwd);
       }
@@ -3304,7 +3304,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       // The degraded update committed: state reflects the new version and the
@@ -3321,7 +3321,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
       );
 
       // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
-      // `unsupported` reports `(force-installed)` with the ◉ glyph + the
+      // `unsupported` reports `(partially-installed)` with the ◉ glyph + the
       // dropped-component detail (the same derived signal the list deriver
       // reads), not `(updated)`. force-installed is a realized transition --
       // info severity + reload-hint.
@@ -3330,7 +3330,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (force-installed) {unsupported source}\n" +
+          "  ◉ hello v1.1.0 (partially-installed) {unsupported source}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3340,7 +3340,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
   });
 });
 
-test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declines `(force-upgradable)` + the --force trailer at warning", async () => {
+test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declines `(partially-upgradable)` + the --force trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force03-"));
     try {
@@ -3367,10 +3367,10 @@ test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declin
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       // XSURF-03: the targeted no-`--force` decline of a force-upgradable
-      // candidate renders the `(force-upgradable)` token + the update-worded
+      // candidate renders the `(partially-upgradable)` token + the update-worded
       // `--force` trailer; SEV-04 keeps the targeted decline at warning.
-      assert.match(body, /\(force-upgradable\)/);
-      assert.match(body, /Re-run with --force to update with the supported components\./);
+      assert.match(body, /\(partially-upgradable\)/);
+      assert.match(body, /Re-run with --partial to update with the supported components\./);
       assert.doesNotMatch(body, /\{no longer installable\}/);
       assert.equal(notifications[0]?.severity, "warning");
 
@@ -3385,7 +3385,7 @@ test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declin
 
 // SEV-04 / D-69-02 / XSURF-03: a BULK (`@marketplace`) update that skips a
 // force-upgradable candidate the user did not target is benign -> info (contrast
-// FORCE-03, the TARGETED decline that stays warning). Same `(force-upgradable)`
+// FORCE-03, the TARGETED decline that stays warning). Same `(partially-upgradable)`
 // per-row token + `--force` trailer; only the severity (and the summary tally)
 // move. The SEV-04 split is now keyed on the force-upgradable STATUS arm, NOT
 // the reason string -- this pair (warning here vs FORCE-03) proves it holds.
@@ -3415,7 +3415,7 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       // UGRM-01/UGRM-02: full-body lock. A bulk update whose only non-`updated`
-      // row is a benign info `(force-upgradable)` decline (0 updated, 0
+      // row is a benign info `(partially-upgradable)` decline (0 updated, 0
       // failures/warnings) renders the cascade BODY (the Phase-73 row +
       // `--force` trailer) AND the never-silent `Plugin update: nothing to
       // update` headline below it -- the summary line does NOT vanish. The
@@ -3424,8 +3424,8 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
       assert.equal(
         body,
         "● mp [project]\n" +
-          "  ● hello v1.0.0 (force-upgradable) {unsupported source}\n" +
-          "    Re-run with --force to update with the supported components.\n" +
+          "  ● hello v1.0.0 (partially-upgradable) {unsupported source}\n" +
+          "    Re-run with --partial to update with the supported components.\n" +
           "\n" +
           "Plugin update: nothing to update",
       );
@@ -3458,7 +3458,7 @@ test("FORCE-04: the force-degrade update path emits no warning severity and no `
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       const warnings = notifications.filter((n) => n.severity === "warning");
@@ -3503,7 +3503,7 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       assert.equal(notifications.length, 1);
@@ -3529,7 +3529,7 @@ test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
-        force: true,
+        partial: true,
       });
 
       // The missing-marketplace short-circuit fires BEFORE the candidate gate,
@@ -3606,7 +3606,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
           // clean: bumps cleanly (installable candidate).
           clean: { version: "1.0.1", hasSkill: true },
           // degrade: candidate re-resolves `unsupported` -> `--force`
-          // degrade-updates it (force-installed), still a realized transition.
+          // degrade-updates it (partially-installed), still a realized transition.
           degrade: { version: "1.1.0", hasSkill: true },
         },
         installedVersions: { clean: "1.0.0", degrade: "1.0.0" },
@@ -3620,7 +3620,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
-        force: true,
+        partial: true,
       });
 
       const body = notifications[0]?.message ?? "";

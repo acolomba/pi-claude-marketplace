@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: force-install
-milestone_name: "Force Install"
-status: Awaiting next milestone
-stopped_at: force-install milestone closed and archived 2026-07-02; shipped as 0.7.0 via PR #77
-last_updated: "2026-07-02T02:05:50.034Z"
+milestone_name: Force Install
+current_phase: 75
+status: verifying
+stopped_at: Completed 75-01-PLAN.md
+last_updated: "2026-07-02T19:58:03.494Z"
 last_activity: 2026-07-02
-last_activity_desc: Milestone force-install completed and archived
+last_activity_desc: Phase 75 complete
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 33
-  completed_plans: 33
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 35
+  completed_plans: 35
   percent: 100
-current_phase: 74
 ---
 
 # Project State
@@ -22,14 +22,14 @@ current_phase: 74
 
 See: .planning/PROJECT.md (updated 2026-06-08)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 74 — bulk-update-grammar-refinement
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. **Current focus:** Phase 75 — Rename force/unsupported vocabulary to partial/partially-available
 
 ## Current Position
 
-Phase: Milestone force-install complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-02 — Milestone force-install completed and archived
+Phase: 75
+Plan: Not started
+Status: Phase complete — ready for verification
+Last activity: 2026-07-02 — Phase 75 complete
 
 ## Performance Metrics
 
@@ -151,6 +151,8 @@ Last activity: 2026-07-02 — Milestone force-install completed and archived
 | Phase 71 P4 | 17min | 2 tasks | 4 files |
 | Phase 73 P01 | 28min | 3 tasks | 14 files |
 | Phase 74 P01 | 23min | 3 tasks | 7 files |
+| Phase 75 P01 | 56min | 2 tasks | 31 files |
+| Phase 75 P02 | 45min | 3 tasks | 52 files |
 
 ## Accumulated Context
 
@@ -172,6 +174,7 @@ Last activity: 2026-07-02 — Milestone force-install completed and archived
 - v1.12 roadmap (2026-06-09): 6 phases (51-56) created by `gsd-roadmapper`, continuing phase numbering from v1.11 Phase 50 (NOT reset to 1). All 24 v1.12 requirements mapped exactly once: CFG-01/02/03 + SPLIT-01/02 -> Phase 51 (Config Schema, Persistence & State Split -- typebox CONFIG_SCHEMA + loadConfig/saveConfig seam mirroring state-io, entry-level base+local merge -> MergedConfig, the absent/unparseable/valid trichotomy that aborts on bad input rather than reading it as empty desired-state, and the STATE_SCHEMA field-relocation that carves desired/user-settings fields out of state.json into the config; ownership-split write seams enforced by architecture test + NFR-10 containment extension); MIG-01/02 -> Phase 52 (First-Run Migration -- generate-only, atomic, idempotent, lossless incl. soft-degraded entries; migrate-before-reconcile ordering rail; migrate-then-reconcile no-op exit gate); DIFF-01/02 -> Phase 53 (Pure Reconcile Planner & Dry-Run Preview -- the pure bidirectional planReconcile foundation colocated with its first user-observable consumer, the read-only no-network/no-write diff command, since DIFF depends on the planner existing and a standalone planner phase would have task-shaped not user-observable criteria; locked subject-first row grammar, any pending-tense tokens land in lockstep with catalog + byte-UAT fixtures); ENBL-01/02/03/04 -> Phase 54 (Enable/Disable Commands -- autoupdate/noautoupdate command shape, disabled keeps config entry + version pin with artefacts not materialized, enable re-materializes from cache no-network NFR-5, three orthogonal facts declared/enabled/available kept distinct on list/info; depends on the Phase 51 state split); RECON-01..06 -> Phase 55 (Load-Time Reconcile Apply, Notification & Wiring -- the highest-integration phase: provenance-scoped add/remove at resources_discover before aggregateDiscoveredResources, per-entry network soft-fail never crossing the boundary NFR-5, reconcile cascade through the existing notify/emitWithSummary seam with NO /reload hint, fixed-point convergence, and cross-process lock coverage of the internal file; depends on the Phase 53 planner AND Phase 54 enable/disable; carries the research-flagged notify-sink feasibility spike since resources_discover has no ctx/pi today); WB-01/02/03/04 + CFG-04 -> Phase 56 (Write-Back Integration & Documentation -- the broadest mechanical surface, landing last on a frozen foundation: targeted entry-level patch re-read under the scope lock inside each command's existing withLockedStateTransaction closure, --local targets the local file and never touches base, import/bootstrap batched multi-entry patch under one lock, plus the README .local gitignore convention; depends on the Phase 51 persistence seam and the Phase 55 apply path). Build order follows the research dependency graph (frozen shapes -> one-way-door migration -> pure planner+dry-run / offline enable-disable -> load wiring -> write-back). Phase 55 is the only phase touching shared/notify.ts / catalog / byte-UAT; its new emission context must land catalog + fixture changes atomically with the renderer/token changes they describe (v1.3 atomic-supersession lesson; same constraint applies to any DIFF-02 / ENBL-04 new status tokens). The research SUMMARY proposed 7 phases; merged its config-schema + state-split into one Phase 51 (both pure-addition schema work on the same shapes) and folded the dry-run preview into the planner phase rather than splitting a thin internal-only planner phase, yielding 6 phases within standard granularity.
 - Phase 65.1 inserted after Phase 65: Reload-deferred will grammar consistency: will-prefix marks only reload-deferred actions; audit+fix marketplace add/remove before force-display phases (URGENT)
 - Phase 71 added: Partial hook force-install: unsupportable hooks degrade under --force (event + matcher level) instead of failing the plugin unavailable
+- Phase 75 added: Rename force/unsupported vocabulary to partial/partially-available (top-level verdict + `--partial` flag + force-family; component-level `unsupported` classification and reason tokens preserved byte-identical)
 
 ### Decisions
 
@@ -317,6 +320,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: XSURF-03 SEV-04 split moved onto the force-upgradable status arm; cascadeSkipSeverity untouched
 - [Phase 74]: UGRM-02 update tally is an opt-in CascadeNotificationMessage.tally override read only by composeTally; other ops byte-identical
 - [Phase 74]: Bulk-update never-silent no-op headline 'Plugin update: nothing to update' is orchestrator-owned via emitUpdateNoOpCascade, not composeTally (count:0 collapses to empty)
+- [Phase ?]: Phase 75 Plan 01: renamed --force/--unsupported user flags to --partial (no alias) and internal degrade plumbing (requirePartialInstallable, partialable, .partial, partialDegrade, partialUpgradable, PARTIAL_*_STATUSES, list opts.partial); OUTPUT byte-identical, output-vocabulary flip deferred to Plan 02.
+- [Phase ?]: Landed Plan 75-01 as one commit (525e57ed): data.ts + edge install/update handlers carry edits from both tasks, so a per-task split needs interactive staging (disabled); plan <verification> also mandated a single commit.
+- [Phase ?]: Phase 75-02: force/unsupported output vocabulary renamed to partial/partially-available as one atomic byte-supersession (Task 1+2 merged: renderPluginInfo derives its token via status literal); completion-cache schemaVersion 4 self-heals stale v3 caches
 
 ### Pending Todos
 
@@ -394,8 +400,8 @@ Audit report: `.planning/milestones/force-install-MILESTONE-AUDIT.md`.
 
 ## Session Continuity
 
-Last session: 2026-06-30T06:22:00.000Z
-Stopped At: force-install milestone closed and archived 2026-07-02; shipped as
+Last session: 2026-07-02T18:38:06.380Z
+Stopped At: Completed 75-01-PLAN.md
 0.7.0 via PR #77. Two pre-existing backlog items acknowledged at close (quick_task
 260621-kmm -- stale, shipped in 0.6.1; coverage-sweep todo -- deferred, testing);
 see the Deferred Items section.

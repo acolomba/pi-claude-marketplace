@@ -523,7 +523,7 @@ test("pi_claude_marketplace_plugin_list :: path-source manifest entry -> availab
 // payload row projects onto the coarse `unavailable` tool bucket (the LLM-tool
 // surface has no distinct `unsupported` bucket; mirrors `disabled`).
 test("pi_claude_marketplace_plugin_list :: unsupported row projects to unavailable tool bucket", () => {
-  assert.equal(projectRowStatus("unsupported"), "unavailable");
+  assert.equal(projectRowStatus("partially-available"), "unavailable");
 });
 
 // FSTAT-02 / FSTAT-04 / D-66-03: both derived force states flatten to the
@@ -531,11 +531,11 @@ test("pi_claude_marketplace_plugin_list :: unsupported row projects to unavailab
 // (degraded, but present); a force-upgradable plugin is a currently-clean
 // install. The LLM-tool surface has no distinct force buckets.
 test("pi_claude_marketplace_plugin_list :: force-installed row projects to installed tool bucket", () => {
-  assert.equal(projectRowStatus("force-installed"), "installed");
+  assert.equal(projectRowStatus("partially-installed"), "installed");
 });
 
 test("pi_claude_marketplace_plugin_list :: force-upgradable row projects to installed tool bucket", () => {
-  assert.equal(projectRowStatus("force-upgradable"), "installed");
+  assert.equal(projectRowStatus("partially-upgradable"), "installed");
 });
 
 // FSTAT-02 / D-66-03: drive the full tool execute path with a seeded

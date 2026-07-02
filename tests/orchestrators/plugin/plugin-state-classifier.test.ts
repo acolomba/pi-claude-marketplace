@@ -59,7 +59,7 @@ function unsupportedResolved(
   unsupported: readonly string[] = ["lspServers"],
 ): ResolvedPlugin {
   return {
-    state: "unsupported",
+    state: "partially-available",
     name,
     pluginRoot: `/tmp/${name}`,
     supported: [],
@@ -92,14 +92,14 @@ test("classifyInstalledRecord: a clean record whose candidate resolves clean is 
 test("classifyInstalledRecord: a clean record whose newer candidate resolves `unsupported` is `force-upgradable`", () => {
   assert.equal(
     classifyInstalledRecord(record(), { upgradable: true, resolved: unsupportedResolved() }),
-    "force-upgradable",
+    "partially-upgradable",
   );
 });
 
 test("classifyInstalledRecord: a record with persisted compatibility.unsupported is `force-installed`", () => {
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), { upgradable: false }),
-    "force-installed",
+    "partially-installed",
   );
 });
 
@@ -121,7 +121,7 @@ test("A4: a degraded record is never split into `upgradable`/`force-upgradable`"
       upgradable: true,
       resolved: unsupportedResolved(),
     }),
-    "force-upgradable",
+    "partially-upgradable",
   );
 });
 
@@ -130,20 +130,20 @@ test("WR-02 / FSTAT-03: a degraded record WITH a newer, non-unavailable candidat
   // to `installed` (FSTAT-03), an unsupported candidate re-applies the force.
   // Either way it must be offerable under `update --force` -- the distinct
   // `force-installed-upgradable` status carries that affordance while `list`
-  // still renders it `(force-installed)`. It is NEVER `force-upgradable`.
+  // still renders it `(partially-installed)`. It is NEVER `force-upgradable`.
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), {
       upgradable: true,
       resolved: installable(),
     }),
-    "force-installed-upgradable",
+    "partially-installed-upgradable",
   );
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), {
       upgradable: true,
       resolved: unsupportedResolved(),
     }),
-    "force-installed-upgradable",
+    "partially-installed-upgradable",
   );
 });
 
@@ -152,7 +152,7 @@ test("WR-02: a degraded record with NO newer candidate -- or a structural-`unava
   // `reinstall`'s job, RINST-01), so it is NOT an `update --force` candidate.
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), { upgradable: false }),
-    "force-installed",
+    "partially-installed",
   );
   // A candidate that resolves structural `unavailable` cannot be installed even
   // under `--force` (FORCE-05), so the degraded row stays plain `force-installed`.
@@ -161,7 +161,7 @@ test("WR-02: a degraded record with NO newer candidate -- or a structural-`unava
       upgradable: true,
       resolved: unavailableResolved(),
     }),
-    "force-installed",
+    "partially-installed",
   );
 });
 
@@ -171,7 +171,7 @@ test("WR-02 / CR-01: a degraded record whose newer candidate probe FAILED is `fo
   // (non-unavailable) candidate and remains offerable under `update --force`.
   assert.equal(
     classifyInstalledRecord(record(["lspServers"]), { upgradable: true, resolved: undefined }),
-    "force-installed-upgradable",
+    "partially-installed-upgradable",
   );
 });
 
@@ -219,7 +219,7 @@ test("classifyManifestEntry: an `installable` resolution is `available`", () => 
 });
 
 test("classifyManifestEntry: an `unsupported` resolution is `unsupported`", () => {
-  assert.equal(classifyManifestEntry(unsupportedResolved()), "unsupported");
+  assert.equal(classifyManifestEntry(unsupportedResolved()), "partially-available");
 });
 
 test("classifyManifestEntry: an `unavailable` resolution is `unavailable`", () => {
