@@ -28,7 +28,7 @@ Installs plugins from Claude plugin marketplaces that contain these components:
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Plugins that contain unsupported components are marked as "unavailable".
+Plugins that contain unsupported components can be partially installed, but may not function as intended.
 
 Claude marketplaces and plugins are managed via a `/claude:plugin` command similar to Claude Code's `/plugin`. A desired-state configuration is kept in `[~/].pi/agent/claude-plugins[.local].json` files for automated, repeatable plugin installations that may be shared across machines or team members.
 
@@ -129,6 +129,22 @@ Marketplaces and plugins can be installed in the user scope or in the current pr
 The user scope is inherited, so it is possible to install a plugin from a user-scope marketplace in the project scope.
 
 It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
+
+### Partially available plugins
+
+Plugins that contain unsupported components, such as an unmappable hook, an LSP server, or a theme, can be partially installed or updated by passing the `--partial` option. The supported components are installed and the unsupported ones are skipped.
+
+List partially available plugins.
+
+```text
+/claude:plugin list --partial
+```
+
+Install a partially available plugin. Placing `--partial` first enables argument completion for partially available plugins, which are otherwise excluded from completion in absence of that flag.
+
+```text
+/claude:plugin install --partial hookify@claude-plugins-official
+```
 
 ## Configuration files
 
@@ -255,11 +271,12 @@ List plugins available for installation. Omit the marketplace name to list acros
 /claude:plugin list --available
 ```
 
-Filter the list by plugin status, installed, available for installation, or unavailable to install.
+Filter the list by plugin status, installed, available for installation, partially available, or unavailable to install.
 
 ```text
 /claude:plugin list --installed
 /claude:plugin list --available
+/claude:plugin list --partial
 /claude:plugin list --unavailable
 ```
 
@@ -290,7 +307,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` and `update`can be used to make a best-effort attempt at mapping these models to Pi models.
+> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` and `update` can be used to make a best-effort attempt at mapping these models to Pi models.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
