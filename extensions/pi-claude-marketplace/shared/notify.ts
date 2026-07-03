@@ -216,22 +216,22 @@ export const STATUS_TOKENS = [
   "will enable",
   "will disable",
   "disabled",
-  // FSTAT-02 / FSTAT-04 / D-66-03: derived force-state realized tokens. Both
+  // FSTAT-02 / FSTAT-04 / D-66-03: derived partial-state realized tokens. Both
   // are appended LAST (below the reload-hint trigger window, like "disabled"):
-  // `force-installed` (◉) is a recorded-installed plugin currently re-resolving
-  // `unsupported`; `force-upgradable` (●) is a currently-clean installed plugin
-  // whose newer cache candidate would NEWLY degrade. The `will force install`
+  // `partially-installed` (◉) is a recorded-installed plugin currently re-resolving
+  // `partially-available`; `partially-upgradable` (●) is a currently-clean installed plugin
+  // whose newer cache candidate would NEWLY degrade. The `will partially install`
   // pending case is a render MODIFIER on `will install`, NOT a token, so the set
   // grows by exactly 2 (D-66-05).
-  "force-installed",
-  "force-upgradable",
-  // USTAT-02 / D-64-01: the not-installed, force-installable `unsupported`
+  "partially-installed",
+  "partially-upgradable",
+  // USTAT-02 / D-64-01: the not-installed, partially-available
   // render token. Appended LAST (below the reload-hint trigger window, like
-  // `disabled` and the force-state tokens). Distinct from `unavailable`: a
-  // plugin resolving `unsupported` has no structural defect -- it would
-  // degrade-install (drop unsupported components) under `--force`. Maps to the
-  // dedicated `ICON_UNSUPPORTED` (`⊖`) glyph.
-  "unsupported",
+  // `disabled` and the partial-state tokens). Distinct from `unavailable`: a
+  // plugin resolving `partially-available` has no structural defect -- it would
+  // degrade-install (drop unsupported components) under `--partial`. Maps to the
+  // dedicated `ICON_PARTIALLY_AVAILABLE` (`⊖`) glyph.
+  "partially-available",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -400,20 +400,20 @@ export const PLUGIN_STATUSES = [
   "will enable",
   "will disable",
   "disabled",
-  // FSTAT-02 / FSTAT-04 / D-66-03: derived force-state realized tokens,
-  // appended last (mirrors the STATUS_TOKENS ordering). `force-installed`
+  // FSTAT-02 / FSTAT-04 / D-66-03: derived partial-state realized tokens,
+  // appended last (mirrors the STATUS_TOKENS ordering). `partially-installed`
   // stamps `needsReload: true` on the install/update success cascade (a
-  // realized transition like `installed`); `force-upgradable` is a
+  // realized transition like `installed`); `partially-upgradable` is a
   // list-inventory-only row (`needsReload: false`).
-  "force-installed",
-  "force-upgradable",
-  // USTAT-02 / D-64-01: the not-installed, force-installable `unsupported`
+  "partially-installed",
+  "partially-upgradable",
+  // USTAT-02 / D-64-01: the not-installed, partially-available
   // plugin-status member. REQUIRED here (not just in STATUS_TOKENS) because
   // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, ...>`; without
-  // this entry `Extract<PluginStatus, "unsupported">` resolves to `never`. This
+  // this entry `Extract<PluginStatus, "partially-available">` resolves to `never`. This
   // is an inventory/list-surface row (no realized transition), so it stamps no
   // reload-hint trigger -- like `available` / `unavailable`.
-  "unsupported",
+  "partially-available",
 ] as const;
 
 /**
@@ -686,38 +686,38 @@ export interface PluginUnavailableMessage extends MessageBase {
   readonly version?: string;
   readonly description?: string;
   // SEV-02 / D-69-03: set on the install-failure surface when the resolver
-  // verdict is `unsupported` (force-degradable). The renderer appends a
-  // 4-space-indented `--force` hint trailer below the row pointing the user
+  // verdict is `partially-available`. The renderer appends a
+  // 4-space-indented `--partial` hint trailer below the row pointing the user
   // at the flag that can degrade-install the plugin. Absent on the
-  // structural `unavailable` arm (force cannot help) and on every list /
+  // structural `unavailable` arm (`--partial` cannot help) and on every list /
   // inventory surface, which render byte-frozen.
-  readonly forceHint?: boolean;
+  readonly partialHint?: boolean;
 }
 
 /**
- * `(unsupported)` -- row for a not-installed, force-installable plugin
+ * `(partially-available)` -- row for a not-installed, partially-available plugin
  * (USTAT-01 / D-64-01 / XSURF-01). The manifest is structurally sound but
  * carries components Pi cannot install (lsp / hooks / unsupported source), so
- * the plugin would degrade-install under `--force`. Mirrors
+ * the plugin would degrade-install under `--partial`. Mirrors
  * `PluginUnavailableMessage` (carries REQUIRED `reasons`; NO `scope` (SNM-11);
  * no `dependencies`; PL-4 optional `description`). The list / info inventory
- * rows OMIT `forceHint` and render byte-frozen with no `--force` trailer; the
- * install-failure surface (XSURF-01) sets `forceHint: true` so the renderer
- * appends the SEV-02 `--force` hint trailer. Uses the dedicated
- * `ICON_UNSUPPORTED` (`⊖`) glyph. `extends MessageBase` (optional severity,
+ * rows OMIT `partialHint` and render byte-frozen with no `--partial` trailer; the
+ * install-failure surface (XSURF-01) sets `partialHint: true` so the renderer
+ * appends the SEV-02 `--partial` hint trailer. Uses the dedicated
+ * `ICON_PARTIALLY_AVAILABLE` (`⊖`) glyph. `extends MessageBase` (optional severity,
  * defaults to info -- this is a token rename, not a severity change).
  */
-export interface PluginUnsupportedMessage extends MessageBase {
-  readonly status: "unsupported";
+export interface PluginPartiallyAvailableMessage extends MessageBase {
+  readonly status: "partially-available";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
   // SEV-02 / XSURF-01: set on the install-failure surface when the resolver
-  // verdict is `unsupported` (force-degradable). The renderer appends a
-  // 4-space-indented `--force` hint trailer below the row. Absent on every
+  // verdict is `partially-available`. The renderer appends a
+  // 4-space-indented `--partial` hint trailer below the row. Absent on every
   // list / info inventory surface, which render byte-frozen.
-  readonly forceHint?: boolean;
+  readonly partialHint?: boolean;
 }
 
 /**
@@ -737,26 +737,26 @@ export interface PluginUpgradableMessage extends MessageBase {
 }
 
 /**
- * `(force-installed)` -- FSTAT-02 / D-66-03 row for a recorded-installed plugin
- * that currently re-resolves `unsupported` (installed with components dropped).
+ * `(partially-installed)` -- FSTAT-02 / D-66-03 row for a recorded-installed plugin
+ * that currently re-resolves `partially-available` (installed with components dropped).
  * Surfaces on the list inventory surface AND the install/update success cascade.
  * Modeled on `PluginUpgradableMessage`: carries REQUIRED `reasons` (the dropped-
- * component / degradation detail). Uses the dedicated `ICON_FORCE_INSTALLED`
+ * component / degradation detail). Uses the dedicated `ICON_PARTIALLY_INSTALLED`
  * (`◉`) glyph. PL-4: optional `description` on the list surface, truncated at
  * column 66.
  *
- * WR-03: optional `dependencies?: readonly Dependency[]`. The force-degradable
- * `unsupported` resolver arm still materializes the SUPPORTED components, so a
- * force-installed plugin can legitimately stage agents / mcp servers. When the
+ * WR-03: optional `dependencies?: readonly Dependency[]`. The partially-available
+ * `partially-available` resolver arm still materializes the SUPPORTED components, so a
+ * partially-installed plugin can legitimately stage agents / mcp servers. When the
  * install/update success cascade builds this row it threads the staged
  * dependencies so the `{requires pi-subagents}` / `{requires pi-mcp}` soft-dep
  * markers fire on a degraded install exactly as on a clean `(installed)` row --
  * the signal is most relevant precisely on a degraded install. The
- * list/info INVENTORY force rows OMIT `dependencies` (the inventory surface
+ * list/info INVENTORY partial rows OMIT `dependencies` (the inventory surface
  * carries no soft-dep markers), so they render unchanged.
  */
-export interface PluginForceInstalledMessage extends MessageBase {
-  readonly status: "force-installed";
+export interface PluginPartiallyInstalledMessage extends MessageBase {
+  readonly status: "partially-installed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
   readonly dependencies?: readonly Dependency[];
@@ -766,29 +766,29 @@ export interface PluginForceInstalledMessage extends MessageBase {
 }
 
 /**
- * `(force-upgradable)` -- FSTAT-04 / D-66-02 / D-66-03 row for a currently-clean
+ * `(partially-upgradable)` -- FSTAT-04 / D-66-02 / D-66-03 row for a currently-clean
  * installed plugin whose newer no-network cache candidate would NEWLY degrade
  * it. Emitted on the list inventory surface AND, per XSURF-03, on the manual
- * update-decline surface (a no-`--force` update of a force-upgradable plugin
+ * update-decline surface (a no-`--partial` update of a partially-upgradable plugin
  * declines rather than degrading; the declined row reuses this token to read
  * consistently with `list`). REUSES `ICON_INSTALLED` (`●`) because the row is
  * currently clean, mirroring the `upgradable` arm. Carries REQUIRED `reasons`;
- * no `dependencies`. The list inventory row OMITS `forceHint` and renders
- * byte-frozen; the update-decline row sets `forceHint: true` (and carries the
- * pre-update version) so the renderer appends the update-worded `--force` hint
+ * no `dependencies`. The list inventory row OMITS `partialHint` and renders
+ * byte-frozen; the update-decline row sets `partialHint: true` (and carries the
+ * pre-update version) so the renderer appends the update-worded `--partial` hint
  * trailer. PL-4: optional `description`, truncated at column 66.
  */
-export interface PluginForceUpgradableMessage extends MessageBase {
-  readonly status: "force-upgradable";
+export interface PluginPartiallyUpgradableMessage extends MessageBase {
+  readonly status: "partially-upgradable";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
   // SEV-04 / XSURF-03: set on the manual update-decline surface. The renderer
-  // appends a 4-space-indented update-worded `--force` hint trailer below the
+  // appends a 4-space-indented update-worded `--partial` hint trailer below the
   // row. Absent on the list inventory row, which renders byte-frozen.
-  readonly forceHint?: boolean;
+  readonly partialHint?: boolean;
 }
 
 /**
@@ -860,12 +860,12 @@ export interface PluginWillInstallMessage extends MessageBase {
   readonly name: string;
   readonly scope?: Scope;
   // FSTAT-06 / D-66-04: render-time modifier. When `true`, the row renders
-  // `(will force install)` -- the planned install would degrade (resolves
-  // `unsupported`) and proceed under the force path -- instead of
+  // `(will partially install)` -- the planned install would degrade (resolves
+  // `partially-available`) and proceed under the partial path -- instead of
   // `(will install)`. A modifier, NOT a new closed-set token (D-66-05): the
-  // `will force update` analog is VACUOUS (the reconcile plan has no update
-  // bucket), so no force-update render path exists.
-  readonly force?: boolean;
+  // `will partial update` analog is VACUOUS (the reconcile plan has no update
+  // bucket), so no partial-update render path exists.
+  readonly partial?: boolean;
 }
 
 /**
@@ -919,7 +919,7 @@ export type PluginNotificationMessage =
   | PluginUninstalledMessage
   | PluginAvailableMessage
   | PluginUnavailableMessage
-  | PluginUnsupportedMessage
+  | PluginPartiallyAvailableMessage
   | PluginUpgradableMessage
   | PluginFailedMessage
   | PluginSkippedMessage
@@ -929,8 +929,8 @@ export type PluginNotificationMessage =
   | PluginWillEnableMessage
   | PluginWillDisableMessage
   | PluginDisabledMessage
-  | PluginForceInstalledMessage
-  | PluginForceUpgradableMessage;
+  | PluginPartiallyInstalledMessage
+  | PluginPartiallyUpgradableMessage;
 
 /**
  * Common fields shared by every arm of the per-status
@@ -1179,14 +1179,19 @@ export type PluginInfoRow =
  * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
 interface PluginInfoRowBase {
-  // FSTAT-07 / D-66-04: `force-installed` widens the info row status set so an
-  // installed plugin re-resolving `unsupported` reports `(force-installed)` on
-  // the info surface. `force-upgradable` is deliberately omitted -- it is a
-  // list-inventory-only concept (an installed plugin's info is force-installed
-  // or installed, never force-upgradable).
+  // FSTAT-07 / D-66-04: `partially-installed` widens the info row status set so an
+  // installed plugin re-resolving `partially-available` reports `(partially-installed)` on
+  // the info surface. `partially-upgradable` is deliberately omitted -- it is a
+  // list-inventory-only concept (an installed plugin's info is partially-installed
+  // or installed, never partially-upgradable).
   readonly status: Extract<
     PluginStatus,
-    "installed" | "available" | "unavailable" | "unsupported" | "failed" | "force-installed"
+    | "installed"
+    | "available"
+    | "unavailable"
+    | "partially-available"
+    | "failed"
+    | "partially-installed"
   >;
   readonly name: string;
   readonly version?: string;
@@ -1432,27 +1437,27 @@ export const ICON_UNINSTALLABLE = "⊘";
 export const ICON_DISABLED = "◌";
 
 /**
- * FSTAT-02 / D-66-03: dedicated glyph for a `force-installed` row -- a
- * recorded-installed plugin that currently re-resolves `unsupported` (installed
+ * FSTAT-02 / D-66-03: dedicated glyph for a `partially-installed` row -- a
+ * recorded-installed plugin that currently re-resolves `partially-available` (installed
  * with one or more components dropped). DISTINCT from `ICON_INSTALLED` (`●`) so
  * the degraded install is visually separable from a clean `(installed)` row.
- * `force-upgradable` deliberately REUSES `ICON_INSTALLED` (the row is currently
+ * `partially-upgradable` deliberately REUSES `ICON_INSTALLED` (the row is currently
  * clean -- only its candidate would degrade), mirroring the `upgradable`
  * precedent.
  */
-export const ICON_FORCE_INSTALLED = "◉";
+export const ICON_PARTIALLY_INSTALLED = "◉";
 
 /**
- * USTAT-02 / D-64-01: dedicated glyph for a not-installed, force-installable
- * `unsupported` row (`⊖` U+2296, circled minus) -- a plugin whose manifest is
+ * USTAT-02 / D-64-01: dedicated glyph for a not-installed, partially-available
+ * `partially-available` row (`⊖` U+2296, circled minus) -- a plugin whose manifest is
  * sound but carries components Pi cannot install (lsp / hooks / unsupported
- * source), so it would degrade-install under `--force`. Stays in the circled-
+ * source), so it would degrade-install under `--partial`. Stays in the circled-
  * operator family with `ICON_UNINSTALLABLE` (`⊘`) but reads "diminished /
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
- * recovery) and from `◉` (`ICON_FORCE_INSTALLED`, the *installed*-degraded row).
+ * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
  */
-export const ICON_UNSUPPORTED = "⊖";
+export const ICON_PARTIALLY_AVAILABLE = "⊖";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1912,21 +1917,21 @@ export function pluginRow(
 }
 
 /**
- * WR-03: SOLE composition site for the `(force-installed)` row -- shared by the
+ * WR-03: SOLE composition site for the `(partially-installed)` row -- shared by the
  * central `renderPluginRow` switch AND the install / update command-local
  * render maps, so the bytes stay identical across surfaces (D-11 "call, never
- * duplicate"). Uses the dedicated `ICON_FORCE_INSTALLED` (`◉`) glyph; the
+ * duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
  * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
  * threads the optional `dependencies` so the `{requires pi-subagents}` /
  * `{requires pi-mcp}` soft-dep markers compose into the SAME brace AFTER the
  * dropped-component reasons (MSG-GR-4) -- exactly like the `installed` arm. The
- * force-degradable `unsupported` arm still stages the SUPPORTED components, so a
- * force-install/update success row legitimately carries `dependencies` and the
- * marker is most relevant precisely there. The list/info INVENTORY force rows
+ * partially-available arm still stages the SUPPORTED components, so a
+ * partial-install/update success row legitimately carries `dependencies` and the
+ * marker is most relevant precisely there. The list/info INVENTORY partial rows
  * omit `dependencies`, so the markers never fire (the row renders
- * byte-identically to a bare `(force-installed)` row).
+ * byte-identically to a bare `(partially-installed)` row).
  */
-export function forceInstalledRow(
+export function partiallyInstalledRow(
   p: {
     readonly name: string;
     readonly scope?: Scope;
@@ -1938,11 +1943,11 @@ export function forceInstalledRow(
   probe: SoftDepStatus,
 ): string {
   return joinTokens([
-    ICON_FORCE_INSTALLED,
+    ICON_PARTIALLY_INSTALLED,
     p.name,
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
-    "(force-installed)",
+    "(partially-installed)",
     composeReasons(
       p.reasons,
       p.dependencies?.includes("agents") ?? false,
@@ -2087,28 +2092,28 @@ function renderPluginRow(
         "(unavailable)",
         composeReasons(p.reasons, false, false, probe),
       ]);
-    case "unsupported":
-      // USTAT-01 / D-64-01: not-installed, force-installable row. Clones the
+    case "partially-available":
+      // USTAT-01 / D-64-01: not-installed, partially-available row. Clones the
       // `unavailable` arm, swapping the glyph (`⊘` -> `⊖`) and token
-      // (`(unavailable)` -> `(unsupported)`). MSG-PL-6 / SNM-11 carve-out:
-      // `unsupported` has NO `scope?` field, so the scope bracket is omitted.
+      // (`(unavailable)` -> `(partially-available)`). MSG-PL-6 / SNM-11 carve-out:
+      // `partially-available` has NO `scope?` field, so the scope bracket is omitted.
       return joinTokens([
-        ICON_UNSUPPORTED,
+        ICON_PARTIALLY_AVAILABLE,
         p.name,
         renderScopeBracket(undefined, mpScope),
         renderVersion(p.version),
-        "(unsupported)",
+        "(partially-available)",
         composeReasons(p.reasons, false, false, probe),
       ]);
     case "upgradable":
       return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
-    case "force-installed":
-      return forceInstalledRow(p, mpScope, probe);
-    case "force-upgradable":
+    case "partially-installed":
+      return partiallyInstalledRow(p, mpScope, probe);
+    case "partially-upgradable":
       // FSTAT-04 / D-66-02 / D-66-03: currently-clean installed plugin whose
       // newer candidate would newly degrade. REUSES ICON_INSTALLED (`●`) -- the
       // row is clean today -- exactly like the `upgradable` arm above.
-      return pluginRow(ICON_INSTALLED, p, mpScope, "(force-upgradable)", probe);
+      return pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe);
     case "skipped":
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe);
     case "failed":
@@ -2120,15 +2125,15 @@ function renderPluginRow(
       // DIFF-02 / D-53-02: pending-tense row for a plugin declared in
       // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
       // slot (the install hasn't happened yet); no reasons (pending rows are
-      // pre-transition). FSTAT-06 / D-66-04: the `force` modifier renders
-      // `(will force install)` when the planned install would degrade
-      // (resolves `unsupported`); there is deliberately NO `will force update`
+      // pre-transition). FSTAT-06 / D-66-04: the `partial` modifier renders
+      // `(will partially install)` when the planned install would degrade
+      // (resolves `partially-available`); there is deliberately NO `will partially update`
       // analog -- the reconcile plan has no update bucket (D-66-05).
       return joinTokens([
         ICON_INSTALLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
-        p.force === true ? "(will force install)" : "(will install)",
+        p.partial === true ? "(will partially install)" : "(will install)",
       ]);
     case "will uninstall":
       // DIFF-02: pending-tense row for a plugin recorded in state but
@@ -2245,9 +2250,9 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 /**
  * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
  * realized ZERO transitions (all targets up-to-date, OR the only surviving rows
- * are benign info skips such as a `(force-upgradable)` decline). Hard-coded so
+ * are benign info skips such as a `(partially-upgradable)` decline). Hard-coded so
  * the byte form cannot drift from `docs/output-catalog.md`'s `all-up-to-date-noop`
- * / `skip-force-upgradable-bulk` states -- mirrors the `reconcile-pending-empty`
+ * / `skip-partially-upgradable-bulk` states -- mirrors the `reconcile-pending-empty`
  * byte-lock precedent. Emitted in PLACE of the `composeTally` success line
  * (which collapses a `tally {count: 0}` override to `""`), so the summary line
  * never vanishes.
@@ -2255,25 +2260,26 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
 
 /**
- * SEV-02 / D-69-03 `--force` hint trailer literal, rendered below a
- * force-degradable `unsupported` install-failure row. References the user's
- * own `--force` flag only -- no plugin / marketplace interpolation (T-69-01).
+ * SEV-02 / D-69-03 `--partial` hint trailer literal, rendered below a
+ * partially-available install-failure row. References the user's
+ * own `--partial` flag only -- no plugin / marketplace interpolation (T-69-01).
  * D-70-01: this byte form is FROZEN as the reconciled DOC contract and is
  * locked byte-for-byte in docs/output-catalog.md and
  * docs/messaging-style-guide.md. Do not change the wording.
  */
-const FORCE_INSTALL_HINT_TRAILER = "Re-run with --force to install the supported components.";
+const PARTIAL_INSTALL_HINT_TRAILER = "Re-run with --partial to install the supported components.";
 
 /**
- * XSURF-03 update-worded `--force` hint trailer literal, rendered below a
- * force-upgradable manual update-decline row. The update-worded analog of
- * `FORCE_INSTALL_HINT_TRAILER`. References the user's own `--force` flag only
+ * XSURF-03 update-worded `--partial` hint trailer literal, rendered below a
+ * partially-upgradable manual update-decline row. The update-worded analog of
+ * `PARTIAL_INSTALL_HINT_TRAILER`. References the user's own `--partial` flag only
  * -- no plugin / marketplace interpolation (T-73-01). This byte form is FROZEN
  * as a reconciled DOC contract and is locked byte-for-byte in
  * docs/output-catalog.md and docs/messaging-style-guide.md. Do not change the
  * wording.
  */
-const FORCE_UPDATE_HINT_TRAILER = "Re-run with --force to update with the supported components.";
+const PARTIAL_UPDATE_HINT_TRAILER =
+  "Re-run with --partial to update with the supported components.";
 
 /**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
@@ -2985,16 +2991,16 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
   switch (status) {
     case "installed":
       return ICON_INSTALLED;
-    case "force-installed":
+    case "partially-installed":
       // FSTAT-02 / FSTAT-07 / D-66-03: info row for an installed plugin
-      // re-resolving `unsupported` -- the dedicated `◉` glyph.
-      return ICON_FORCE_INSTALLED;
+      // re-resolving `partially-available` -- the dedicated `◉` glyph.
+      return ICON_PARTIALLY_INSTALLED;
     case "available":
       return ICON_AVAILABLE;
-    case "unsupported":
-      // USTAT-01 / D-64-01: not-installed, force-installable info row -- the
+    case "partially-available":
+      // USTAT-01 / D-64-01: not-installed, partially-available info row -- the
       // dedicated `⊖` glyph, distinct from the `⊘` structural-unavailable arm.
-      return ICON_UNSUPPORTED;
+      return ICON_PARTIALLY_AVAILABLE;
     case "unavailable":
     case "failed":
       // Both use the prohibited-symbol glyph.
@@ -3425,7 +3431,7 @@ export function emitContextCascade(
  * instead). Two cases, both at info severity with NO reload-hint:
  *   (a) Empty cascade (all up-to-date): no body -> emit ONLY the headline (NOT
  *       the `(no marketplaces)` sentinel).
- *   (b) Non-empty cascade (e.g. a benign `(force-upgradable)` decline): render
+ *   (b) Non-empty cascade (e.g. a benign `(partially-upgradable)` decline): render
  *       the body, then the headline below it.
  * IL-2: exactly one `ctx.ui.notify` call via `emitWithSummary` (which emits the
  * body unchanged at info severity -- no summary prefix).
@@ -3501,8 +3507,8 @@ function composePluginLinesWith(
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
   // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
-  // / `available` / `unavailable` / `unsupported` / `disabled` /
-  // `force-installed` / `force-upgradable`) carry the manifest description;
+  // / `available` / `unavailable` / `partially-available` / `disabled` /
+  // `partially-installed` / `partially-upgradable`) carry the manifest description;
   // cascade `installed` rows never set `description`, so the guard keeps them
   // single-line.
   if (
@@ -3510,33 +3516,36 @@ function composePluginLinesWith(
       p.status === "upgradable" ||
       p.status === "available" ||
       p.status === "unavailable" ||
-      p.status === "unsupported" ||
+      p.status === "partially-available" ||
       p.status === "disabled" ||
-      p.status === "force-installed" ||
-      p.status === "force-upgradable") &&
+      p.status === "partially-installed" ||
+      p.status === "partially-upgradable") &&
     p.description !== undefined &&
     p.description.length > 0
   ) {
     lines.push(`    ${truncateDescription(p.description)}`);
   }
 
-  // SEV-02 / D-69-03 / XSURF-01: the force-degradable install-failure row
-  // carries a 4-space-indented install-worded `--force` hint trailer. The row
-  // surfaces as `unavailable` (Phase-72 structural arm) or `unsupported`
+  // SEV-02 / D-69-03 / XSURF-01: the partially-available install-failure row
+  // carries a 4-space-indented install-worded `--partial` hint trailer. The row
+  // surfaces as `unavailable` (Phase-72 structural arm) or `partially-available`
   // (resolver-state-driven token, XSURF-01); the structural `unavailable` arm
-  // omits `forceHint` -- force cannot help. The hint references the user's own
+  // omits `partialHint` -- `--partial` cannot help. The hint references the user's own
   // flag only and interpolates no plugin / marketplace identifier (T-69-01).
   // D-70-01: the byte form is FROZEN as the reconciled DOC contract, locked
   // byte-for-byte in docs/output-catalog.md and docs/messaging-style-guide.md.
-  if ((p.status === "unavailable" || p.status === "unsupported") && p.forceHint === true) {
-    lines.push(`    ${FORCE_INSTALL_HINT_TRAILER}`);
+  if (
+    (p.status === "unavailable" || p.status === "partially-available") &&
+    p.partialHint === true
+  ) {
+    lines.push(`    ${PARTIAL_INSTALL_HINT_TRAILER}`);
   }
 
-  // SEV-04 / XSURF-03: the force-upgradable manual update-decline row carries a
-  // 4-space-indented update-worded `--force` hint trailer. The list inventory
-  // `force-upgradable` row omits `forceHint` and stays byte-frozen.
-  if (p.status === "force-upgradable" && p.forceHint === true) {
-    lines.push(`    ${FORCE_UPDATE_HINT_TRAILER}`);
+  // SEV-04 / XSURF-03: the partially-upgradable manual update-decline row carries a
+  // 4-space-indented update-worded `--partial` hint trailer. The list inventory
+  // `partially-upgradable` row omits `partialHint` and stays byte-frozen.
+  if (p.status === "partially-upgradable" && p.partialHint === true) {
+    lines.push(`    ${PARTIAL_UPDATE_HINT_TRAILER}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {

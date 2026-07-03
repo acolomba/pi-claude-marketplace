@@ -8,7 +8,7 @@
 //
 // RINST-01 / D-67-03: reinstall is a pure repair primitive whose overwrite of
 // collisions and foreign content is unconditional. There is no command-local
-// `--force` flag; passing `--force` errors as an UNKNOWN flag.
+// overwrite flag; the retired reinstall force flag now errors as an UNKNOWN flag.
 
 import { reinstallPlugins } from "../../../orchestrators/plugin/reinstall.ts";
 import { errorMessage } from "../../../shared/errors.ts";
@@ -29,8 +29,8 @@ export function makeReinstallHandler(
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. No command-local long flags
-    // are passed through (RINST-01 / D-67-03: `--force` is retired), so any
-    // unrecognized `--` token is rejected here as an UNKNOWN flag.
+    // are passed through (RINST-01 / D-67-03: the reinstall force flag is
+    // retired), so any unrecognized `--` token is rejected here as an UNKNOWN flag.
     const localFlag = extractLocalFlag(args, ctx, USAGE, []);
     if (localFlag === undefined) {
       return;

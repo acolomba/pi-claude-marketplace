@@ -282,3 +282,19 @@ Hooks component bridge alongside skills/commands/agents/MCP, translating Claude 
 | 72. Unsupported Render Token                                        | force-install | 1/1 | Complete    | 2026-06-29 |
 | 73. Force Cross-Surface Token Unification                           | force-install | 1/1 | Complete    | 2026-06-30 |
 | 74. Bulk Update Grammar Refinement                                  | force-install | 1/1 | Complete    | 2026-06-30 |
+
+### Phase 75: Rename force/unsupported vocabulary to partial/partially-available
+
+**Goal:** Rename the force-install / unsupported feature vocabulary to partial / partially-available across code, tests, and docs. The top-level plugin verdict `unsupported` becomes "partially available"; the `--force` install/update flag becomes `--partial` (no alias); and the force-family (`force-installed`, `force-installed-upgradable`, `force-upgradable`, `forceHint`, `FORCE_UPDATE_HINT_TRAILER`, "force installed" prose) moves to the partial vocabulary. Persisted status literals are migrated with a `schemaVersion` bump. Explicitly OUT of scope: unrelated `force` uses (`git push --force`, `forceGithub`) and the component-level classification — the `compatibility.supported`/`unsupported` state arrays and the `unsupported hooks` / `unsupported source` reason tokens stay byte-identical (a plugin is partially available *because* some component kinds are unsupported).
+**Requirements**: RVOC-01..04 (minted for traceability; no formal IDs required — completeness is encoded in each plan's must_haves)
+**Depends on:** Phase 74
+**Plans:** 2/2 plans complete
+
+Plans:
+**Wave 1**
+
+- [x] 75-01-PLAN.md — Rename the `--partial` flag + internal degrade-force plumbing (byte-gate-free; output vocabulary unchanged)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 75-02-PLAN.md — Atomic output-vocabulary rename (verdict + force-state render tokens/literals + glyphs + hint-trailers) + completion-cache schemaVersion 3→4 + docs + grep-absence guard

@@ -133,8 +133,8 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Unsuppor
  * typed `unsupported: string[]` component-kind list (NOT the free-form `notes`).
  *
  * This is the single shared render-time helper for the per-kind marker family
- * carried on the `unsupported` resolver arm. `list`, `info`, and the `install`
- * error surface all route through it so a given unsupported plugin renders
+ * carried on the `partially-available` resolver arm. `list`, `info`, and the `install`
+ * error surface all route through it so a given partially-available plugin renders
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
@@ -151,8 +151,8 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Unsuppor
  * Structural reasons (malformed `hooks.json`, NFR-10 source escape) are NOT
  * in this family: a structural defect routes to the `unavailable` arm
  * (D-64-07) and its reason stays on the `notes`/structural path via
- * `narrowResolverNotes`. This helper covers only the force-degradable per-kind
- * markers on the `unsupported` arm.
+ * `narrowResolverNotes`. This helper covers only the partially-available per-kind
+ * markers on the `partially-available` arm.
  */
 export function narrowUnsupportedKinds(
   unsupported: readonly string[],

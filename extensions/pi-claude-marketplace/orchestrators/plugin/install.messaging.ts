@@ -1,19 +1,19 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  ICON_UNSUPPORTED,
+  ICON_PARTIALLY_AVAILABLE,
   composeReasons,
-  forceInstalledRow,
+  partiallyInstalledRow,
   installedLikeRow,
   joinTokens,
   pluginRow,
   renderScopeBracket,
   renderVersion,
   type PluginFailedMessage,
-  type PluginForceInstalledMessage,
+  type PluginPartiallyInstalledMessage,
   type PluginInstalledMessage,
   type PluginUnavailableMessage,
-  type PluginUnsupportedMessage,
+  type PluginPartiallyAvailableMessage,
 } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -36,15 +36,15 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * install's private status set. A single-target install emits exactly one of
  * these: a success `installed` row, a `failed` row, or -- when the
  * entity-shape classifier narrows a not-installable error -- an `unavailable`
- * row (structural defect) or, per XSURF-01, an `unsupported` row (the
- * force-degradable arm, consistent with `list` / `info`).
+ * row (structural defect) or, per XSURF-01, a `partially-available` row (the
+ * partially-available arm, consistent with `list` / `info`).
  */
 export const INSTALL_STATUSES = [
   "installed",
-  "force-installed",
+  "partially-installed",
   "failed",
   "unavailable",
-  "unsupported",
+  "partially-available",
 ] as const;
 export type InstallStatus = (typeof INSTALL_STATUSES)[number];
 
@@ -56,10 +56,10 @@ export type InstallStatus = (typeof INSTALL_STATUSES)[number];
  */
 export type InstallMsg =
   | PluginInstalledMessage
-  | PluginForceInstalledMessage
+  | PluginPartiallyInstalledMessage
   | PluginFailedMessage
   | PluginUnavailableMessage
-  | PluginUnsupportedMessage;
+  | PluginPartiallyAvailableMessage;
 
 /**
  * install's command-private reason. `orphan rewake` surfaces a hook-config bug
@@ -87,11 +87,11 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       p.reasons,
       probe,
     ),
-  // FSTAT-07 / D-66-04: a force install that re-resolves `unsupported` reports
-  // (force-installed) with the dropped-component detail. WR-03: the shared
-  // `forceInstalledRow` threads `dependencies` so the soft-dep markers fire on a
+  // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
+  // (partially-installed) with the dropped-component detail. WR-03: the shared
+  // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
   // degraded install exactly as on a clean `(installed)` row.
-  "force-installed": (p, probe, mpScope) => forceInstalledRow(p, mpScope, probe),
+  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   unavailable: (p, probe, mpScope) =>
     joinTokens([
       ICON_UNINSTALLABLE,
@@ -102,17 +102,17 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       "(unavailable)",
       composeReasons(p.reasons, false, false, probe),
     ]),
-  // XSURF-01: the force-degradable install-failure arm. Byte-identical to the
-  // `unavailable` arm but with the `⊖` glyph + `(unsupported)` token; the
-  // `--force` hint trailer is composed centrally by the renderer, not here.
-  unsupported: (p, probe, mpScope) =>
+  // XSURF-01: the partially-available install-failure arm. Byte-identical to the
+  // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
+  // `--partial` hint trailer is composed centrally by the renderer, not here.
+  "partially-available": (p, probe, mpScope) =>
     joinTokens([
-      ICON_UNSUPPORTED,
+      ICON_PARTIALLY_AVAILABLE,
       p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `unsupported` has NO `scope?` field.
+      // MSG-PL-6 / SNM-11 carve-out: `partially-available` has NO `scope?` field.
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
-      "(unsupported)",
+      "(partially-available)",
       composeReasons(p.reasons, false, false, probe),
     ]),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),

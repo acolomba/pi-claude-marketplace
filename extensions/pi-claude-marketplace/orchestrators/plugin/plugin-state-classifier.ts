@@ -26,31 +26,31 @@ import type { ResolvedPlugin } from "../../domain/resolver.ts";
  * inventory token via its own `isRecordedButDisabled` guard ahead of the call
  * (D-54-01 / ENBL-04). The completion path has no `disabled` token, so the
  * classifier collapses a recorded-but-disabled record to `installed` (WR-01) --
- * keeping it in the no-`--force` inventory set while excluding it from the
- * `update --force` (upgradable/force-upgradable) candidates, at parity with the
+ * keeping it in the no-`--partial` inventory set while excluding it from the
+ * `update --partial` (upgradable/partially-upgradable) candidates, at parity with the
  * frozen `(disabled)` row `list` shows.
  *
- * `force-installed-upgradable` is a force-installed record (already degraded)
+ * `partially-installed-upgradable` is a partially-installed record (already degraded)
  * that ALSO carries a meaningful upgrade candidate -- a newer, NON-unavailable
- * version. `list` renders it as `(force-installed)`, identical to a plain
- * `force-installed` row, but -- unlike one -- it is a real `update --force`
+ * version. `list` renders it as `(partially-installed)`, identical to a plain
+ * `partially-installed` row, but -- unlike one -- it is a real `update --partial`
  * target: a supported candidate promotes it back to `installed` (FSTAT-03), an
- * unsupported candidate re-applies the force-install. It is NEVER
- * `force-upgradable` (FSTAT-04 -- that state is reserved for a currently-CLEAN
+ * partially-available candidate re-applies the partial install. It is NEVER
+ * `partially-upgradable` (FSTAT-04 -- that state is reserved for a currently-CLEAN
  * row whose candidate would newly degrade it).
  */
 export type InstalledClassification =
   | "installed"
   | "upgradable"
-  | "force-installed"
-  | "force-installed-upgradable"
-  | "force-upgradable";
+  | "partially-installed"
+  | "partially-installed-upgradable"
+  | "partially-upgradable";
 
 /**
  * The not-installed manifest-entry states, mapping 1:1 onto the resolver's
  * three-way `ResolvedPlugin.state` discriminant (D-64-01).
  */
-export type ManifestEntryClassification = "available" | "unsupported" | "unavailable";
+export type ManifestEntryClassification = "available" | "partially-available" | "unavailable";
 
 /**
  * The minimal structural view of a persisted install record the classifier
@@ -59,12 +59,12 @@ export type ManifestEntryClassification = "available" | "unsupported" | "unavail
  *
  * - `compatibility.unsupported` is the install-time degrade signal (FSTAT-01 /
  *   D-66-01): non-empty means one or more components were dropped, so the row
- *   derives `force-installed`.
+ *   derives `partially-installed`.
  * - `enabled` + `compatibility.installable` are the recorded-but-disabled axes
  *   (ENBL-02 -- canonical `reconcile/plan.ts::isRecordedButDisabled`): an
  *   `installable: true` record with `enabled: false` was explicitly disabled and
  *   is version-frozen, so the classifier short-circuits it to `installed`
- *   (WR-01) -- it must never split into `upgradable`/`force-upgradable`.
+ *   (WR-01) -- it must never split into `upgradable`/`partially-upgradable`.
  */
 export interface InstalledRecordLike {
   readonly enabled: boolean;
@@ -78,13 +78,13 @@ export interface InstalledRecordLike {
  * The upgrade-candidate signal for {@link classifyInstalledRecord}.
  *
  * `upgradable: false` -- the installed version matches the manifest (no newer
- * candidate); the record stays `installed`/`force-installed`.
+ * candidate); the record stays `installed`/`partially-installed`.
  *
  * `upgradable: true` -- the manifest carries a newer version (PL-5 string
  * compare at the caller). `resolved` is the NO-NETWORK `resolveStrict`
  * resolution of the candidate manifest entry; `resolved: undefined` is the
  * CR-01 probe-failure degrade (the classifier falls back to plain `upgradable`
- * rather than asserting a force degrade it could not probe).
+ * rather than asserting a partial degrade it could not probe).
  */
 export type UpgradeCandidate =
   | { readonly upgradable: false }
@@ -93,18 +93,19 @@ export type UpgradeCandidate =
 /**
  * Classify a persisted install record into the finer installed-inventory state.
  *
- * Precedence (A4): `force-installed` (install-time degrade) wins over the clean
- * upgrade signals -- a degraded record is never mis-split into `force-upgradable`
+ * Precedence (A4): `partially-installed` (install-time degrade) wins over the clean
+ * upgrade signals -- a degraded record is never mis-split into `partially-upgradable`
  * or `upgradable`. A degraded record WITH a newer, NON-unavailable candidate is
- * `force-installed-upgradable` (WR-02): the force-update is meaningful (promote
- * back to `installed` if the candidate is supported, or re-apply force if still
- * unsupported), so it must be offerable under `update --force`. A degraded record
+ * `partially-installed-upgradable` (WR-02): the partial update is meaningful (promote
+ * back to `installed` if the candidate is supported, or re-apply the partial
+ * install if still `partially-available`), so it must be offerable under
+ * `update --partial`. A degraded record
  * with NO newer candidate -- or one whose candidate resolves structural
- * `unavailable` (nothing installable to move to) -- stays plain `force-installed`.
+ * `unavailable` (nothing installable to move to) -- stays plain `partially-installed`.
  *
- * Only a CLEAN record reaches the `force-upgradable`/`upgradable` split: a
- * candidate that resolves `unsupported` would NEWLY degrade the plugin
- * (`force-upgradable`); any other candidate (clean, structural-`unavailable`, or
+ * Only a CLEAN record reaches the `partially-upgradable`/`upgradable` split: a
+ * candidate that resolves `partially-available` would NEWLY degrade the plugin
+ * (`partially-upgradable`); any other candidate (clean, structural-`unavailable`, or
  * an un-probeable `undefined`) stays plain `upgradable`.
  */
 export function classifyInstalledRecord(
@@ -114,37 +115,38 @@ export function classifyInstalledRecord(
   // WR-01 / ENBL-02 / D-54-01: a recorded-but-disabled record (the canonical
   // `installable: true` + `enabled: false` marker `reconcile/plan.ts::
   // isRecordedButDisabled` reads) is version-frozen while disabled, so it must
-  // never split into `upgradable`/`force-upgradable`. `list` renders it as the
+  // never split into `upgradable`/`partially-upgradable`. `list` renders it as the
   // distinct `(disabled)` token via its own pre-classifier guard; the completion
   // path has no `disabled` token, so collapse to `installed` here -- it stays in
-  // the no-`--force` inventory set but is excluded from `update --force`, at
-  // parity with the frozen `(disabled)` row. Checked BEFORE the force-installed
-  // branch so a disabled record is never mislabeled `force-installed`.
+  // the no-`--partial` inventory set but is excluded from `update --partial`, at
+  // parity with the frozen `(disabled)` row. Checked BEFORE the partially-installed
+  // branch so a disabled record is never mislabeled `partially-installed`.
   if (record.compatibility.installable && !record.enabled) {
     return "installed";
   }
 
   // FSTAT-01 / D-66-01 / A4: install-time degrade wins over the clean upgrade
   // split. WR-02 / FSTAT-03: a degraded record WITH a newer, NON-unavailable
-  // candidate is a real `update --force` target (promote to `installed` if the
-  // candidate is supported, re-apply force if still unsupported), so it derives
-  // the distinct `force-installed-upgradable` (offered under `update --force`,
-  // rendered `(force-installed)`, never `force-upgradable`). `undefined` (CR-01
+  // candidate is a real `update --partial` target (promote to `installed` if the
+  // candidate is supported, re-apply the partial install if still
+  // `partially-available`), so it derives
+  // the distinct `partially-installed-upgradable` (offered under `update --partial`,
+  // rendered `(partially-installed)`, never `partially-upgradable`). `undefined` (CR-01
   // probe failure) is treated as NON-unavailable -- it cannot assert the
   // candidate is gone -- matching the clean record's degrade-to-`upgradable`.
   if (record.compatibility.unsupported.length > 0) {
     if (candidate.upgradable && candidate.resolved?.state !== "unavailable") {
-      return "force-installed-upgradable";
+      return "partially-installed-upgradable";
     }
 
-    return "force-installed";
+    return "partially-installed";
   }
 
   if (candidate.upgradable) {
     // FSTAT-04 / FSTAT-05 / D-66-02: a newer candidate that resolves
-    // `unsupported` newly degrades a currently-clean plugin.
-    if (candidate.resolved?.state === "unsupported") {
-      return "force-upgradable";
+    // `partially-available` newly degrades a currently-clean plugin.
+    if (candidate.resolved?.state === "partially-available") {
+      return "partially-upgradable";
     }
 
     // CR-01 degrade: `resolved === undefined` (probe failure), `installable`,
@@ -157,7 +159,7 @@ export function classifyInstalledRecord(
 
 /**
  * Classify a not-installed manifest entry's resolution. D-64-01: `installable`
- * is the only `available` arm; both `unsupported` and structural `unavailable`
+ * is the only `available` arm; both `partially-available` and structural `unavailable`
  * are distinct here (the render collapse to a single `(unavailable)` token is a
  * caller concern, not a classification one). The exhaustive `switch` +
  * `assertNever` makes a future fourth `ResolvedPlugin` arm a compile-time error.
@@ -166,8 +168,8 @@ export function classifyManifestEntry(resolved: ResolvedPlugin): ManifestEntryCl
   switch (resolved.state) {
     case "installable":
       return "available";
-    case "unsupported":
-      return "unsupported";
+    case "partially-available":
+      return "partially-available";
     case "unavailable":
       return "unavailable";
     default:

@@ -65,7 +65,7 @@ import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { requireForceInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -1259,9 +1259,9 @@ async function loadCachedEntry(
   return entryRaw;
 }
 
-// BFILL-01 / D-68-02: reinstall is force-capable. It resolves through the
-// `requireForceInstallable` gate (admitting both `installable` and the
-// force-degradable `unsupported` arm) so backfill can re-materialize a
+// BFILL-01 / D-68-02: reinstall is partial-capable. It resolves through the
+// `requirePartialInstallable` gate (admitting both `installable` and the
+// partially-available arm) so backfill can re-materialize a
 // still-partial plugin in place without throwing `{not-installable}`. The
 // `unavailable` arm is still rejected (NFR-7). Resolution stays cache-only via
 // `resolveStrict` -- no network (NFR-5).
@@ -1270,7 +1270,7 @@ async function resolveInstallable(
   marketplaceRoot: string,
 ): Promise<MaterializablePlugin> {
   const resolved = await resolveStrict(entry, { marketplaceRoot });
-  requireForceInstallable(resolved, "install");
+  requirePartialInstallable(resolved, "install");
   return resolved;
 }
 
@@ -1341,7 +1341,7 @@ async function replaceAll(
     replacements.push({ phase: "commands", handle: commands });
     // RINST-01 / D-67-03: reinstall is a pure repair primitive -- overwrite of
     // collisions and foreign content is UNCONDITIONAL. The agents bridge's
-    // `{ force: true }` gate is always set; there is no command-local `--force`
+    // `{ force: true }` gate is always set; there is no command-local `--partial`
     // option to relay. Containment is unchanged (NFR-10): the overwrite is
     // scoped to this plugin's own staged agent handles.
     const agents = await replacePreparedAgents(handles.agents, { force: true });
@@ -1440,9 +1440,9 @@ function updateStateRecord(
     version: oldRecord.version,
     resolvedSource: installable.pluginRoot,
     // BFILL-01: record the REAL compatibility from the resolve, not a hardcoded
-    // `installable: true`. A partial re-materialize (resolved `unsupported`)
+    // `installable: true`. A partial re-materialize (resolved `partially-available`)
     // persists `installable: false` with the still-unsupported set, so the
-    // force-installed derivation (D-66-01) stays truthful; a full one records
+    // partially-installed derivation (D-66-01) stays truthful; a full one records
     // `installable: true` with an empty unsupported set.
     compatibility: {
       installable: installable.state === "installable",

@@ -409,14 +409,14 @@ export type PluginShapeErrorShape =
       readonly plugin: string;
       readonly reasons: readonly string[];
       // SEV-02 / D-69-03: three-way distinction the resolver loses at the
-      // throw. `true` when the verdict is `unsupported` (force can
+      // throw. `true` when the verdict is `partially-available` (force can
       // degrade-install it), `false` when `unavailable` (structural; force
-      // cannot help). The render row points the user at `--force` iff this
+      // cannot help). The render row points the user at `--partial` iff this
       // is `true`. Does NOT affect `buildPluginShapeMessage` bytes.
-      readonly forceable: boolean;
+      readonly partialable: boolean;
       // IN-02 / RSTATE-05: the resolver's typed `unsupported[]` component-kind
-      // list, carried alongside the free-form `reasons`. A force-degradable
-      // `unsupported` plugin whose only signal is `hooks` carries NO `contains`
+      // list, carried alongside the free-form `reasons`. A partially-available
+      // `partially-available` plugin whose only signal is `hooks` carries NO `contains`
       // note (hooks is not an UNSUPPORTED_COMPONENT_KINDS member), so the
       // failure-row composer reads this typed list -- not `reasons` -- to render
       // the same per-kind marker `list`/`info` emit via `narrowUnsupportedKinds`.
@@ -427,8 +427,8 @@ export type PluginShapeErrorShape =
       readonly kind: "no-longer-installable";
       readonly plugin: string;
       readonly reasons: readonly string[];
-      // SEV-02 / D-69-03: see `not-installable` -- same three-way force hint.
-      readonly forceable: boolean;
+      // SEV-02 / D-69-03: see `not-installable` -- same three-way partial hint.
+      readonly partialable: boolean;
       // IN-02 / RSTATE-05: see `not-installable` -- typed unsupported-kind list.
       readonly unsupportedKinds?: readonly string[];
     };

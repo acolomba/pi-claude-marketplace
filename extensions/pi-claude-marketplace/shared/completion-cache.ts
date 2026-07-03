@@ -69,16 +69,17 @@ export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
 const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 
 // LIST-02 / D-67-02: the plugin-index cache carries the FINER derived status
-// set so the completion bucketizer can offer the `--force`-gated candidate sets
-// without a second classifier. WR-02 adds `force-installed-upgradable` -- a
-// force-installed row that ALSO has a meaningful (newer, non-unavailable)
-// candidate, so it is offered under `update --force` (rendered `(force-installed)`
-// on `list`). The schemaVersion bump (1 -> 3) makes every stale prior-shape cache
-// (any `schemaVersion !== 3`) mismatch and drop+rebuild on next read via the
+// set so the completion bucketizer can offer the `--partial`-gated candidate sets
+// without a second classifier. WR-02 adds `partially-installed-upgradable` -- a
+// partially-installed row that ALSO has a meaningful (newer, non-unavailable)
+// candidate, so it is offered under `update --partial` (rendered `(partially-installed)`
+// on `list`). The schemaVersion bump (1 -> 4) makes every stale prior-shape cache
+// (any `schemaVersion !== 4`) mismatch and drop+rebuild on next read via the
 // existing mismatch path -- no manual migration (T-67-07: the plugin-index cache
-// is an ephemeral optimization cache, NOT the persisted state model).
+// is an ephemeral optimization cache, NOT the persisted state model). D-75-01: the
+// 3 -> 4 bump renames the partial-status literal union in lockstep.
 export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(3),
+  schemaVersion: Type.Literal(4),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
   plugins: Type.Array(
@@ -87,11 +88,11 @@ export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
       status: Type.Union([
         Type.Literal("installed"),
         Type.Literal("upgradable"),
-        Type.Literal("force-installed"),
-        Type.Literal("force-installed-upgradable"),
-        Type.Literal("force-upgradable"),
+        Type.Literal("partially-installed"),
+        Type.Literal("partially-installed-upgradable"),
+        Type.Literal("partially-upgradable"),
         Type.Literal("available"),
-        Type.Literal("unsupported"),
+        Type.Literal("partially-available"),
         Type.Literal("unavailable"),
       ]),
       version: Type.Optional(Type.String()),
@@ -111,11 +112,11 @@ export interface PluginIndexRow {
   readonly status:
     | "installed"
     | "upgradable"
-    | "force-installed"
-    | "force-installed-upgradable"
-    | "force-upgradable"
+    | "partially-installed"
+    | "partially-installed-upgradable"
+    | "partially-upgradable"
     | "available"
-    | "unsupported"
+    | "partially-available"
     | "unavailable";
   readonly version?: string;
 }
@@ -330,7 +331,7 @@ export async function getPluginIndex(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 3 as const,
+        schemaVersion: 4 as const,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [] as PluginIndexRow[],
         _loadError: errorMessage(err.cause),
@@ -345,7 +346,7 @@ export async function getPluginIndex(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 3 as const,
+    schemaVersion: 4 as const,
     lastRefreshedAt: new Date().toISOString(),
     plugins: rows.map((r) => {
       // Strip undefined version fields so the on-disk shape matches the

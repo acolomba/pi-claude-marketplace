@@ -18,7 +18,7 @@ import test from "node:test";
 import {
   type ResolveContext,
   type ResolvedPlugin,
-  requireForceInstallable,
+  requirePartialInstallable,
   resolveLoose,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
@@ -173,7 +173,7 @@ test("PR-3 loose: entry declares unsupported component -> notInstallable", async
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveLoose(basicEntry({ source: "./local", themes: ["dark"] }), ctx);
   // D-64-06: unsupported component kind, no structural defect -> unsupported.
-  assert.equal(r.state, "unsupported");
+  assert.equal(r.state, "partially-available");
   assert.ok(r.notes.some((n) => n === "contains themes"));
 });
 
@@ -254,7 +254,7 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     });
     const r = await resolveLoose(basicEntry({ source: `./local-${c.kind}` }), ctx);
     // D-64-06: unsupported component kind, no structural defect -> unsupported.
-    assert.equal(r.state, "unsupported", `${c.kind} should be unsupported`);
+    assert.equal(r.state, "partially-available", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
   }
 });
@@ -344,35 +344,35 @@ test("RSTATE-02 loose: structural conflict + unsupported kind -> unavailable (st
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RSTATE-04 / D-64-04: requireForceInstallable gate (loose mode)
+// RSTATE-04 / D-64-04: requirePartialInstallable gate (loose mode)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("RSTATE-04 loose: requireForceInstallable admits installable and exposes pluginRoot", async () => {
+test("RSTATE-04 loose: requirePartialInstallable admits installable and exposes pluginRoot", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r: ResolvedPlugin = await resolveLoose(basicEntry({ source: "./local" }), ctx);
   assert.equal(r.state, "installable");
-  requireForceInstallable(r);
+  requirePartialInstallable(r);
   assert.equal(typeof r.pluginRoot, "string");
 });
 
-test("RSTATE-04 loose: requireForceInstallable admits unsupported and exposes pluginRoot", async () => {
+test("RSTATE-04 loose: requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r: ResolvedPlugin = await resolveLoose(
     basicEntry({ source: "./local", themes: ["dark"] }),
     ctx,
   );
-  assert.equal(r.state, "unsupported");
-  requireForceInstallable(r);
+  assert.equal(r.state, "partially-available");
+  requirePartialInstallable(r);
   assert.equal(typeof r.pluginRoot, "string");
 });
 
-test("RSTATE-04 loose: requireForceInstallable throws on unavailable", async () => {
+test("RSTATE-04 loose: requirePartialInstallable throws on unavailable", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveLoose(basicEntry({ source: "./missing" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.throws(
     () => {
-      requireForceInstallable(r);
+      requirePartialInstallable(r);
     },
     (err: unknown) =>
       err instanceof Error && err.message.includes('Plugin "p1" is not installable'),

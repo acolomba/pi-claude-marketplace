@@ -113,7 +113,7 @@ interface ScopeReadResult {
   /**
    * BFILL-02: the read-pass state snapshot, carried out so the load-time
    * backfill gate can read its persisted `lastReconciledExtensionVersion`
-   * stamp + scan its force-installed plugins. Undefined for a pristine scope
+   * stamp + scan its partially-installed plugins. Undefined for a pristine scope
    * (no state.json) -- backfill MUST NOT create state.json there (WR-05).
    */
   readonly state?: ExtensionState;
@@ -223,7 +223,7 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     // (4) Plan against the merged config + current state. Pure -- no I/O.
     const plan = planReconcile(outcome.merged, state, scope);
     // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
-    // read its stamp + scan its force-installed plugins. planReconcile is pure,
+    // read its stamp + scan its partially-installed plugins. planReconcile is pure,
     // so the snapshot is the unmutated read-pass state.
     return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
   });
@@ -815,13 +815,13 @@ async function applyPlan(
  *
  * WR-01: a config-present / state.json-absent scope DOES carry a snapshot (the
  * read pass loads DEFAULT_STATE), so `state` is defined even though no state.json
- * exists on disk. With zero force-installed plugins to promote, the stamp write
+ * exists on disk. With zero partially-installed plugins to promote, the stamp write
  * would CREATE an unsolicited state.json purely to record the version -- the same
  * WR-05 violation. That case is skipped silently below.
  *
  * Stamp-on-gate-open (D-68-03): whenever the gate opened AND a state.json already
  * exists (or there is real backfill work), the running version is stamped
- * UNCONDITIONALLY -- even with zero force-installed plugins to promote -- so the
+ * UNCONDITIONALLY -- even with zero partially-installed plugins to promote -- so the
  * gate closes and does not reopen on the next load. The stamp is written via
  * withStateGuard -> saveState (the sole sanctioned state.json writer, SPLIT-02 /
  * NFR-1), never a bare atomicWriteJson.
@@ -853,11 +853,11 @@ async function applyBackfillForScope(
     return;
   }
 
-  // Gate OPEN. Scan every force-installed plugin and re-materialize the ones
+  // Gate OPEN. Scan every partially-installed plugin and re-materialize the ones
   // whose supported set grew; promotion rows fold into `outcomes` (RECON-04).
   const anyFailure = await scanForceInstalledBackfills(opts, scope, state, outcomes);
 
-  // SF-02: a force-installed plugin was scanned but its backfill FAILED -- a
+  // SF-02: a partially-installed plugin was scanned but its backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
   // the scan; not a benign no-growth / concurrent-uninstall. Leave the version
   // gate OPEN so the next load retries -- symmetric with the WR-02 self-heal (a
@@ -917,7 +917,7 @@ async function applyBackfillForScopeIsolated(
 export { applyBackfillForScopeIsolated as __test_applyBackfillForScopeIsolated };
 
 /**
- * WR-01: true iff any recorded plugin in this scope is force-installed
+ * WR-01: true iff any recorded plugin in this scope is partially-installed
  * (compatibility.installable === false) -- the only kind the backfill scan can
  * promote. Decides whether a stamp write is worth bringing a state.json into
  * existence for: with none and no state.json on disk, the file stays absent.
@@ -935,14 +935,14 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
 }
 
 /**
- * BFILL-01 / D-68-03: scan the read-pass snapshot's force-installed plugins
+ * BFILL-01 / D-68-03: scan the read-pass snapshot's partially-installed plugins
  * (compatibility.installable === false; clean/installed plugins have nothing to
  * backfill) and re-materialize each whose supported set grew. Iterates the
  * snapshot; reinstallPlugin self-locks and re-reads fresh state per plugin
  * (CR-01).
  *
  * WR-03: the snapshot predates applyPlan, which may have re-materialized a
- * force-installed plugin in the SAME load (e.g. a disable/enable that emits its
+ * partially-installed plugin in the SAME load (e.g. a disable/enable that emits its
  * own transition row). Skip any plugin already represented in this scope's
  * accumulated outcomes so a single load can never emit two rows for one plugin
  * (nor clobber a just-applied transition with a redundant overwrite).
@@ -993,7 +993,7 @@ async function scanForceInstalledBackfills(
 
 /**
  * Per-plugin fault isolation for one scanned record. Applies the D-68-03
- * force-installed filter + the WR-03 already-touched dedupe (both benign skips
+ * partially-installed filter + the WR-03 already-touched dedupe (both benign skips
  * returning `false`), then runs `maybeBackfillPlugin` inside a try/catch.
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
@@ -1020,7 +1020,7 @@ async function backfillOnePluginIsolated(
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const { scope, marketplace, mp, plugin, record } = target;
-  // D-68-03: scan ONLY force-installed plugins.
+  // D-68-03: scan ONLY partially-installed plugins.
   if (record.compatibility.installable) {
     return false;
   }
@@ -1049,7 +1049,7 @@ async function backfillOnePluginIsolated(
  * Test seam (mirrors reinstall.ts's `__test_*` exports): exercise the WR-03
  * dedupe directly with a pre-populated `outcomes` array standing in for a
  * same-load applyPlan transition (the planner's enable bucket requires
- * installable === true, so a force-installed plugin cannot reach it through a
+ * installable === true, so a partially-installed plugin cannot reach it through a
  * real plan -- the seam injects the precondition).
  */
 export { scanForceInstalledBackfills as __test_scanForceInstalledBackfills };
@@ -1058,13 +1058,13 @@ type StateMarketplaceRecord = ExtensionState["marketplaces"][string];
 type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
 
 /**
- * BFILL-01: re-resolve one force-installed plugin offline (NFR-5) and, if its
+ * BFILL-01: re-resolve one partially-installed plugin offline (NFR-5) and, if its
  * supported set strictly grew (the boundary moved for THIS plugin -- D-68-03,
  * avoiding needless mtime churn), re-materialize it in place via the
- * force-capable reinstall primitive at the SAME recorded version (no upgrade --
+ * partial-capable reinstall primitive at the SAME recorded version (no upgrade --
  * D-68-02). The promotion folds into the single cascade as a
  * `PluginBackfilledOutcome` whose `installable` boolean drives the
- * (installed)-vs-(force-installed) projection.
+ * (installed)-vs-(partially-installed) projection.
  *
  * SF-01 / SF-02: returns `true` iff the re-materialize FAILED (a genuine
  * failure, surfaced as a plugin-scoped (failed) row), so the caller keeps the
@@ -1146,13 +1146,13 @@ async function maybeBackfillPlugin(
     dependencies: dependenciesFromInstall(outcome),
     // The re-resolved installability selects the row: a fully promoted plugin
     // (unsupported now empty) -> `installable` -> (installed); a partial
-    // re-materialize stays `unsupported` -> (force-installed).
+    // re-materialize stays `partially-available` -> (partially-installed).
     installable: resolved.state === "installable",
     // SEV-05 / D-69-04: carry the re-resolved dropped-component kinds so the
-    // `(force-installed)` row composes a factual `{reasons}` brace through the
+    // `(partially-installed)` row composes a factual `{reasons}` brace through the
     // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
     // the brace-less `(installed)` row, so its unsupported set is empty.
-    unsupported: resolved.state === "unsupported" ? resolved.unsupported : [],
+    unsupported: resolved.state === "partially-available" ? resolved.unsupported : [],
   });
   return false;
 }

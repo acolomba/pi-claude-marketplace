@@ -87,7 +87,7 @@ import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/component
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import {
-  requireForceInstallable,
+  requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../domain/resolver.ts";
@@ -191,13 +191,13 @@ export interface UpdatePluginsOptions {
   readonly local?: boolean;
   /**
    * FORCE-02 opt-in. When true, the candidate resolve admits the
-   * force-degradable `unsupported` arm (D-65-04): an `unsupported` target
+   * partially-available arm (D-65-04): a `partially-available` target
    * updates by degrading instead of blocking. Default false keeps the
    * existing `requireInstallable` block. Never bypasses an `unavailable`/
    * structural candidate (FORCE-05). The cascade entrypoint
    * (`updateSinglePlugin`) does NOT accept this flag.
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
 }
 
 /**
@@ -319,11 +319,11 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // resolves to false at the bridge call site so cascade re-installs
         // always omit `model:`.
         mapModel: opts.mapModel ?? false,
-        // FORCE-02: thread `--force` from the user-facing options bag into
+        // FORCE-02: thread `--partial` from the user-facing options bag into
         // the per-plugin candidate gate (D-65-04). The cascade entrypoint
         // (`updateSinglePlugin`) never sets this, so cascade re-installs
         // resolve to false and keep the `requireInstallable` block.
-        force: opts.force ?? false,
+        partial: opts.partial ?? false,
         // WB-01: thread `--local` for the direct-path
         // write-back target selection.
         ...(opts.local === true && { local: true }),
@@ -502,16 +502,16 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       cwd,
       locations,
       cascade: true,
-      // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path
-      // automatically. A force-upgradable candidate (re-resolves `unsupported`)
+      // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
+      // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
       // degrades in place -- supported components materialize, unsupported kinds
-      // skip -- and renders `(force-installed) {dropped kinds}` instead of
-      // declining with `(skipped) {no longer installable}`. `requireForceInstallable`
+      // skip -- and renders `(partially-installed) {dropped kinds}` instead of
+      // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
       // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
-      // automatic force path can never materialize a structurally-broken plugin.
+      // automatic partial path can never materialize a structurally-broken plugin.
       // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
-      // directly) is unaffected; it sets `force` from the user's `--force` flag.
-      force: true,
+      // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
+      partial: true,
     });
   } catch (err) {
     // Cascade-safe: capture throws into a partition='failed' outcome so the
@@ -639,13 +639,13 @@ interface ThreePhaseArgs {
    */
   readonly local?: boolean;
   /**
-   * FORCE-02 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.force`
-   * (which the edge handler populates from `--force`). Gates the candidate
+   * FORCE-02 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.partial`
+   * (which the edge handler populates from `--partial`). Gates the candidate
    * resolve in `preflightUpdate` (D-65-04). The cascade entrypoint
    * `updateSinglePlugin` intentionally NEVER sets this; cascade-driven
    * re-installs resolve to false at the gate.
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
 }
 
 interface PrepHandles {
@@ -756,14 +756,14 @@ async function preflightUpdate(
   let installable: MaterializablePlugin;
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
-    // FORCE-02/FORCE-05 (D-65-04): `--force` widens the gate at the CANDIDATE
-    // resolve so an `unsupported` target degrades (supported components
+    // FORCE-02/FORCE-05 (D-65-04): `--partial` widens the gate at the CANDIDATE
+    // resolve so a `partially-available` target degrades (supported components
     // materialize, unsupported kinds skip) instead of blocking. Without
-    // `--force` the candidate still blocks via `requireInstallable` (the catch
+    // `--partial` the candidate still blocks via `requireInstallable` (the catch
     // arm below renders `(skipped) {no longer installable}`). Both gates still
     // reject an `unavailable`/structural candidate (FORCE-05).
-    if (args.force === true) {
-      requireForceInstallable(resolved, "update");
+    if (args.partial === true) {
+      requirePartialInstallable(resolved, "update");
     } else {
       requireInstallable(resolved, "update");
     }
@@ -777,18 +777,18 @@ async function preflightUpdate(
     //
     // XSURF-03: source the decline discriminant from the thrown `err.shape`
     // (`resolved` is out of scope here -- it is declared inside the `try`).
-    // `err.shape.forceable === true` ⇔ the resolver verdict was `unsupported`,
-    // i.e. a force-upgradable decline: `--force` could degrade-update it. For
+    // `err.shape.partialable === true` ⇔ the resolver verdict was `partially-available`,
+    // i.e. a partially-upgradable decline: `--partial` could degrade-update it. For
     // that arm carry the list-consistent degrade kinds via the SAME
-    // `narrowUnsupportedKinds` helper the `list (force-upgradable)` row uses
-    // (byte-parity, pinned by catalog-uat) and mark `forceUpgradable: true` so
-    // the projection flips ONLY this arm to the `force-upgradable` token. A
-    // structural decline (`forceable !== true` -- force cannot help) keeps the
+    // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
+    // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true` so
+    // the projection flips ONLY this arm to the `partially-upgradable` token. A
+    // structural decline (`partialable !== true` -- `--partial` cannot help) keeps the
     // `no longer installable` reason and the plain skipped path.
     if (
       err instanceof PluginShapeError &&
       err.shape.kind === "no-longer-installable" &&
-      err.shape.forceable
+      err.shape.partialable
     ) {
       return {
         partition: "skipped",
@@ -796,7 +796,7 @@ async function preflightUpdate(
         fromVersion: record.version,
         notes: [errorMessage(err)],
         reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
-        forceUpgradable: true,
+        partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
       };
@@ -1554,20 +1554,20 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     stagedMcpServers,
     declaresAgents: stagedAgents.length > 0,
     declaresMcp: stagedMcpServers.length > 0,
-    // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
-    // `unsupported` degraded it -- carry the dropped kinds so the cascade
-    // renders `(force-installed)` instead of `(updated)`. Empty for a clean
-    // candidate (FSTAT-03 -- no lingering force state).
+    // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
+    // `partially-available` degraded it -- carry the dropped kinds so the cascade
+    // renders `(partially-installed)` instead of `(updated)`. Empty for a clean
+    // candidate (FSTAT-03 -- no lingering partial state).
     //
     // SEV-03 / D-69-01: `newlyDegraded` records whether this degrade NEWLY
-    // introduced force state -- the PERSISTED `compatibility.unsupported` read
+    // introduced partial state -- the PERSISTED `compatibility.unsupported` read
     // from the prior install record (`preflight.record`, loaded BEFORE the
     // update applied) was empty. The autoupdate cascade renderer reads it to
     // raise the row to `warning` (newly degraded) vs `info` (already degraded);
-    // the manual `update --force` renderer ignores it (explicit opt-in stays
+    // the manual `update --partial` renderer ignores it (explicit opt-in stays
     // info). No schema change -- the field already exists on the record.
-    ...(installable.state === "unsupported" && {
-      forceDegrade: {
+    ...(installable.state === "partially-available" && {
+      partialDegrade: {
         kinds: [...installable.unsupported],
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
@@ -1605,14 +1605,14 @@ interface TargetedOutcome {
 
 /**
  * SEV-04 / D-69-02: severity for a `skipped` update row. An absent-target skip
- * (`not installed` / `not found`) is always error (D-01). A force-upgradable
- * decline (`no longer installable`, no `--force`) follows the invocation shape:
+ * (`not installed` / `not found`) is always error (D-01). A partially-upgradable
+ * decline (`no longer installable`, no `--partial`) follows the invocation shape:
  * a targeted `<plugin>@<marketplace>` update the user explicitly opted into is
  * actionable -> warning; a bulk / untargeted update that skips one the user did
  * not name is benign -> info. This threads the EXISTING `cardinality`
  * invocation-shape signal -- no inference from cascade shape. All OTHER
  * non-idempotent reasons keep the producer-local `skipSeverity` judgment, so the
- * change is surgical to the force-upgradable decline.
+ * change is surgical to the partially-upgradable decline.
  */
 function cascadeSkipSeverity(
   reasons: readonly ContentReason[],
@@ -1634,9 +1634,9 @@ function cascadeSkipSeverity(
  * `outcomeToCascadePluginMessage` so the parent switch stays within the
  * cognitive-complexity budget.
  *
- * XSURF-03: the force-upgradable manual update-decline (`outcome.forceUpgradable`)
- * flips to the `force-upgradable` token (consistent with how `list` describes
- * the same plugin) + the update-worded `--force` trailer. The SEV-04 split
+ * XSURF-03: the partially-upgradable manual update-decline (`outcome.partialUpgradable`)
+ * flips to the `partially-upgradable` token (consistent with how `list` describes
+ * the same plugin) + the update-worded `--partial` trailer. The SEV-04 split
  * (targeted=warning / bulk=info) moves onto this status arm directly -- it is no
  * longer keyed on the reason string (the reason now carries the list-consistent
  * degrade kinds, not `no longer installable`). Every other skipped reason keeps
@@ -1656,14 +1656,14 @@ function projectSkippedOutcome(
       ? { version: outcome.fromVersion }
       : {};
 
-  if (outcome.forceUpgradable === true) {
+  if (outcome.partialUpgradable === true) {
     return {
-      status: "force-upgradable",
+      status: "partially-upgradable",
       name: outcome.name,
       scope: target.scope,
       ...version,
       reasons,
-      forceHint: true,
+      partialHint: true,
       severity: cardinality === "single" ? "warning" : "info",
       needsReload: false,
     };
@@ -1716,27 +1716,27 @@ function outcomeToCascadePluginMessage(
   );
   switch (outcome.partition) {
     case "updated":
-      // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
-      // `unsupported` degraded it -- report `(force-installed)` with the
+      // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
+      // `partially-available` degraded it -- report `(partially-installed)` with the
       // dropped-component detail instead of `(updated)`. This reads the LIVE
       // candidate resolution of the just-completed update -- NOT the persisted
       // `compatibility.unsupported` record the `list` / non-path `info`
       // derivers read; they agree here only because the update just wrote that
       // record. A clean candidate keeps `(updated)` (FSTAT-03 -- no lingering
-      // force state). force-installed is a realized transition
+      // partial state). partially-installed is a realized transition
       // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload
       // as the updated row. WR-03: thread `dependencies` (the same
       // declared-kinds gate the `(updated)` row uses) so the soft-dep
       // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a
       // degraded update exactly as on a clean one.
-      if (outcome.forceDegrade !== undefined && outcome.forceDegrade.kinds.length > 0) {
+      if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
         return {
-          status: "force-installed",
+          status: "partially-installed",
           name: outcome.name,
           scope: target.scope,
           version: outcome.toVersion,
           dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-          reasons: narrowUnsupportedKinds(outcome.forceDegrade.kinds),
+          reasons: narrowUnsupportedKinds(outcome.partialDegrade.kinds),
           // SEV-01: info, raised to warning on a missing declared companion.
           severity: successSeverity,
           needsReload: true,
@@ -1880,10 +1880,10 @@ function renderUpdateCascadeAndNotify(
   const probe = softDepStatus(pi);
 
   // UGRM-02 / D-04: the headline counts realized transitions ONLY. The `updated`
-  // partition holds both clean `(updated)` rows AND force-installed degraded
-  // updates (the force-installed arm is emitted from `case "updated"`), so a
+  // partition holds both clean `(updated)` rows AND partially-installed degraded
+  // updates (the partially-installed arm is emitted from `case "updated"`), so a
   // single partition filter captures every realized transition. A
-  // `force-upgradable` decline is partition `skipped`, so it contributes 0
+  // `partially-upgradable` decline is partition `skipped`, so it contributes 0
   // (correct). Derived BEFORE row suppression -- independent of UGRM-01
   // filtering.
   const updatedCount = outcomes.filter((o) => o.outcome.partition === "updated").length;
@@ -1895,7 +1895,7 @@ function renderUpdateCascadeAndNotify(
     // {up-to-date}` row for each unchanged plugin. The single-target path is
     // untouched (a user who named one plugin still sees its up-to-date skip
     // row). Only the `unchanged` partition is suppressed; a `skipped`-partition
-    // row (e.g. the `force-upgradable` decline) survives into the cascade.
+    // row (e.g. the `partially-upgradable` decline) survives into the cascade.
     if (cardinality === "plural" && outcome.partition === "unchanged") {
       continue;
     }
@@ -1967,7 +1967,7 @@ function renderUpdateCascadeAndNotify(
   // `plural` update that updated nothing AND has no surviving error/warning row.
   // This covers BOTH an empty post-suppression cascade (all up-to-date) and a
   // non-empty cascade whose only rows are benign info skips (e.g. the
-  // `force-upgradable` decline). The surviving severities are the caller-stamped
+  // `partially-upgradable` decline). The surviving severities are the caller-stamped
   // per-row `severity` fields (undefined defaults to info).
   const hasErrorOrWarningRow = marketplaces.some((mp) =>
     mp.plugins.some((p) => p.severity === "error" || p.severity === "warning"),

@@ -4,7 +4,7 @@
 // discriminated parser. Consumed by `domain/resolver.ts`: a structural parse
 // failure (`{ ok: false }`) resolves `state: "unavailable"` per D-57-04; a
 // successful parse whose partition dropped unsupportable events / matcher groups
-// / handlers resolves `state: "unsupported"` (force-degradable) carrying the
+// / handlers resolves `state: "partially-available"` (partially-available) carrying the
 // `{unsupported hooks}` reason.
 //
 // HOOK-03: `additionalProperties: true` at EVERY nesting level. Unknown
@@ -24,7 +24,7 @@
 // missing REQUIRED `command` on a `type: "command"` handler) surface through
 // `parseHooksConfig` as `{ ok: false, reason }`. The resolver routes these to
 // the `state: "unavailable"` arm. A parseable config that merely drops
-// unsupportable entries instead resolves `state: "unsupported"` with the
+// unsupportable entries instead resolves `state: "partially-available"` with the
 // `{unsupported hooks}` reason (the `{ ok: true }` arm carries
 // `dropped: readonly DroppedHook[]`).
 // `hookDebugLog` is the OBS-01 debug-output seam (imported from
@@ -355,7 +355,7 @@ export type HookConfigParseResult<P> =
  * success; on failure returns `{ok:false, reason}` and forwards the detail
  * through `hookDebugLog`. The resolver maps a structural `{ok:false}` failure to
  * `state: "unavailable"`; a `{ok:true}` parse with a non-empty
- * `dropped: readonly DroppedHook[]` list resolves `state: "unsupported"` with the
+ * `dropped: readonly DroppedHook[]` list resolves `state: "partially-available"` with the
  * `{unsupported hooks}` reason. No throws.
  *
  * HOOK-03 / LIFE-01 wrapper-detection arm: if the parsed JSON looks like

@@ -413,7 +413,7 @@ test("BFILL-01: a fully-promoted backfill (installable:true) projects to an (ins
   assert.deepEqual(row.status === "installed" ? [...row.dependencies] : "absent", ["agents"]);
 });
 
-test("SEV-05: a partial backfill (installable:false) projects to a (force-installed) row with the dropped-kinds reasons brace, severity info, needsReload", () => {
+test("SEV-05: a partial backfill (installable:false) projects to a (partially-installed) row with the dropped-kinds reasons brace, severity info, needsReload", () => {
   // A load-time backfill whose re-resolved unsupported set is still non-empty
   // stays degraded -- it renders a force-installed row (the ◉ glyph), not a
   // clean (installed) row (D-68-04 / T-68-07). SEV-05 / D-69-04: the re-resolved
@@ -436,15 +436,15 @@ test("SEV-05: a partial backfill (installable:false) projects to a (force-instal
   assert.equal(block.plugins.length, 1);
   const row = block.plugins[0];
   assert.ok(row);
-  assert.equal(row.status, "force-installed");
+  assert.equal(row.status, "partially-installed");
   assert.equal(row.name, "cr");
   assert.equal(row.severity, "info");
   assert.equal(row.needsReload, true);
   // SEV-05: the dropped kind renders through the shared narrower as `lsp`.
-  assert.deepEqual(row.status === "force-installed" ? [...row.reasons] : "absent", ["lsp"]);
+  assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
 });
 
-test("SEV-05: a backfill with no dropped kinds (degenerate empty set) renders a brace-less (force-installed) row -- byte-identical to today", () => {
+test("SEV-05: a backfill with no dropped kinds (degenerate empty set) renders a brace-less (partially-installed) row -- byte-identical to today", () => {
   // The no-dropped-kinds force-installed backfill renders brace-less: the shared
   // narrower returns [], so composeReasons emits no brace (D-69-04 -- rows
   // without reasons stay byte-identical).
@@ -463,8 +463,8 @@ test("SEV-05: a backfill with no dropped kinds (degenerate empty set) renders a 
   assert.ok(block);
   const row = block.plugins[0];
   assert.ok(row);
-  assert.equal(row.status, "force-installed");
-  assert.deepEqual(row.status === "force-installed" ? [...row.reasons] : "absent", []);
+  assert.equal(row.status, "partially-installed");
+  assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", []);
 });
 
 test("RECON-04: a cascade with an install row + a backfill row yields ONE message carrying both rows", () => {
@@ -498,7 +498,7 @@ test("RECON-04: a cascade with an install row + a backfill row yields ONE messag
     [...block.plugins].map((p) => [p.name, p.status]),
     [
       ["fresh", "installed"],
-      ["promoted", "force-installed"],
+      ["promoted", "partially-installed"],
     ],
   );
 });
@@ -585,7 +585,7 @@ function installPlan(scope: Scope, install: PlannedPluginInstall): ReconcilePlan
 test("FSTAT-06: a planned install whose candidate resolveStrict yields unsupported -> will-install row carries force:true", async () => {
   // A real no-network resolveStrict over an on-disk plugin root carrying an
   // unsupported component (`.lsp.json` -> lspServers) resolves `unsupported`,
-  // so the planned install would degrade -> `(will force install)`.
+  // so the planned install would degrade -> `(will partially install)`.
   const mpRoot = await mkdtemp(path.join(tmpdir(), "recon-force-"));
   try {
     await mkdir(path.join(mpRoot, "cr"), { recursive: true });
@@ -615,7 +615,7 @@ test("FSTAT-06: a planned install whose candidate resolveStrict yields unsupport
     assert.ok(row);
     assert.equal(row.status, "will install");
     // The force modifier is set exactly when the candidate resolved unsupported.
-    assert.equal(row.status === "will install" ? row.force : undefined, true);
+    assert.equal(row.status === "will install" ? row.partial : undefined, true);
   } finally {
     await rm(mpRoot, { recursive: true, force: true });
   }
@@ -648,7 +648,7 @@ test("FSTAT-06: a planned install whose candidate resolves installable -> plain 
     assert.ok(row);
     assert.equal(row.status, "will install");
     assert.equal(
-      row.status === "will install" ? row.force : "absent",
+      row.status === "will install" ? row.partial : "absent",
       undefined,
       "installable candidate row must not carry force",
     );
@@ -672,7 +672,7 @@ test("FSTAT-06: an unlocatable candidate (locator returns undefined) -> plain wi
     const msg = buildReconcilePendingNotification([plan], forceKeys);
     const row = msg.marketplaces[0]?.plugins[0];
     assert.ok(row);
-    assert.equal(row.status === "will install" ? row.force : "absent", undefined);
+    assert.equal(row.status === "will install" ? row.partial : "absent", undefined);
   });
 });
 
@@ -713,7 +713,7 @@ test("FSTAT-06: force keys are scoped to (scope, marketplace, plugin) -- a same-
     );
     const forcedRows = msg.marketplaces
       .flatMap((m) => m.plugins)
-      .filter((p) => p.status === "will install" && p.force === true);
+      .filter((p) => p.status === "will install" && p.partial === true);
     assert.equal(forcedRows.length, 0);
   });
 });
@@ -754,7 +754,7 @@ test("FSTAT-06 / D-66-05: the reconcile pending projection never emits an update
     .flatMap((m) => m.plugins)
     .find((p) => p.status === "will install" && p.name === "ins");
   assert.ok(forcedInstall);
-  assert.equal(forcedInstall.status === "will install" ? forcedInstall.force : undefined, true);
+  assert.equal(forcedInstall.status === "will install" ? forcedInstall.partial : undefined, true);
 
   // Structural guarantee: the pending closed status set has no update member,
   // so a `will force update` row is unrepresentable on this surface.

@@ -235,14 +235,14 @@ test("Unknown long flag -> USAGE error (no orchestrator call)", async () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// FORCE-01 (parse) -- the handler threads `force: true` into installPlugin.
+// FORCE-01 (parse) -- the handler threads `partial: true` into installPlugin.
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
  * Seed a project-scope path-source marketplace with an `unsupported` plugin
  * (one supported skill + experimental themes/monitors, D-64-06). The force vs
  * non-force divergence on THIS plugin is the observable that proves the
- * handler threads the parsed `--force` boolean into `installPlugin`.
+ * handler threads the parsed `--partial` boolean into `installPlugin`.
  */
 async function seedUnsupportedProjectPlugin(cwd: string): Promise<void> {
   const marketplaceRoot = path.join(cwd, "mp-src");
@@ -286,14 +286,14 @@ async function seedUnsupportedProjectPlugin(cwd: string): Promise<void> {
   await saveState(locations.extensionRoot, state);
 }
 
-test("shim :: --force threads force:true into installPlugin (unsupported plugin degrades)", async () => {
+test("shim :: --partial threads partial:true into installPlugin (unsupported plugin degrades)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedUnsupportedProjectPlugin(cwd);
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
-    await handler("p1@mp --scope project --force", ctx);
+    await handler("p1@mp --scope project --partial", ctx);
 
-    // The threaded `force: true` selects the force gate, so the unsupported
+    // The threaded `partial: true` selects the force gate, so the unsupported
     // plugin degrades and installs (no error). Without threading this would
     // block exactly like the non-force case below.
     const errs = notifications.filter((n) => n.severity === "error");
@@ -306,14 +306,14 @@ test("shim :: --force threads force:true into installPlugin (unsupported plugin 
   });
 });
 
-test("shim :: without --force the same unsupported plugin blocks (force boolean is load-bearing)", async () => {
+test("shim :: without --partial the same unsupported plugin blocks (force boolean is load-bearing)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     await seedUnsupportedProjectPlugin(cwd);
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("p1@mp --scope project", ctx);
 
-    // No `--force` -> the default gate blocks; the ONLY difference from the
+    // No `--partial` -> the default gate blocks; the ONLY difference from the
     // case above is the missing token, so this divergence proves the handler
     // threads `force` rather than ignoring it.
     assert.ok(notifications.length >= 1, "a row must surface on block");
@@ -321,17 +321,17 @@ test("shim :: without --force the same unsupported plugin blocks (force boolean 
     assert.equal(
       after.marketplaces["mp"]?.plugins["p1"],
       undefined,
-      "unsupported plugin must not install without --force",
+      "unsupported plugin must not install without --partial",
     );
   });
 });
 
-test("USAGE string contains [--force]", async () => {
+test("USAGE string contains [--partial]", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeInstallHandler(makePi());
     await handler("", ctx);
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\[--force\]/);
+    assert.match(notifications[0]!.message, /\[--partial\]/);
   });
 });

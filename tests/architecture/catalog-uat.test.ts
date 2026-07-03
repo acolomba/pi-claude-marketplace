@@ -206,7 +206,7 @@ interface CatalogFixture {
   // UGRM-01/UGRM-02: an optional emit override for catalog states whose
   // user-visible output is produced by the ORCHESTRATOR, not by `notify()`. The
   // bulk-`update` never-silent no-op headline (`all-up-to-date-noop`,
-  // `skip-force-upgradable-bulk`) is emitted via `emitUpdateNoOpCascade` -- the
+  // `skip-partially-upgradable-bulk`) is emitted via `emitUpdateNoOpCascade` -- the
   // `notify()` renderer alone (with a `tally {count: 0}` override) would collapse
   // the headline to `""`. When `emit` is present the driver calls it instead of
   // `notify()`, then byte-pairs the resulting `ctx.ui.notify` call against the
@@ -257,24 +257,24 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 
 // ---------------------------------------------------------------------------
 // USTAT-01 / D-64-01: the list/info render now de-collapses by resolver STATE.
-// A not-installed plugin that resolves `unsupported` (force-installable: lsp,
+// A not-installed plugin that resolves `partially-available` (lsp,
 // unsupported component kind, or a parseable-but-unsupportable `hooks.json`)
-// renders the distinct `(unsupported)` / `⊖` token; a STRUCTURALLY malformed
+// renders the distinct `(partially-available)` / `⊖` token; a STRUCTURALLY malformed
 // plugin (invalid JSON / `type:"command"` missing `command`) stays
 // `(unavailable)` / `⊘`. Classify each fixture below by its modeled resolver
 // state, NOT by its reason brace -- the same `{unsupported hooks}` brace can
 // appear on both arms (the structural arm via `narrowResolverNotes`, the
-// force-degradable arm via `narrowUnsupportedKinds`):
+// partially-available arm via `narrowUnsupportedKinds`):
 //   - list `single-mp-mixed`: `epsilon` carries `lsp` -> unambiguously resolver
-//     `unsupported` -> modeled as `status: "unsupported"` -> `⊖ (unsupported)`;
+//     `partially-available` -> modeled as `status: "partially-available"` -> `⊖ (partially-available)`;
 //     `delta` models the structural malformed-`hooks.json` arm -> stays
 //     `status: "unavailable"` -> `⊘ (unavailable)`. The catalog thus documents
 //     BOTH de-collapsed byte forms on the list surface.
 //   - info `unavailable-single-scope` carries `componentsResolved: false` --
-//     the malformed-structural case (a force-degradable plugin resolves,
-//     setting `componentsResolved: true`, and renders `force-installed`), so it
+//     the malformed-structural case (a partially-available plugin resolves,
+//     setting `componentsResolved: true`, and renders `partially-installed`), so it
 //     keeps its `(unavailable) {unsupported hooks}` bytes.
-// The filter buckets (`--unsupported` / `--unavailable`) are unchanged; only the
+// The filter buckets (`--partial` / `--unavailable`) are unchanged; only the
 // rendered token splits.
 // ---------------------------------------------------------------------------
 const FIXTURES: FixtureMap = {
@@ -312,7 +312,7 @@ const FIXTURES: FixtureMap = {
               },
               { status: "unavailable", name: "delta", reasons: ["unsupported hooks"] },
               {
-                status: "unsupported",
+                status: "partially-available",
                 name: "epsilon",
                 reasons: ["unsupported hooks", "lsp"],
               },
@@ -675,10 +675,10 @@ const FIXTURES: FixtureMap = {
     },
 
     // FSTAT-02 / D-66-03: list-surface inventory row for a recorded-installed
-    // plugin currently re-resolving `unsupported`. The derived `force-installed`
+    // plugin currently re-resolving `partially-available`. The derived `partially-installed`
     // token wears the dedicated `◉` glyph, distinct from the clean `●`
     // `(installed)` row. Severity `info` (the row omits `severity`).
-    "force-installed-inventory": {
+    "partially-installed-inventory": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -688,7 +688,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -700,15 +700,15 @@ const FIXTURES: FixtureMap = {
     },
 
     // FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04: list-surface inventory row for
-    // a recorded-installed partial-hook plugin re-resolving `unsupported` with
-    // one or more hook events / matcher groups dropped. The force-degradable
+    // a recorded-installed partial-hook plugin re-resolving `partially-available` with
+    // one or more hook events / matcher groups dropped. The partially-available
     // `hooks` kind rides the SINGLE aggregate `{unsupported hooks}` brace (no
     // per-handler fan-out on the list row -- D-71-04); the
     // `event(matcher) (unsupported)` breakdown lives on `info` (D-71-05). The
     // brace is sourced via `narrowUnsupportedKinds` (typed kind), distinct from
     // the structural `narrowResolverNotes` path an `unavailable` malformed-hooks
     // row uses.
-    "force-installed-inventory-hooks": {
+    "partially-installed-inventory-hooks": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -718,7 +718,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hook-plugin",
                 version: "1.0.0",
                 reasons: ["unsupported hooks"],
@@ -731,9 +731,9 @@ const FIXTURES: FixtureMap = {
 
     // FSTAT-04 / D-66-02 / D-66-03: list-surface inventory row for a
     // currently-clean installed plugin whose newer no-network candidate would
-    // newly degrade it. The derived `force-upgradable` token REUSES the `●`
+    // newly degrade it. The derived `partially-upgradable` token REUSES the `●`
     // glyph (the row is clean today), mirroring the `upgradable` precedent.
-    "force-upgradable-inventory": {
+    "partially-upgradable-inventory": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -743,7 +743,7 @@ const FIXTURES: FixtureMap = {
             details: { autoupdate: true },
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 name: "clean-plugin",
                 version: "1.0.0",
                 reasons: ["unsupported source"],
@@ -868,19 +868,19 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // WR-03: a `--force` install succeeds with one or more components dropped
-    // (the resolver's `unsupported` arm) -- the success row is
-    // `(force-installed)`. The force-degradable arm still stages the SUPPORTED
+    // WR-03: a `--partial` install succeeds with one or more components dropped
+    // (the resolver's `partially-available` arm) -- the success row is
+    // `(partially-installed)`. The partially-available arm still stages the SUPPORTED
     // components, so the row carries `dependencies`; with the `agents` companion
     // extension unloaded the soft-dep marker fires in the SAME brace AFTER the
     // dropped-component reason (MSG-GR-4), rendering `{lsp, requires
     // pi-subagents}`. Probe with only `mcp` loaded so the `agents` marker fires.
     // SEV-01: the unloaded `agents` companion is a silent degradation
-    // independent of the dropped components, so the force-installed success row
+    // independent of the dropped components, so the partially-installed success row
     // stamps `warning` and the cascade carries the `needs attention` summary
-    // line. The direct `--force` opt-in itself stays benign info -- the warning
-    // is the missing companion, not the force degrade.
-    "success-force-installed-with-soft-dep": {
+    // line. The direct `--partial` opt-in itself stays benign info -- the warning
+    // is the missing companion, not the partial install.
+    "success-partially-installed-with-soft-dep": {
       pi: piWithMcpLoaded(),
       expectedSeverity: "warning",
       message: {
@@ -890,7 +890,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 severity: "warning",
                 needsReload: true,
                 name: "helper",
@@ -904,9 +904,9 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-02 / D-69-03 / XSURF-01: force-degradable install failure -- the row
-    // renders the resolver-state-driven `(unsupported)` token (consistent with
-    // list / info), carries the `--force` hint trailer, and renders at error
+    // SEV-02 / D-69-03 / XSURF-01: partially-available install failure -- the row
+    // renders the resolver-state-driven `(partially-available)` token (consistent with
+    // list / info), carries the `--partial` hint trailer, and renders at error
     // severity.
     "failure-unsupported-features": {
       pi: piWithBothLoaded(),
@@ -918,10 +918,10 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "unsupported",
+                status: "partially-available",
                 name: "helper",
                 reasons: ["unsupported hooks", "lsp"],
-                forceHint: true,
+                partialHint: true,
                 severity: "error",
               },
             ],
@@ -932,7 +932,7 @@ const FIXTURES: FixtureMap = {
 
     // SEV-02 / D-69-03 / D-70-02: structurally `unavailable` install failure --
     // force cannot degrade-install a structural defect, so the row carries NO
-    // `--force` hint, but it still stamps error severity (the leading summary
+    // `--partial` hint, but it still stamps error severity (the leading summary
     // line fires) because an install failure must read as an error.
     "failure-structural-unavailable": {
       pi: piWithBothLoaded(),
@@ -1675,13 +1675,13 @@ const FIXTURES: FixtureMap = {
     },
 
     // SEV-04 / D-69-02 / XSURF-03: a TARGETED `update <plugin>@<marketplace>`
-    // that declines a force-upgradable candidate (no `--force`) is actionable
-    // -> warning. The decline flips to the `force-upgradable` token (consistent
+    // that declines a partially-upgradable candidate (no `--partial`) is actionable
+    // -> warning. The decline flips to the `partially-upgradable` token (consistent
     // with how `list` describes the same plugin) carrying the list-consistent
-    // degrade reason + the update-worded `--force` trailer (forceHint). Single
+    // degrade reason + the update-worded `--partial` trailer (partialHint). Single
     // cardinality, so no trailing tally; the cascade carries the `needs
     // attention` summary line.
-    "decline-force-upgradable-targeted": {
+    "decline-partially-upgradable-targeted": {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
       message: {
@@ -1693,10 +1693,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "warning",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -1708,20 +1708,20 @@ const FIXTURES: FixtureMap = {
     },
 
     // SEV-04 / D-69-02 / XSURF-03: a BULK `update @<marketplace>` that skips the
-    // same force-upgradable candidate the user did NOT target is benign -> info.
-    // Same `force-upgradable` token + `--force` trailer as the targeted form; no
+    // same partially-upgradable candidate the user did NOT target is benign -> info.
+    // Same `partially-upgradable` token + `--partial` trailer as the targeted form; no
     // summary line; the plural tally counts the info skip among its successes.
     // UGRM-01/UGRM-02: a bulk update whose only non-`updated` row is a benign
-    // info `(force-upgradable)` decline (partition `skipped`, 0 updated, 0
+    // info `(partially-upgradable)` decline (partition `skipped`, 0 updated, 0
     // failures/warnings) is a zero-realized-transition cascade. The Phase-73
-    // `(force-upgradable) {lsp}` body row + `--force` trailer still render, but
+    // `(partially-upgradable) {lsp}` body row + `--partial` trailer still render, but
     // the headline is the never-silent `Plugin update: nothing to update`
     // constant -- emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext`),
     // NOT by composeTally (which would collapse a `tally {count: 0}` override to
     // `""`, dropping the line = the byte-drift defect). So this fixture drives
     // the orchestrator no-op seam via `emit`, keeping the Phase-73 row as the
     // body. Info severity, no reload-hint.
-    "skip-force-upgradable-bulk": {
+    "skip-partially-upgradable-bulk": {
       pi: piWithBothLoaded(),
       message: {
         label: "Plugin update",
@@ -1732,10 +1732,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "info",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -1751,10 +1751,10 @@ const FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "force-upgradable",
+                status: "partially-upgradable",
                 severity: "info",
                 needsReload: false,
-                forceHint: true,
+                partialHint: true,
                 name: "hello",
                 version: "1.0.0",
                 reasons: ["lsp"],
@@ -2755,14 +2755,14 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-03 / D-69-01: the autoupdate cascade TAKES the force path, so a
-    // candidate re-resolving `unsupported` renders `(force-installed) {dropped
-    // kinds}` (◉ glyph, via the shared `forceInstalledRow`) instead of
+    // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path, so a
+    // candidate re-resolving `partially-available` renders `(partially-installed) {dropped
+    // kinds}` (◉ glyph, via the shared `partiallyInstalledRow`) instead of
     // declining with `(skipped) {no longer installable}`. ALREADY-degraded case:
     // the persisted `compatibility.unsupported` was non-empty before the
     // auto-update, so re-degrading is benign -> INFO (no `expectedSeverity`).
-    // force-installed is a realized transition -> reload-hint fires.
-    "autoupdate-force-installed-already-degraded": {
+    // partially-installed is a realized transition -> reload-hint fires.
+    "autoupdate-partially-installed-already-degraded": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
@@ -2772,7 +2772,7 @@ const FIXTURES: FixtureMap = {
             status: "updated",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 scope: "user",
                 version: "1.0.0",
@@ -2787,13 +2787,13 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-03 / D-69-01: the SAME `(force-installed)` autoupdate row, but the
+    // SEV-03 / D-69-01: the SAME `(partially-installed)` autoupdate row, but the
     // auto-update NEWLY degrades a previously-clean plugin (the persisted
     // `compatibility.unsupported` was empty before the update). A silent
     // automatic degradation is actionable -> `warning` + the `needs attention`
     // summary line. The per-row bytes are identical to the already-degraded
     // info fixture above; only the stamped severity moves.
-    "autoupdate-force-installed-newly-degraded": {
+    "autoupdate-partially-installed-newly-degraded": {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
       message: {
@@ -2804,7 +2804,7 @@ const FIXTURES: FixtureMap = {
             status: "updated",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "degraded-plugin",
                 scope: "user",
                 version: "1.0.0",
@@ -3258,17 +3258,17 @@ const FIXTURES: FixtureMap = {
       },
     },
     // FSTAT-06 / D-66-04: a pending child install whose no-network candidate
-    // resolves `unsupported` carries the `force` modifier, rendering
-    // `(will force install)` in place of `(will install)`. A render modifier,
-    // not a new token; no `will force update` analog exists (D-66-05).
-    "mp-add-plugin-force-install": {
+    // resolves `partially-available` carries the `partial` modifier, rendering
+    // `(will partially install)` in place of `(will install)`. A render modifier,
+    // not a new token; no `will partially update` analog exists (D-66-05).
+    "mp-add-plugin-partial-install": {
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [
           {
             name: "new-mp",
             scope: "user",
-            plugins: [{ status: "will install", name: "degraded-plugin", force: true }],
+            plugins: [{ status: "will install", name: "degraded-plugin", partial: true }],
           },
         ],
       },
@@ -3546,7 +3546,7 @@ const FIXTURES: FixtureMap = {
     // through the shared narrowUnsupportedKinds seam (lspServers -> lsp). The
     // marketplace was already added, so its header is bare (no status token).
     // SEV-03 / A3: a benign promotion stays info -- no expectedSeverity.
-    "backfill-force-installed": {
+    "backfill-partially-installed": {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
@@ -3558,7 +3558,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
@@ -3572,10 +3572,10 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-05 / D-69-04: a backfill force-installed row whose dropped-kind set is
+    // SEV-05 / D-69-04: a backfill partially-installed row whose dropped-kind set is
     // empty renders brace-less -- byte-identical to the pre-SEV-05 form (the
     // change is additive; rows without reasons do not gain a brace).
-    "backfill-force-installed-no-reasons": {
+    "backfill-partially-installed-no-reasons": {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
@@ -3587,7 +3587,7 @@ const FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "force-installed",
+                status: "partially-installed",
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
@@ -3731,31 +3731,31 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   }
 });
 
-// XSURF-03 cross-surface byte-parity: the `update`-decline `force-upgradable`
-// reason brace MUST be byte-identical to the `list (force-upgradable)` reason
+// XSURF-03 cross-surface byte-parity: the `update`-decline `partially-upgradable`
+// reason brace MUST be byte-identical to the `list (partially-upgradable)` reason
 // brace for the SAME degrade kinds. This is what justifies sourcing the
 // update-decline reason via the SAME `narrowUnsupportedKinds` seam the `list`
 // row uses (rather than the install-path `narrowResolverReasons`, which also
 // folds in note-derived reasons and could diverge). The assertion renders both
-// rows through `notify()` and compares the `(force-upgradable) {…}` segment.
-test("XSURF-03: update-decline force-upgradable reason brace === list force-upgradable brace (same kinds)", () => {
+// rows through `notify()` and compares the `(partially-upgradable) {…}` segment.
+test("XSURF-03: update-decline partially-upgradable reason brace === list partially-upgradable brace (same kinds)", () => {
   // Both surfaces source the degrade reason from the shared kind-narrowing seam.
   const kinds = ["lspServers", "themes"];
   const reasons = narrowUnsupportedKinds(kinds);
 
-  // The list-inventory row (no forceHint -> no trailer).
+  // The list-inventory row (no partialHint -> no trailer).
   const listCtx = makeCtx();
   notify(listCtx as never, piWithBothLoaded() as never, {
     marketplaces: [
       {
         name: "mp",
         scope: "project",
-        plugins: [{ status: "force-upgradable", name: "hello", version: "1.0.0", reasons }],
+        plugins: [{ status: "partially-upgradable", name: "hello", version: "1.0.0", reasons }],
       },
     ],
   });
 
-  // The update-decline row (forceHint -> update trailer + warning severity).
+  // The update-decline row (partialHint -> update trailer + warning severity).
   const declineCtx = makeCtx();
   notify(declineCtx as never, piWithBothLoaded() as never, {
     label: "Plugin update",
@@ -3766,11 +3766,11 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
         scope: "project",
         plugins: [
           {
-            status: "force-upgradable",
+            status: "partially-upgradable",
             name: "hello",
             version: "1.0.0",
             reasons,
-            forceHint: true,
+            partialHint: true,
             severity: "warning",
             needsReload: false,
           },
@@ -3780,8 +3780,8 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
   });
 
   const extractBrace = (s: string): string => {
-    const m = /\(force-upgradable\) (\{[^}]*\})/.exec(s);
-    assert.ok(m, `expected a (force-upgradable) {…} brace in:\n${s}`);
+    const m = /\(partially-upgradable\) (\{[^}]*\})/.exec(s);
+    assert.ok(m, `expected a (partially-upgradable) {…} brace in:\n${s}`);
     return m[1]!;
   };
 
@@ -3791,7 +3791,7 @@ test("XSURF-03: update-decline force-upgradable reason brace === list force-upgr
   assert.equal(
     extractBrace(declineBody),
     extractBrace(listBody),
-    "the update-decline reason brace must be byte-identical to the list force-upgradable brace",
+    "the update-decline reason brace must be byte-identical to the list partially-upgradable brace",
   );
 });
 

@@ -221,7 +221,7 @@ export function notifyUpdateWithContext<
  * bulk update realized ZERO transitions (0 updated, 0 failures, 0 warnings):
  * either an empty post-suppression cascade (all up-to-date) or a non-empty
  * cascade whose only surviving rows are benign info skips (e.g. a
- * `(force-upgradable)` decline). Renders the surviving rows through the command's
+ * `(partially-upgradable)` decline). Renders the surviving rows through the command's
  * render map and folds the hard-coded `Plugin update: nothing to update` headline
  * below them, so the summary line can never vanish. NO `cardinality` / `tally` --
  * the headline is a fixed constant owned by `emitUpdateNoOpCascade`, not the

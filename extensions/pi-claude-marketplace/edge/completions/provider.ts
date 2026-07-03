@@ -90,17 +90,17 @@ function flagCompletions(
   const flags: { name: string; description?: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
-  // RINST-01 / D-67-03: reinstall offers no `--force` completion -- the flag is
-  // retired and overwrite is unconditional.
+  // RINST-01 / D-67-03: reinstall offers no force-flag completion -- the retired
+  // reinstall force flag is gone and overwrite is unconditional.
 
   if (positionalHead === "list" || positionalHead === "ls") {
     flags.push(
-      // LIST-01 / D-67-01: `--installed` spans installed + force-installed;
-      // `--unsupported` selects not-installed plugins that resolve unsupported.
+      // LIST-01 / D-67-01: `--installed` spans installed + partially-installed;
+      // `--partial` selects not-installed plugins that resolve to partially-available.
       { name: "--installed", description: "Show installed plugins" },
       { name: "--available", description: "Show available plugins" },
       { name: "--unavailable", description: "Show unavailable plugins" },
-      { name: "--unsupported", description: "Show unsupported (not-installed) plugins" },
+      { name: "--partial", description: "Show partially available plugins" },
     );
   }
 
@@ -108,17 +108,17 @@ function flagCompletions(
     // AG-7 opt-in: surface `--map-model` as a completion suggestion under
     // the install and update positional heads, mirroring the existing
     // list-flag pattern.
-    // LIST-02 / D-67-02: `--force` widens the install/update candidate set
-    // (install -> available + unsupported; update -> upgradable +
-    // force-upgradable). FORCE-05: never admits `unavailable`.
+    // LIST-02 / D-67-02: `--partial` widens the install/update candidate set
+    // (install -> available + partially-available; update -> upgradable +
+    // partially-upgradable). FORCE-05: never admits `unavailable`.
     flags.push(
       {
         name: "--map-model",
         description: "Enable model field mapping in generated agents (default: omit)",
       },
       {
-        name: "--force",
-        description: "Force over collisions and unsupported components (not unavailable)",
+        name: "--partial",
+        description: "Install over collisions and unsupported components (not unavailable)",
       },
     );
   }
@@ -192,17 +192,17 @@ interface PluginRefBranchConfig {
   readonly allowMarketplaceOnly: boolean;
   readonly targetScope?: Scope;
   /**
-   * LIST-02 / D-67-02: `--force` preceded the plugin positional. Narrows the
-   * candidate set (install -> available + unsupported; update -> upgradable +
-   * force-upgradable). Only ever set for the install/update heads.
+   * LIST-02 / D-67-02: `--partial` preceded the plugin positional. Narrows the
+   * candidate set (install -> available + partially-available; update -> upgradable +
+   * partially-upgradable). Only ever set for the install/update heads.
    */
-  readonly force?: boolean;
+  readonly partial?: boolean;
 }
 
 function pluginRefBranchConfig(
   positionalHead: string,
   explicitScope: Scope | undefined,
-  force: boolean,
+  partial: boolean,
 ): PluginRefBranchConfig | null {
   switch (positionalHead) {
     case "install":
@@ -210,7 +210,7 @@ function pluginRefBranchConfig(
         mode: "install",
         allowMarketplaceOnly: false,
         targetScope: explicitScope ?? "user",
-        force,
+        partial,
       };
     case "uninstall":
       return {
@@ -222,7 +222,7 @@ function pluginRefBranchConfig(
       return {
         mode: "update",
         allowMarketplaceOnly: true,
-        force,
+        partial,
         ...(explicitScope !== undefined && { targetScope: explicitScope }),
       };
     case "reinstall":
@@ -277,19 +277,19 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  // RINST-01 / D-67-03: no reinstall `--force` positional strip -- the flag is
-  // retired there. LIST-02 / D-67-02: `--force` IS a recognized boolean flag for
-  // install/update, so it must be skipped during positional extraction (else
-  // `install --force <TAB>` mis-parses `--force` as the plugin positional and
-  // returns null). The head is the first positional regardless of boolean flags
-  // (the subcommand token is never a flag), so a flag-free first pass recovers
-  // it before deciding which boolean flags apply.
+  // RINST-01 / D-67-03: no reinstall force-flag positional strip -- the retired
+  // reinstall force flag is gone there. LIST-02 / D-67-02: `--partial` IS a
+  // recognized boolean flag for install/update, so it must be skipped during
+  // positional extraction (else `install --partial <TAB>` mis-parses `--partial`
+  // as the plugin positional and returns null). The head is the first positional
+  // regardless of boolean flags (the subcommand token is never a flag), so a
+  // flag-free first pass recovers it before deciding which boolean flags apply.
   const head = extractPositionals(tokens)[0] ?? "";
-  const booleanFlags = head === "install" || head === "update" ? ["--force"] : [];
+  const booleanFlags = head === "install" || head === "update" ? ["--partial"] : [];
   const positionals = extractPositionals(tokens, booleanFlags);
   const positionalHead = positionals[0] ?? "";
   const explicitScope = extractScope(tokens);
-  const force = booleanFlags.length > 0 && tokens.includes("--force");
+  const partial = booleanFlags.length > 0 && tokens.includes("--partial");
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens.at(-1);
@@ -317,7 +317,7 @@ export async function getArgumentCompletions(
   // plugins, with project precedence when --scope is omitted. `allowMarketplaceOnly`
   // is true for update and reinstall (bare `@<marketplace>` operates on every
   // installed plugin in that marketplace).
-  const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope, force);
+  const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope, partial);
   if (pluginRefConfig !== null && positionals.length === 1) {
     const { mode, ...options } = pluginRefConfig;
     return getPluginRefCompletions(mode, current, argumentTextPrefix, resolver, options);

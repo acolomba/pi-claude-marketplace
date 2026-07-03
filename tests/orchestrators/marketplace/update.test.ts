@@ -1148,10 +1148,10 @@ test("outcomeToCascadePluginMessage: updated outcome -> PluginUpdatedMessage wit
   assert.deepEqual(msg.dependencies, ["agents"]);
 });
 
-test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForceInstalledMessage (force-installed), info severity, reasons narrowed", () => {
+test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginPartiallyInstalledMessage (partially-installed), info severity, reasons narrowed", () => {
   // The autoupdate cascade now TAKES the force path, so a candidate that
   // re-resolved `unsupported` produces an `updated` outcome carrying
-  // `unsupportedKinds`. The marketplace mapper must render `(force-installed)`
+  // `unsupportedKinds`. The marketplace mapper must render `(partially-installed)`
   // with the narrowed dropped-component reason instead of `(updated)`.
   const outcome: PluginUpdateOutcome = {
     partition: "updated",
@@ -1162,11 +1162,11 @@ test("SEV-03 / D-69-01: updated outcome carrying unsupportedKinds -> PluginForce
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "force-installed");
-  if (msg.status !== "force-installed") {
+  assert.equal(msg.status, "partially-installed");
+  if (msg.status !== "partially-installed") {
     throw new Error("unreachable: narrowed above");
   }
 
@@ -1192,10 +1192,10 @@ test("SEV-03 / D-69-01: a NEWLY-degraded force outcome (newlyDegraded=true) stam
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "force-installed");
+  assert.equal(msg.status, "partially-installed");
   // A previously-clean plugin silently degraded by the auto-update is
   // actionable -> warning (drives the `needs attention` summary line).
   assert.equal(msg.severity, "warning");
@@ -1211,10 +1211,10 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
     stagedMcpServers: [],
     declaresAgents: false,
     declaresMcp: false,
-    forceDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
   };
   const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
-  assert.equal(msg.status, "force-installed");
+  assert.equal(msg.status, "partially-installed");
   // Re-degrading a plugin that was already force-installed is benign -> info.
   assert.equal(msg.severity, "info");
 });
@@ -1234,13 +1234,13 @@ test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updat
   assert.equal(msg.status, "updated");
 });
 
-test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child row (◉ v.. (force-installed) {lsp}) and raises the summary to `needs attention` on a newly-degraded plugin", async () => {
+test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child row (◉ v.. (partially-installed) {lsp}) and raises the summary to `needs attention` on a newly-degraded plugin", async () => {
   // The object-shape tests above assert `__test_outcomeToCascadePluginMessage`
   // only; this drives the whole `updateMarketplace` cascade so the render map's
-  // `force-installed` arm (UPDATE_CONTEXT -> `forceInstalledRow`) is exercised to
+  // `force-installed` arm (UPDATE_CONTEXT -> `partiallyInstalledRow`) is exercised to
   // a byte-exact string. A candidate re-resolving `unsupported` degrades in place
   // on the autoupdate force path -- carried on the `updated` outcome as
-  // `forceDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
+  // `partialDegrade`. `newlyDegraded: true` (prior persisted `unsupported` empty)
   // raises the row to warning, so the envelope summary reads `needs attention`.
   await withHermeticHome(async ({ cwd }) => {
     await seedGithubMarketplace({
@@ -1264,7 +1264,7 @@ test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child r
         stagedMcpServers: [],
         declaresAgents: false,
         declaresMcp: false,
-        forceDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+        partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
       });
 
     await updateMarketplace({
@@ -1281,12 +1281,12 @@ test("SEV-03 / D-69-01: the autoupdate cascade RENDERS a force-installed child r
     assert.ok(first !== undefined);
     const body = first.message;
     // Byte-exact force-installed child row under the marketplace header. The ◉
-    // glyph, single realized version, `(force-installed)` token, and `{lsp}`
+    // glyph, single realized version, `(partially-installed)` token, and `{lsp}`
     // dropped-component brace mirror the plugin-surface force-installed byte lock
     // (`narrowUnsupportedKinds(["lspServers"]) -> "lsp"`). The `[project]` scope
     // bracket is orphan-folded (plugin.scope === mp.scope).
     const headerIdx = body.indexOf("● auto-mp [project]");
-    const rowIdx = body.indexOf("  ◉ hello v0.0.2 (force-installed) {lsp}");
+    const rowIdx = body.indexOf("  ◉ hello v0.0.2 (partially-installed) {lsp}");
     assert.ok(headerIdx >= 0, `marketplace header missing:\n${body}`);
     assert.ok(rowIdx > headerIdx, `force-installed child row missing/misplaced:\n${body}`);
     // newlyDegraded -> warning envelope -> the degraded summary variant.
