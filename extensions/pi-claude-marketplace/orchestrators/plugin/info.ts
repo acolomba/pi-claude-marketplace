@@ -1057,7 +1057,7 @@ async function buildNotInstalledRow(
       // XSURF-02 / IN-01: derive the token AND its reason source from
       // `resolved.state`, mirroring the path-source arm and the list surface,
       // instead of hardcoding `unavailable`. The `resolved.state !==
-      // "installable"` guard above narrows to `unsupported | unavailable`, so
+      // "installable"` guard above narrows to `partially-available | unavailable`, so
       // `resolved.unsupported` is reachable on the `partially-available` arm. Today
       // non-path sources never resolve `partially-available` (no-network), so this is
       // latent-divergence repair -- existing non-path `unavailable` rows stay

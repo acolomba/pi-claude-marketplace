@@ -508,7 +508,7 @@ export async function runInstallLedger(
   }
 
   // After the gate, `resolved` is narrowed to the materializable union
-  // (`installable | unsupported`); pluginRoot etc. are reachable. The
+  // (`installable | partially-available`); pluginRoot etc. are reachable. The
   // `partially-available` arm carries only supported kinds in componentPaths, so the
   // shared materialize phases degrade it naturally (D-65-02, no partial branch).
   const installable: MaterializablePlugin = resolved;
@@ -1817,7 +1817,7 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * component-kind list (carried on the thrown `PluginShapeError`). It is narrowed
  * FIRST, through the shared `narrowUnsupportedKinds` helper, so the failure row
  * renders the same per-kind markers `list`/`info` do. This is the ONLY reason
- * source for a `hooks`-only unsupported plugin (which carries no `contains hooks`
+ * source for a `hooks`-only partially-available plugin (which carries no `contains hooks`
  * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
  * plugin yields one `lsp`, sourced from both the note and the typed kind). The
  * permissive `unsupported source` fallback fires only when BOTH sources are empty.

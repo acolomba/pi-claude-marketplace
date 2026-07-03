@@ -75,7 +75,7 @@ export function makeUpdateHandler(
       target,
       ...(flagged.scope !== undefined && { scope: flagged.scope }),
       ...(mapModel && { mapModel: true }),
-      // FORCE-02 (D-65-05): thread `--partial` so an unsupported candidate
+      // FORCE-02 (D-65-05): thread `--partial` so a partially-available candidate
       // degrades instead of blocking.
       ...(partial && { partial: true }),
       ...(localFlag.local && { local: true }),

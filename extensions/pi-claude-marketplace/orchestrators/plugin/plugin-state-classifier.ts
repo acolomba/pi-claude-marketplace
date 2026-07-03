@@ -35,7 +35,7 @@ import type { ResolvedPlugin } from "../../domain/resolver.ts";
  * version. `list` renders it as `(partially-installed)`, identical to a plain
  * `partially-installed` row, but -- unlike one -- it is a real `update --partial`
  * target: a supported candidate promotes it back to `installed` (FSTAT-03), an
- * unsupported candidate re-applies the partial install. It is NEVER
+ * partially-available candidate re-applies the partial install. It is NEVER
  * `partially-upgradable` (FSTAT-04 -- that state is reserved for a currently-CLEAN
  * row whose candidate would newly degrade it).
  */

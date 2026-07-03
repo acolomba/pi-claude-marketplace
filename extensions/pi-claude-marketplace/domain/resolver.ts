@@ -62,7 +62,7 @@ const ComponentPathsSchema = Type.Object({
 const McpServersFieldSchema = Type.Record(Type.String(), Type.Unknown());
 
 // D-71-03 / PHOOK-02: the supportability-dropped hook events / matcher groups /
-// handlers carried on the installable + unsupported arms for the `info`
+// handlers carried on the installable + partially-available arms for the `info`
 // enumeration (D-71-05). Mirrors the `DroppedHook` union in
 // `domain/components/hooks.ts`; `event` is typed as a plain string here (rather
 // than the narrower `BucketAEvent`) because the resolver arm only carries the
@@ -153,7 +153,7 @@ export type _DroppedHookArmKeysCheck = _AssertTrue<
 // discriminant on each arm; TypeBox key order does not affect the static type).
 const MATERIALIZABLE_FIELDS = {
   name: Type.String(),
-  // pluginRoot is present on installable + unsupported only (NFR-7); D-64-06
+  // pluginRoot is present on installable + partially-available only (NFR-7); D-64-06
   // lets a partial install degrade past the unsupported parts, so both arms
   // expose it.
   pluginRoot: Type.String(),

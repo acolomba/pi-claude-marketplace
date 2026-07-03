@@ -134,7 +134,7 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Unsuppor
  *
  * This is the single shared render-time helper for the per-kind marker family
  * carried on the `partially-available` resolver arm. `list`, `info`, and the `install`
- * error surface all route through it so a given unsupported plugin renders
+ * error surface all route through it so a given partially-available plugin renders
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
