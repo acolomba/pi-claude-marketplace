@@ -7,12 +7,19 @@
 // the rename is BOTH complete (in-scope retired tokens absent) AND surgical
 // (out-of-scope homonyms preserved byte-for-byte).
 //
-// Scope of the ABSENCE checks (three surfaces, read as UTF-8 in Node so the
-// glyph-bearing files -- notify.ts, info.ts, output-catalog.md -- are NOT
-// mis-detected as binary the way a recursive shell `grep` would):
+// Scope of the ABSENCE checks (read as UTF-8 in Node so the glyph-bearing files
+// -- notify.ts, info.ts, output-catalog.md, and the PRD -- are NOT mis-detected
+// as binary the way a recursive shell `grep` would):
 //   - the extension tree `extensions/pi-claude-marketplace/**/*.ts`
 //   - the two user-facing docs `docs/output-catalog.md` + `docs/messaging-style-guide.md`
 //   - the phase architecture tests `tests/architecture/*.ts` (this file excluded)
+//   - the PRD `docs/prd/pi-claude-marketplace-prd.md`, scanned SEPARATELY because
+//     it legitimately spells the stable `FORCE-NN` / `FSTAT-NN` requirement IDs
+//     and the component-level `unsupported <kind>` homonyms, which an allowlist
+//     mask preserves
+//   - the completion `description:` string VALUES in edge/completions/{provider,
+//     data}.ts (a plugin is never "unsupported"/"force"-anything to the user; the
+//     component-level "unsupported components" homonym stays allowed)
 //
 // The checks cover the retired vocabulary in ALL of its written forms:
 //   - user flags `--force` / `--unsupported`
@@ -330,5 +337,161 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
   assert.ok(
     stageForce.length > 0,
     "the agents-staging overwrite `options?.force` gate must survive",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// PRD surface (docs/prd/pi-claude-marketplace-prd.md). The PRD prose was the
+// last holdout of the retired plugin-level force/unsupported vocabulary. It is
+// scanned SEPARATELY from GUARDED_SOURCES because it legitimately spells two
+// OUT-of-scope homonyms an allowlist must preserve:
+//   - the stable requirement/decision IDs `FORCE-01..05` / `FSTAT-01..07`
+//     (incl. the `01a` / `03a` suffixed rows) -- identifiers, not vocabulary;
+//   - the component-level `unsupported <kind>` reasons (`unsupported source`,
+//     `unsupported hooks`, `unsupported component(s)`, `settings (unsupported)`)
+//     -- a plugin is *partially-available* BECAUSE some component kinds are
+//     unsupported (section 4b).
+// ---------------------------------------------------------------------------
+
+const PRD_REL = "docs/prd/pi-claude-marketplace-prd.md";
+const PRD_CONTENT = readFileSync(path.join(REPO_ROOT, PRD_REL), "utf8");
+
+// Mask the OUT-of-scope homonyms above so the retired-token checks below cannot
+// false-positive on them. Everything left is fair game for the ABSENCE checks.
+function maskPrdAllowlist(text: string): string {
+  return text
+    .replace(/\b(?:FORCE|FSTAT)-\d+[a-z]?/g, "")
+    .replace(/UNSUPPORTED component/g, "")
+    .replace(/unsupported[ -]components?/gi, "")
+    .replace(/unsupported (?:source|hooks)/gi, "")
+    .replace(/settings \(unsupported\)/g, "");
+}
+
+const MASKED_PRD = maskPrdAllowlist(PRD_CONTENT);
+
+// The retired plugin-level flag / verdict / status / render / symbol tokens.
+// None is an ID or a component homonym, so none survives the mask after the
+// rename. The standalone backtick verdict `` `unsupported` `` cannot collide
+// with the component reasons (those keep an interior space, e.g.
+// `unsupported source kind: github`).
+const PRD_ABSENT_TOKENS = [
+  "--force",
+  "--unsupported",
+  "force-installed",
+  "force-upgradable",
+  "force-degradable",
+  "(force-installed)",
+  "(force-upgradable)",
+  "Re-run with --force",
+  "requireForceInstallable",
+  "`unsupported`",
+];
+
+for (const token of PRD_ABSENT_TOKENS) {
+  test(`D-75-01 guard: PRD retired plugin-level token absent -- ${token}`, () => {
+    assert.ok(
+      !MASKED_PRD.includes(token),
+      `retired plugin-level token ${JSON.stringify(token)} must be ABSENT from ${PRD_REL} after the rename (FORCE-/FSTAT- IDs and component-level unsupported homonyms are allowlisted)`,
+    );
+  });
+}
+
+// PRESENCE half: the allowlisted homonyms MUST survive byte-for-byte -- an
+// over-rename would silently delete an ID row or a component reason.
+test("D-75-01 guard: PRD keeps FORCE-/FSTAT- IDs and the component `unsupported` homonyms", () => {
+  assert.ok(
+    /\bFORCE-0\d/.test(PRD_CONTENT),
+    "the FORCE-NN requirement IDs must survive in the PRD",
+  );
+  assert.ok(
+    /\bFSTAT-0\d/.test(PRD_CONTENT),
+    "the FSTAT-NN requirement IDs must survive in the PRD",
+  );
+  assert.ok(
+    PRD_CONTENT.includes("unsupported source"),
+    "the component-level `unsupported source` homonym must survive in the PRD",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Completion `description:` string VALUES (edge/completions/{provider,data}.ts).
+// A completion description is user-facing prose: the retired plugin-level verb
+// "force" and the plugin-level noun "unsupported" (a PLUGIN is "partially
+// available", never "unsupported") must not resurface there. The component-level
+// "unsupported components/source/hooks/kinds" homonym stays allowed -- it names
+// the dropped COMPONENTS, not the plugin.
+// ---------------------------------------------------------------------------
+
+const COMPLETION_DESCRIPTION_FILES = [
+  "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+  "extensions/pi-claude-marketplace/edge/completions/data.ts",
+];
+
+/** The double-quoted `description:` string values declared in `rel`. */
+function completionDescriptions(rel: string): string[] {
+  const content = EXT_SOURCES.get(rel);
+  assert.ok(content !== undefined, `expected ${rel} in the extension sources`);
+  const out: string[] = [];
+  const re = /description:\s*"((?:[^"\\]|\\.)*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const value = m[1];
+    if (value !== undefined) {
+      out.push(value);
+    }
+  }
+
+  return out;
+}
+
+test("D-75-01 guard: completion descriptions carry no PLUGIN-level `unsupported`", () => {
+  // "unsupported" is allowed ONLY when it immediately qualifies a COMPONENT noun
+  // (component/source/hook/kind). A plugin-level "unsupported ... plugins" is the
+  // retired verdict and must read "partially available".
+  const pluginLevelUnsupported = /unsupported(?!\s+(?:component|source|hook|kind))/i;
+  const offenders: string[] = [];
+  for (const rel of COMPLETION_DESCRIPTION_FILES) {
+    for (const desc of completionDescriptions(rel)) {
+      if (pluginLevelUnsupported.test(desc)) {
+        offenders.push(`${rel}: ${JSON.stringify(desc)}`);
+      }
+    }
+  }
+
+  assert.equal(
+    offenders.length,
+    0,
+    `completion descriptions must not call a PLUGIN "unsupported" (use "partially available"); offenders:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("D-75-01 guard: completion descriptions carry no retired `force` verb", () => {
+  const offenders: string[] = [];
+  for (const rel of COMPLETION_DESCRIPTION_FILES) {
+    for (const desc of completionDescriptions(rel)) {
+      if (/\bforce/i.test(desc)) {
+        offenders.push(`${rel}: ${JSON.stringify(desc)}`);
+      }
+    }
+  }
+
+  assert.equal(
+    offenders.length,
+    0,
+    `completion descriptions must not use the retired "force" verb (use a neutral verb like "install"); offenders:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+// Sanity: the extractor actually finds the `--partial` completion descriptions it
+// is meant to police -- guards against a silent zero-match pass if the
+// `description:` shape ever changes.
+test("D-75-01 guard: completion-description extractor finds the --partial rows", () => {
+  const provider = completionDescriptions(
+    "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+  );
+  assert.ok(
+    provider.some((d) => d.includes("partially available")) &&
+      provider.some((d) => d.includes("unsupported components")),
+    "expected the partial list-filter and install/update completion descriptions to be extracted",
   );
 });

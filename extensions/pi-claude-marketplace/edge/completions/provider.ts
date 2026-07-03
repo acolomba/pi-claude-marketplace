@@ -118,7 +118,7 @@ function flagCompletions(
       },
       {
         name: "--partial",
-        description: "Force over collisions and unsupported components (not unavailable)",
+        description: "Install over collisions and unsupported components (not unavailable)",
       },
     );
   }
