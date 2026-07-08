@@ -495,13 +495,24 @@ async function collectUnsupportedKinds(
 }
 
 function sourceUnsupportedReason(parsedSource: ParsedSource): string | undefined {
-  if (parsedSource.kind === "path") {
+  if (parsedSource.kind === "path" || parsedSource.kind === "git-subdir") {
     return undefined;
   }
 
   return parsedSource.kind === "unknown"
     ? `unsupported source kind: unknown (${parsedSource.reason})`
     : `unsupported source kind: ${parsedSource.kind}`;
+}
+
+function sourcePathWithinMarketplace(parsedSource: ParsedSource): string | undefined {
+  switch (parsedSource.kind) {
+    case "path":
+      return parsedSource.raw;
+    case "git-subdir":
+      return parsedSource.path;
+    default:
+      return undefined;
+  }
 }
 
 async function sourceEscapeReason(
@@ -590,8 +601,19 @@ async function preflightStages(
   }
 
   // PR-2 case 2: source path escape.
-  const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
-  const escapeReason = await sourceEscapeReason(ctx, pluginRoot, parsedSource.raw);
+  const sourcePath = sourcePathWithinMarketplace(parsedSource);
+  if (sourcePath === undefined) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `unsupported source kind: ${parsedSource.kind}`,
+      ]),
+    };
+  }
+
+  const pluginRoot = path.resolve(ctx.marketplaceRoot, sourcePath);
+  const escapeReason = await sourceEscapeReason(ctx, pluginRoot, sourcePath);
 
   if (escapeReason !== undefined) {
     return {

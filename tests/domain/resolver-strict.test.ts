@@ -104,6 +104,25 @@ test("PR-2(1) upstream object source kind (url) -> notInstallable", async () => 
   assert.ok(r.notes.includes("unsupported source kind: url"), `notes: ${r.notes.join(" / ")}`);
 });
 
+test("PR-2(1) upstream object source kind (git-subdir) -> installable when path exists", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./plugins/p1")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({
+      source: {
+        source: "git-subdir",
+        url: "https://github.com/acme/marketplace.git",
+        path: "./plugins/p1",
+        ref: "main",
+      },
+    }),
+    ctx,
+  );
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.equal(r.pluginRoot, ROOT("./plugins/p1"));
+  }
+});
+
 test("PR-2(2) source path escape -> notInstallable", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "../escape" }), ctx);
@@ -117,6 +136,44 @@ test("PR-2(2) source path escape -> notInstallable", async () => {
 test("PR-2(3) source dir does not exist -> notInstallable", async () => {
   const ctx = mockCtx(MP, {}); // no entries -> statKind returns null
   const r = await resolveStrict(basicEntry({ source: "./missing" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("source dir does not exist")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PR-2(2) git-subdir path escape -> notInstallable", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(
+    basicEntry({
+      source: {
+        source: "git-subdir",
+        url: "https://github.com/acme/marketplace.git",
+        path: "../escape",
+      },
+    }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("escapes marketplace root")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PR-2(3) git-subdir source dir does not exist -> notInstallable", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(
+    basicEntry({
+      source: {
+        source: "git-subdir",
+        url: "https://github.com/acme/marketplace.git",
+        path: "./plugins/missing",
+      },
+    }),
+    ctx,
+  );
   assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("source dir does not exist")),
