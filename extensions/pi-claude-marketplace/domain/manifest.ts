@@ -7,11 +7,13 @@
 // is `typebox/compile` (the package is `typebox` with no scope).
 
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { InvalidMarketplaceManifestError } from "../shared/errors.ts";
+import { assertPathInside } from "../shared/path-safety.ts";
 
 import { PLUGIN_ENTRY_SCHEMA } from "./components/plugin.ts";
 import { createManifestCache } from "./manifest-cache.ts";
@@ -42,12 +44,13 @@ export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 /**
  * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY
  * marketplace.json file read in the repo (CACHE-06) and the injected loader
- * behind the cache. It returns the RAW JSON.parse value (WR-01) -- it does NOT
- * route the result back through the validator's coercing parse, a schema clean,
- * or a deep clone -- so key order and extra fields survive (`update.ts`
- * JSON.stringifys it; `info.ts` reads `parsed.description`). Keep this focused on
- * path-based reads only: no cache state, invalidation, or caller-specific error
- * wrapping belongs here.
+ * behind the cache. It preserves the parsed manifest except that plugin-local
+ * `mcpServers` file references are inlined before validation. It does NOT route
+ * the result through the validator's coercing parse, a schema clean, or a deep
+ * clone -- so key order and extra fields survive (`update.ts` JSON.stringifys
+ * it; `info.ts` reads `parsed.description`). Keep this focused on path-based
+ * reads only: no cache state, invalidation, or caller-specific error wrapping
+ * belongs here.
  */
 async function loadMarketplaceManifestUncached(manifestPath: string): Promise<MarketplaceManifest> {
   const raw = await readFile(manifestPath, "utf8");
@@ -67,6 +70,8 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
     );
   }
 
+  await inlineMcpServerReferences(parsed, manifestPath);
+
   if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
     const firstErr = MARKETPLACE_VALIDATOR.Errors(parsed)[0];
     const detail = firstErr
@@ -76,6 +81,44 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
   }
 
   return parsed;
+}
+
+async function inlineMcpServerReferences(manifest: unknown, manifestPath: string): Promise<void> {
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    !Array.isArray((manifest as { plugins?: unknown }).plugins)
+  ) {
+    return;
+  }
+
+  const marketplaceRoot = path.dirname(path.dirname(manifestPath));
+  for (const plugin of (manifest as { plugins: unknown[] }).plugins) {
+    if (
+      typeof plugin !== "object" ||
+      plugin === null ||
+      typeof (plugin as { source?: unknown }).source !== "string" ||
+      typeof (plugin as { mcpServers?: unknown }).mcpServers !== "string"
+    ) {
+      continue;
+    }
+
+    const entry = plugin as { source: string; mcpServers: unknown };
+    const mcpReference = entry.mcpServers as string;
+    const pluginRoot = path.resolve(marketplaceRoot, entry.source);
+    const mcpPath = path.resolve(pluginRoot, mcpReference);
+    await assertPathInside(marketplaceRoot, pluginRoot, `plugin source path "${entry.source}"`);
+    await assertPathInside(pluginRoot, mcpPath, `mcpServers path "${mcpReference}"`);
+
+    try {
+      const mcpDoc = JSON.parse(await readFile(mcpPath, "utf8")) as { mcpServers?: unknown };
+      entry.mcpServers = mcpDoc.mcpServers;
+    } catch (err) {
+      throw new InvalidMarketplaceManifestError(`mcpServers file is invalid: ${String(err)}`, {
+        cause: err,
+      });
+    }
+  }
 }
 
 /**

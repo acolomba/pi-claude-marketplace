@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -86,6 +86,45 @@ test("NFR-8 loadMarketplaceManifest reads and validates marketplace.json through
 
     assert.equal(manifest.name, "test-marketplace");
     assert.equal(manifest.plugins[0]?.name, "p");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("loadMarketplaceManifest inlines string mcpServers file references before validation", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-mcp-ref-"));
+  try {
+    const manifestDir = path.join(tmp, ".claude-plugin");
+    const pluginRoot = path.join(tmp, "plugins/example-plugin");
+    const manifestPath = path.join(manifestDir, "marketplace.json");
+    const mcpServers = {
+      "example-plugin": {
+        command: "bash",
+        args: ["${CLAUDE_PLUGIN_ROOT}/scripts/example-mcp.sh"],
+      },
+    };
+
+    await mkdir(pluginRoot, { recursive: true });
+    await mkdir(manifestDir, { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "example-marketplace",
+        plugins: [
+          {
+            name: "example-plugin",
+            source: "./plugins/example-plugin",
+            mcpServers: "./.mcp.json",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify({ mcpServers }), "utf8");
+
+    const manifest = await loadMarketplaceManifest(manifestPath);
+
+    assert.deepEqual(manifest.plugins[0]?.mcpServers, mcpServers);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
