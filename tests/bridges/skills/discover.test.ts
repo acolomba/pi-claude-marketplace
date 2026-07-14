@@ -233,3 +233,72 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
     await cleanupStaging(tmp, "test-cleanup");
   }
 });
+
+test("discoverPluginSkills treats a declared path that is itself a skill dir as one discovered skill", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-"));
+  try {
+    const skillDir = path.join(tmp, "implement");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: implement\n---\nbody");
+
+    const resolved: ResolvedPluginInstallable = {
+      state: "installable",
+      name: "mattpocock-skills",
+      pluginRoot: tmp,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillDir], commands: [], agents: [] },
+      mcpServers: {},
+    };
+
+    const { discovered, warnings } = await discoverPluginSkills({
+      pluginName: "mattpocock-skills",
+      resolved,
+    });
+
+    assert.deepEqual([...warnings], []);
+    assert.equal(discovered.length, 1);
+    assert.equal(discovered[0]!.sourceName, "implement");
+    assert.equal(discovered[0]!.skillDir, skillDir);
+    assert.equal(discovered[0]!.generatedName, "mattpocock-skills-implement");
+  } finally {
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});
+
+test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill dir", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "discover-self-skill-dedup-"));
+  try {
+    const direct = path.join(tmp, "implement");
+    await mkdir(direct, { recursive: true });
+    await writeFile(path.join(direct, "SKILL.md"), "---\nname: implement\n---\nbody");
+
+    const container = path.join(tmp, "skills");
+    await mkdir(path.join(container, "implement"), { recursive: true });
+    await writeFile(path.join(container, "implement", "SKILL.md"), "---\nname: implement\n---\nbody");
+
+    const resolved: ResolvedPluginInstallable = {
+      state: "installable",
+      name: "mattpocock-skills",
+      pluginRoot: tmp,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [direct, container], commands: [], agents: [] },
+      mcpServers: {},
+    };
+
+    const { discovered, warnings } = await discoverPluginSkills({
+      pluginName: "mattpocock-skills",
+      resolved,
+    });
+
+    assert.equal(discovered.length, 1);
+    assert.equal(discovered[0]!.skillDir, direct);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /mattpocock-skills-implement/);
+  } finally {
+    await cleanupStaging(tmp, "test-cleanup");
+  }
+});

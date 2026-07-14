@@ -64,6 +64,11 @@ async function isSkillDir(entry: Dirent, skillsDir: string): Promise<boolean> {
   return !stat.isSymbolicLink() && (await hasRegularSkillFile(full));
 }
 
+async function isSelfSkillDir(skillsDir: string): Promise<boolean> {
+  const stat = await lstat(skillsDir).catch(() => null);
+  return stat?.isDirectory() === true && !stat.isSymbolicLink() && (await hasRegularSkillFile(skillsDir));
+}
+
 function duplicateWarning(sourceName: string, skillsDir: string, generatedName: string): string {
   return (
     `skill source "${sourceName}" in "${skillsDir}" elides to generated name ` +
@@ -103,6 +108,24 @@ export async function discoverPluginSkills(input: {
     const skillsDir = path.isAbsolute(skillsRel)
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
+
+    if (await isSelfSkillDir(skillsDir)) {
+      const sourceName = path.basename(skillsDir);
+      assertSafeName(sourceName, `skill directory name in ${skillsDir}`);
+
+      const generatedName = generatedSkillName(input.pluginName, sourceName);
+      if (seenByGenerated.has(generatedName)) {
+        warnings.push(duplicateWarning(sourceName, skillsDir, generatedName));
+        continue;
+      }
+
+      seenByGenerated.set(generatedName, {
+        sourceName,
+        generatedName,
+        skillDir: skillsDir,
+      });
+      continue;
+    }
 
     const entries = await readEntriesGracefully(skillsDir);
 
