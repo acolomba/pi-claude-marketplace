@@ -94,7 +94,6 @@
 
 import path from "node:path";
 
-import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -116,25 +115,23 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { NO_PROVIDER_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
   resolveScopeOrNotifyNotAdded,
-  type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
 import { UPDATE_CONTEXT, type UpdateRowMsg } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { AuthAttemptResult, OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -339,6 +336,63 @@ async function manifestContentKey(
   }
 }
 
+/**
+ * D-76-08 duck-type: an isomorphic-git `HttpError` carrying a 401/403 status
+ * is an authentication challenge. Name/status duck-check keeps the
+ * orchestrator tier free of an isomorphic-git import (D-13; mirrors the
+ * classifyAddError arm in add.ts).
+ */
+function isAuthChallengeError(err: unknown): err is Error {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+
+  const code = (err as NodeJS.ErrnoException).code;
+  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+  return code === "HttpError" && (statusCode === 401 || statusCode === 403);
+}
+
+/**
+ * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
+ * sequence as github; refreshGitHubClone fetches by remote name, so the
+ * original clone URL is irrelevant). PROV-02/03/04: the host extracted from
+ * source.url decides the auth bundle -- a provider-registered host
+ * authenticates host-keyed; a no-provider host refreshes authless and a
+ * private repo fails clean on the structural 401.
+ *
+ * D-79-03 / PROV-04: a 401/403 challenge on a host with NO registered
+ * provider carries exactly one extra cause line telling the user WHY
+ * authentication cannot proceed. Attached as the chain TAIL (the challenge
+ * is unresolvable BECAUSE no provider is registered), which keeps the
+ * HttpError at cause-depth 1 where `transportReason`'s one-level unwrap
+ * classifies it as `authentication required`.
+ */
+async function refreshUrlClone(
+  cloneDir: string,
+  source: UrlSource,
+  args: RefreshOneArgs,
+  onFetchSucceeded: () => void,
+): Promise<void> {
+  const { ctx, credentialOps, deviceFlowHttp, gitOps } = args;
+  const host = hostFromCloneUrl(source.url, "url");
+  const auth = buildAuthForHost({
+    host,
+    credentialOps,
+    ctx,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+  });
+
+  try {
+    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
+  } catch (err) {
+    if (auth === undefined && isAuthChallengeError(err) && err.cause === undefined) {
+      err.cause = new Error(NO_PROVIDER_CAUSE(host));
+    }
+
+    throw err;
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
@@ -360,29 +414,24 @@ async function refreshRecord(
     const preKey = await manifestContentKey(record);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
-      // AUTH-02: bind the Device Flow trigger as the onAuthRequired
-      // closure for this fetch. platform/git.ts::buildAuthCallbacks first
-      // consults credentialOps.fill(host); on a hit (the post-add common
-      // case) the stored token is returned and Device Flow does NOT trigger
-      // -- this is the AUTH-02 silent-reuse contract. AUTH-09: the
-      // closure interpolates ONLY user_code + verification_uri inside
-      // initiateDeviceFlow's notifyFn -- the access token is acquired later
-      // in the poll loop and never passed back to a notify or Error.
-      //
-      // host is the bare hostname; the supported scope is GitHub-only so the
-      // literal "github.com" is correct here. AUTH-D02 parameterizes this
-      // from the source.
-      const host = "github.com";
+      // AUTH-02 / D-79-05: buildAuthForHost binds the GitHub provider's
+      // Device Flow as the onAuthRequired closure for this fetch.
+      // platform/git.ts::buildAuthCallbacks first consults
+      // credentialOps.fill(host); on a hit (the post-add common case) the
+      // stored token is returned and Device Flow does NOT trigger -- this is
+      // the AUTH-02 silent-reuse contract. AUTH-09: the closure interpolates
+      // ONLY user_code + verification_uri inside the flow's notifyFn.
       const { ctx, credentialOps, deviceFlowHttp } = args;
-      const notifyFn = makeRawNotifyFn(ctx);
-      const onAuthRequired: OnAuthRequiredFn = async (): Promise<AuthAttemptResult> =>
-        initiateDeviceFlow({
-          host,
-          credentialOps,
-          notifyFn,
-          ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
-        });
-      const auth: GitAuthBundle = { credentialOps, host, onAuthRequired };
+      const host = hostFromCloneUrl(
+        `https://github.com/${source.owner}/${source.repo}.git`,
+        "github",
+      );
+      const auth = buildAuthForHost({
+        host,
+        credentialOps,
+        ctx,
+        ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+      });
 
       await refreshGitHubClone(
         cloneDir,
@@ -393,6 +442,12 @@ async function refreshRecord(
         },
         auth,
       );
+      await validateManifestAtRoot(record, cloneDir);
+    } else if (source.kind === "url") {
+      const cloneDir = await locations.sourceCloneDir(name);
+      await refreshUrlClone(cloneDir, source, args, () => {
+        cloneAdvanced = true;
+      });
       await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "path") {
       await validateManifestAtRoot(record, record.marketplaceRoot);
@@ -572,30 +627,52 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
     return ["invalid manifest"] as const;
   }
 
-  // Mirror the one-level cause unwrap above for errno-bearing FS errors: the
-  // refreshOneMarketplace catch receives the errno error WRAPPED inside a
-  // MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
-  // wrapper itself carries no `code`. Without the unwrap, a path-source
-  // refresh that hits ENOENT/ENOTDIR/EACCES/EPERM -- a network-free failure
-  // (NFR-5) -- would fall through to the lying `?? ["network unreachable"]`
-  // default instead of the correct closed-set `source missing` /
-  // `permission denied` reasons.
+  // Mirror the one-level cause unwrap above for code-bearing transport
+  // errors (errno + HttpError); the narrowing lives in `transportReason`.
   if (err instanceof Error) {
-    let errnoBearer: NodeJS.ErrnoException | undefined;
-    if ((err as NodeJS.ErrnoException).code !== undefined) {
-      errnoBearer = err;
-    } else if (err.cause instanceof Error) {
-      errnoBearer = err.cause;
+    const reason = transportReason(err);
+    if (reason !== undefined) {
+      return [reason] as const;
     }
+  }
 
-    const code = errnoBearer?.code;
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
+  return undefined;
+}
 
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
+/**
+ * Narrow a code-bearing transport failure to its closed-set Reason. The
+ * refreshOneMarketplace catch receives the transport error WRAPPED inside a
+ * MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
+ * wrapper itself carries no `code` -- hence the one-level cause unwrap.
+ * Without it, a path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM --
+ * a network-free failure (NFR-5) -- would fall through to the lying
+ * `?? ["network unreachable"]` default instead of the correct closed-set
+ * `source missing` / `permission denied` reasons.
+ *
+ * D-76-08 / D-79-03: an isomorphic-git HttpError with a 401/403 status is an
+ * auth challenge, not a network outage -- classified BEFORE the errno codes
+ * so the row carries the existing closed-set `authentication required` token.
+ */
+function transportReason(err: Error): ContentReason | undefined {
+  let bearer: NodeJS.ErrnoException | undefined;
+  if ((err as NodeJS.ErrnoException).code !== undefined) {
+    bearer = err;
+  } else if (err.cause instanceof Error) {
+    bearer = err.cause;
+  }
+
+  const code = bearer?.code;
+  const statusCode = (bearer as { data?: { statusCode?: number } } | undefined)?.data?.statusCode;
+  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
+    return "authentication required";
+  }
+
+  if (code === "EACCES" || code === "EPERM") {
+    return "permission denied";
+  }
+
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return "source missing";
   }
 
   return undefined;

@@ -30,21 +30,36 @@
 //       `getPluginInfo`
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as git from "isomorphic-git";
+
+import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import {
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolvePluginPin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
+import {
+  getPluginInfo,
+  type InfoCloneCacheSeam,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
+import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -243,6 +258,98 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   }
 
   return mpRoot;
+}
+
+/**
+ * Stage a WARM unpinned git mirror at the URL-keyed mirror dir carrying a real
+ * committed plugin tree, so `makePresenceProbe` reads it fs-only as
+ * `materialized` and `resolveStrict` validates the on-disk tree. `components`
+ * lists per-kind files/dirs to seed under the mirror root (skills as dirs,
+ * commands/agents as `.md` files) so the warm three-way resolution enumerates
+ * them. The canonical url (no `.git` suffix) must match the manifest source so
+ * the staged mirror key equals the probed key.
+ */
+async function seedWarmMirror(opts: {
+  scope: "user" | "project";
+  cwd: string;
+  cloneUrl: string;
+  pluginJson: Record<string, unknown>;
+  componentDirs?: readonly string[];
+  componentFiles?: readonly string[];
+}): Promise<void> {
+  const locations = locationsFor(opts.scope, opts.cwd);
+  const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(opts.cloneUrl));
+  await mkdir(path.join(mirrorDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mirrorDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify(opts.pluginJson),
+    "utf8",
+  );
+
+  for (const rel of opts.componentDirs ?? []) {
+    await mkdir(path.join(mirrorDir, rel), { recursive: true });
+  }
+
+  for (const rel of opts.componentFiles ?? []) {
+    const abs = path.join(mirrorDir, rel);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, "", "utf8");
+  }
+
+  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
+  await git.commit({
+    fs,
+    dir: mirrorDir,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
+}
+
+/**
+ * NFR-10 / D-77-03: stage a WARM unpinned git mirror carrying a git-subdir plugin
+ * -- the plugin.json + components live under `<mirror>/<subPath>` while the mirror
+ * ROOT is an empty monorepo (the canva shape). The presence probe must anchor the
+ * pluginRoot at the subdir; a clone-root resolution would render the silently-empty
+ * `(available)` row this fix removes.
+ */
+async function seedWarmSubdirMirror(opts: {
+  scope: "user" | "project";
+  cwd: string;
+  cloneUrl: string;
+  subPath: string;
+  pluginJson: Record<string, unknown>;
+  componentDirs?: readonly string[];
+  componentFiles?: readonly string[];
+}): Promise<void> {
+  const locations = locationsFor(opts.scope, opts.cwd);
+  const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(opts.cloneUrl));
+  const subdir = path.join(mirrorDir, opts.subPath);
+  await mkdir(path.join(subdir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(subdir, ".claude-plugin", "plugin.json"),
+    JSON.stringify(opts.pluginJson),
+    "utf8",
+  );
+
+  for (const rel of opts.componentDirs ?? []) {
+    await mkdir(path.join(subdir, rel), { recursive: true });
+  }
+
+  for (const rel of opts.componentFiles ?? []) {
+    const abs = path.join(subdir, rel);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, "", "utf8");
+  }
+
+  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDir, filepath: "." });
+  await git.commit({
+    fs,
+    dir: mirrorDir,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,7 +1546,7 @@ test("ENBL-04: info on a recorded-but-disabled plugin renders the list-arm `(dis
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◌ foo v1.2.3 (disabled)"].join("\n"),
+      ["● mp [user]", "  ◍ foo v1.2.3 (disabled)"].join("\n"),
     );
   });
 });
@@ -1486,7 +1593,7 @@ test("ENBL-04: bare info (no --scope) with disabled record in one scope and info
     assert.equal(notifications.length, 2);
     const all = notifications.map((n) => n.message).join("\n---\n");
     assert.match(all, /● foo v1\.0\.0 \(installed\)/, all);
-    assert.match(all, /◌ foo v1\.2\.3 \(disabled\)/, all);
+    assert.match(all, /◍ foo v1\.2\.3 \(disabled\)/, all);
   });
 });
 
@@ -2184,5 +2291,778 @@ test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on 
     // Unparseable hooks.json -> lenient reader returns undefined ->
     // appendHooksBlock's length-zero guard suppresses the header.
     assert.doesNotMatch(msg, /hooks:/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04 / NFR-5: git-source plugins
+// on the info surface. A NOT-installed git plugin (url / github / git-subdir)
+// with a COLD clone renders `(remote)` + `components: not resolved` from the
+// manifest -- it is NOT over-claimed `(available)` when nothing is materialized
+// locally. A WARM clone resolves and lists components fs-only via the three-way
+// resolver. An installed git plugin whose clone is missing keeps its recorded
+// installed status (D-78-04). Neither path clones or touches the network.
+// ---------------------------------------------------------------------------
+
+test("RSTA-01: uninstalled url-source plugin with a cold clone renders `(remote)` + components: not resolved, not (available)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            description: "Git-source plugin; not installed.",
+          },
+        ],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
+    assert.match(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(available\)/, msg);
+    assert.doesNotMatch(msg, /\(unavailable\)/, msg);
+  });
+});
+
+test("RSTA-01: uninstalled github-object-source plugin with a cold clone renders `(remote)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "ghplug",
+            source: { source: "github", repo: "owner/repo" },
+            version: "2.0.0",
+          },
+        ],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ghplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ ghplug v2\.0\.0 \(remote\)/, msg);
+    assert.doesNotMatch(msg, /\(available\)/, msg);
+    assert.doesNotMatch(msg, /\(unavailable\)/, msg);
+  });
+});
+
+test("RSTA-01: uninstalled git-subdir-source plugin with a cold clone renders `(remote)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "subplug",
+            source: { source: "git-subdir", url: "https://example.com/repo", path: "sub" },
+            version: "3.0.0",
+          },
+        ],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "subplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ subplug v3\.0\.0 \(remote\)/, msg);
+    assert.doesNotMatch(msg, /\(available\)/, msg);
+    assert.doesNotMatch(msg, /\(unavailable\)/, msg);
+  });
+});
+
+test("RSTA-05: uninstalled url-source plugin with a WARM mirror resolves and lists components fs-only (available)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // Canonical url (no `.git`) so the staged mirror key matches the probed key.
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: cloneUrl,
+            version: "1.0.0",
+            description: "Warm git-source plugin.",
+          },
+        ],
+      },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug" },
+      componentDirs: ["skills/warm-skill"],
+      componentFiles: ["commands/warm-cmd.md"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // Warm resolution: three-way `available`, components enumerated fs-only from
+    // the mirror working tree -- byte-equal the path-plugin components layout.
+    assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);
+    assert.match(msg, /commands: warm-cmd/, msg);
+    assert.match(msg, /skills: warm-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("RSTA-05 / D-77-03: uninstalled git-subdir plugin with a WARM mirror renders the subdir's components, not an empty (available) row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // Canonical url (no `.git`) so the staged mirror key matches the probed key.
+    const cloneUrl = "https://example.com/monorepo";
+    const subPath = "plugins/canva";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "canva",
+            // Object-form git-subdir source -- the only form that produces a
+            // git-subdir kind (the string `#ref:sub` form parses as a plain url).
+            source: { source: "git-subdir", url: cloneUrl, path: subPath },
+            version: "1.0.0",
+            description: "Warm git-subdir plugin.",
+          },
+        ],
+      },
+    });
+    await seedWarmSubdirMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      subPath,
+      pluginJson: { name: "canva" },
+      componentDirs: ["skills/canva-skill"],
+      componentFiles: ["commands/canva-cmd.md"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "canva", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // Warm resolution anchored at the subdir: three-way `available` with the
+    // subdir's components enumerated, NOT the silently-empty `(available)` row.
+    assert.match(msg, /○ canva v1\.0\.0 \(available\)/, msg);
+    assert.match(msg, /commands: canva-cmd/, msg);
+    assert.match(msg, /skills: canva-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("RSTA-04: uninstalled git source with a WARM clone declaring an unsupported component resolves with a reason brace, not (remote)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "badplug",
+            source: cloneUrl,
+            version: "1.0.0",
+          },
+        ],
+      },
+    });
+    // A warm mirror whose plugin.json declares an unsupported field
+    // (`lspServers`) -> resolveStrict returns a non-installable arm, so the row
+    // carries the same reason-brace path a path plugin gets (RSTA-04).
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "badplug", lspServers: { foo: {} } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "badplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // Non-installable warm resolution routes through the SAME reason-brace arm a
+    // path source uses -- NOT `(remote)` and NOT a bare `components: not resolved`.
+    assert.match(msg, /\((unavailable|partially-available)\) \{/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("PURL-08 / D-78-04: installed git-source plugin with a missing clone keeps its recorded (installed) status, never (remote)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            description: "Installed git-source plugin.",
+          },
+        ],
+      },
+      // Installed record present; no clone dir on disk. The installed path
+      // preserves the D-78-04 degrade -- status holds, never regresses to remote.
+      installed: { gplug: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /● gplug v1\.0\.0 \(installed\)/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+    assert.doesNotMatch(msg, /\(unavailable\)/, msg);
+    assert.doesNotMatch(msg, /\(partially/, msg);
+  });
+});
+
+test("RSTA-04: installed git-source plugin with a WARM mirror resolves its components fs-only on the (installed) row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: cloneUrl,
+            version: "1.0.0",
+          },
+        ],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug" },
+      componentDirs: ["skills/inst-skill"],
+      componentFiles: ["agents/inst-agent.md"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /● gplug v1\.0\.0 \(installed\)/, msg);
+    assert.match(msg, /agents: inst-agent/, msg);
+    assert.match(msg, /skills: inst-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-clones dir on disk (no clone, no network)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    // No plugin-clones/ directory exists; its continued absence after the
+    // render proves the surface neither cloned nor fetched.
+    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
+    let clonesExisted = true;
+    try {
+      await readFile(clonesDir);
+    } catch {
+      clonesExisted = false;
+    }
+
+    assert.equal(clonesExisted, false);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
+
+    // The clones dir must STILL be absent -- the render neither cloned nor fetched.
+    let clonesAfter = true;
+    try {
+      await readFile(clonesDir);
+    } catch {
+      clonesAfter = false;
+    }
+
+    assert.equal(clonesAfter, false, "info must not create plugin-clones/ (NFR-5)");
+  });
+});
+
+// FTCH-03 / FTCH-04 / FTCH-06 / D-81-04 / D-81-05: `info --fetch`.
+//
+// A real clone-cache seam over a mock gitOps lets the fetch hook materialize a
+// cold clone/mirror without touching the network; the production
+// `buildAuthForHost` runs inside info. Tests inject this via
+// `GetPluginInfoOptions.cloneCacheSeam`.
+function fetchSeamWith(gitOps: GitOps): InfoCloneCacheSeam {
+  return {
+    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+    materializeOrRefreshPluginMirror: (args) =>
+      materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone then resolves and lists components (available)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const fixtureRepoDir = path.join(cwd, "repo-fixture");
+    await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "gplug" }),
+    );
+    await mkdir(path.join(fixtureRepoDir, "skills", "fetched-skill"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, "skills", "fetched-skill", "SKILL.md"),
+      `---\nname: fetched-skill\n---\n\nHello.\n`,
+    );
+
+    // A PINNED source (manifest sha) drives the immutable per-sha clone path,
+    // whose mock-git surface is `clone` + `checkout` (no HEAD resolveRef on the
+    // fixture-copied tree). The fetch hook clones then resolves the warm tree.
+    const GIT_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: { source: "url", url: "https://example.com/repo", sha: GIT_SHA },
+            version: "1.0.0",
+          },
+        ],
+      },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The mirror was materialized (network on cache miss), then resolved warm.
+    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold mirror");
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);
+    assert.match(msg, /skills: fetched-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("D-81-04: info --fetch degrades to `components: not resolved` + an existing reason when the fetch THROWS, never failing info", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0" }],
+      },
+    });
+
+    // A network-typed clone failure: the fetch hook must catch it and fall
+    // through to the componentsResolved: false arm with `network unreachable`.
+    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
+      code: "ENOTFOUND",
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+
+    // getPluginInfo MUST resolve (not reject) even though the fetch threw.
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /components: not resolved/, msg);
+    assert.match(msg, /network unreachable/, msg);
+    assert.doesNotMatch(msg, /\(available\)/, msg);
+  });
+});
+
+test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam calls and renders `(remote)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0" }],
+      },
+    });
+
+    // The seam is provided but `fetch` is omitted: the hook must NOT run.
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(gitState.cloneCalls.length, 0, "bare info must not clone (network-free)");
+    assert.equal(gitState.fetchCalls.length, 0, "bare info must not fetch (network-free)");
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
+  });
+});
+
+test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing clone surfaces the fetch failure reason WITHOUT regressing the recorded status", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+      // Installed record present; no clone dir on disk. The consented fetch
+      // fails, so the row must carry the failure reason -- NOT render
+      // byte-identical to bare info's silent degrade.
+      installed: { gplug: { version: "1.0.0" } },
+    });
+
+    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
+      code: "ENOTFOUND",
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // The recorded status holds (D-78-04: a fetch failure never un-installs)
+    // AND the consented fetch failure surfaces as a closed-set reason.
+    assert.match(msg, /● gplug v1\.0\.0 \(installed\) \{network unreachable\}/, msg);
+    assert.match(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+    assert.doesNotMatch(msg, /\(unavailable\)/, msg);
+    assert.doesNotMatch(msg, /\(partially/, msg);
+  });
+});
+
+test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing clone materializes it and upgrades to resolved components", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const fixtureRepoDir = path.join(cwd, "repo-fixture");
+    await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "gplug" }),
+    );
+    await mkdir(path.join(fixtureRepoDir, "skills", "fetched-skill"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, "skills", "fetched-skill", "SKILL.md"),
+      `---\nname: fetched-skill\n---\n\nHello.\n`,
+    );
+
+    const GIT_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: { source: "url", url: "https://example.com/repo", sha: GIT_SHA },
+            version: "1.0.0",
+          },
+        ],
+      },
+      // Installed record present; no clone dir on disk -- bare info renders
+      // `components: not resolved` here (PURL-08). The fetch recovers it.
+      installed: { gplug: { version: "1.0.0" } },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The clone was materialized, then the now-warm tree resolved on the
+    // recorded (installed) row -- the headline `info --fetch` recovery.
+    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold clone");
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /● gplug v1\.0\.0 \(installed\)/, msg);
+    assert.match(msg, /skills: fetched-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materializes AND refreshes the mirror (probeUnpinned arm)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const fixtureRepoDir = path.join(cwd, "repo-fixture");
+    await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "gplug" }),
+    );
+    await mkdir(path.join(fixtureRepoDir, "skills", "fetched-skill"), { recursive: true });
+    await writeFile(
+      path.join(fixtureRepoDir, "skills", "fetched-skill", "SKILL.md"),
+      `---\nname: fetched-skill\n---\n\nHello.\n`,
+    );
+
+    // An UNPINNED source (no sha) drives the URL-keyed mirror path. The mock
+    // pre-seeds refs so refreshGitHubClone's default-branch form resolves:
+    // refs/remotes/origin/HEAD + refs/heads/main + HEAD all read MIRROR_HEAD.
+    const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({
+      fixtureSourceDir: fixtureRepoDir,
+      head: MIRROR_HEAD,
+      localRefs: { "refs/heads/main": MIRROR_HEAD },
+      remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
+    });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // Cold mirror: materialized once, then refreshed in place (MIRR-02 -- the
+    // mirror refresh IS the consented fetch on the unpinned arm).
+    assert.ok(gitState.cloneCalls.length >= 1, "the fetch hook cloned the cold mirror");
+    assert.ok(gitState.fetchCalls.length >= 1, "the fetch hook refreshed the mirror (MIRR-02)");
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);
+    assert.match(msg, /skills: fetched-skill/, msg);
+    assert.doesNotMatch(msg, /components: not resolved/, msg);
+    assert.doesNotMatch(msg, /\(remote\)/, msg);
+  });
+});
+
+test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authentication required}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    // The isomorphic-git HttpError shape: `.code === "HttpError"` with the
+    // status on `.data.statusCode` (duck-typed by classifyFetchFailure).
+    const authErr = Object.assign(new Error("auth"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: authErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\) \{authentication required\}/, msg);
+    assert.match(msg, /components: not resolved/, msg);
+  });
+});
+
+test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flow) to `{authentication required}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    // isomorphic-git throws UserCanceledError when onAuth returns
+    // `{ cancel: true }` -- the shape a denied/expired Device Flow surfaces.
+    const canceledErr = Object.assign(new Error("auth canceled"), {
+      code: "UserCanceledError",
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: canceledErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    assert.match(msg, /◌ gplug v1\.0\.0 \(remote\) \{authentication required\}/, msg);
+    assert.match(msg, /components: not resolved/, msg);
   });
 });

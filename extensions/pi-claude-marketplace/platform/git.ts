@@ -38,7 +38,12 @@ export interface CloneOptions {
    * parent if the caller plans to atomic-rename a clone into place.
    */
   dir: string;
-  /** Remote URL -- only https://github.com/<owner>/<repo>[.git] is accepted (SP-3). */
+  /**
+   * Remote URL. Any `https://` git URL is accepted: github sources reconstruct
+   * their canonical `https://github.com/<owner>/<repo>.git` form, while url
+   * sources (MURL-01 / D-76-06) pass `source.url` verbatim. Auth is omitted
+   * for public url clones (D-76-07); see `opts.auth` below.
+   */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
   ref?: string;
@@ -80,6 +85,25 @@ export interface CheckoutOptions {
 export interface ResolveRefOptions {
   dir: string;
   ref: string;
+}
+
+export interface ResolveRemoteRefOptions {
+  /** Remote URL. */
+  url: string;
+  /**
+   * Optional ref (branch or tag) to resolve. When omitted, the remote HEAD
+   * (default branch) is resolved. Matches `refs/heads/<ref>`, `refs/tags/<ref>`,
+   * a peeled annotated-tag target, or a bare `<ref>` name.
+   */
+  ref?: string;
+  /**
+   * Optional auth bundle. Same shape as `CloneOptions.auth`; when present,
+   * resolveRemoteRef builds isomorphic-git `onAuth`/`onAuthFailure` callbacks
+   * via `buildAuthCallbacks` and threads them into `listServerRefs` so an
+   * unpinned private-repo HEAD resolution can authenticate (PROV-03). When
+   * omitted, the resolution behaves identically to the public-only path.
+   */
+  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
 }
 
 export interface ForceUpdateRefOptions {
@@ -164,6 +188,71 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
     dir: opts.dir,
     ref: opts.ref,
   });
+}
+
+/**
+ * D-77-05 / PURL-09: resolve a remote ref (or the default-branch HEAD) to its
+ * full commit SHA WITHOUT a full clone. Wraps isomorphic-git's
+ * `listServerRefs` (protocol version 2 ref advertisement) so the install
+ * clone-cache seam can pin an unpinned source at install time.
+ *
+ * `symrefs: true` makes the remote HEAD entry carry its `target` symref so an
+ * unpinned resolution follows HEAD to the default branch; `peelTags: true`
+ * peels annotated tags so a tag `ref` resolves to the underlying commit oid
+ * (via the `refs/tags/<ref>^{}` peeled entry) rather than the tag object.
+ *
+ * Ref selection (opts.ref):
+ *   - undefined: return the HEAD entry's oid (default-branch commit).
+ *   - given: match `refs/heads/<ref>` / `refs/tags/<ref>` / a bare `<ref>`;
+ *     for an annotated tag, prefer the `peeled` commit oid so the returned
+ *     value is a commit, not the tag object.
+ *
+ * Auth is threaded through the optional `opts.auth` bundle so an unpinned
+ * private-repo HEAD resolution can authenticate (PROV-03); omitted = the
+ * public-only path. No sparse/partial fetch is exposed (documented
+ * divergence; see the NOT-exposed list above).
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
+ * url, onAuth, onAuthFailure, protocolVersion, symrefs, peelTags }) =>
+ * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
+ */
+export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string> {
+  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
+  // top of this file: build the callbacks only when opts.auth is defined so the
+  // public-only resolution stays byte-identical.
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
+  const refs = await git.listServerRefs({
+    http,
+    url: opts.url,
+    protocolVersion: 2,
+    symrefs: true,
+    peelTags: true,
+    ...(authCbs !== undefined && {
+      onAuth: authCbs.onAuth,
+      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+    }),
+  });
+
+  if (opts.ref === undefined) {
+    const head = refs.find((r) => r.ref === "HEAD");
+    if (head === undefined) {
+      throw new Error(`remote ${opts.url} advertised no HEAD ref`);
+    }
+
+    return head.oid;
+  }
+
+  const match = refs.find(
+    (r) =>
+      r.ref === `refs/heads/${opts.ref}` || r.ref === `refs/tags/${opts.ref}` || r.ref === opts.ref,
+  );
+  if (match === undefined) {
+    throw new Error(`remote ${opts.url} has no ref "${opts.ref}"`);
+  }
+
+  // For an annotated tag the `peeled` field carries the commit the tag points
+  // at; prefer it so a tag resolves to a commit, not the tag object.
+  return match.peeled ?? match.oid;
 }
 
 /**

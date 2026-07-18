@@ -73,13 +73,19 @@ const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 // without a second classifier. WR-02 adds `partially-installed-upgradable` -- a
 // partially-installed row that ALSO has a meaningful (newer, non-unavailable)
 // candidate, so it is offered under `update --partial` (rendered `(partially-installed)`
-// on `list`). The schemaVersion bump (1 -> 4) makes every stale prior-shape cache
-// (any `schemaVersion !== 4`) mismatch and drop+rebuild on next read via the
-// existing mismatch path -- no manual migration (T-67-07: the plugin-index cache
-// is an ephemeral optimization cache, NOT the persisted state model). D-75-01: the
-// 3 -> 4 bump renames the partial-status literal union in lockstep.
+// on `list`). The schemaVersion bump makes every stale prior-shape cache (any
+// `schemaVersion` mismatch) drop+rebuild on next read via the existing mismatch
+// path -- no manual migration (T-67-07: the plugin-index cache is an ephemeral
+// optimization cache, NOT the persisted state model). D-75-01: the partial-status
+// literal union rename rode a prior bump in lockstep. PURL-08 / D-03: the 4 -> 5
+// bump drops caches written BEFORE the completion bucketizer learned the
+// git-source short-circuit -- those caches carried not-installed git-source rows
+// misclassified `unavailable`, and dropping them stops the wrong rows outliving
+// the fix. RSTA-03: the 5 -> 6 bump drops caches carrying the OLD not-installed
+// git-source `(available)` classification (a not-fetched git plugin is now
+// `remote`), so pre-fix caches drop+rebuild via the same drop-on-mismatch path.
 export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(4),
+  schemaVersion: Type.Literal(6),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
   plugins: Type.Array(
@@ -94,6 +100,7 @@ export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
         Type.Literal("available"),
         Type.Literal("partially-available"),
         Type.Literal("unavailable"),
+        Type.Literal("remote"),
       ]),
       version: Type.Optional(Type.String()),
     }),
@@ -117,7 +124,8 @@ export interface PluginIndexRow {
     | "partially-upgradable"
     | "available"
     | "partially-available"
-    | "unavailable";
+    | "unavailable"
+    | "remote";
   readonly version?: string;
 }
 
@@ -331,7 +339,7 @@ export async function getPluginIndex(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 4 as const,
+        schemaVersion: 6 as const,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [] as PluginIndexRow[],
         _loadError: errorMessage(err.cause),
@@ -346,7 +354,7 @@ export async function getPluginIndex(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 4 as const,
+    schemaVersion: 6 as const,
     lastRefreshedAt: new Date().toISOString(),
     plugins: rows.map((r) => {
       // Strip undefined version fields so the on-disk shape matches the

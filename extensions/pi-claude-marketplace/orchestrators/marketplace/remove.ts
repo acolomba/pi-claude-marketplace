@@ -63,6 +63,7 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
 
 import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -71,7 +72,6 @@ import {
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
 
-import type { ConfigLoadResult } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
@@ -82,7 +82,7 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type RecordedSourceKind = "github" | "path" | "unknown";
+type RecordedSourceKind = "github" | "url" | "path" | "unknown";
 
 /**
  * RECON-03: controls how `removeMarketplace` surfaces
@@ -406,38 +406,26 @@ type ExtensionPluginRow =
   NonNullable<Parameters<typeof cascadeUnstagePlugin>[3]> extends infer T ? T : never;
 
 /**
- * Commit the full-remove success branch: delete the marketplace from state and
- * fire the cascade config write-back (skipped in orchestrated mode).
+ * Cascade-delete the marketplace entry + its `@<marketplace>` plugin keys from
+ * ONE physical config layer. Loads the file fresh so the sweep sees the
+ * on-disk truth of that layer (the target-layer load threaded for CFG-03 is a
+ * different concern).
+ *
+ * WR-02: short-circuit when the layer declares neither the marketplace nor any
+ * plugin key under it. Writing anyway would rewrite the file (mtime bump) for a
+ * semantic no-op -- or CREATE the file containing only empty maps when it is
+ * absent. Both contradict the RECON-05 byte/mtime-stability discipline.
+ *
+ * An `absent` or `invalid` layer is left untouched (never rewritten): the
+ * sibling layer being invalid is NOT a CFG-03 abort (that is scoped to the
+ * target layer in `runRemoveLockBody`).
  */
-async function commitFullRemove(args: {
-  readonly tx: { readonly state: { marketplaces: Record<string, unknown> } };
-  readonly marketplace: string;
-  readonly targetConfigPath: string;
-  readonly scopeRoot: string;
-  readonly cfg: ConfigLoadResult;
-  readonly orchestrated: boolean;
-}): Promise<void> {
-  const { tx, marketplace, targetConfigPath, scopeRoot, cfg, orchestrated } = args;
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
-  delete tx.state.marketplaces[marketplace];
-
-  // WB-01: cascade write-back lives in ONE place. The helper removes the
-  // marketplace entry AND every plugin entry whose key ends in
-  // `@<marketplace>` so the next reconcile is a no-op.
-  //
-  // WR-09 / T-56-02-01: SKIPPED in orchestrated mode. A reconcile-driven
-  // call derives the desired state FROM the merged config; the declaration
-  // may live only in claude-plugins.local.json, and a write-back would
-  // clobber a per-machine override.
-  if (orchestrated) {
-    return;
-  }
-
-  // WR-02: short-circuit when the TARGETED physical file
-  // declares neither the marketplace nor any plugin key under it. Writing
-  // anyway would rewrite the file (mtime bump) for a semantic no-op -- or
-  // CREATE claude-plugins.json containing only empty maps when the file is
-  // absent. Both contradict the RECON-05 byte/mtime-stability discipline.
+async function cascadeRemoveFromLayer(
+  configPath: string,
+  scopeRoot: string,
+  marketplace: string,
+): Promise<void> {
+  const cfg = await loadConfig(configPath);
   if (cfg.status !== "valid") {
     return;
   }
@@ -451,12 +439,43 @@ async function commitFullRemove(args: {
     return;
   }
 
-  await deleteMarketplaceConfigEntryWithCascade(
-    cfg.config,
-    targetConfigPath,
-    scopeRoot,
-    marketplace,
-  );
+  await deleteMarketplaceConfigEntryWithCascade(cfg.config, configPath, scopeRoot, marketplace);
+}
+
+/**
+ * Commit the full-remove success branch: delete the marketplace from state and
+ * fire the cascade config write-back (skipped in orchestrated mode).
+ */
+async function commitFullRemove(args: {
+  readonly tx: { readonly state: { marketplaces: Record<string, unknown> } };
+  readonly marketplace: string;
+  readonly locations: ScopedLocations;
+  readonly orchestrated: boolean;
+}): Promise<void> {
+  const { tx, marketplace, locations, orchestrated } = args;
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
+  delete tx.state.marketplaces[marketplace];
+
+  // WB-01: cascade write-back lives in ONE place. `cascadeRemoveFromLayer`
+  // removes the marketplace entry AND every plugin entry whose key ends in
+  // `@<marketplace>` so the next reconcile is a no-op.
+  //
+  // WR-09 / T-56-02-01: SKIPPED in orchestrated mode. A reconcile-driven
+  // call derives the desired state FROM the merged config; the declaration
+  // may live only in claude-plugins.local.json, and a write-back would
+  // clobber a per-machine override.
+  if (orchestrated) {
+    return;
+  }
+
+  // Cross-layer sweep: both `claude-plugins.json` and
+  // `claude-plugins.local.json` are inside the NFR-10 sanctioned write set.
+  // A `--local` install by a prior version may have left the plugin key in
+  // the sibling layer; cleaning only the target layer leaves it as a
+  // perpetual dangling-reference. Each layer is loaded fresh and swept
+  // independently (WR-02 no-op guard per file, NFR-1 atomic save per file).
+  await cascadeRemoveFromLayer(locations.configJsonPath, locations.scopeRoot, marketplace);
+  await cascadeRemoveFromLayer(locations.configLocalJsonPath, locations.scopeRoot, marketplace);
 }
 
 /**
@@ -510,7 +529,9 @@ async function runRemoveLockBody(args: {
 
   const src = record.source as { kind?: unknown };
   const sourceKind: RecordedSourceKind | undefined =
-    src.kind === "github" || src.kind === "path" || src.kind === "unknown" ? src.kind : undefined;
+    src.kind === "github" || src.kind === "url" || src.kind === "path" || src.kind === "unknown"
+      ? src.kind
+      : undefined;
 
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
   await cascadePluginsInPlace({
@@ -526,9 +547,7 @@ async function runRemoveLockBody(args: {
     await commitFullRemove({
       tx,
       marketplace: opts.name,
-      targetConfigPath,
-      scopeRoot: locations.scopeRoot,
-      cfg,
+      locations,
       orchestrated,
     });
   }
@@ -718,9 +737,31 @@ export async function removeMarketplace(
   if (failedPlugins.length === 0) {
     await removePath(locations.marketplaceDataDir(opts.name));
 
-    // MR-7: GitHub clone dirs retained when any plugin failed; here failedPlugins.length === 0.
-    if (sourceKindAtRecord === "github") {
+    // MR-7: clone dirs retained when any plugin failed; here failedPlugins.length === 0.
+    // MURL-04 / NFR-3: both github and url sources have a sources/<name>/ clone;
+    // a url clone left behind would permanently trip MA-6 {stale clone} on re-add.
+    // path sources never have a clone dir.
+    if (sourceKindAtRecord === "github" || sourceKindAtRecord === "url") {
       await removePath(locations.sourceCloneDir(opts.name));
+    }
+
+    // PURL-05 / PURL-06 / D-78-01: reclaim any git-source plugin-clones/<key>/
+    // dir the cascade-uninstalled plugins no longer reference. Runs post-commit
+    // (after withLockedStateTransaction saved), so the GC derives live clone
+    // keys from the just-committed state where the removed plugins' records are
+    // gone -> their clones are unreferenced -> swept; a clone still referenced
+    // by a surviving marketplace's plugin survives. fs-only helper: no git
+    // surface (NFR-5). NFR-3: a crash before this leaves an orphan the next
+    // idempotent pass removes.
+    //
+    // Per D-19-01 this hygienic cleanup never becomes the primary user-facing
+    // path. The GC helper already swallows per-dir rm leaks into a returned
+    // string[] rather than throwing; the try/catch is belt-and-braces so a
+    // GC-internal throw can never fail the user-visible remove.
+    try {
+      await garbageCollectPluginClones(locations);
+    } catch {
+      // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
     }
   }
 

@@ -82,13 +82,16 @@ export interface GitAuthBundle {
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Six primitives. The 5 base primitives (clone / fetch / forceUpdateRef
+ * Seven primitives. The 5 base primitives (clone / fetch / forceUpdateRef
  * / checkout / resolveRef) cover the standard D-14 sequence. CR-01
  * added a 6th -- `currentBranch` -- because the D-14 default-branch
  * tracking path needs to distinguish "what is the symbolic name of the
  * local branch" from "what SHA does HEAD point at". `resolveRef('HEAD')`
  * returns a SHA; using that SHA as the `ref` to forceUpdateRef writes a
  * meaningless `refs/<40-hex>` -- the local branch never advances.
+ * D-77-05 added a 7th -- `resolveRemoteRef` -- so the plugin clone-cache
+ * seam can pin an unpinned source's remote HEAD to a SHA without a full
+ * clone at install time.
  *
  * No `pull` -- D-14 requires the three-step force-overwrite path
  * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
@@ -124,10 +127,18 @@ export interface GitOps {
    * `refs/heads/<branch>` for forceUpdateRef.
    */
   currentBranch(opts: { dir: string }): Promise<string | undefined>;
+  /**
+   * D-77-05 / PURL-09: resolve a remote ref (or the default-branch HEAD) to
+   * its full commit SHA WITHOUT a full clone. Used by the plugin clone-cache
+   * seam to pin an unpinned source at install time. An optional `auth` bundle
+   * threads through to `listServerRefs` so an unpinned PRIVATE-repo HEAD
+   * resolution can authenticate (PROV-03); omitted = public-only.
+   */
+  resolveRemoteRef(opts: { url: string; ref?: string; auth?: GitAuthBundle }): Promise<string>;
 }
 
 /**
- * D-13 default implementation. All five primitives delegate to
+ * D-13 default implementation. All primitives delegate to
  * `platform/git.ts`, which is the only file that imports isomorphic-git.
  * No dynamic imports -- D-13's "no orchestrator-tier isomorphic-git
  * dependency" boundary is now enforced statically.
@@ -145,6 +156,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,
   currentBranch: defaultGit.currentBranch,
+  resolveRemoteRef: defaultGit.resolveRemoteRef,
 };
 
 /**

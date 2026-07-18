@@ -70,7 +70,12 @@ export function makeMockDeviceFlowHttp(
       user_code: "ABCD-1234",
       verification_uri: "https://github.com/login/device",
       expires_in: 900,
-      interval: 5,
+      // interval:0 by default so a test that drives the poll loop without an
+      // explicit deviceCode spins it synchronously instead of firing a real
+      // ref'd sleepMs (which would block the worker for seconds of wall-clock
+      // time). Tests that need a non-zero interval (e.g. slow_down back-off)
+      // override deviceCode explicitly.
+      interval: 0,
     },
     pollQueue: [...(initial?.pollQueue ?? [])],
     defaultPoll: initial?.defaultPoll ?? { kind: "pending" },

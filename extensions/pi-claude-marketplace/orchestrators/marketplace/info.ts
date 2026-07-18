@@ -47,8 +47,9 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * Source dispatch: `record.source` is `Type.Unknown()` at the schema
  * level but is constrained to a `ParsedSource` at the write paths.
  * Casting to that discriminated union lets the discriminator narrow
- * `kind === "github"` without re-checking `typeof` on each field. Every
- * non-github kind coerces to the `path` arm with `record.marketplaceRoot`
+ * `kind === "github"` / `kind === "url"` without re-checking `typeof` on
+ * each field. `github` and `url` (D-76-09) get dedicated projections;
+ * every OTHER kind coerces to the `path` arm with `record.marketplaceRoot`
  * -- surfacing a bare row beats refusing to render (NFR-12).
  */
 async function buildBlock(
@@ -56,18 +57,30 @@ async function buildBlock(
   autoupdate: boolean,
 ): Promise<MarketplaceInfoMessage> {
   const src = record.source as ParsedSource;
-  const source: MarketplaceInfoMessage["source"] =
-    src.kind === "github"
-      ? {
-          sourceKind: "github",
-          owner: src.owner,
-          repo: src.repo,
-          ...(src.ref !== undefined && { ref: src.ref }),
-        }
-      : { sourceKind: "path", absPath: record.marketplaceRoot };
+  let source: MarketplaceInfoMessage["source"];
+  if (src.kind === "github") {
+    source = {
+      sourceKind: "github",
+      owner: src.owner,
+      repo: src.repo,
+      ...(src.ref !== undefined && { ref: src.ref }),
+    };
+  } else if (src.kind === "url") {
+    // D-76-09: url sources project a `url:` line. This MUST branch before
+    // the `path` fallback, else a url source would render as
+    // `path: <clone dir>` (record.marketplaceRoot), which is wrong.
+    source = {
+      sourceKind: "url",
+      url: src.url,
+      ...(src.ref !== undefined && { ref: src.ref }),
+    };
+  } else {
+    source = { sourceKind: "path", absPath: record.marketplaceRoot };
+  }
 
-  // The renderer gates `last_updated:` line emission on
-  // `sourceKind === "github"` AND `lastUpdatedAt !== undefined`.
+  // D-76-10: the renderer gates `last_updated:` line emission on
+  // `sourceKind !== "path"` (all git-backed kinds) AND
+  // `lastUpdatedAt !== undefined`.
   const details: MarketplaceInfoMessage["details"] = {
     autoupdate,
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),

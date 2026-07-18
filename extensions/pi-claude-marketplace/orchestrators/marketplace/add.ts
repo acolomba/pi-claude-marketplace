@@ -50,7 +50,6 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { initiateDeviceFlow } from "../../domain/github-auth.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -72,19 +71,18 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
-import { makeRawNotifyFn } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { GitHubSource, PathSource } from "../../domain/source.ts";
+import type { GitHubSource, PathSource, UrlSource } from "../../domain/source.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { AuthAttemptResult } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -250,6 +248,19 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
 
   if (err instanceof Error) {
     const code = (err as NodeJS.ErrnoException).code;
+
+    // D-76-08: an isomorphic-git `HttpError` carries a `.code` STRING
+    // ("HttpError"), not an errno, so it would fall through the errno ladder
+    // below to `unparseable` -- falsely implying a corrupted source tree when
+    // the truth is a 401/403 auth challenge from a private/nonexistent repo.
+    // Catch it HERE, above the errno ladder. Duck-typed on the name+status
+    // (D-13: no isomorphic-git import in the orchestrator tier; mirrors the
+    // isGitNotFoundError name-check idiom in shared.ts).
+    const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+    if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
+      return "authentication required";
+    }
+
     if (code === "ENOENT" || code === "ENOTDIR") {
       return "source missing";
     }
@@ -339,8 +350,9 @@ async function runAddInGuard(args: {
     );
   }
 
-  // S5b: valid-but-unsupported kinds (url / git-subdir / npm).
-  if (source.kind !== "github" && source.kind !== "path") {
+  // S5b: valid-but-unsupported kinds. MURL-01 / D-76-05: `url` is now
+  // admitted; only `git-subdir` and `npm` (marketplace-level) stay rejected.
+  if (source.kind !== "github" && source.kind !== "path" && source.kind !== "url") {
     throw new UnsupportedSourceError(
       `Cannot add marketplace from "${opts.rawSource}": unsupported source kind ${source.kind}`,
     );
@@ -365,6 +377,19 @@ async function runAddInGuard(args: {
 
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
+        ctx: opts.ctx,
+        state,
+        locations,
+        source,
+        gitOps,
+        credentialOps,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        cwd: opts.cwd,
+      });
+    } else if (source.kind === "url") {
+      // MURL-01 / D-76-06: clone source.url verbatim; per-host provider
+      // lookup decides the auth bundle (PROV-02/03/04).
+      recordedName = await addUrlInGuard({
         ctx: opts.ctx,
         state,
         locations,
@@ -414,7 +439,10 @@ async function runAddInGuard(args: {
       await tx.save();
     } catch (err) {
       let wrapped: unknown = err;
-      if (source.kind === "github") {
+      // MURL-01 / NFR-3: both github and url sources committed a clone into
+      // sources/<name>/; a write-back failure must remove it so a retry never
+      // trips MA-6 {stale clone}. path sources have no clone dir.
+      if (source.kind === "github" || source.kind === "url") {
         const finalDir = await locations.sourceCloneDir(recordedName);
         const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
         wrapped = appendLeakToError(wrapped, leak);
@@ -578,50 +606,36 @@ export async function addMarketplace(
   return undefined;
 }
 
-async function addGithubInGuard(args: {
-  ctx: ExtensionContext;
+/**
+ * Shared clone-into-guard body for git-cloned marketplace sources (github and
+ * url). Owns everything from staging-dir creation through the clone, manifest
+ * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
+ * mutation, and the MA-9 append-leak-not-mask cleanup catch. The only per-kind
+ * differences are the pre-computed `cloneUrl` and the optional `auth` bundle,
+ * so that subtle MA-9 discipline lives in exactly one place.
+ *
+ * MURL-01 / D-76-07: `auth` is spread into the clone options ONLY when defined,
+ * so the public-only url path emits a clone call with no `auth` key at all.
+ */
+async function addGitClonedInGuard(args: {
   state: ExtensionState;
   locations: ScopedLocations;
-  source: GitHubSource;
+  source: GitHubSource | UrlSource;
   gitOps: GitOps;
-  credentialOps: CredentialOps;
-  deviceFlowHttp?: DeviceFlowHttp;
+  cloneUrl: string;
+  auth?: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const { state, locations, source, gitOps, cloneUrl, auth, cwd } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
-  const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
-  // AUTH-01: bind the Device Flow trigger as the onAuthRequired closure
-  // for this clone. platform/git.ts::buildAuthCallbacks first consults
-  // credentialOps.fill(host); only on a miss does it invoke this closure.
-  // AUTH-09: the closure interpolates ONLY user_code + verification_uri
-  // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
-  // LATER in the poll loop and is never passed back to a notify or Error.
-  //
-  // host is the bare hostname; the supported scope is GitHub-only so the
-  // literal "github.com" is correct here (matches the GitHubSource
-  // parser's contract at domain/source.ts -- every github source resolves
-  // to https://github.com/<owner>/<repo>). AUTH-D02 parameterizes this
-  // from the source.
-  const host = "github.com";
-  const notifyFn = makeRawNotifyFn(ctx);
-  const onAuthRequired = async (): Promise<AuthAttemptResult> =>
-    initiateDeviceFlow({
-      host,
-      credentialOps,
-      notifyFn,
-      ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
-    });
-  const auth: GitAuthBundle = { credentialOps, host, onAuthRequired };
-
-  // 1. Clone into staging (NFR-5: only github branch reaches gitOps.clone).
+  // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
   try {
     await gitOps.clone({
       dir: stagingDir,
       url: cloneUrl,
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
-      auth,
+      ...(auth !== undefined && { auth }),
     });
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a
@@ -684,6 +698,85 @@ async function addGithubInGuard(args: {
 
     throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
   }
+}
+
+async function addGithubInGuard(args: {
+  ctx: ExtensionContext;
+  state: ExtensionState;
+  locations: ScopedLocations;
+  source: GitHubSource;
+  gitOps: GitOps;
+  credentialOps: CredentialOps;
+  deviceFlowHttp?: DeviceFlowHttp;
+  cwd: string;
+}): Promise<string> {
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
+
+  // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
+  // Flow as the onAuthRequired closure for this clone.
+  // platform/git.ts::buildAuthCallbacks first consults
+  // credentialOps.fill(host); only on a miss does it invoke the closure.
+  // AUTH-09: the closure interpolates ONLY user_code + verification_uri
+  // (via initiateDeviceFlow's notifyFn) -- the access token is acquired
+  // LATER in the poll loop and is never passed back to a notify or Error.
+  const host = hostFromCloneUrl(cloneUrl, "github");
+  const auth = buildAuthForHost({
+    host,
+    credentialOps,
+    ctx,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+  });
+
+  return addGitClonedInGuard({
+    state,
+    locations,
+    source,
+    gitOps,
+    cloneUrl,
+    ...(auth !== undefined && { auth }),
+    cwd,
+  });
+}
+
+/**
+ * MURL-01 / D-76-06: url-source add. Clones `source.url` VERBATIM (no
+ * github.com reconstruction). PROV-02/03/04: the host is extracted from the
+ * url and looked up in the provider registry via buildAuthForHost -- a
+ * provider-registered host authenticates host-keyed; a no-provider host gets
+ * NO bundle (buildAuthForHost returns undefined), so the clone runs authless
+ * and a private repo fails clean on the structural 401. The
+ * undefined-for-no-provider guarantee is the cross-host leak guard: a bundle
+ * for an unregistered host would key another provider's credential onto it.
+ */
+async function addUrlInGuard(args: {
+  ctx: ExtensionContext;
+  state: ExtensionState;
+  locations: ScopedLocations;
+  source: UrlSource;
+  gitOps: GitOps;
+  credentialOps: CredentialOps;
+  deviceFlowHttp?: DeviceFlowHttp;
+  cwd: string;
+}): Promise<string> {
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const host = hostFromCloneUrl(source.url, "url");
+  const auth = buildAuthForHost({
+    host,
+    credentialOps,
+    ctx,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+  });
+
+  return addGitClonedInGuard({
+    state,
+    locations,
+    source,
+    gitOps,
+    cloneUrl: source.url,
+    ...(auth !== undefined && { auth }),
+    cwd,
+  });
 }
 
 async function addPathInGuard(args: {

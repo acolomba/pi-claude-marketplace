@@ -46,6 +46,13 @@ const GIT_CREDENTIAL_FILE = "extensions/pi-claude-marketplace/platform/git-crede
 
 const GITHUB_AUTH_FILE = "extensions/pi-claude-marketplace/domain/github-auth.ts";
 
+const PROVIDER_FILES: ReadonlyArray<string> = [
+  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+  // buildAuthForHost binds the provider flow + notifyFn per host; a token
+  // interpolation regression here would leak, so the PROV-05 scan covers it.
+  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+];
+
 const PHASE_35_ORCHESTRATOR_FILES: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
@@ -132,6 +139,36 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
     false,
     "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
+});
+
+test("PROV-05: every provider file is scanned for token interpolation in an Error or notifyFn message", async () => {
+  // Each provider descriptor file carries credential-shaping logic
+  // (credentialFrom) and endpoint/clientId literals. A regression that
+  // interpolated a token into an Error or notifyFn here would leak it, so the
+  // AUTH-09 gate must cover the whole provider set, not just github-auth.ts.
+  const errorOrNotifyWithToken =
+    /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+
+  for (const rel of PROVIDER_FILES) {
+    const absPath = path.join(REPO_ROOT, rel);
+    const exists = await access(absPath).then(
+      () => true,
+      () => false,
+    );
+    if (!exists) {
+      // A not-yet-authored provider file leaves the gate vacuously satisfied
+      // for that file; its creation activates the scan.
+      continue;
+    }
+
+    const src = await readFile(absPath, "utf8");
+    const stripped = stripComments(src);
+    assert.equal(
+      errorOrNotifyWithToken.test(stripped),
+      false,
+      `Error or notifyFn in ${rel} interpolates a token field (AUTH-09 violation)`,
+    );
+  }
 });
 
 test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {

@@ -235,16 +235,17 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 // there is deliberately no `will partially update` analog (the reconcile plan
 // has no update bucket -- D-66-05).
 const WILL_TOKEN_RE =
-  /^(?:[●○⊘◌]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|partially install|uninstall|enable|disable)\))?$/;
+  /^(?:[●○⊘◍]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|partially install|uninstall|enable|disable)\))?$/;
 
 // D-54-01 / ENBL-04: subject-first row grammar for the new
 // `(disabled)` inventory token. Each row matches
-// `◌ <name> [<scope>] v<version> (disabled)` with the status token AFTER the
-// subject, never before. The status token is the load-bearing assertion --
-// the row icon + name + optional bracket + optional version are exercised by
-// the catalog-uat byte-equality runner.
+// `◍ <name> [<scope>] v<version> (disabled)` with the status token AFTER the
+// subject, never before (D-80-01: the disabled/will-disable glyph is `◍`
+// U+25CD, after `◌` was reassigned to `(remote)`). The status token is the
+// load-bearing assertion -- the row icon + name + optional bracket + optional
+// version are exercised by the catalog-uat byte-equality runner.
 const DISABLED_TOKEN_RE =
-  /^◌ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)$/;
+  /^◍ [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+)? \(disabled\)$/;
 
 const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   {
@@ -347,7 +348,7 @@ test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] 
   }
 });
 
-test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◌ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
+test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
   for (const fixture of DISABLED_VARIANT_FIXTURES) {
     const ctx = makeCtx();
     notify(ctx as never, fixture.pi as never, fixture.message);

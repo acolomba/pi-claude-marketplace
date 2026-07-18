@@ -165,6 +165,34 @@ test("SC-7 pluginDataDir('mp', 'plugin') happy path returns under dataRoot", asy
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// SC-7 / D-77-03 / NFR-10: plugin-clone cache chokepoint containment.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-77-03 pluginClonesDir is a hard-coded suffix directly under extensionRoot", () => {
+  const loc = locationsFor("project", "/p");
+  assert.equal(loc.pluginClonesDir, path.join(loc.extensionRoot, "plugin-clones"));
+  assert.ok(loc.pluginClonesDir.endsWith("plugin-clones"));
+});
+
+test("SC-7 / D-77-03 pluginCloneDir(key) happy path returns under pluginClonesDir", async () => {
+  const loc = locationsFor("project", "/p");
+  const key = "aaaaaaaaaaaa-bbbbbbbbbbbb";
+  const got = await loc.pluginCloneDir(key);
+  assert.ok(got.startsWith(loc.pluginClonesDir));
+  assert.ok(got.endsWith(key));
+});
+
+test("SC-7 / D-77-03 pluginCloneDir refuses a traversal key (upstream assertSafeName)", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginCloneDir("../evil"), /must not contain path separators/);
+});
+
+test("SC-7 / D-77-03 pluginCloneDir refuses a separator-bearing key", async () => {
+  const loc = locationsFor("project", "/p");
+  await assert.rejects(() => loc.pluginCloneDir("a/b"), /must not contain path separators/);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // T-5-09: pluginDataDir name-input containment coverage.
 //
 // assertPathInside alone does NOT catch a plugin name like "p/sub" because

@@ -110,6 +110,7 @@ test("TC-1 :: first positional surfaces top-level keywords (bootstrap/install/un
       "bootstrap",
       "disable",
       "enable",
+      "fetch",
       "import",
       "info",
       "install",
@@ -240,83 +241,88 @@ test("TC-3 :: - prefix surfaces --scope", async () => {
   }
 });
 
-test("TC-3 :: - prefix on list head also surfaces --installed/--available/--unavailable", async () => {
+test("TC-3 / RSTA-07 :: list head flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("list -", f.resolver);
     assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    for (const expected of [
-      "--scope",
-      "--installed",
+    // Exact-set: adding a list flag to the catalog must add it here in the same
+    // change. RSTA-07 adds `--remote` to the filter family.
+    assert.deepEqual([...items.map((i) => i.label)].sort(), [
       "--available",
-      "--unavailable",
+      "--installed",
       "--partial",
-    ]) {
-      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
-    }
+      "--remote",
+      "--scope",
+      "--unavailable",
+    ]);
   } finally {
     await f.cleanup();
   }
 });
 
-test("TC-3 :: - prefix on ls alias also surfaces --installed/--available/--unavailable", async () => {
+test("TC-3 / RSTA-07 :: ls alias flag completion is EXACTLY scope + the filter family incl. --remote", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("ls -", f.resolver);
     assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    for (const expected of [
-      "--scope",
-      "--installed",
+    assert.deepEqual([...items.map((i) => i.label)].sort(), [
       "--available",
-      "--unavailable",
+      "--installed",
       "--partial",
-    ]) {
-      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
-    }
+      "--remote",
+      "--scope",
+      "--unavailable",
+    ]);
   } finally {
     await f.cleanup();
   }
 });
 
-test("TC-3 :: - prefix on install head surfaces --map-model (260516-08j)", async () => {
+test("TC-3 / AG-7 :: install head flag completion is EXACTLY scope + map-model + partial", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("install -", f.resolver);
     assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    for (const expected of ["--scope", "--map-model"]) {
-      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
-    }
-
-    // list-only flags MUST NOT leak into install completions.
-    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
-      assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
-    }
+    // Exact-set: `--map-model` (AG-7) and `--partial` (LIST-02) are the only
+    // install extras; list-only filter flags MUST NOT leak in.
+    assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--map-model",
+      "--partial",
+      "--scope",
+    ]);
   } finally {
     await f.cleanup();
   }
 });
 
-test("TC-3 :: - prefix on update head surfaces --map-model (260516-08j)", async () => {
+test("TC-3 / AG-7 :: update head flag completion is EXACTLY scope + map-model + partial", async () => {
   __resetCacheForTests();
   const f = await emptyFixture();
   try {
     const items = await getArgumentCompletions("update -", f.resolver);
     assert.ok(items !== null);
-    const labels = items.map((i) => i.label);
-    for (const expected of ["--scope", "--map-model"]) {
-      assert.ok(labels.includes(expected), `expected ${expected} in: ${labels.join(", ")}`);
-    }
+    assert.deepEqual([...items.map((i) => i.label)].sort(), [
+      "--map-model",
+      "--partial",
+      "--scope",
+    ]);
+  } finally {
+    await f.cleanup();
+  }
+});
 
-    // list-only flags MUST NOT leak into update completions.
-    for (const unexpected of ["--installed", "--available", "--unavailable"]) {
-      assert.ok(!labels.includes(unexpected), `unexpected ${unexpected} in: ${labels.join(", ")}`);
-    }
+test("TC-3 / FTCH-03 :: info head flag completion is EXACTLY scope + fetch", async () => {
+  __resetCacheForTests();
+  const f = await emptyFixture();
+  try {
+    const items = await getArgumentCompletions("info -", f.resolver);
+    assert.ok(items !== null);
+    // FTCH-03: `info` gains `--fetch`; previously it fell through to `--scope` only.
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["--fetch", "--scope"]);
   } finally {
     await f.cleanup();
   }
@@ -1213,6 +1219,121 @@ test("TC-6 / INFO-02 :: info --scope project <here> returns the SAME union (scop
     assert.ok(items !== null);
     const labels = items.map((i) => i.label);
     assert.deepEqual([...labels].sort(), ["bar@mp", "foo@mp"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// FTCH-07 / D-81-03: `fetch` completion. `fetch <tab>` offers the fetchable
+// git-source buckets ({remote, available, partially-available, unavailable});
+// installed-family and path-source rows are excluded. `fetch @<tab>` offers
+// marketplace names (allowMarketplaceOnly). Per D-81-03 option (a), pinned-warm
+// cannot be distinguished from unpinned-warm in the completion cache, so warm
+// buckets are offered and a pinned-warm target simply no-ops if typed.
+// ---------------------------------------------------------------------------
+
+test("FTCH-07 :: fetch <here> offers the fetchable buckets, excludes installed and installed-family", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: {} },
+    manifests: {
+      user: {
+        mp: [
+          { name: "p-remote", status: "remote" },
+          { name: "p-avail", status: "available" },
+          { name: "p-unsup", status: "partially-available" },
+          { name: "p-unavail", status: "unavailable" },
+          { name: "p-inst", status: "installed" },
+          { name: "p-upg", status: "upgradable" },
+        ],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("fetch ", f.resolver);
+    assert.ok(items !== null);
+    const labels = items.map((i) => i.label);
+    assert.deepEqual([...labels].sort(), [
+      "p-avail@mp",
+      "p-remote@mp",
+      "p-unavail@mp",
+      "p-unsup@mp",
+    ]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("FTCH-07 :: fetch <here> surfaces fetchable plugins already present in state (no install-state exclusion)", async () => {
+  __resetCacheForTests();
+  // A plugin whose marketplace is added AND whose row derives a fetchable
+  // status is offered regardless of install state -- fetch enumerates the
+  // manifest, not the installed inventory.
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: {} },
+    manifests: {
+      user: { mp: [{ name: "warmable", status: "available" }] },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("fetch war", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["warmable@mp"],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("FTCH-07 :: fetch @<here> offers marketplace names (allowMarketplaceOnly)", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { "mp-a": {}, "mp-b": {} }, project: {} },
+    manifests: {
+      user: {
+        "mp-a": [{ name: "p", status: "available" }],
+        "mp-b": [{ name: "q", status: "remote" }],
+      },
+      project: {},
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("fetch @", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual([...items.map((i) => i.label)].sort(), ["@mp-a", "@mp-b"]);
+    for (const item of items) {
+      assert.match(
+        item.value,
+        / $/,
+        `marketplace-only completion needs trailing space: ${item.value}`,
+      );
+    }
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("FTCH-07 :: fetch --scope user <here> limits fetchable refs to user scope", async () => {
+  __resetCacheForTests();
+  const f = await makeFixture({
+    state: { user: { mp: {} }, project: { mp: {} } },
+    manifests: {
+      user: { mp: [{ name: "user-avail", status: "available" }] },
+      project: { mp: [{ name: "project-avail", status: "available" }] },
+    },
+  });
+  try {
+    const items = await getArgumentCompletions("fetch --scope user ", f.resolver);
+    assert.ok(items !== null);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["user-avail@mp"],
+    );
   } finally {
     await f.cleanup();
   }

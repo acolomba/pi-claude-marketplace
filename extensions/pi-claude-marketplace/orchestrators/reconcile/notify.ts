@@ -21,7 +21,9 @@
 //                            header (status undefined). De-registration is
 //                            immediate; only the plugin-uninstall cascade is
 //                            reload-deferred (WILL-03 / D-65.1-03).
-//   sourceMismatches      -> block.status = "failed", reasons: ["source mismatch"]
+//   sourceMismatches      -> block.status = "failed", reasons:
+//                            ["dangling reference"] for the dangling-reference
+//                            cause (PURL-06) or ["source mismatch"] otherwise
 //   pluginsToInstall      -> child row { status: "will install" }
 //   pluginsToUninstall    -> child row { status: "will uninstall" }
 //   pluginsToDisable      -> child row { status: "will disable" }
@@ -110,8 +112,9 @@ function ensureMarketplaceBlock<Msg extends PluginNotificationMessage>(
  * an accumulated block. Token set:
  *  - `"added"` / `"removed"` are the realized apply-time transition statuses.
  *  - `"failed"` is reused for source-mismatch blocks; its `reasons` is the
- *    existing `"source mismatch"` REASONS member (no new REASONS literal --
- *    the closed set already covers it).
+ *    `"source mismatch"` REASONS member for the source-mismatch /
+ *    unknown-stored / malformed-plugin-key causes, and the `"dangling
+ *    reference"` member (PURL-06) for the dangling-reference cause.
  *  - `undefined` is the list/inventory arm; used when a block carries only
  *    plugin child rows (e.g. a pending-uninstall under an existing
  *    marketplace whose source matches, or a marketplace-remove cascade whose
@@ -158,8 +161,10 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
  * `plannedSourceMismatchSubject`: mp name for source-mismatch /
  * unknown-stored / dangling-reference; rawKey for malformed-plugin-key).
  * Source-mismatch supersedes any prior status (the declaration cannot be
- * honoured byte-for-byte). Reuse the existing "source mismatch" REASONS
- * member; do NOT add a new REASONS literal.
+ * honoured byte-for-byte). The header reason is derived from the cause:
+ * dangling-reference names the real problem with the `dangling reference`
+ * REASONS member (PURL-06), while the other three causes render
+ * `source mismatch`.
  *
  * Plugin-level diagnostics (`dangling-reference` only) surface the
  * offending plugin as a child (failed) row so N dangling plugins under one
@@ -171,16 +176,21 @@ function applySourceMismatch(
   mismatch: ReconcilePlan["sourceMismatches"][number],
 ): void {
   block.status = "failed";
-  block.reasons = ["source mismatch"];
   if (mismatch.cause === "dangling-reference") {
+    // PURL-06: an orphaned plugin declaration whose marketplace is undeclared
+    // reads as `dangling reference` on both the mp row and the plugin child --
+    // NOT `source mismatch` (there is no source to compare).
+    block.reasons = ["dangling reference"];
     block.plugins.push({
       status: "failed",
       name: mismatch.plugin,
-      reasons: ["source mismatch"],
-      // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+      reasons: ["dangling reference"],
+      // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
       severity: "error",
       needsReload: false,
     });
+  } else {
+    block.reasons = ["source mismatch"];
   }
 }
 
@@ -234,8 +244,9 @@ function pushMarketplaceRemoveCascade(
  *                              deliberately omits removed-marketplace plugins
  *                              to avoid double-billing the apply cascade).
  *   - sourceMismatches      -> block.status = "failed", reasons:
- *                              ["source mismatch"] (reuses the existing
- *                              REASONS member; no new literal)
+ *                              ["dangling reference"] for the dangling-reference
+ *                              cause (PURL-06), ["source mismatch"] for the
+ *                              other three causes
  *   - pluginsToInstall      -> child row { status: "will install" }
  *   - pluginsToUninstall    -> child row { status: "will uninstall" }
  *   - pluginsToDisable      -> child row { status: "will disable" }
@@ -589,16 +600,21 @@ function applyOutcomeToBlock(
       return;
     case "source-mismatch":
       block.status = "failed";
-      block.reasons = ["source mismatch"];
       if (outcome.cause === "dangling-reference") {
+        // PURL-06: name the real problem -- an orphaned plugin declaration whose
+        // marketplace is undeclared reads as `dangling reference` on both the mp
+        // row and the plugin child, NOT `source mismatch`.
+        block.reasons = ["dangling reference"];
         block.plugins.push({
           status: "failed",
           name: outcome.plugin,
-          reasons: ["source mismatch"],
-          // D-03/D-06: a dangling-reference source mismatch -> error, no reload.
+          reasons: ["dangling reference"],
+          // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
           severity: "error",
           needsReload: false,
         });
+      } else {
+        block.reasons = ["source mismatch"];
       }
 
       return;

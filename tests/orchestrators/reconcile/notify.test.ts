@@ -188,17 +188,19 @@ test("sourceMismatch projection -> block.status='failed' + reasons=['source mism
   assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["source mismatch"]);
 });
 
-test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes produce identical block bytes (failed + reasons=['source mismatch'])", () => {
-  // The Y2 widening of PlannedSourceMismatch from a fused 2-discriminant
-  // shape (with sentinel strings in data fields) to four per-cause variants
-  // MUST keep the rendered byte form identical to the pre-cut output. The
-  // catalog UAT byte gate proves this end-to-end; this unit-level table
-  // pins the byte-equality at the projection seam (closer to the cut).
+test("pending projection: dangling-reference projects {dangling reference}; the other three causes project {source mismatch}", () => {
+  // PURL-06: the dangling-reference cause diverges from the shared
+  // `source mismatch` token -- it renders the `dangling reference` REASONS
+  // member on both the marketplace header AND the attributed plugin child, so
+  // the operator sees the real problem (an undeclared marketplace) instead of a
+  // source-comparison failure. The other three causes still render
+  // `source mismatch`. Each row carries the expected reasons per cause.
   const matrix: readonly {
     name: string;
     mismatch: ReconcilePlan["sourceMismatches"][number];
     expectedSubject: string;
-    expectedPlugins: readonly { name: string; status: string }[];
+    expectedReasons: readonly string[];
+    expectedPlugins: readonly { name: string; status: string; reasons: readonly string[] }[];
   }[] = [
     {
       name: "source-mismatch (declared + recorded both recognised)",
@@ -210,6 +212,7 @@ test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes 
         recordedSource: "https://github.com/acme/old",
       },
       expectedSubject: "mp",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
     {
@@ -222,6 +225,7 @@ test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes 
         recordedSource: "[object Object]",
       },
       expectedSubject: "mp",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
     {
@@ -233,7 +237,8 @@ test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes 
         plugin: "cr",
       },
       expectedSubject: "phantom-mp",
-      expectedPlugins: [{ name: "cr", status: "failed" }],
+      expectedReasons: ["dangling reference"],
+      expectedPlugins: [{ name: "cr", status: "failed", reasons: ["dangling reference"] }],
     },
     {
       name: "malformed-plugin-key (raw key as subject)",
@@ -243,6 +248,7 @@ test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes 
         rawKey: "my-plugin",
       },
       expectedSubject: "my-plugin",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
   ];
@@ -256,37 +262,43 @@ test("Y2 byte-neutral pending projection: all four PlannedSourceMismatch causes 
     assert.equal(msg.marketplaces.length, 1, `${c.name}: expected one block`);
     const block = msg.marketplaces[0];
     assert.ok(block, `${c.name}: block missing`);
-    // Byte-stable header: status='failed' + reasons=['source mismatch'].
+    // Header: status='failed'; reasons diverge per cause (PURL-06).
     assert.equal(block.status, "failed", c.name);
     assert.ok("reasons" in block, `${c.name}: reasons field missing`);
     assert.deepEqual(
       "reasons" in block ? [...(block.reasons ?? [])] : [],
-      ["source mismatch"],
+      [...c.expectedReasons],
       c.name,
     );
-    // Byte-stable subject derivation: marketplace name for the first three
-    // causes, raw key for malformed-plugin-key.
+    // Subject derivation: marketplace name for the first three causes, raw key
+    // for malformed-plugin-key.
     assert.equal(block.name, c.expectedSubject, c.name);
-    // Byte-stable plugin children: only dangling-reference attributes a
-    // child row; the other three variants leave plugins empty.
+    // Plugin children: only dangling-reference attributes a child row, and it
+    // carries the `dangling reference` token; the other three leave it empty.
     assert.deepEqual(
-      [...block.plugins].map((p) => ({ name: p.name, status: p.status })),
+      [...block.plugins].map((p) => ({
+        name: p.name,
+        status: p.status,
+        reasons: "reasons" in p ? [...(p.reasons ?? [])] : [],
+      })),
       [...c.expectedPlugins],
       c.name,
     );
   }
 });
 
-test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome causes produce identical block bytes", () => {
-  // Mirror of the Y2 pending table for the apply-cascade projection. The
-  // SourceMismatchOutcome variants propagate the per-cause discriminant
-  // from PlannedSourceMismatch -- the renderer derives the byte-stable
-  // header + plugin children from each variant identically.
+test("applied-cascade projection: dangling-reference projects {dangling reference}; the other three causes project {source mismatch}", () => {
+  // PURL-06 mirror of the pending table for the apply-cascade projection. The
+  // SourceMismatchOutcome variants propagate the per-cause discriminant from
+  // PlannedSourceMismatch -- the dangling-reference cause renders the
+  // `dangling reference` token on the mp header AND the plugin child; the other
+  // three causes render `source mismatch`.
   const matrix: readonly {
     name: string;
     outcome: PerEntryOutcome;
     expectedSubject: string;
-    expectedPlugins: readonly { name: string; status: string }[];
+    expectedReasons: readonly string[];
+    expectedPlugins: readonly { name: string; status: string; reasons: readonly string[] }[];
   }[] = [
     {
       name: "source-mismatch (mp-level)",
@@ -297,6 +309,7 @@ test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome
         marketplace: "mp",
       },
       expectedSubject: "mp",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
     {
@@ -308,6 +321,7 @@ test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome
         marketplace: "mp",
       },
       expectedSubject: "mp",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
     {
@@ -320,7 +334,8 @@ test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome
         plugin: "cr",
       },
       expectedSubject: "phantom-mp",
-      expectedPlugins: [{ name: "cr", status: "failed" }],
+      expectedReasons: ["dangling reference"],
+      expectedPlugins: [{ name: "cr", status: "failed", reasons: ["dangling reference"] }],
     },
     {
       name: "malformed-plugin-key (raw key as subject)",
@@ -331,6 +346,7 @@ test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome
         rawKey: "my-plugin",
       },
       expectedSubject: "my-plugin",
+      expectedReasons: ["source mismatch"],
       expectedPlugins: [],
     },
   ];
@@ -344,12 +360,16 @@ test("Y2 byte-neutral applied-cascade projection: all four SourceMismatchOutcome
     assert.ok("reasons" in block, `${c.name}: reasons field missing`);
     assert.deepEqual(
       "reasons" in block ? [...(block.reasons ?? [])] : [],
-      ["source mismatch"],
+      [...c.expectedReasons],
       c.name,
     );
     assert.equal(block.name, c.expectedSubject, c.name);
     assert.deepEqual(
-      [...block.plugins].map((p) => ({ name: p.name, status: p.status })),
+      [...block.plugins].map((p) => ({
+        name: p.name,
+        status: p.status,
+        reasons: "reasons" in p ? [...(p.reasons ?? [])] : [],
+      })),
       [...c.expectedPlugins],
       c.name,
     );
@@ -503,7 +523,7 @@ test("RECON-04: a cascade with an install row + a backfill row yields ONE messag
   );
 });
 
-test("dangling-reference mismatch (plugin attributed) -> child (failed) {source mismatch} plugin row (WR-03)", () => {
+test("dangling-reference mismatch (plugin attributed) -> child (failed) {dangling reference} plugin row (WR-03 / PURL-06)", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),
     sourceMismatches: [
@@ -526,17 +546,53 @@ test("dangling-reference mismatch (plugin attributed) -> child (failed) {source 
   const block = msg.marketplaces[0];
   assert.ok(block);
   assert.equal(block.status, "failed");
+  // PURL-06: the mp header names the real problem with `dangling reference`.
+  assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["dangling reference"]);
   // Each dangling plugin stays individually attributable as a child
-  // (failed) row -- N dangling plugins do NOT collapse into one anonymous
-  // marketplace row.
+  // (failed) {dangling reference} row -- N dangling plugins do NOT collapse
+  // into one anonymous marketplace row.
   assert.equal(block.plugins.length, 2);
   assert.deepEqual(
-    [...block.plugins].map((p) => [p.name, p.status]),
+    [...block.plugins].map((p) => [p.name, p.status, "reasons" in p ? [...(p.reasons ?? [])] : []]),
     [
-      ["cr", "failed"],
-      ["cr2", "failed"],
+      ["cr", "failed", ["dangling reference"]],
+      ["cr2", "failed", ["dangling reference"]],
     ],
   );
+});
+
+test("PURL-06 UAT shape: an orphaned pr-review-toolkit@claude-plugins-official reference projects a (failed) {dangling reference} mp row PLUS a (failed) {dangling reference} plugin child", () => {
+  // Reproduces the two-row shape the operator saw on /reload after a
+  // previous-version --local install left an orphaned plugin declaration whose
+  // marketplace is no longer declared. The token must read `dangling reference`,
+  // NOT `source mismatch` -- there is no source to compare.
+  const plan: ReconcilePlan = {
+    ...emptyPlan("user"),
+    sourceMismatches: [
+      {
+        scope: "user",
+        cause: "dangling-reference",
+        marketplace: "claude-plugins-official",
+        plugin: "pr-review-toolkit",
+      },
+    ],
+  };
+  const msg = buildReconcilePendingNotification([plan]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  // Marketplace row: ⊘ claude-plugins-official [user] (failed) {dangling reference}
+  assert.equal(block.name, "claude-plugins-official");
+  assert.equal(block.scope, "user");
+  assert.equal(block.status, "failed");
+  assert.deepEqual("reasons" in block ? [...(block.reasons ?? [])] : [], ["dangling reference"]);
+  // Plugin child: ⊘ pr-review-toolkit (failed) {dangling reference}
+  assert.equal(block.plugins.length, 1);
+  const child = block.plugins[0];
+  assert.ok(child);
+  assert.equal(child.name, "pr-review-toolkit");
+  assert.equal(child.status, "failed");
+  assert.deepEqual("reasons" in child ? [...(child.reasons ?? [])] : [], ["dangling reference"]);
 });
 
 test("PluginUninstall projection -> plugin row under marketplace block with (will uninstall) status", () => {

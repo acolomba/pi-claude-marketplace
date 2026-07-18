@@ -1531,15 +1531,14 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
   });
 });
 
-test("T4 / PR #51: applySourceMismatches + applied-cascade source-mismatch arm fire through applyReconcile -- dangling-reference variant attributes a (failed) {source mismatch} plugin child row to the offending plugin", async () => {
-  // Byte-equality tables were added for the four PlannedSourceMismatch
-  // / SourceMismatchOutcome causes in notify.test.ts (the projection seam).
-  // T4 closes the missing piece: an end-to-end applyReconcile pass that
-  // routes a dangling-reference through `applySourceMismatches`
-  // (apply.ts:677-720) and the applied-cascade source-mismatch arm
-  // (notify.ts:353-364). Before T4 no test exercised this code path
-  // through apply -- the projection contract held, but the apply seam that
-  // feeds it could regress unnoticed.
+test("PR #51 / PURL-06: applySourceMismatches + applied-cascade source-mismatch arm fire through applyReconcile -- dangling-reference variant attributes a (failed) {dangling reference} plugin child row to the offending plugin", async () => {
+  // Per-cause reason tables live in notify.test.ts (the projection seam).
+  // This test closes the missing piece: an end-to-end applyReconcile pass that
+  // routes a dangling-reference through `applySourceMismatches` and the
+  // applied-cascade source-mismatch arm. Previously no test exercised this
+  // code path through apply -- the projection contract held, but the apply
+  // seam that feeds it could regress unnoticed. PURL-06: the dangling-
+  // reference cause now renders `dangling reference`, not `source mismatch`.
   await withHermeticHome(async ({ cwd }) => {
     // Config: plugin `cr@phantom-mp` declared under a marketplace that is
     // NOT declared anywhere -- the planner emits a PlannedSourceMismatch
@@ -1564,23 +1563,22 @@ test("T4 / PR #51: applySourceMismatches + applied-cascade source-mismatch arm f
 
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-    assert.equal(args[1], "error", "T4: source-mismatch surfaces error severity");
+    assert.equal(args[1], "error", "source-mismatch surfaces error severity");
     const emitted = args[0];
-    // Marketplace-level (failed) row with the {source mismatch} reason; the
-    // plugin child row carries the `cr` subject (dangling-reference is the
-    // only Y2 cause that attributes a plugin child -- the byte-equality
-    // table in notify.test.ts Y2 rows 1-3-4 carries no plugin child).
+    // Marketplace-level (failed) row with the {dangling reference} reason; the
+    // plugin child row carries the `cr` subject (dangling-reference is the only
+    // source-mismatch cause that attributes a plugin child).
     assert.ok(
       emitted.includes("phantom-mp"),
-      `T4: expected marketplace subject phantom-mp in failed row; got:\n${emitted}`,
+      `expected marketplace subject phantom-mp in failed row; got:\n${emitted}`,
     );
     assert.ok(
-      emitted.includes("(failed)") && emitted.includes("{source mismatch}"),
-      `T4: expected (failed) {source mismatch} row; got:\n${emitted}`,
+      emitted.includes("(failed)") && emitted.includes("{dangling reference}"),
+      `expected (failed) {dangling reference} row; got:\n${emitted}`,
     );
     assert.ok(
       emitted.includes("cr"),
-      `T4: dangling-reference variant must attribute the plugin child row to cr; got:\n${emitted}`,
+      `dangling-reference variant must attribute the plugin child row to cr; got:\n${emitted}`,
     );
   });
 });

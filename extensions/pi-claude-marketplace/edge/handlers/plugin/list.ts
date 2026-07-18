@@ -15,13 +15,18 @@ import { listPlugins } from "../../../orchestrators/plugin/list.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
+import { parseFlagNames } from "../../flag-catalog.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
-  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--scope user|project]";
+  "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]";
 
-const BOOLEAN_FLAGS = new Set(["--installed", "--available", "--unavailable", "--partial"]);
+// The boolean FILTER flags scanned in the positional loop derive from the
+// catalog's list parse-set (RSTA-07: `--remote` joins the PL-1 filter family).
+// `--scope` is consumed by parseArgs and `--local` is not a list flag, so
+// neither appears in the catalog's list entry.
+const BOOLEAN_FLAGS = parseFlagNames("list");
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -75,6 +80,7 @@ export function makeListHandler(
       ...(filterFlags.has("--available") && { available: true }),
       ...(filterFlags.has("--unavailable") && { unavailable: true }),
       ...(filterFlags.has("--partial") && { partial: true }),
+      ...(filterFlags.has("--remote") && { remote: true }),
     });
   };
 }

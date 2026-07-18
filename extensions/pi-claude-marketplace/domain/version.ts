@@ -33,6 +33,31 @@ export async function computeHashVersion(pluginRoot: string): Promise<string> {
   return "hash-" + hash.digest("hex").slice(0, HASH_TRUNC);
 }
 
+/**
+ * D-77-01 / PURL-09: anchored-exact predicate for a git-source sha-version
+ * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape produced
+ * by `shaVersion` (`"sha-" + fullSha.slice(0, 12)`). Uppercase hex, wrong
+ * length, a `hash-` prefix, or an affixed character are all rejected so a
+ * malformed pseudo-sha is never silently rewritten into a misleading short SHA
+ * (mirrors the HASH_VERSION_RE hardening in shared/notify.ts).
+ */
+export const SHA_VERSION_RE = /^sha-[0-9a-f]{12}$/;
+
+/**
+ * D-77-01 / PURL-09: build the git-source version string from a resolved commit
+ * sha -- `sha-` + the first 12 hex chars. Parallels the PI-7 `hash-<12hex>`
+ * convention but names the git-commit provenance. The full 40-hex sha is
+ * persisted separately (D-77-02); this string is display-and-equality level.
+ */
+export function shaVersion(fullSha: string): string {
+  return "sha-" + fullSha.slice(0, HASH_TRUNC);
+}
+
+/** D-77-01 / PURL-09: true iff `v` is exactly `sha-<12 lowercase hex>`. */
+export function looksLikeShaVersion(v: string): boolean {
+  return SHA_VERSION_RE.test(v);
+}
+
 async function walkAndHash(hash: Hash, root: string, rel: string): Promise<void> {
   const dirAbs = rel === "" ? root : path.join(root, rel);
   const entries = await readdir(dirAbs, { withFileTypes: true });

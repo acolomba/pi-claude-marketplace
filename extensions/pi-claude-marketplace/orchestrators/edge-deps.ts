@@ -29,17 +29,15 @@
 //     writes the TC-8 `_loadError` poison row (returning [] to callers).
 
 import { loadMarketplaceManifest } from "../domain/manifest.ts";
-import { resolveStrict } from "../domain/resolver.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
 
-import {
-  classifyInstalledRecord,
-  classifyManifestEntry,
-} from "./plugin/plugin-state-classifier.ts";
+import { probeManifestEntry, probeUpgradeCandidate } from "./plugin/git-source-probe.ts";
+import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
+import type { ScopedLocations } from "../persistence/locations.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
@@ -83,17 +81,18 @@ async function classifyInstalledPluginRow(
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
   marketplaceRoot: string,
+  locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   const upgradable =
     manifestEntry?.version !== undefined && manifestEntry.version !== installed.version;
 
-  let candidateResolved: Awaited<ReturnType<typeof resolveStrict>> | undefined;
+  // PURL-08 / D-78-04 / CR-01: the shared probe injects the fs-only presence
+  // probe so a git-source upgrade candidate resolves against the WARM clone
+  // cache without cloning, and folds a probe failure to `undefined` (the CR-01
+  // degrade). `upgradable === true` narrows `manifestEntry` to defined.
+  let candidateResolved: Awaited<ReturnType<typeof probeUpgradeCandidate>>;
   if (upgradable) {
-    try {
-      candidateResolved = await resolveStrict(manifestEntry, { marketplaceRoot });
-    } catch {
-      candidateResolved = undefined;
-    }
+    candidateResolved = await probeUpgradeCandidate(manifestEntry, marketplaceRoot, locations);
   }
 
   return {
@@ -117,13 +116,18 @@ async function classifyInstalledPluginRow(
 async function classifyNotInstalledPluginRow(
   entry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
+  locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
-  let status: PluginIndexRow["status"];
-  try {
-    status = classifyManifestEntry(await resolveStrict(entry, { marketplaceRoot }));
-  } catch {
-    status = "unavailable";
-  }
+  // RSTA-01 / RSTA-03: the shared presence-derived probe owns the git-source
+  // classification (a not-installed url/git-subdir/github entry with a cold clone
+  // classifies `remote`; a warm one resolves the three-way verdict) AND the
+  // catch-to-`unavailable` fold -- including a presence-probe throw on a
+  // corrupt mirror -- at parity with `list`'s availableRowMessage -- both
+  // surfaces route through the SAME `probeManifestEntry`, so the bucket never
+  // diverges. No local try/catch is needed -- `probeManifestEntry` folds every
+  // throw internally and never throws, so one broken mirror degrades one row
+  // instead of poisoning the marketplace's completion index.
+  const status = await probeManifestEntry(entry, marketplaceRoot, locations);
 
   return {
     name: entry.name,
@@ -207,6 +211,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
               installed,
               parsed.plugins.find((p) => p.name === pluginName),
               mp.marketplaceRoot,
+              locations,
             ),
           );
         }
@@ -217,7 +222,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
             continue;
           }
 
-          rows.push(await classifyNotInstalledPluginRow(entry, mp.marketplaceRoot));
+          rows.push(await classifyNotInstalledPluginRow(entry, mp.marketplaceRoot, locations));
         }
 
         return rows;

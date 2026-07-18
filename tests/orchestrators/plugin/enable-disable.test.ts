@@ -322,7 +322,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◌ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
+      ["● mp [user]", "  ◍ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
     );
 
     const raw = await readFile(statePath, "utf8");
@@ -395,7 +395,7 @@ test("D-63-04: disable of a hooks-only plugin empties resources.hooks", async ()
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◌ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
+      ["● mp [user]", "  ◍ foo v9.9.9 (disabled)", "", "/reload to pick up changes"].join("\n"),
     );
 
     const raw = await readFile(statePath, "utf8");

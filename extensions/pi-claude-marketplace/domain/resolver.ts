@@ -42,7 +42,13 @@ import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./componen
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { assertSafeName } from "./name.ts";
-import { parsePluginSource, type ParsedSource } from "./source.ts";
+import {
+  parsePluginSource,
+  type GitHubSource,
+  type GitSubdirSource,
+  type ParsedSource,
+  type UrlSource,
+} from "./source.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Schema + types
@@ -233,6 +239,28 @@ export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPar
 type StatKind = "file" | "dir" | null;
 type StatKindReader = (p: string) => Promise<StatKind>;
 
+// PURL-01 / PURL-03: the result of the injected git-source pluginRoot policy.
+// A discriminated union whose ONLY `pluginRoot`-bearing arm is `materialized`,
+// mirroring the NFR-7 discipline of the ResolvedPlugin union: a not-cached /
+// escaping / missing-subdir outcome cannot leak a pluginRoot.
+//   - materialized:   the clone (and, for git-subdir, its contained subdir) is
+//                     present on disk; `pluginRoot` is safe to read and the
+//                     resolved commit sha is carried for version recording.
+//   - not-cached:     no clone materialized (e.g. an info probe of a
+//                     recorded-but-evicted plugin); resolves `unavailable`.
+//                     Read surfaces (list / info) inject the fs-only presence
+//                     probe from git-source-probe.ts, so this arm resolves
+//                     without network.
+//   - escapes:        the git-subdir path escaped the clone root (NFR-10). The
+//                     containment check is the callback's job (it holds the
+//                     clone root); the escape surfaces here with a detail note.
+//   - missing-subdir: the git-subdir path is absent under the clone root.
+export type GitPluginRootResult =
+  | { readonly kind: "materialized"; readonly pluginRoot: string; readonly resolvedSha: string }
+  | { readonly kind: "not-cached" }
+  | { readonly kind: "escapes"; readonly detail: string }
+  | { readonly kind: "missing-subdir"; readonly detail: string };
+
 // ──────────────────────────────────────────────────────────────────────────
 // Context (injectable for tests)
 // ──────────────────────────────────────────────────────────────────────────
@@ -241,6 +269,15 @@ export interface ResolveContext {
   readonly marketplaceRoot: string;
   readonly readFileText?: (p: string) => Promise<string>;
   readonly statKind?: StatKindReader;
+  // PURL-01 / D-11 / D-13: the git-source pluginRoot policy. Absent => git
+  // sources (url / git-subdir / github) resolve `unavailable`. Read surfaces
+  // (list / info) inject the fs-only presence probe from git-source-probe.ts,
+  // so they resolve git sources without network; install injects the
+  // clone-materializing callback. The domain never imports the platform/git
+  // surface; the orchestrator that owns it injects this callback.
+  readonly resolveGitPluginRoot?: (
+    source: UrlSource | GitSubdirSource | GitHubSource,
+  ) => Promise<GitPluginRootResult>;
 }
 
 async function defaultStatKind(p: string): Promise<StatKind> {
@@ -494,14 +531,23 @@ async function collectUnsupportedKinds(
   return found;
 }
 
+// PURL-01 / D-77-01: the four installable source kinds return undefined. `path`
+// derives its pluginRoot from marketplaceRoot; `url` / `git-subdir` / `github`
+// derive theirs from the injected `resolveGitPluginRoot` callback. `npm` stays
+// out of scope, and `unknown` is the NFR-12 forward-compat tail. The exhaustive
+// switch keeps this sound: a future ParsedSource kind fails the compile.
 function sourceUnsupportedReason(parsedSource: ParsedSource): string | undefined {
-  if (parsedSource.kind === "path") {
-    return undefined;
+  switch (parsedSource.kind) {
+    case "path":
+    case "github":
+    case "url":
+    case "git-subdir":
+      return undefined;
+    case "npm":
+      return `unsupported source kind: npm`;
+    case "unknown":
+      return `unsupported source kind: unknown (${parsedSource.reason})`;
   }
-
-  return parsedSource.kind === "unknown"
-    ? `unsupported source kind: unknown (${parsedSource.reason})`
-    : `unsupported source kind: ${parsedSource.kind}`;
 }
 
 async function sourceEscapeReason(
@@ -552,6 +598,91 @@ async function readManifest(
 }
 
 /**
+ * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
+ *
+ * - `path`: resolve under `marketplaceRoot` and run the NFR-10 escape check
+ *   VERBATIM (regression-critical -- a `../escape` path source resolves
+ *   `unavailable` with the marketplace-root escape note).
+ * - `url` / `git-subdir` / `github`: delegate to `ctx.resolveGitPluginRoot`.
+ *   Absent callback => `unavailable` (path-only back-compat). Otherwise switch
+ *   on the discriminated result: `materialized` carries the clone-anchored
+ *   pluginRoot (D-77-03: git-subdir containment is enforced INSIDE the callback,
+ *   surfacing here as `escapes`); `escapes` / `missing-subdir` carry their
+ *   structural detail; `not-cached` reports the plugin is not installed.
+ *
+ * `parsedSource` is pre-narrowed by the caller's `sourceUnsupportedReason` gate,
+ * so `npm` / `unknown` never reach here.
+ */
+async function deriveSourcePluginRoot(
+  entry: PluginEntry,
+  ctx: ResolveContext,
+  parsedSource: ParsedSource,
+  partial: PartialResolution,
+): Promise<
+  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
+> {
+  if (parsedSource.kind === "path") {
+    const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
+    const escapeReason = await sourceEscapeReason(ctx, pluginRoot, parsedSource.raw);
+    if (escapeReason !== undefined) {
+      return {
+        kind: "unavailable",
+        result: unavailable(entry.name, [...partial.notes, escapeReason]),
+      };
+    }
+
+    return { kind: "ok", pluginRoot };
+  }
+
+  // The caller's `sourceUnsupportedReason` gate already rejected `npm` /
+  // `unknown`, so only the three git kinds remain. Narrow explicitly so the
+  // callback receives its precise `UrlSource | GitSubdirSource | GitHubSource`
+  // parameter type.
+  if (
+    parsedSource.kind !== "url" &&
+    parsedSource.kind !== "git-subdir" &&
+    parsedSource.kind !== "github"
+  ) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `unsupported source kind: ${parsedSource.kind}`,
+      ]),
+    };
+  }
+
+  // url | git-subdir | github -- the injected policy owns clone-vs-probe and,
+  // for git-subdir, the clone-root-anchored containment (NFR-10 / PURL-03).
+  if (ctx.resolveGitPluginRoot === undefined) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `git source requires a clone-cache resolver`,
+      ]),
+    };
+  }
+
+  const r = await ctx.resolveGitPluginRoot(parsedSource);
+  switch (r.kind) {
+    case "materialized":
+      return { kind: "ok", pluginRoot: r.pluginRoot };
+    case "escapes":
+    case "missing-subdir":
+      return {
+        kind: "unavailable",
+        result: unavailable(entry.name, [...partial.notes, r.detail]),
+      };
+    case "not-cached":
+      return {
+        kind: "unavailable",
+        result: unavailable(entry.name, [...partial.notes, `not installed`]),
+      };
+  }
+}
+
+/**
  * Steps 1-6 are shared between resolveStrict and resolveLoose. Returns
  * either:
  *   - { kind: "ok", pluginRoot, manifest, partial } -- proceed to mode-specific steps
@@ -580,7 +711,8 @@ async function preflightStages(
   // Classify source. PluginEntry.source is Type.Unknown() per MM-3.
   const parsedSource: ParsedSource = parsePluginSource(entry.source);
 
-  // PR-2 case 1: only path sources are installable (MM-3).
+  // PR-2 case 1 / PURL-01: url / git-subdir / github / path are installable;
+  // npm and unknown reject here.
   const unsupportedReason = sourceUnsupportedReason(parsedSource);
   if (unsupportedReason !== undefined) {
     return {
@@ -589,16 +721,18 @@ async function preflightStages(
     };
   }
 
-  // PR-2 case 2: source path escape.
-  const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
-  const escapeReason = await sourceEscapeReason(ctx, pluginRoot, parsedSource.raw);
-
-  if (escapeReason !== undefined) {
-    return {
-      kind: "unavailable",
-      result: unavailable(entry.name, [...partial.notes, escapeReason]),
-    };
+  // PR-2 case 2 / PURL-01 / PURL-03: derive the pluginRoot. Path sources resolve
+  // it under marketplaceRoot with the NFR-10 escape check (unchanged); git
+  // sources delegate to the injected `resolveGitPluginRoot` callback, whose
+  // discriminated result already carries the clone-root-anchored containment
+  // outcome (D-77-03: git-subdir containment is the callback's responsibility,
+  // never a marketplaceRoot-anchored check).
+  const rooted = await deriveSourcePluginRoot(entry, ctx, parsedSource, partial);
+  if (rooted.kind === "unavailable") {
+    return rooted;
   }
+
+  const pluginRoot = rooted.pluginRoot;
 
   // PR-2 case 3: source dir does not exist.
   if ((await statKindOf(ctx)(pluginRoot)) !== "dir") {

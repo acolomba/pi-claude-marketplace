@@ -10,6 +10,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  type GitPluginRootResult,
   type ResolveContext,
   type ResolvedPlugin,
   requirePartialInstallable,
@@ -84,24 +85,33 @@ function basicEntry(over: LooseEntry = {}): PluginEntry {
 // PR-2: nine non-installable cases (1 test per case)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("PR-2(1) non-path source kind (github) -> notInstallable", async () => {
+// PURL-01: a github source is no longer rejected as an unsupported kind. With
+// NO resolveGitPluginRoot injected (the pure path-only caller), it resolves
+// `unavailable` because git sources require a clone-cache resolver -- the
+// path-only back-compat arm, NOT the old "unsupported source kind" rejection.
+test("PR-2(1) github source with no clone resolver -> unavailable (requires clone resolver)", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(basicEntry({ source: "owner/repo" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.ok(
-    r.notes.some((n) => n.includes("unsupported source kind")),
+    r.notes.some((n) => n.includes("clone")),
     `notes: ${r.notes.join(" / ")}`,
   );
 });
 
-test("PR-2(1) upstream object source kind (url) -> notInstallable", async () => {
+// PURL-01: same for an object-form url source -- no longer "unsupported source
+// kind: url"; without an injected callback it needs a clone resolver.
+test("PR-2(1) url source with no clone resolver -> unavailable (requires clone resolver)", async () => {
   const ctx = mockCtx(MP, {});
   const r = await resolveStrict(
-    basicEntry({ source: { source: "url", url: "https://github.com/obra/superpowers.git" } }),
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/obra/superpowers.git" } }),
     ctx,
   );
   assert.equal(r.state, "unavailable");
-  assert.ok(r.notes.includes("unsupported source kind: url"), `notes: ${r.notes.join(" / ")}`);
+  assert.ok(
+    r.notes.some((n) => n.includes("clone")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
 });
 
 test("PR-2(2) source path escape -> notInstallable", async () => {
@@ -965,4 +975,216 @@ test("PHOOK-01: an unmapped-tool matcher drops the group with cond unmapped-tool
       { kind: "group", event: "PreToolUse", matcher: "MultiEdit", cond: "unmapped-tool" },
     ]);
   }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// PURL-01 / PURL-03: git plugin sources (url / git-subdir / github-object) are
+// installable when a `resolveGitPluginRoot` callback materializes their clone
+// root. The resolver stays network-free: the clone-vs-probe policy is injected.
+// ──────────────────────────────────────────────────────────────────────────
+
+// A materialized clone root that `mockCtx`'s file map treats as an existing
+// directory. Its `.claude-plugin/plugin.json` is deliberately absent (best-effort
+// per PR-2 case 4) so the plugin resolves installable with an empty component set.
+const CLONE_ROOT = "/abs/plugin-clones/deadbeef00-cafef00dba/";
+
+/**
+ * Build a ResolveContext whose `resolveGitPluginRoot` returns a fixed result and
+ * whose file map treats `CLONE_ROOT` (and any component dirs) as present. The
+ * marketplaceRoot is still `MP`, but git sources never touch it -- their
+ * pluginRoot comes from the injected callback.
+ */
+function gitCtx(
+  result: GitPluginRootResult,
+  files: Record<string, "dir" | "file" | { contents: string }> = { [CLONE_ROOT]: "dir" },
+): ResolveContext {
+  return {
+    ...mockCtx(MP, files),
+    resolveGitPluginRoot(): Promise<GitPluginRootResult> {
+      return Promise.resolve(result);
+    },
+  };
+}
+
+test("PURL-01: url source + materialized callback -> installable carrying the clone pluginRoot", async () => {
+  const ctx = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    ctx,
+  );
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.equal(r.pluginRoot, CLONE_ROOT);
+  }
+});
+
+test("PURL-01: git-subdir source + materialized callback -> installable carrying the clone pluginRoot", async () => {
+  const subRoot = path.join(CLONE_ROOT, "packages", "plug");
+  const ctx = gitCtx(
+    {
+      kind: "materialized",
+      pluginRoot: subRoot,
+      resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    },
+    { [subRoot]: "dir" },
+  );
+  const r = await resolveStrict(
+    basicEntry({
+      source: { source: "git-subdir", url: "https://gitlab.com/o/p", path: "packages/plug" },
+    }),
+    ctx,
+  );
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.equal(r.pluginRoot, subRoot);
+  }
+});
+
+test("PURL-01: github-object source + materialized callback -> installable carrying the clone pluginRoot", async () => {
+  const ctx = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "github", repo: "owner/repo" } }),
+    ctx,
+  );
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.equal(r.pluginRoot, CLONE_ROOT);
+  }
+});
+
+test("PURL-01: npm source stays unavailable with unsupported-source note", async () => {
+  const ctx = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "npm", package: "some-plugin" } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(r.notes.includes("unsupported source kind: npm"), `notes: ${r.notes.join(" / ")}`);
+});
+
+test("PURL-01: url source with NO resolveGitPluginRoot injected -> unavailable (path-only back-compat)", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  // No pluginRoot leaks (NFR-7); a note explains the missing clone resolver.
+  assert.ok(
+    r.notes.some((n) => n.includes("clone")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PURL-01: path source is unchanged -- marketplaceRoot escape check still fires (regression)", async () => {
+  // Even with a git callback present, a path source uses the marketplaceRoot
+  // derivation + escape check, never the callback.
+  const ctx = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+  const r = await resolveStrict(basicEntry({ source: "../escape" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("escapes marketplace root")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PURL-03: escapes result -> unavailable carrying the escape detail", async () => {
+  const detail = "source path escapes clone root: ../../etc";
+  const ctx = gitCtx({ kind: "escapes", detail });
+  const r = await resolveStrict(
+    basicEntry({
+      source: { source: "git-subdir", url: "https://gitlab.com/o/p", path: "../../etc" },
+    }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(r.notes.includes(detail), `notes: ${r.notes.join(" / ")}`);
+});
+
+test("PURL-03: missing-subdir result -> unavailable carrying the missing detail", async () => {
+  const detail = "source missing: packages/absent";
+  const ctx = gitCtx({ kind: "missing-subdir", detail });
+  const r = await resolveStrict(
+    basicEntry({
+      source: { source: "git-subdir", url: "https://gitlab.com/o/p", path: "packages/absent" },
+    }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(r.notes.includes(detail), `notes: ${r.notes.join(" / ")}`);
+});
+
+test("PURL-01: not-cached result -> unavailable (never carries pluginRoot)", async () => {
+  const ctx = gitCtx({ kind: "not-cached" });
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  // NFR-7: the unavailable arm structurally omits pluginRoot.
+  assert.ok(!("pluginRoot" in r), "unavailable arm must not carry pluginRoot");
+});
+
+// PURL-01: a materialized git clone feeds the SAME downstream stages as a path
+// source. A malformed plugin.json at the returned clone root still trips the
+// existing structural note (the git branch does not bypass manifest reading).
+test("PURL-01: materialized clone with malformed plugin.json -> unavailable with the manifest note", async () => {
+  const manifestPath = path.join(CLONE_ROOT, ".claude-plugin", "plugin.json");
+  const ctx = gitCtx(
+    {
+      kind: "materialized",
+      pluginRoot: CLONE_ROOT,
+      resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    },
+    { [CLONE_ROOT]: "dir", [manifestPath]: { contents: "{ not json" } },
+  );
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+// PURL-01: a materialized clone whose directory does not exist on disk still
+// trips PR-2 case 3 (source dir does not exist) -- the git branch does not skip
+// the dir-existence check.
+test("PURL-01: materialized clone whose dir is absent -> unavailable (source dir does not exist)", async () => {
+  // The callback claims materialized, but the file map has no CLONE_ROOT dir.
+  const ctx = gitCtx(
+    {
+      kind: "materialized",
+      pluginRoot: CLONE_ROOT,
+      resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    },
+    {},
+  );
+  const r = await resolveStrict(
+    basicEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("source dir does not exist")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
 });

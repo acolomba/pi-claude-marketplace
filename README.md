@@ -336,6 +336,14 @@ Uninstall a plugin.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
+Pre-fetch a git-source plugin so a later install resolves offline. `fetch` is a pi-only extension: Claude Code's upstream `/plugin` has no `fetch` verb. It warms the local clone cache without installing the plugin, then reports the plugin's resulting status (`available`, `partially-available`, or `unavailable`). Fetch one plugin, every plugin from one marketplace, or all plugins.
+
+```text
+/claude:plugin fetch context7-plugin@context7-marketplace
+/claude:plugin fetch @context7-marketplace
+/claude:plugin fetch
+```
+
 Reload Pi after changes.
 
 ```text

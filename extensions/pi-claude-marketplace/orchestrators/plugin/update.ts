@@ -91,6 +91,8 @@ import {
   requireInstallable,
   resolveStrict,
 } from "../../domain/resolver.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import { shaVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -116,8 +118,17 @@ import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts"
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
+import {
+  canonicalCloneUrl,
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolveGitSubdirRoot,
+  resolvePluginPin,
+} from "./clone-cache.ts";
+import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
@@ -133,14 +144,20 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
+import type {
+  GitHubSource,
+  GitSubdirSource,
+  ParsedSource,
+  UrlSource,
+} from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,6 +183,27 @@ export type UpdatePluginsTarget =
 // (`updateSinglePlugin` / `preflightUpdate`) NEVER raises it -- it keeps its
 // non-throwing concurrent-removal outcome (A3).
 
+/**
+ * PURL-06 / D-78-05: the clone-cache seam update injects into the git-source
+ * candidate probe. update.ts is the sole gitOps exemption under
+ * tests/architecture/no-orchestrator-network.test.ts, so unlike install
+ * it may resolveRemoteRef + materialize inline. Production leaves this undefined
+ * and update uses the real `resolvePluginPin` / `materializePluginClone` imports
+ * (which default to the real git backend). Tests substitute mock-backed
+ * entrypoints so the git-source update path runs without touching the network.
+ */
+export interface UpdateCloneCacheSeam {
+  readonly resolvePluginPin: typeof resolvePluginPin;
+  readonly materializePluginClone: typeof materializePluginClone;
+  /**
+   * MIRR-01/MIRR-03 / D-79.1-01: the mirror seam for an UNPINNED git source
+   * (`source.sha === undefined`). Refreshes the single mutable
+   * `plugin-clones/<urlhash12>/` mirror in place and re-anchors the record to
+   * the bare mirror key with the resolved HEAD sha.
+   */
+  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+}
+
 export interface UpdatePluginsOptions {
   readonly ctx: ExtensionContext;
   /** Factory `pi` reference -- carries `getAllTools` for RH-3/RH-4 soft-dep probes. */
@@ -175,6 +213,8 @@ export interface UpdatePluginsOptions {
   readonly target: UpdatePluginsTarget;
   /** D-12 injection seam; defaults to DEFAULT_GIT_OPS. */
   readonly gitOps?: GitOps;
+  /** PURL-06 test-only clone-cache seam override; production uses the real imports. */
+  readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /**
    * AG-7 opt-in flag. Default false: re-staged agents omit `model:` and
    * Pi picks its own default. The edge handler sets this to `true` only
@@ -198,6 +238,17 @@ export interface UpdatePluginsOptions {
    * (`updateSinglePlugin`) does NOT accept this flag.
    */
   readonly partial?: boolean;
+  /**
+   * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
+   * The git-source candidate probe passes it to `buildAuthForHost` so an
+   * unpinned private update authenticates at pin-resolution (Q1) and the
+   * re-clone authenticates (PROV-03). Tests inject makeMockCredentialOps().
+   */
+  readonly credentialOps?: CredentialOps;
+  /** PROV-03 Device Flow HTTP seam; tests inject makeMockDeviceFlowHttp(). */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** D-79-02 once-per-host memo shared across a bulk update. */
+  readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
 /**
@@ -327,6 +378,14 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
         // WB-01: thread `--local` for the direct-path
         // write-back target selection.
         ...(opts.local === true && { local: true }),
+        // PURL-06: thread the test-only clone-cache seam into the git-source
+        // candidate probe. Undefined in production -> the real imports.
+        ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
+        // PROV-03 / D-79-02: thread the auth seams so a git-source update on a
+        // provider host authenticates host-keyed at pin-resolution + re-clone.
+        ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
       });
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -646,6 +705,18 @@ interface ThreePhaseArgs {
    * re-installs resolve to false at the gate.
    */
   readonly partial?: boolean;
+  /**
+   * PURL-06 test-only clone-cache seam override for the git-source candidate
+   * probe. Undefined in production (and in the cascade entrypoint) -> the real
+   * `resolvePluginPin` / `materializePluginClone` imports.
+   */
+  readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /** PROV-03 credential seam (see UpdatePluginsOptions.credentialOps). */
+  readonly credentialOps?: CredentialOps;
+  /** PROV-03 Device Flow HTTP seam (see UpdatePluginsOptions.deviceFlowHttp). */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** D-79-02 once-per-host memo (see UpdatePluginsOptions.authMemo). */
+  readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
 interface PrepHandles {
@@ -662,6 +733,298 @@ interface PluginPreflight {
   readonly installable: MaterializablePlugin;
   readonly fromVersion: string;
   readonly toVersion: string;
+  /**
+   * PURL-06 / D-77-02: the full 40-hex commit sha the git-source candidate probe
+   * captured (pinned source.sha or the re-resolved remote HEAD). Undefined for
+   * path / github-name sources. `finalizeUpdateRecord` writes it into
+   * `sRecord.resolvedSha` on the all-success arm so a future reinstall can pin
+   * its re-clone to the persisted commit identity and clone GC keeps the
+   * record's clone key live (D-78-01).
+   */
+  readonly resolvedSha?: string;
+}
+
+/**
+ * PURL-06 / D-78-05: build the clone-materializing `resolveGitPluginRoot` probe
+ * plus a getter for the resolved sha it captured. Mirrors install's
+ * `makeInstallCloneProbe`, but update is gitOps-exempt (the sole exemption
+ * under tests/architecture/no-orchestrator-network.test.ts) so the probe
+ * legally resolves the pin (D-78-05: pinned source.sha short-circuits;
+ * unpinned re-resolves remote HEAD by refreshing the mirror AT UPDATE TIME) and
+ * materializes the new clone into the cache BEFORE the swap. git-subdir
+ * containment (PURL-03 / NFR-10) is anchored to the clone root. The full sha is
+ * captured as a side-channel because the resolver's `ResolvedPlugin` schema
+ * cannot carry it; the caller reads `resolvedSha()` AFTER the resolve.
+ */
+function makeUpdateCloneProbe(
+  seam: UpdateCloneCacheSeam,
+  locations: ScopedLocations,
+  auth: {
+    ctx?: ExtensionContext;
+    credentialOps: CredentialOps;
+    deviceFlowHttp?: DeviceFlowHttp;
+    authMemo?: Map<string, AuthAttemptResult>;
+  },
+): {
+  probe: (source: UrlSource | GitSubdirSource | GitHubSource) => Promise<GitPluginRootResult>;
+  resolvedSha: () => string | undefined;
+} {
+  let captured: string | undefined;
+
+  // PROV-02/03 / T-79-09: build a host-keyed auth bundle from the CANONICAL clone
+  // url (undefined for a public / no-provider host, or whenever `ctx` is absent
+  // -- the cascade path has no user UI to prompt). Shared by both probe arms.
+  const buildBundle = (gitSource: UrlSource | GitSubdirSource | GitHubSource, cloneUrl: string) => {
+    if (auth.ctx === undefined) {
+      return undefined;
+    }
+
+    return buildAuthForHost({
+      host: hostFromCloneUrl(cloneUrl, gitSource.kind),
+      credentialOps: auth.credentialOps,
+      ctx: auth.ctx,
+      ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
+      ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
+    });
+  };
+
+  // MIRR-01/MIRR-03 / D-79.1-01: an UNPINNED source (no manifest sha, incl.
+  // ref-only moving pointers) refreshes the single mutable mirror clone at
+  // `plugin-clones/<urlhash12>/` in place and re-anchors the record to that bare
+  // mirror key -- it does NOT re-clone into the per-sha immutable cache. update
+  // is gitOps-exempt (the sole exemption under
+  // tests/architecture/no-orchestrator-network.test.ts), but the mirror git
+  // surface still lives in the clone-cache seam; the probe reaches it only by
+  // name for parity with install.
+  const probeUnpinned = async (
+    gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  ): Promise<GitPluginRootResult> => {
+    const cloneUrl = canonicalCloneUrl(gitSource);
+    const authBundle = buildBundle(gitSource, cloneUrl);
+    const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
+      locations,
+      cloneUrl,
+      ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
+      ...(authBundle !== undefined && { auth: authBundle }),
+    });
+
+    if (gitSource.kind === "git-subdir") {
+      const subdirResult = await resolveGitSubdirRoot(mirrorRoot, gitSource.path);
+      if (subdirResult.kind !== "materialized") {
+        return subdirResult;
+      }
+
+      captured = resolvedSha;
+      return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
+    }
+
+    // Capture the resolved HEAD sha AFTER a successful materialize so a failed
+    // mirror op does not leave a stale sha for the version/state record.
+    captured = resolvedSha;
+    return { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha };
+  };
+
+  const probePinned = async (
+    gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  ): Promise<GitPluginRootResult> => {
+    const authBundle = buildBundle(gitSource, canonicalCloneUrl(gitSource));
+    // The bundle threads into BOTH the pin resolution AND the re-clone.
+    const { cloneUrl, pin, ref } = await seam.resolvePluginPin({
+      source: gitSource,
+      ...(authBundle !== undefined && { auth: authBundle }),
+    });
+    const cloneRoot = await seam.materializePluginClone({
+      locations,
+      cloneUrl,
+      pin,
+      ...(ref !== undefined && { ref }),
+      ...(authBundle !== undefined && { auth: authBundle }),
+    });
+
+    if (gitSource.kind === "git-subdir") {
+      const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
+      if (subdirResult.kind !== "materialized") {
+        return subdirResult;
+      }
+
+      captured = pin;
+      return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha: pin };
+    }
+
+    // Capture the pin AFTER a successful materialize so a failed clone does not
+    // leave a stale sha for the version/state record.
+    captured = pin;
+    return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: pin };
+  };
+
+  const probe = (
+    gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  ): Promise<GitPluginRootResult> =>
+    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+
+  return { probe, resolvedSha: () => captured };
+}
+
+/**
+ * PURL-06 / D-78-05 / NFR-3: classify a git-source candidate-probe throw
+ * (mirror-refresh / materialize network failure) into the EXISTING closed-set
+ * `network unreachable` / `authentication required` REASONS -- no new token. The
+ * probe re-resolves an unpinned entry's remote HEAD by refreshing its mirror at
+ * update time, so a vanished or unreachable repo surfaces here as a fail-clean
+ * skipped outcome (the plugin stays on its recorded sha). Duck-typed on the
+ * isomorphic-git `HttpError` (`.code === "HttpError"` + 401/403 status), the
+ * `UserCanceledError` shape an unsuccessful device-flow auth surfaces as, and
+ * the errno ladder, mirroring `marketplace/add.ts::classifyAddError` (D-13: no
+ * isomorphic-git import in the orchestrator tier). Returns undefined for a
+ * non-network throw so the caller keeps its `no longer installable` fallthrough.
+ */
+function classifyGitProbeFailure(
+  err: unknown,
+): "network unreachable" | "authentication required" | undefined {
+  if (!(err instanceof Error)) {
+    return undefined;
+  }
+
+  const code = (err as NodeJS.ErrnoException).code;
+  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
+    return "authentication required";
+  }
+
+  // A device flow that terminates unsuccessfully (denied / expired / poll
+  // network error) makes platform/git.ts's onAuth return `{ cancel: true }`,
+  // which isomorphic-git throws as `UserCanceledError` -- a real auth failure,
+  // NOT an HttpError 401/403.
+  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
+    return "authentication required";
+  }
+
+  if (
+    code === "ENETUNREACH" ||
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "ETIMEDOUT" ||
+    code === "ECONNRESET" ||
+    code === "EAI_AGAIN"
+  ) {
+    return "network unreachable";
+  }
+
+  return undefined;
+}
+
+/**
+ * PURL-06 / D-77-01: derive the update's `toVersion`. A git source (url /
+ * git-subdir / github) with a captured sha records `shaVersion(pin)` -- the
+ * commit IS the version identity (mirror install's `deriveInstallVersion`); path
+ * / github-name plugins keep the 3-tier `resolvePluginVersion` ladder.
+ */
+async function deriveUpdateToVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  resolvedSha: string | undefined,
+): Promise<string> {
+  const kind = parsePluginSource(entry.source).kind;
+  const isGitSource = kind === "url" || kind === "git-subdir" || kind === "github";
+  if (isGitSource && resolvedSha !== undefined) {
+    return shaVersion(resolvedSha);
+  }
+
+  return resolvePluginVersion(entry, installable);
+}
+
+/**
+ * Resolve + gate the update candidate, returning the materializable plugin on
+ * success or a skipped `PluginUpdateOutcome` on a decline. Extracted from
+ * `preflightUpdate` to keep that function inside the cognitive-complexity
+ * ceiling; the catch fans out the three decline arms:
+ *   - PURL-06 / NFR-3 git-probe network throw -> the EXISTING `network
+ *     unreachable` / `authentication required` REASON (fail-clean; the plugin
+ *     stays on its recorded sha, no swap).
+ *   - XSURF-03 partially-upgradable decline (`--partial` could help) -> the
+ *     list-consistent degrade kinds + `partialUpgradable: true`.
+ *   - structural decline -> `no longer installable`.
+ */
+async function resolveUpdateCandidate(
+  entry: PluginEntry,
+  marketplaceRoot: string,
+  resolveGitPluginRoot: (
+    source: UrlSource | GitSubdirSource | GitHubSource,
+  ) => Promise<GitPluginRootResult>,
+  ctx: { readonly plugin: string; readonly fromVersion: string; readonly partial: boolean },
+): Promise<MaterializablePlugin | PluginUpdateOutcome> {
+  const { plugin, fromVersion, partial } = ctx;
+  try {
+    const resolved = await resolveStrict(entry, { marketplaceRoot, resolveGitPluginRoot });
+    // FORCE-02/FORCE-05 (D-65-04): `--partial` widens the gate at the CANDIDATE
+    // resolve so a `partially-available` target degrades (supported components
+    // materialize, unsupported kinds skip) instead of blocking. Without
+    // `--partial` the candidate still blocks via `requireInstallable`. Both
+    // gates still reject an `unavailable`/structural candidate (FORCE-05).
+    if (partial) {
+      requirePartialInstallable(resolved, "update");
+    } else {
+      requireInstallable(resolved, "update");
+    }
+
+    return resolved;
+  } catch (err) {
+    // For a PATH source `resolveStrict` never throws (returns a not-installable
+    // variant) and the only typed-throw producer is `requireInstallable`. For a
+    // GIT source the injected `resolveGitPluginRoot` probe re-resolves an
+    // unpinned entry's remote HEAD (D-78-05) and materializes the clone -- so a
+    // vanished / unreachable repo throws a network error HERE.
+    //
+    // PURL-06 / NFR-3: a git-probe network throw is fail-clean -- classify it to
+    // the EXISTING `network unreachable` / `authentication required` REASON (no
+    // new token); the plugin STAYS on its recorded sha. The raw error text rides
+    // `notes` for the cause chain.
+    const networkReason = classifyGitProbeFailure(err);
+    if (networkReason !== undefined) {
+      return {
+        partition: "skipped",
+        name: plugin,
+        fromVersion,
+        notes: [errorMessage(err)],
+        reasons: [networkReason] as const,
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    }
+
+    // XSURF-03: `err.shape.partialable === true` ⇔ the resolver verdict was
+    // `partially-available`, i.e. a partially-upgradable decline `--partial`
+    // could degrade-update. Carry the list-consistent degrade kinds via the SAME
+    // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
+    // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true`. A
+    // structural decline keeps the `no longer installable` reason.
+    if (
+      err instanceof PluginShapeError &&
+      err.shape.kind === "no-longer-installable" &&
+      err.shape.partialable
+    ) {
+      return {
+        partition: "skipped",
+        name: plugin,
+        fromVersion,
+        notes: [errorMessage(err)],
+        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
+        partialUpgradable: true,
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    }
+
+    return {
+      partition: "skipped",
+      name: plugin,
+      fromVersion,
+      notes: [errorMessage(err)],
+      reasons: ["no longer installable"] as const,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
 }
 
 async function preflightUpdate(
@@ -753,68 +1116,46 @@ async function preflightUpdate(
   }
 
   const entry: PluginEntry = entryRaw;
-  let installable: MaterializablePlugin;
-  try {
-    const resolved = await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
-    // FORCE-02/FORCE-05 (D-65-04): `--partial` widens the gate at the CANDIDATE
-    // resolve so a `partially-available` target degrades (supported components
-    // materialize, unsupported kinds skip) instead of blocking. Without
-    // `--partial` the candidate still blocks via `requireInstallable` (the catch
-    // arm below renders `(skipped) {no longer installable}`). Both gates still
-    // reject an `unavailable`/structural candidate (FORCE-05).
-    if (args.partial === true) {
-      requirePartialInstallable(resolved, "update");
-    } else {
-      requireInstallable(resolved, "update");
-    }
 
-    installable = resolved;
-  } catch (err) {
-    // `requireInstallable` throws `PluginShapeError` with
-    // `kind === "no-longer-installable"`. `resolveStrict` itself never throws
-    // (returns a not-installable variant), so the only typed-throw producer in
-    // this block is `requireInstallable`.
-    //
-    // XSURF-03: source the decline discriminant from the thrown `err.shape`
-    // (`resolved` is out of scope here -- it is declared inside the `try`).
-    // `err.shape.partialable === true` ⇔ the resolver verdict was `partially-available`,
-    // i.e. a partially-upgradable decline: `--partial` could degrade-update it. For
-    // that arm carry the list-consistent degrade kinds via the SAME
-    // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
-    // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true` so
-    // the projection flips ONLY this arm to the `partially-upgradable` token. A
-    // structural decline (`partialable !== true` -- `--partial` cannot help) keeps the
-    // `no longer installable` reason and the plain skipped path.
-    if (
-      err instanceof PluginShapeError &&
-      err.shape.kind === "no-longer-installable" &&
-      err.shape.partialable
-    ) {
-      return {
-        partition: "skipped",
-        name: plugin,
-        fromVersion: record.version,
-        notes: [errorMessage(err)],
-        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds ?? []),
-        partialUpgradable: true,
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-    }
+  // PURL-06 / D-78-05: a git source (url / git-subdir / github) resolves its
+  // pluginRoot through the clone-materializing probe -- pinned entries pin
+  // source.sha, unpinned entries re-resolve remote HEAD at update time -- and
+  // captures the resolved sha for the swap-or-not decision + the resolvedSha
+  // state field. Path / github-name plugins keep the no-git-callback behavior
+  // (the resolver derives their pluginRoot from marketplaceRoot).
+  const clone = makeUpdateCloneProbe(
+    args.cloneCacheSeam ?? {
+      resolvePluginPin,
+      materializePluginClone,
+      materializeOrRefreshPluginMirror,
+    },
+    locations,
+    {
+      ...(args.ctx !== undefined && { ctx: args.ctx }),
+      credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+      ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
+      ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
+    },
+  );
 
-    return {
-      partition: "skipped",
-      name: plugin,
-      fromVersion: record.version,
-      notes: [errorMessage(err)],
-      reasons: ["no longer installable"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
+  const candidate = await resolveUpdateCandidate(entry, mp.marketplaceRoot, clone.probe, {
+    plugin,
+    fromVersion: record.version,
+    partial: args.partial === true,
+  });
+  if ("partition" in candidate) {
+    return candidate;
   }
 
+  const installable: MaterializablePlugin = candidate;
   const fromVersion = record.version;
-  const toVersion = await resolvePluginVersion(entry, installable);
+
+  // PURL-06 / D-78-05: for a git source with a captured sha, `toVersion` is
+  // `shaVersion(pin)` so the existing `toVersion === fromVersion` short-circuit
+  // below renders `(unchanged)` on an equal sha and swaps on a differing one.
+  // Path / github-name plugins keep the 3-tier `resolvePluginVersion` ladder.
+  const resolvedSha = clone.resolvedSha();
+  const toVersion = await deriveUpdateToVersion(entry, installable, resolvedSha);
   if (toVersion === fromVersion) {
     // `(unchanged)` rows do not render the soft-dep marker either.
     return {
@@ -827,7 +1168,15 @@ async function preflightUpdate(
     };
   }
 
-  return { state, record, entry, installable, fromVersion, toVersion };
+  return {
+    state,
+    record,
+    entry,
+    installable,
+    fromVersion,
+    toVersion,
+    ...(resolvedSha !== undefined && { resolvedSha }),
+  };
 }
 
 function isOutcome(value: PluginPreflight | PluginUpdateOutcome): value is PluginUpdateOutcome {
@@ -1100,7 +1449,7 @@ async function finalizeUpdateRecord(
   phase3aFailures: readonly Phase3Failure[],
 ): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
-  const { installable, toVersion } = preflight;
+  const { installable, toVersion, resolvedSha } = preflight;
   let invalidConfigWriteBack = false;
   // Per-bridge finalize is a sequence of independent `failedPhases.has(...)`
   // guards (one per cascade slot); the cognitive-complexity counter sums
@@ -1174,6 +1523,12 @@ async function finalizeUpdateRecord(
         unsupported: [...installable.unsupported],
       };
       sRecord.resolvedSource = installable.pluginRoot;
+      // PURL-06 / D-78-01: write the git-source commit identity so the
+      // post-commit GC and the next update read the swapped sha. Undefined for
+      // path / github-name sources (they have no clone and protect none).
+      if (resolvedSha !== undefined) {
+        sRecord.resolvedSha = resolvedSha;
+      }
     }
 
     sRecord.updatedAt = new Date().toISOString();
@@ -1500,6 +1855,22 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       declaresAgents: false,
       declaresMcp: false,
     };
+  }
+
+  // PURL-06 / D-78-01: GC-after-swap. The finalize withStateGuard has committed
+  // the new resolvedSha, so the OLD clone is now unreferenced iff no surviving
+  // record maps to it; `garbageCollectPluginClones` derives live clone keys from
+  // the persisted records and deletes the rest. Runs POST-commit (NFR-3
+  // fail-clean: a crash between commit and delete just leaves an orphan the next
+  // idempotent pass removes). Gated on a git-source swap (`preflight.resolvedSha`
+  // set) so path / github-name updates add no cache sweep. Leaks are swallowed
+  // (D-19-01): hygienic cleanup never becomes the primary path.
+  if (preflight.resolvedSha !== undefined) {
+    try {
+      await garbageCollectPluginClones(args.locations);
+    } catch {
+      // D-19-01: a GC failure never fails the update; the next pass retries.
+    }
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.

@@ -22,6 +22,7 @@
 
 import { installPlugin } from "../../../orchestrators/plugin/install.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
+import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
@@ -30,6 +31,11 @@ import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi
 
 const USAGE =
   "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]";
+
+// The downstream-consumed pass-through flags (`--map-model` / `--partial`,
+// D-65-05) derive from the catalog's install parse-set; `--local` is consumed
+// by extractLocalFlag itself.
+const PASS_THROUGH_FLAGS = passThroughFlagNames("install");
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -40,9 +46,9 @@ export function makeInstallHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // Shared scanner; see edge/handlers/shared.ts. `--map-model` and `--partial`
-    // (D-65-05) are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model", "--partial"]);
+    // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
+    // pass-through flags are downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, PASS_THROUGH_FLAGS);
     if (localFlag === undefined) {
       return;
     }

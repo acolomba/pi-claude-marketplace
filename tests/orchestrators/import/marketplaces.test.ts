@@ -48,6 +48,56 @@ test("planMarketplaceSourcesForRefs maps directory and github.repo extra-known e
   assert.deepEqual(got.diagnostics, []);
 });
 
+test("MURL-07 planMarketplaceSourcesForRefs maps nested url/github/directory extra-known entries", () => {
+  const got = planMarketplaceSourcesForRefs(
+    "project",
+    [
+      ref("a@nu", "nu", "a"),
+      ref("b@nur", "nur", "b"),
+      ref("c@ng", "ng", "c"),
+      ref("d@ngr", "ngr", "d"),
+      ref("e@nd", "nd", "e"),
+    ],
+    {
+      // Nested upstream {source:{...}} shape (D-76-13).
+      nu: { source: { source: "url", url: "https://gitlab.com/acme/mp.git" } },
+      nur: { source: { source: "url", url: "https://gitlab.com/acme/mp.git", ref: "main" } },
+      ng: { source: { source: "github", repo: "acme/mp" } },
+      ngr: { source: { source: "github", repo: "acme/mp", ref: "v2.0" } },
+      nd: { source: { source: "directory", path: "/abs/mp" } },
+    },
+  );
+
+  assert.deepEqual(got.marketplacesToEnsure, [
+    { scope: "project", marketplace: "nu", source: "https://gitlab.com/acme/mp.git" },
+    { scope: "project", marketplace: "nur", source: "https://gitlab.com/acme/mp.git#main" },
+    { scope: "project", marketplace: "ng", source: "acme/mp" },
+    { scope: "project", marketplace: "ngr", source: "acme/mp@v2.0" },
+    { scope: "project", marketplace: "nd", source: "/abs/mp" },
+  ]);
+  assert.deepEqual(got.diagnostics, []);
+});
+
+test("MURL-07 planMarketplaceSourcesForRefs leaves the nested file shape unmappable", () => {
+  const got = planMarketplaceSourcesForRefs(
+    "user",
+    [ref("a@nf", "nf", "a"), ref("b@nx", "nx", "b")],
+    {
+      // The nested `file` shape (remote marketplace.json URL) stays out of
+      // scope and keeps its unmappable diagnostic (D-76-13).
+      nf: { source: { source: "file", url: "https://x/marketplace.json" } },
+      // An unrecognized discriminator is also unmappable.
+      nx: { source: { source: "npm", package: "x" } },
+    },
+  );
+
+  assert.deepEqual(got.marketplacesToEnsure, []);
+  assert.deepEqual(
+    got.diagnostics.map((diagnostic) => diagnostic.code),
+    ["unmappable-marketplace-source", "unmappable-marketplace-source"],
+  );
+});
+
 test("planMarketplaceSourcesForRefs diagnoses unsupported and missing marketplace source shapes", () => {
   const got = planMarketplaceSourcesForRefs(
     "user",

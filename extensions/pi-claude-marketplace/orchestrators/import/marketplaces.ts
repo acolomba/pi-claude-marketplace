@@ -26,10 +26,53 @@ function unmappableMarketplaceDiagnostic(scope: Scope, marketplace: string): Imp
     scope,
     code: "unmappable-marketplace-source",
     marketplace,
-    message: `Skipping Claude marketplace ${JSON.stringify(marketplace)} because it has no supported directory or github.repo source.`,
+    message: `Skipping Claude marketplace ${JSON.stringify(marketplace)} because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).`,
   };
 }
 
+/**
+ * D-76-13: read the nested upstream `{ source: { source: <kind>, ... } }`
+ * shape into a source STRING the parser accepts. Marketplace-level url
+ * sources support `ref` but NOT `sha` per the upstream docs. The `file`
+ * shape (remote marketplace.json URL) and any unrecognized discriminator
+ * stay unmappable (return undefined).
+ */
+function nestedMarketplaceSource(src: Record<string, unknown>): string | undefined {
+  switch (src.source) {
+    case "url": {
+      if (typeof src.url !== "string") {
+        return undefined;
+      }
+
+      const refSuffix = typeof src.ref === "string" ? `#${src.ref}` : "";
+      return src.url + refSuffix;
+    }
+
+    case "github": {
+      // The @ref form folds into a github source with ref (D-76-04).
+      if (typeof src.repo !== "string") {
+        return undefined;
+      }
+
+      const refSuffix = typeof src.ref === "string" ? `@${src.ref}` : "";
+      return src.repo + refSuffix;
+    }
+
+    case "directory":
+      return typeof src.path === "string" ? src.path : undefined;
+
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * MURL-07 / D-76-13: read BOTH the flat legacy shape (`{directory}`,
+ * `{github:{repo}}`) AND the upstream nested `{source:{...}}` shape. Reading
+ * both is the no-regression path: the current code and its tests exercise
+ * the flat shape, while the official docs (verified 2026-07-11) document only
+ * the nested shape.
+ */
 function marketplaceSourceFromExtra(entry: unknown): string | undefined {
   if (!isPlainObject(entry)) {
     return undefined;
@@ -42,6 +85,11 @@ function marketplaceSourceFromExtra(entry: unknown): string | undefined {
   const github = entry.github;
   if (isPlainObject(github) && typeof github.repo === "string") {
     return github.repo;
+  }
+
+  const source = entry.source;
+  if (isPlainObject(source)) {
+    return nestedMarketplaceSource(source);
   }
 
   return undefined;

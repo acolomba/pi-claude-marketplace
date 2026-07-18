@@ -54,6 +54,13 @@ import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate
 const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   version: Type.String(),
   resolvedSource: Type.String(),
+  // D-77-02 / PURL-09: the full 40-hex resolved commit sha for git-source
+  // installs. OPTIONAL and additive -- NO schemaVersion bump (mirrors the
+  // lastReconciledExtensionVersion precedent), so a legacy record without it
+  // loads unchanged and absence needs no migrate fill. Git-source-only:
+  // path/github-name installs omit it. Reinstall uses THIS full sha as its
+  // re-clone checkout pin; clone GC presence-checks it to derive live keys.
+  resolvedSha: Type.Optional(Type.String()),
   compatibility: Type.Object({
     installable: Type.Boolean(),
     notes: Type.Array(Type.String()),
@@ -213,6 +220,16 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
     mp.source = pathSource(obj.raw);
   } else if (obj.kind === "github" && typeof obj.raw === "string") {
     mp.source = githubSource(obj.raw);
+  } else if (obj.kind === "url" && typeof obj.raw === "string") {
+    // MURL-01/MURL-05: revalidate a stored url source through the SAME parser
+    // funnel (ST-6) so the .git-canonical url + optional #ref are recomputed.
+    // Anything that no longer classifies as url is a corrupt record.
+    const parsedSrc = parsePluginSource(obj.raw);
+    if (parsedSrc.kind !== "url") {
+      throw new Error(`state.json marketplace "${mpName}" has an invalid url source: ${obj.raw}`);
+    }
+
+    mp.source = parsedSrc;
   } else if (obj.kind !== "unknown") {
     throw new Error(
       `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,

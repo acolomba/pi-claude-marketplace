@@ -7,6 +7,8 @@
 //
 // Coverage:
 //   (a) single-scope github + autoupdate + lastUpdatedAt + description
+//   (a2) single-scope url source with ref + lastUpdatedAt (D-76-09 / D-76-10)
+//   (a3) single-scope url source without ref (MURL-05)
 //   (b) single-scope github no `ref`
 //   (c) single-scope path source (no last_updated, no description)
 //   (d) single-scope marketplace.json without `description`
@@ -27,6 +29,7 @@ import test from "node:test";
 
 import {
   githubSource,
+  parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
@@ -177,6 +180,85 @@ test("INFO-01: single-scope github source with autoupdate + lastUpdatedAt + desc
         "last_updated: 2026-06-03T00:00:00Z",
         "description: Official Claude marketplace",
       ].join("\n"),
+    );
+  });
+});
+
+test("MURL-05: single-scope url source with ref + lastUpdatedAt renders `url: <url>#<ref>` and `last_updated:`", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(userLocations.extensionRoot, "url-mp.json");
+    await writeMarketplaceJson(manifestPath, "url-mp", "A URL-sourced marketplace");
+
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "url-mp": {
+          name: "url-mp",
+          scope: "user",
+          // D-76-09: url sources project a `url:` line, NOT a `path:` line
+          // (the clone dir would be wrong). D-76-10: last_updated renders
+          // for git-backed kinds (github + url).
+          source: parsePluginSource("https://gitlab.com/acme/mp#main"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: "/abs/clone/url-mp",
+          plugins: {},
+          lastUpdatedAt: "2026-06-03T00:00:00Z",
+        },
+      },
+    } as unknown as Parameters<typeof saveState>[1]);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getMarketplaceInfo({ ctx, pi, name: "url-mp", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● url-mp [user] <no autoupdate>",
+        "url: https://gitlab.com/acme/mp#main",
+        "last_updated: 2026-06-03T00:00:00Z",
+        "description: A URL-sourced marketplace",
+      ].join("\n"),
+    );
+    // D-76-09: never a `path:` line for a url source.
+    assert.ok(
+      !notifications[0]!.message.includes("path:"),
+      "a url source must not render a `path:` line",
+    );
+  });
+});
+
+test("MURL-05: single-scope url source without ref drops the #<ref> suffix from the `url:` line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const userLocations = locationsFor("user", cwd);
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const manifestPath = path.join(userLocations.extensionRoot, "url-noref.json");
+    await writeMarketplaceJson(manifestPath, "url-noref");
+
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        "url-noref": {
+          name: "url-noref",
+          scope: "user",
+          source: parsePluginSource("https://gitlab.com/acme/mp"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: "/abs/clone/url-noref",
+          plugins: {},
+        },
+      },
+    } as unknown as Parameters<typeof saveState>[1]);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getMarketplaceInfo({ ctx, pi, name: "url-noref", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    // No `#<ref>` suffix; no lastUpdatedAt so no `last_updated:` line either.
+    assert.equal(
+      notifications[0]!.message,
+      ["● url-noref [user] <no autoupdate>", "url: https://gitlab.com/acme/mp"].join("\n"),
     );
   });
 });
@@ -424,9 +506,10 @@ test("D-03: absent from BOTH scopes with no --scope renders `(failed) {not added
 });
 
 // ---------------------------------------------------------------------------
-// Source-coerce fallback (NFR-12 forward-compat): non-github source kinds
-// (`url`, `git-subdir`, `npm`, `unknown`) coerce to the `path` arm with
-// `record.marketplaceRoot` as the absolute path.
+// Source-coerce fallback (NFR-12 forward-compat): non-projected source kinds
+// (`git-subdir`, `npm`, `unknown`) coerce to the `path` arm with
+// `record.marketplaceRoot` as the absolute path. `url` is projected to its own
+// `url:` arm (D-76-09) and NO LONGER falls through to `path`.
 // ---------------------------------------------------------------------------
 
 test('NFR-12: forward-compat `kind: "unknown"` source coerces to the `path:` arm with marketplaceRoot', async () => {

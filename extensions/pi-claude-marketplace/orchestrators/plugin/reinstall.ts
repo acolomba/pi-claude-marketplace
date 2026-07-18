@@ -61,11 +61,13 @@ import {
   replacePreparedSkills,
   rollbackSkillsReplacement,
 } from "../../bridges/skills/index.ts";
+import { pluginMirrorKey } from "../../domain/clone-key.ts";
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
@@ -78,6 +80,7 @@ import {
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { pathExists } from "../../shared/fs-utils.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -90,9 +93,12 @@ import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
+import { canonicalCloneUrl, materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { readMirrorHeadSha } from "./git-source-probe.ts";
 import { REINSTALL_CONTEXT, type ReinstallMsg } from "./reinstall.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
@@ -106,7 +112,8 @@ import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/age
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
+import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -120,6 +127,7 @@ import type {
   PluginSkippedMessage,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
@@ -155,6 +163,22 @@ export interface ReinstallPluginOptions {
    * path.
    */
   readonly local?: boolean;
+  /**
+   * PROV-03 / Q3 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use. A
+   * COLD-cache reinstall re-clones and threads a host-keyed bundle so a private
+   * git source authenticates (PROV-03); a WARM cache short-circuits before the
+   * clone so auth is never exercised (offline parity, PURL-07).
+   */
+  readonly credentialOps?: CredentialOps;
+  /** PROV-03 Device Flow HTTP seam; tests inject makeMockDeviceFlowHttp(). */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * D-79-02 once-per-host memo. The bulk path (`reinstallPlugins`) shares ONE
+   * memo across its targets so a cold-cache sweep over several private plugins
+   * runs the device flow at most once per host; the standalone single-plugin
+   * caller may omit it (single target -- at most one challenge).
+   */
+  readonly authMemo?: Map<string, AuthAttemptResult>;
   /** @internal Test-only seams; production callers omit this. */
   readonly __deps?: ReinstallPluginDeps;
 }
@@ -163,6 +187,24 @@ export interface ReinstallPluginDeps {
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly dropMarketplaceCache?: DropMarketplaceCacheFn;
   readonly removeDataDir?: RemoveDataDirFn;
+  /**
+   * PURL-07 / D-78-02: test-only clone-cache seam override. When undefined
+   * (production), reinstall's recorded-sha probe reaches the real
+   * `materializePluginClone` import; tests inject a mock-backed materialize so
+   * the git-source reinstall path runs without touching the network.
+   */
+  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
+}
+
+/**
+ * PURL-07 / D-78-02: the reinstall clone-cache seam. Only `materializePluginClone`
+ * -- NOT `resolvePluginPin` -- because reinstall pins from the state record's
+ * recorded sha, never from a network pin re-resolution. reinstall reaches the
+ * git surface by this entrypoint name only, so it stays in the
+ * no-orchestrator-network forbidden list (NFR-5) without ever naming the git ops.
+ */
+export interface ReinstallCloneCacheSeam {
+  readonly materializePluginClone: typeof materializePluginClone;
 }
 
 export type ReinstallPluginsTarget =
@@ -182,6 +224,12 @@ export interface ReinstallPluginsOptions {
    * write-back. The base file is NEVER touched on the --local path.
    */
   readonly local?: boolean;
+  /** PROV-03 credential seam (see ReinstallPluginOptions.credentialOps). */
+  readonly credentialOps?: CredentialOps;
+  /** PROV-03 Device Flow HTTP seam (see ReinstallPluginOptions.deviceFlowHttp). */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** @internal Test-only seams threaded to every per-plugin call. */
+  readonly __deps?: ReinstallPluginDeps;
 }
 
 interface PreparedHandles {
@@ -442,6 +490,10 @@ export async function reinstallPlugins(
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
   const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
+  // D-79-02: ONE once-per-host memo spans the whole bulk loop so a cold-cache
+  // sweep over several private plugins on the same host runs the device flow
+  // at most once (the same bulk-storm guard install/update use).
+  const authMemo = new Map<string, AuthAttemptResult>();
   for (const target of targets) {
     try {
       outcomes.push(
@@ -454,6 +506,10 @@ export async function reinstallPlugins(
           plugin: target.plugin,
           render: "none",
           ...(opts.local === true && { local: true }),
+          ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
+          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+          authMemo,
+          ...(opts.__deps !== undefined && { __deps: opts.__deps }),
         }),
       );
     } catch (err) {
@@ -819,8 +875,8 @@ function renderReinstallPartitionAndNotify(
  * tests/orchestrators/plugin/reinstall.test.ts can verify the cascade
  * payload structure (including the folded-in manual-recovery row) without
  * forcing a real `ManualRecoveryError` through the bridges (which would
- * require fs-permission / saveState dep injection plumbing through
- * `reinstallPlugins`, which does not propagate `__deps`).
+ * require fs-permission / saveState dep injection plumbing through the
+ * bridge tier).
  */
 export { renderReinstallPartitionAndNotify as __test_renderReinstallPartitionAndNotify };
 
@@ -1130,7 +1186,17 @@ async function runLockedReinstall(
 
   const oldSnapshot = clonePluginRecord(oldRecord);
   const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
-  const installable = await resolveInstallable(entry, mp.marketplaceRoot);
+  const installable = await resolveInstallable({
+    entry,
+    marketplaceRoot: mp.marketplaceRoot,
+    locations,
+    recordedSha: oldSnapshot.resolvedSha,
+    seam: opts.__deps?.cloneCacheSeam ?? { materializePluginClone },
+    ctx: opts.ctx,
+    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  });
   const generated = await discoverGeneratedNames(plugin, installable);
   assertNoCrossPluginConflicts(
     scope,
@@ -1259,17 +1325,162 @@ async function loadCachedEntry(
   return entryRaw;
 }
 
+/**
+ * PROV-02/03: build the host-keyed bundle for the COLD-cache re-clone
+ * (undefined for a public / no-provider host). A warm cache short-circuits
+ * inside materializePluginClone before the clone, so the bundle is never
+ * exercised offline (PURL-07 parity). The bulk path threads a shared authMemo
+ * so repeated challenges across one sweep prompt once per host (D-79-02); the
+ * standalone single-plugin caller omits it.
+ */
+function buildReinstallCloneAuth(
+  cloneUrl: string,
+  kind: "url" | "git-subdir" | "github",
+  auth: {
+    ctx: ExtensionContext;
+    credentialOps: CredentialOps;
+    deviceFlowHttp?: DeviceFlowHttp;
+    authMemo?: Map<string, AuthAttemptResult>;
+  },
+): ReturnType<typeof buildAuthForHost> {
+  const host = hostFromCloneUrl(cloneUrl, kind);
+  return buildAuthForHost({
+    host,
+    credentialOps: auth.credentialOps,
+    ctx: auth.ctx,
+    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
+    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
+  });
+}
+
+/**
+ * PURL-07 / D-78-02: build the recorded-sha `resolveGitPluginRoot` callback for a
+ * git plugin source. Reinstall pins from the state record's `recordedSha` (the pin
+ * IS the record) and reaches `materializePluginClone` by name via the seam -- it
+ * NEVER calls `resolvePluginPin` / `resolveRemoteRef`, so a warm cache is offline
+ * by construction (proven by the resolveRemoteRefCalls-empty warm-cache test).
+ *
+ * The clone url is reconstructed with `canonicalCloneUrl` (pure, no network);
+ * git-subdir containment reuses `resolveGitSubdirRoot` -- the same
+ * clone-root-anchored assertPathInside install uses (PURL-03 / NFR-10).
+ */
+function makeReinstallCloneProbe(
+  seam: ReinstallCloneCacheSeam,
+  locations: ScopedLocations,
+  recordedSha: string,
+  cloneUrl: string,
+  auth: {
+    ctx: ExtensionContext;
+    credentialOps: CredentialOps;
+    deviceFlowHttp?: DeviceFlowHttp;
+    authMemo?: Map<string, AuthAttemptResult>;
+  },
+): (source: UrlSource | GitSubdirSource | GitHubSource) => Promise<GitPluginRootResult> {
+  return async (gitSource): Promise<GitPluginRootResult> => {
+    // MIRR-06 / D-79.1-04 / PRL-07: an unpinned source (no manifest sha)
+    // repairs fs-only from the warm mirror the record points at. Reinstall
+    // never re-resolves a pin over the network (cached manifests + the
+    // recorded sha only), so it reads the mirror HEAD with `readMirrorHeadSha`
+    // -- it does NOT re-anchor and does NOT materialize a cold mirror. When
+    // the mirror dir is absent, fall through to the recorded-sha per-sha path
+    // below: a pre-existing per-sha unpinned clone still repairs offline,
+    // while a truly cold source attempts the recorded-sha re-clone (the one
+    // network touch below) and fails clean if unreachable.
+    if (gitSource.sha === undefined) {
+      const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      if (await pathExists(mirrorDir)) {
+        const mirrorSha = await readMirrorHeadSha(mirrorDir);
+        if (gitSource.kind === "git-subdir") {
+          const subdirResult = await resolveGitSubdirRoot(mirrorDir, gitSource.path);
+          if (subdirResult.kind !== "materialized") {
+            return subdirResult;
+          }
+
+          return {
+            kind: "materialized",
+            pluginRoot: subdirResult.pluginRoot,
+            resolvedSha: mirrorSha,
+          };
+        }
+
+        return { kind: "materialized", pluginRoot: mirrorDir, resolvedSha: mirrorSha };
+      }
+    }
+
+    const authBundle = buildReinstallCloneAuth(cloneUrl, gitSource.kind, auth);
+
+    const cloneRoot = await seam.materializePluginClone({
+      locations,
+      cloneUrl,
+      pin: recordedSha,
+      ...(authBundle !== undefined && { auth: authBundle }),
+    });
+
+    if (gitSource.kind === "git-subdir") {
+      const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
+      if (subdirResult.kind !== "materialized") {
+        return subdirResult;
+      }
+
+      return {
+        kind: "materialized",
+        pluginRoot: subdirResult.pluginRoot,
+        resolvedSha: recordedSha,
+      };
+    }
+
+    return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: recordedSha };
+  };
+}
+
 // BFILL-01 / D-68-02: reinstall is partial-capable. It resolves through the
 // `requirePartialInstallable` gate (admitting both `installable` and the
 // partially-available arm) so backfill can re-materialize a
 // still-partial plugin in place without throwing `{not-installable}`. The
 // `unavailable` arm is still rejected (NFR-7). Resolution stays cache-only via
 // `resolveStrict` -- no network (NFR-5).
-async function resolveInstallable(
-  entry: PluginEntry,
-  marketplaceRoot: string,
-): Promise<MaterializablePlugin> {
-  const resolved = await resolveStrict(entry, { marketplaceRoot });
+//
+// PURL-07 / D-78-02: for a git source (url / git-subdir / github) with a
+// recorded sha, inject the recorded-sha probe so the git plugin re-materializes
+// offline from the warm cache. A path source (or a git record predating the
+// resolvedSha field) keeps the existing no-callback resolveStrict path.
+async function resolveInstallable(input: {
+  readonly entry: PluginEntry;
+  readonly marketplaceRoot: string;
+  readonly locations: ScopedLocations;
+  readonly recordedSha: string | undefined;
+  readonly seam: ReinstallCloneCacheSeam;
+  readonly ctx: ExtensionContext;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+}): Promise<MaterializablePlugin> {
+  const parsedSource = parsePluginSource(input.entry.source);
+  const isGitSource =
+    parsedSource.kind === "url" ||
+    parsedSource.kind === "git-subdir" ||
+    parsedSource.kind === "github";
+
+  const resolveGitPluginRoot =
+    isGitSource && input.recordedSha !== undefined
+      ? makeReinstallCloneProbe(
+          input.seam,
+          input.locations,
+          input.recordedSha,
+          canonicalCloneUrl(parsedSource),
+          {
+            ctx: input.ctx,
+            credentialOps: input.credentialOps,
+            ...(input.deviceFlowHttp !== undefined && { deviceFlowHttp: input.deviceFlowHttp }),
+            ...(input.authMemo !== undefined && { authMemo: input.authMemo }),
+          },
+        )
+      : undefined;
+
+  const resolved = await resolveStrict(input.entry, {
+    marketplaceRoot: input.marketplaceRoot,
+    ...(resolveGitPluginRoot !== undefined && { resolveGitPluginRoot }),
+  });
   requirePartialInstallable(resolved, "install");
   return resolved;
 }
@@ -1439,6 +1650,12 @@ function updateStateRecord(
     // never an upgrade.
     version: oldRecord.version,
     resolvedSource: installable.pluginRoot,
+    // PURL-07 / D-78-02: carry the recorded resolvedSha forward. Reinstall is a
+    // repair/promotion, so the git identity survives exactly as version and
+    // installedAt do -- dropping it corrupts GC key derivation and a later
+    // reinstall's pin. The conditional spread leaves path/github-name records
+    // (which never had a resolvedSha) without a spurious field.
+    ...(oldRecord.resolvedSha !== undefined && { resolvedSha: oldRecord.resolvedSha }),
     // BFILL-01: record the REAL compatibility from the resolve, not a hardcoded
     // `installable: true`. A partial re-materialize (resolved `partially-available`)
     // persists `installable: false` with the still-unsupported set, so the
@@ -1754,6 +1971,9 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
   return {
     version: record.version,
     resolvedSource: record.resolvedSource,
+    // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
+    // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
+    ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
     compatibility: {
       installable: record.compatibility.installable,
       notes: [...record.compatibility.notes],

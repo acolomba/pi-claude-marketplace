@@ -172,6 +172,11 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
       return "installed";
     case "available":
       return "available";
+    case "remote":
+      // RSTA-01 / D-80-05: a not-installed git-source `remote` plugin projects
+      // onto the `available` tool bucket -- install still offers it (install
+      // performs the fetch), so the LLM-tool surface treats it as installable.
+      return "available";
     case "unavailable":
       return "unavailable";
     case "partially-available":
@@ -333,10 +338,12 @@ function pluginScopeOrFallback(
       // SNM-11 carve-out applies only to `available` / `unavailable`).
       return p.scope ?? marketplaceScope;
     case "available":
+    case "remote":
     case "unavailable":
     case "partially-available":
-      // USTAT-01 / SNM-11: the `partially-available` row carries no `scope` field (the
-      // carve-out applies to `available` / `unavailable` / `partially-available`).
+      // USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
+      // `partially-available` carry no `scope` field (the SNM-11 carve-out
+      // family), so they fall back to the marketplace scope.
       return marketplaceScope;
     case "updated":
     case "reinstalled":
@@ -387,6 +394,7 @@ function pluginVersion(p: PluginNotificationMessage): string | undefined {
     case "installed":
     case "upgradable":
     case "available":
+    case "remote":
     case "unavailable":
     case "partially-available":
     case "reinstalled":

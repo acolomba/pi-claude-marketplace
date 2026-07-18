@@ -328,6 +328,7 @@ function buildValidatorFixture(opts: {
   omitHooks?: boolean;
   enabled?: unknown;
   omitEnabled?: boolean;
+  resolvedSha?: string;
 }): {
   schemaVersion: 2;
   marketplaces: Record<string, unknown>;
@@ -357,6 +358,10 @@ function buildValidatorFixture(opts: {
   };
   if (!opts.omitEnabled) {
     plugin["enabled"] = opts.enabled ?? true;
+  }
+
+  if (opts.resolvedSha !== undefined) {
+    plugin["resolvedSha"] = opts.resolvedSha;
   }
 
   return {
@@ -402,6 +407,83 @@ test("ENBL-02: STATE_VALIDATOR rejects a record missing `enabled` (fill-before-v
   // `enabled` as REQUIRED.
   const fixture = buildValidatorFixture({ omitEnabled: true });
   assert.equal(STATE_VALIDATOR.Check(fixture), false);
+});
+
+// ===================================================================
+// D-77-02 / PURL-09: resolvedSha additive-optional field.
+//
+// The full 40-hex resolved commit sha lives on the plugin install record
+// as an OPTIONAL field -- absent on legacy/path/github-name records, present
+// on git-source installs. No schemaVersion bump and no migrate fill.
+// ===================================================================
+
+test("D-77-02 STATE_VALIDATOR accepts a plugin record WITHOUT resolvedSha (legacy loads unchanged)", () => {
+  const fixture = buildValidatorFixture({ hooks: [] });
+  assert.equal(STATE_VALIDATOR.Check(fixture), true);
+});
+
+test("D-77-02 STATE_VALIDATOR accepts a plugin record WITH a 40-hex resolvedSha", () => {
+  const fixture = buildValidatorFixture({
+    hooks: [],
+    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  });
+  assert.equal(STATE_VALIDATOR.Check(fixture), true);
+});
+
+test("D-77-02 saveState + loadState round-trips resolvedSha intact", async () => {
+  const { root, cleanup } = await tmpExtensionRoot();
+  try {
+    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+    const plugin: PluginInstallRecord = {
+      version: "sha-a1b2c3d4e5f6",
+      resolvedSource: "https://github.com/o/r",
+      resolvedSha: fullSha,
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      enabled: true,
+      installedAt: "2025-01-01T00:00:00.000Z",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+    };
+    const state: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: "./mp", logical: "./mp" },
+          addedFromCwd: "/cwd",
+          manifestPath: "/abs/mp/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/abs/mp",
+          plugins: { p1: plugin },
+        },
+      },
+    };
+    await saveState(root, state);
+    const reloaded = await loadState(root);
+    const mp = reloaded.marketplaces["mp"];
+    assert.ok(mp);
+    const reloadedPlugin = mp.plugins["p1"];
+    assert.equal(reloadedPlugin?.resolvedSha, fullSha);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("D-77-02 toDisabledRecord preserves resolvedSha through the disable transform", () => {
+  const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+  const record: PluginInstallRecord = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "https://github.com/o/r",
+    resolvedSha: fullSha,
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: ["s"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: true,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+  const disabled = toDisabledRecord(record, "2025-02-02T00:00:00.000Z");
+  assert.equal(disabled.resolvedSha, fullSha);
+  assert.equal(disabled.enabled, false);
 });
 
 test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; every plugin record gains resources.hooks default", async (t) => {

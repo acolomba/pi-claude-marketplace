@@ -1230,3 +1230,264 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
     assert.equal(Object.keys(persisted.marketplaces).length, 0);
   });
 });
+
+test("MURL-01: url source clones source.url VERBATIM with NO auth key in the clone options", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp",
+      gitOps,
+    });
+
+    // D-76-06: the clone URL is source.url verbatim -- no github.com
+    // reconstruction, and the parser canonicalized the trailing `.git` off.
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
+    // D-76-07: public-only -- the clone options object carries NO `auth` key.
+    assert.equal(Object.hasOwn(cloneCall, "auth"), false);
+    assert.equal(cloneCall.auth, undefined);
+  });
+});
+
+test("MURL-01: url source with a #ref clones at that ref with singleBranch and still no auth", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp#v1.0",
+      gitOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    assert.deepEqual(
+      {
+        url: state.cloneCalls[0]?.url,
+        ref: state.cloneCalls[0]?.ref,
+        singleBranch: state.cloneCalls[0]?.singleBranch,
+      },
+      {
+        url: "https://gitlab.example.com/team/mp",
+        ref: "v1.0",
+        singleBranch: true,
+      },
+    );
+    // D-76-07: still no auth key even with a ref.
+    assert.equal(Object.hasOwn(state.cloneCalls[0] ?? {}, "auth"), false);
+  });
+});
+
+test("MURL-01: after a successful url add, state records source.kind === 'url' and the clone lands at sources/<name>/", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp",
+      gitOps,
+    });
+
+    const persisted = await loadState(locations.extensionRoot);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    assert.equal((recorded.source as { kind: string }).kind, "url");
+
+    // The clone was renamed into its final sources/<derivedName>/ path.
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    assert.ok(await pathExists(finalDir), "clone must land at sources/<derivedName>/");
+  });
+});
+
+test("D-76-08: a url clone throwing an HttpError with statusCode 401 renders (failed) {authentication required}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    // Duck-typed isomorphic-git HttpError shape: code === "HttpError",
+    // data.statusCode carries the HTTP status.
+    const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpErr,
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+    });
+
+    const note = notifications.find((n) => n.severity === "error");
+    assert.ok(note, "401 clone challenge must render an error");
+    assert.ok(
+      note.message.includes("(failed) {authentication required}"),
+      `expected authentication-required row, got: ${note.message}`,
+    );
+    // Must NOT misclassify as unparseable or network unreachable.
+    assert.equal(note.message.includes("{unparseable}"), false);
+    assert.equal(note.message.includes("{network unreachable}"), false);
+  });
+});
+
+test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {authentication required}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const httpErr = Object.assign(new Error("HTTP 403 from clone"), {
+      code: "HttpError",
+      data: { statusCode: 403 },
+    });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpErr,
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+    });
+
+    const note = notifications.find((n) => n.severity === "error");
+    assert.ok(note);
+    assert.ok(note.message.includes("(failed) {authentication required}"));
+  });
+});
+
+test("MURL-01 regression: github source is byte-identical -- Device Flow auth still constructed, cloneUrl still reconstructed", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    // github: URL reconstructed to the canonical https://github.com/.git form.
+    assert.equal(cloneCall.url, "https://github.com/anthropics/claude-plugins-official.git");
+    // github: the Device Flow auth bundle IS constructed and passed through.
+    assert.ok(cloneCall.auth, "github clone must carry an auth bundle");
+    assert.equal(cloneCall.auth.host, "github.com");
+    // Its callbacks are wired (buildAuthCallbacks-compatible shape).
+    assert.equal(typeof cloneCall.auth.onAuthRequired, "function");
+    assert.ok(
+      buildAuthCallbacks({
+        credentialOps: cloneCall.auth.credentialOps,
+        host: cloneCall.auth.host,
+        onAuthRequired: cloneCall.auth.onAuthRequired,
+      }),
+      "github auth bundle must be buildAuthCallbacks-compatible",
+    );
+  });
+});
+
+test("PROV-04 / D-79-03: a no-provider url add that 401s renders the bare (failed) {authentication required} row with NO cause line", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    // D-79-03: marketplace add keeps its no-child-rows invariant (D-01/D-10),
+    // so the no-provider cause line renders ONLY on the update path's
+    // cause-carrying child row -- the add row stays the bare closed-set token.
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpErr,
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+      credentialOps,
+    });
+
+    const note = notifications.find((n) => n.severity === "error");
+    assert.ok(note, "401 clone challenge must render an error");
+    assert.ok(
+      note.message.includes("(failed) {authentication required}"),
+      `expected authentication-required row, got: ${note.message}`,
+    );
+    // NO cause trailer and NO no-provider line on the add surface (D-79-03).
+    assert.equal(note.message.includes("no auth provider is registered"), false);
+    assert.equal(note.message.includes("cause:"), false);
+  });
+});
+
+test("PROV-02: a public no-provider url add clones authless -- no auth key, no credential interaction, no Device Flow prompt", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { http: deviceFlowHttp, state: httpState } = makeMockDeviceFlowHttp();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp",
+      gitOps,
+      credentialOps,
+      deviceFlowHttp,
+    });
+
+    // No provider for gitlab.example.com -> buildAuthForHost yields undefined
+    // -> the clone call carries NO auth key at all (PROV-02).
+    assert.equal(state.cloneCalls.length, 1);
+    assert.equal(Object.hasOwn(state.cloneCalls[0] ?? {}, "auth"), false);
+    // The public clone never touched the credential seam or the flow.
+    assert.equal(credState.fillCalls.length, 0);
+    assert.equal(httpState.requestCodeCalls.length, 0);
+    assert.equal(
+      notifications.filter((n) => n.message.startsWith("Open ")).length,
+      0,
+      "Device Flow prompt must NOT fire for a public no-provider url add",
+    );
+  });
+});

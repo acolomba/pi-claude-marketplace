@@ -71,6 +71,14 @@ export interface ScopedLocations {
   /** `<extensionRoot>/sources/` -- where GitHub clones land. */
   readonly sourcesDir: string;
   /**
+   * `<extensionRoot>/plugin-clones/` -- D-77-03 / NFR-10 source-addressed
+   * plugin-clone cache root. Sibling of `sourcesDir` / `sources-staging` /
+   * `cacheDir`; same-FS with `sources-staging/` so tmp+rename stays atomic
+   * (NFR-1). Hard-coded suffix on `extensionRoot`; no name input participates
+   * at this layer.
+   */
+  readonly pluginClonesDir: string;
+  /**
    * `<extensionRoot>/hooks/` -- HOOK-01 / D-57-03 per-plugin hooks
    * container-dir root. Sibling of `dataRoot`, `sourcesDir`, `cacheDir`.
    * Hard-coded suffix on `extensionRoot`; no name input participates at
@@ -100,6 +108,15 @@ export interface ScopedLocations {
   marketplaceDataDir(mp: string): Promise<string>;
   /** Returns `<sourcesDir>/<mp>/` after SC-7 containment check. */
   sourceCloneDir(mp: string): Promise<string>;
+  /**
+   * SC-7 / D-15 / NFR-10 / D-77-03: returns `<pluginClonesDir>/<key>/` after
+   * `assertSafeName` + `assertPathInside` containment checks. `key` is a
+   * `pluginCloneKey` (`<12hex>-<sha12>`) or `pluginMirrorKey` (`<12hex>`)
+   * output; the chokepoint is the SOLE sanctioned composer of a plugin-clone
+   * path -- call sites MUST route through it rather than string-concatenating
+   * under `pluginClonesDir`.
+   */
+  pluginCloneDir(key: string): Promise<string>;
   /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
   sourcesStagingDir(uuid: string): Promise<string>;
   /**
@@ -147,6 +164,11 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const promptsTargetDir = path.join(extensionRoot, "resources", "prompts");
   const dataRoot = path.join(extensionRoot, "data");
   const sourcesDir = path.join(extensionRoot, "sources");
+  // D-77-03 / NFR-10: source-addressed plugin-clone cache root. Sibling of
+  // dataRoot, sourcesDir, cacheDir; same-FS with sources-staging/ so the
+  // tmp+rename clone commit stays atomic (NFR-1). Hard-coded suffix on
+  // extensionRoot; no name input participates at this layer.
+  const pluginClonesDir = path.join(extensionRoot, "plugin-clones");
   // HOOK-01 / D-57-03: per-plugin hooks container-dir root. Sibling of
   // dataRoot, sourcesDir, cacheDir. Hard-coded suffix on extensionRoot;
   // no name input participates at this layer (NFR-10 by construction).
@@ -186,6 +208,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     promptsTargetDir,
     dataRoot,
     sourcesDir,
+    pluginClonesDir,
     hooksDir,
     cacheDir,
     marketplaceNamesCacheFile,
@@ -219,6 +242,19 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
       assertSafeName(mp, `sourceCloneDir marketplace name "${mp}"`);
       const candidate = path.join(sourcesDir, mp);
       await assertPathInside(sourcesDir, candidate, `sourceCloneDir(${mp})`);
+      return candidate;
+    },
+
+    async pluginCloneDir(key: string): Promise<string> {
+      // SC-7 / D-15 / NFR-10 / D-77-03: mirror the sourceCloneDir chokepoint
+      // exactly. The key is a `pluginCloneKey` (`<12hex>-<sha12>`) or
+      // `pluginMirrorKey` (`<12hex>`) output (safe by construction), but gate
+      // through assertSafeName for symmetry and defense-in-depth before
+      // path.join, then assertPathInside on the resulting leaf against
+      // pluginClonesDir.
+      assertSafeName(key, `pluginCloneDir clone key "${key}"`);
+      const candidate = path.join(pluginClonesDir, key);
+      await assertPathInside(pluginClonesDir, candidate, `pluginCloneDir(${key})`);
       return candidate;
     },
 

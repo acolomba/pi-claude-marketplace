@@ -76,9 +76,49 @@ const ACCEPT_CASES: readonly AcceptCase[] = [
     expect: { kind: "github", owner: "o", repo: "r" },
   },
   {
-    name: "MM-3 object url source",
-    raw: { source: "url", url: "https://github.com/obra/superpowers.git", sha: "abc123" },
-    expect: { kind: "url", url: "https://github.com/obra/superpowers.git", sha: "abc123" },
+    // D-76-02: an object-form github.com URL normalizes to `github` kind so
+    // Device Flow auth still applies -- it does NOT build a UrlSource.
+    name: "D-76-02 object url source pointing at github.com normalizes to github",
+    raw: {
+      source: "url",
+      url: "https://github.com/obra/superpowers.git",
+      sha: "abc1234def5678abc1234def5678abc1234def56",
+    },
+    expect: {
+      kind: "github",
+      owner: "obra",
+      repo: "superpowers",
+      sha: "abc1234def5678abc1234def5678abc1234def56",
+    },
+  },
+  {
+    // MURL-01: generic non-github https object-form source stays `url` kind;
+    // the single trailing .git is canonicalized away (D-76-01).
+    name: "MURL-01 object url source (non-github) stays url with .git stripped",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp.git", ref: "main" },
+    expect: { kind: "url", url: "https://gitlab.com/acme/mp", ref: "main" },
+  },
+  {
+    // MURL-01 / D-76-01: generic https string source parses to `url` kind.
+    name: "MURL-01 https non-github string with .git#ref canonicalizes",
+    raw: "https://gitlab.com/acme/mp.git#main",
+    expect: { kind: "url", url: "https://gitlab.com/acme/mp", ref: "main" },
+  },
+  {
+    name: "MURL-01 https non-github string without ref",
+    raw: "https://gitlab.com/acme/mp",
+    expect: { kind: "url", url: "https://gitlab.com/acme/mp" },
+  },
+  {
+    name: "MURL-01 https non-github string trailing .git no fragment",
+    raw: "https://gitlab.com/acme/mp.git",
+    expect: { kind: "url", url: "https://gitlab.com/acme/mp" },
+  },
+  {
+    // D-76-04: owner/repo@<ref> upstream shorthand folds into github + ref.
+    name: "D-76-04 owner/repo@ref folds to github with ref",
+    raw: "acme/tools@v2.0",
+    expect: { kind: "github", owner: "acme", repo: "tools", ref: "v2.0" },
   },
   {
     name: "MM-3 object git-subdir source",
@@ -93,18 +133,16 @@ const ACCEPT_CASES: readonly AcceptCase[] = [
 ];
 
 const REJECT_CASES: readonly RejectCase[] = [
-  { name: "SP-3 SSH git@", raw: "git@github.com:o/r.git", reasonContains: "not supported" },
-  { name: "SP-3 ssh:// scheme", raw: "ssh://git@github.com/o/r", reasonContains: "not supported" },
-  { name: "SP-3 non-github https", raw: "https://gitlab.com/o/r", reasonContains: "not supported" },
+  // D-76-01: git@host: scp-form is still rejected; the reason names scp-form.
+  { name: "D-76-01 SSH git@ scp-form", raw: "git@github.com:o/r.git", reasonContains: "git@" },
+  // D-76-01: ssh:// scheme still rejected; reason names ssh.
+  { name: "D-76-01 ssh:// scheme", raw: "ssh://git@github.com/o/r", reasonContains: "ssh" },
+  // D-76-01: http:// (non-TLS) still rejected; reason names http.
+  { name: "D-76-01 http:// scheme", raw: "http://host/repo", reasonContains: "http://" },
   {
     name: "SP-3 browser /tree/<ref>",
     raw: "https://github.com/o/r/tree/main",
     reasonContains: "browser URL",
-  },
-  {
-    name: "SP-2 owner/repo@<ref>",
-    raw: "anthropics/claude-plugins-official@v1.0",
-    reasonContains: "owner/repo@<ref>",
   },
   { name: "SP-4 ~user form", raw: "~user/foo", reasonContains: "per-user tilde" },
   { name: "MM-4 bare word (no slash)", raw: "foo", reasonContains: "non-relative" },
@@ -140,6 +178,62 @@ for (const c of REJECT_CASES) {
   });
 }
 
+// Clone-key invariant at the parser funnel (domain/clone-key.ts): a git
+// source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey` and
+// `shaVersion` slice its first 12 chars unchecked. A non-conforming sha from
+// an untrusted manifest is DROPPED so the source degrades to unpinned.
+
+const FULL_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+test("sha funnel: a full 40-hex sha on an object url source is accepted", () => {
+  const got = parsePluginSource({
+    source: "url",
+    url: "https://gitlab.com/acme/mp",
+    sha: FULL_SHA,
+  });
+  assert.equal(got.kind, "url");
+  if (got.kind === "url") {
+    assert.equal(got.sha, FULL_SHA);
+  }
+});
+
+test("sha funnel: a 7-hex abbreviated sha is dropped (source degrades to unpinned)", () => {
+  const got = parsePluginSource({
+    source: "url",
+    url: "https://gitlab.com/acme/mp",
+    sha: "abc1234",
+  });
+  assert.equal(got.kind, "url");
+  if (got.kind === "url") {
+    assert.equal(got.sha, undefined, "abbreviated sha must not flow into the parsed source");
+  }
+});
+
+test("sha funnel: an uppercase 40-hex sha is accepted and lowercased (SHA_VERSION_RE is lowercase-only)", () => {
+  const got = parsePluginSource({
+    source: "git-subdir",
+    url: "https://example.com/mono",
+    path: "plugins/p",
+    sha: FULL_SHA.toUpperCase(),
+  });
+  assert.equal(got.kind, "git-subdir");
+  if (got.kind === "git-subdir") {
+    assert.equal(got.sha, FULL_SHA);
+  }
+});
+
+test("sha funnel: traversal-shaped garbage is dropped, never carried toward a cache key", () => {
+  const got = parsePluginSource({
+    source: "github",
+    repo: "o/r",
+    sha: "../../../../etc/passwd",
+  });
+  assert.equal(got.kind, "github");
+  if (got.kind === "github") {
+    assert.equal(got.sha, undefined);
+  }
+});
+
 test("SP-6 pathSource() factory throws on empty string", () => {
   assert.throws(() => pathSource(""), /non-empty string/);
   assert.throws(() => pathSource("   "), /non-empty string/);
@@ -169,11 +263,43 @@ test("SP-6 githubSource() throws on non-github input with reason in message", ()
   );
 });
 
-test("SP-2 reject hint references the corrected URL form", () => {
+// D-76-04: owner/repo@ref folds to github+ref (the SP-2 reject-with-hint is retired).
+test("D-76-04 owner/repo@ref parses to github kind with ref set", () => {
   const got = parsePluginSource("anthropics/claude-plugins-official@v1.0");
+  assert.equal(got.kind, "github");
+  if (got.kind === "github") {
+    assert.equal(got.owner, "anthropics");
+    assert.equal(got.repo, "claude-plugins-official");
+    assert.equal(got.ref, "v1.0");
+  }
+});
+
+// D-76-04: only a valid owner/repo left side folds; a bad left side stays unknown.
+test("D-76-04 owner@ref with no slash on the left side stays unknown", () => {
+  const got = parsePluginSource("foo@v1.0");
+  assert.equal(got.kind, "unknown");
+});
+
+// D-76-02: the github-host check runs BEFORE the generic-https arm, so a
+// github.com string URL is `github`, never `url`.
+test("D-76-02 https github.com string stays github kind (host wins)", () => {
+  const got = parsePluginSource("https://github.com/acme/mp");
+  assert.equal(got.kind, "github");
+  if (got.kind === "github") {
+    assert.equal(got.owner, "acme");
+    assert.equal(got.repo, "mp");
+  }
+});
+
+// D-76-01: unsupportedUrlReason no longer claims only-github; it names the scheme.
+test("D-76-01 unsupported-scheme reason no longer says 'only github URLs'", () => {
+  const got = parsePluginSource("ssh://git@host/repo");
   assert.equal(got.kind, "unknown");
   if (got.kind === "unknown") {
-    assert.match(got.reason, /https:\/\/github\.com\/anthropics\/claude-plugins-official#v1\.0/);
+    assert.ok(
+      !got.reason.includes("only github URLs"),
+      `reason should name the scheme, not claim only-github; got: ${got.reason}`,
+    );
   }
 });
 
@@ -371,7 +497,8 @@ test("parseGitHubUrl: single-segment path yields unknown with must-be hint", () 
   }
 });
 
-// sourceLogical for UrlSource -- with ref suffix
+// sourceLogical for UrlSource -- with ref suffix. D-76-01: the single trailing
+// .git is canonicalized away at parse time, so the logical form drops it.
 test("sourceLogical: UrlSource returns url#ref when ref present", () => {
   const parsed = parsePluginSource({
     source: "url",
@@ -379,14 +506,14 @@ test("sourceLogical: UrlSource returns url#ref when ref present", () => {
     ref: "v1",
   });
   assert.equal(parsed.kind, "url");
-  assert.equal(sourceLogical(parsed), "https://example.com/p.git#v1");
+  assert.equal(sourceLogical(parsed), "https://example.com/p#v1");
 });
 
-// sourceLogical for UrlSource -- no ref
+// sourceLogical for UrlSource -- no ref (D-76-01: .git stripped).
 test("sourceLogical: UrlSource returns bare url when ref absent", () => {
   const parsed = parsePluginSource({ source: "url", url: "https://example.com/p.git" });
   assert.equal(parsed.kind, "url");
-  assert.equal(sourceLogical(parsed), "https://example.com/p.git");
+  assert.equal(sourceLogical(parsed), "https://example.com/p");
 });
 
 // sourceLogical for GitSubdirSource -- with ref
@@ -494,6 +621,36 @@ test("Y1 samePlannedSource: exhaustive switch over the tri-state union compiles"
       }
     }
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// MURL-06: samePlannedSource url arm is live and ref-aware. A config-declared
+// url source and its stored counterpart must reconcile to the same identity
+// (no spurious remove-then-re-add on /reload), and the .git suffix is
+// canonicalized at parse time so `repo.git` and `repo` compare equal (D-76-01).
+// ─────────────────────────────────────────────────────────────────────────
+
+test("MURL-06 samePlannedSource: identical url source pair returns 'same'", () => {
+  const stored = parsePluginSource("https://gitlab.com/acme/mp");
+  assert.equal(stored.kind, "url");
+  assert.equal(samePlannedSource(stored, "https://gitlab.com/acme/mp"), "same");
+});
+
+test("MURL-06 samePlannedSource: .git-suffixed declaration matches bare stored url", () => {
+  const stored = parsePluginSource("https://gitlab.com/acme/mp");
+  assert.equal(stored.kind, "url");
+  assert.equal(samePlannedSource(stored, "https://gitlab.com/acme/mp.git"), "same");
+});
+
+test("MURL-06 samePlannedSource: differing #ref returns 'different' (ref-aware)", () => {
+  const stored = parsePluginSource("https://gitlab.com/acme/mp#main");
+  assert.equal(stored.kind, "url");
+  assert.equal(samePlannedSource(stored, "https://gitlab.com/acme/mp#dev"), "different");
+});
+
+test("MURL-06 samePlannedSource: github stored vs url planned returns 'different' (kind mismatch)", () => {
+  const stored = githubSource("acme/mp");
+  assert.equal(samePlannedSource(stored, "https://gitlab.com/acme/mp"), "different");
 });
 
 test("Y1 samePlannedSource: truthy coercion of 'unknown-stored' is a TYPE error (compile-time guard)", () => {

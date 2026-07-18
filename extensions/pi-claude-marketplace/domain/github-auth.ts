@@ -10,9 +10,13 @@
  *   - D-32-01: file lives in domain/ (auth policy is domain-tier).
  *   - D-32-02: injectable DeviceFlowHttp seam (DEFAULT_DEVICE_FLOW_HTTP uses
  *     globalThis.fetch; tests inject makeMockDeviceFlowHttp).
- *   - D-32-03: GITHUB_OAUTH_CLIENT_ID is a PUBLIC compile-time constant
+ *   - D-32-03: the OAuth App client_id is a PUBLIC compile-time constant
  *     (Device Flow has no client_secret; client_id is safe to commit per
- *     RFC 8628 §3.1 and GitHub OAuth Apps docs).
+ *     RFC 8628 §3.1 and GitHub OAuth Apps docs). It now lives on the
+ *     GITHUB_PROVIDER descriptor in domain/auth-registry.ts (D-79-04).
+ *   - D-79-04: endpoints/clientId/scope/credentialFrom are read from a
+ *     GitAuthProvider descriptor; `provider` defaults to GITHUB_PROVIDER so
+ *     the github.com path is byte-identical.
  *   - D-32-04: notifyFn callback (no `ctx` import; preserves shared/notify.ts
  *     chokepoint at the boundary).
  *   - D-32-05: every DeviceFlowResult -- success OR failure -- carries
@@ -24,15 +28,13 @@
  *     appear in notifyFn or new Error(...) interpolation. Enforced by
  *     tests/architecture/no-credential-leak.test.ts.
  *
- * OPERATOR ACTION REQUIRED (P32-7): the GITHUB_OAUTH_CLIENT_ID below is
- * currently a placeholder. Before the first production smoke test, register
- * the pi-claude-marketplace OAuth App at github.com -> Settings -> Developer
- * settings -> OAuth Apps -> New OAuth App (with Device Flow enabled) and
- * substitute the placeholder with the real client_id. The mock-HTTP unit
- * tests do NOT depend on the real client_id value.
+ * The GITHUB_PROVIDER.clientId in domain/auth-registry.ts is the registered
+ * pi-claude-marketplace GitHub OAuth App's public client_id (Device Flow
+ * enabled). The mock-HTTP unit tests do NOT depend on the real client_id
+ * value.
  *
- * Scope: hard-coded to `repo` (P32-8 -- full control of private repositories;
- * covers AUTH-01's "private GitHub marketplace" requirement).
+ * Scope: GITHUB_PROVIDER requests `repo` (full control of private
+ * repositories; covers AUTH-01's "private GitHub marketplace" requirement).
  *
  * AUTH-09 discipline (mechanical lock): the
  * tests/architecture/no-credential-leak.test.ts gate scans THIS file for
@@ -42,6 +44,8 @@
  */
 
 import { setTimeout as sleepMs } from "node:timers/promises";
+
+import { GITHUB_PROVIDER, type GitAuthProvider } from "./auth-registry.ts";
 
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { GitCredentials } from "../platform/git.ts";
@@ -120,6 +124,12 @@ export interface InitiateDeviceFlowOpts {
   notifyFn: NotifyFn;
   /** Defaults to DEFAULT_DEVICE_FLOW_HTTP; tests inject a mock. */
   http?: DeviceFlowHttp;
+  /**
+   * Provider descriptor supplying endpoints/clientId/scope/credentialFrom
+   * (D-79-04). Defaults to GITHUB_PROVIDER so existing github.com call sites
+   * compile and behave byte-identically.
+   */
+  provider?: GitAuthProvider;
   /** Optional abort signal. Future-proofing; currently ignored. */
   signal?: AbortSignal;
 }
@@ -133,22 +143,13 @@ export type DeviceFlowResult =
   | { ok: true; cred: GitCredentials; authAttempted: true }
   | { ok: false; reason: string; authAttempted: true };
 
-const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
-const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
-
-/**
- * D-32-03: PUBLIC OAuth App client_id. Currently a placeholder; the operator
- * substitutes the real client_id before the first production smoke test. Unit
- * tests pass the constant through to mocks; they do not validate its value.
- */
-const GITHUB_OAUTH_CLIENT_ID = "Ov23liNcyK08uGdU0mMl";
-
-/** P32-8: full control of private repositories. */
-const REQUESTED_SCOPE = "repo";
-
-async function requestCodeImpl(clientId: string, scope: string): Promise<DeviceCodeResponse> {
+async function requestCodeImpl(
+  deviceCodeUrl: string,
+  clientId: string,
+  scope: string,
+): Promise<DeviceCodeResponse> {
   const body = new URLSearchParams({ client_id: clientId, scope }).toString();
-  const res = await fetch(GITHUB_DEVICE_CODE_URL, {
+  const res = await fetch(deviceCodeUrl, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -178,6 +179,7 @@ async function requestCodeImpl(clientId: string, scope: string): Promise<DeviceC
 }
 
 async function pollTokenImpl(
+  tokenUrl: string,
   clientId: string,
   deviceCode: string,
   _intervalSec: number,
@@ -190,7 +192,7 @@ async function pollTokenImpl(
 
   let res: Response;
   try {
-    res = await fetch(GITHUB_ACCESS_TOKEN_URL, {
+    res = await fetch(tokenUrl, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -253,10 +255,24 @@ async function pollTokenImpl(
   }
 }
 
-export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = {
-  requestCode: requestCodeImpl,
-  pollToken: pollTokenImpl,
-};
+/**
+ * Build the real fetch-backed DeviceFlowHttp for a provider. The URLs are
+ * captured in closures so the PUBLIC requestCode/pollToken signatures stay
+ * (clientId, scope) / (clientId, deviceCode, intervalSec) -- the mock seam in
+ * tests/helpers/device-flow-mock.ts needs no change.
+ */
+function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlowHttp {
+  return {
+    requestCode: (clientId, scope) => requestCodeImpl(deviceCodeUrl, clientId, scope),
+    pollToken: (clientId, deviceCode, intervalSec) =>
+      pollTokenImpl(tokenUrl, clientId, deviceCode, intervalSec),
+  };
+}
+
+export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = makeDeviceFlowHttp(
+  GITHUB_PROVIDER.deviceCodeUrl,
+  GITHUB_PROVIDER.tokenUrl,
+);
 
 /**
  * Run the GitHub Device Flow against the injected DeviceFlowHttp and persist
@@ -276,11 +292,12 @@ export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = {
  */
 async function safePollToken(
   http: DeviceFlowHttp,
+  clientId: string,
   deviceCode: string,
   intervalSec: number,
 ): Promise<PollResult | { kind: "poll_error"; reason: string }> {
   try {
-    return await http.pollToken(GITHUB_OAUTH_CLIENT_ID, deviceCode, intervalSec);
+    return await http.pollToken(clientId, deviceCode, intervalSec);
   } catch (err) {
     return {
       kind: "poll_error",
@@ -291,6 +308,7 @@ async function safePollToken(
 
 async function runPollLoop(
   http: DeviceFlowHttp,
+  provider: GitAuthProvider,
   deviceCode: DeviceCodeResponse,
   opts: InitiateDeviceFlowOpts,
 ): Promise<DeviceFlowResult> {
@@ -308,11 +326,16 @@ async function runPollLoop(
       return { ok: false, reason: "Device Flow cancelled.", authAttempted: true };
     }
 
-    const r = await safePollToken(http, deviceCode.device_code, currentIntervalSec);
+    const r = await safePollToken(
+      http,
+      provider.clientId,
+      deviceCode.device_code,
+      currentIntervalSec,
+    );
 
     switch (r.kind) {
       case "success": {
-        const cred: GitCredentials = { username: "x-access-token", password: r.accessToken };
+        const cred: GitCredentials = provider.credentialFrom(r.accessToken);
         await opts.credentialOps.approve(opts.host, cred);
         return { ok: true, cred, authAttempted: true };
       }
@@ -358,11 +381,14 @@ async function runPollLoop(
 }
 
 export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<DeviceFlowResult> {
-  const http = opts.http ?? DEFAULT_DEVICE_FLOW_HTTP;
+  // D-79-04: default to GITHUB_PROVIDER so existing github.com call sites are
+  // byte-identical.
+  const provider = opts.provider ?? GITHUB_PROVIDER;
+  const http = opts.http ?? makeDeviceFlowHttp(provider.deviceCodeUrl, provider.tokenUrl);
 
   let deviceCode: DeviceCodeResponse;
   try {
-    deviceCode = await http.requestCode(GITHUB_OAUTH_CLIENT_ID, REQUESTED_SCOPE);
+    deviceCode = await http.requestCode(provider.clientId, provider.scope);
   } catch (err) {
     return {
       ok: false,
@@ -375,5 +401,5 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
   // Token is not yet acquired; never appears here.
   opts.notifyFn(`Open ${deviceCode.verification_uri} and enter: ${deviceCode.user_code}`, "info");
 
-  return runPollLoop(http, deviceCode, opts);
+  return runPollLoop(http, provider, deviceCode, opts);
 }

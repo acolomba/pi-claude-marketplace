@@ -22,6 +22,7 @@ import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { errorMessage } from "./errors.ts";
+import { assertPathInside, PathContainmentError } from "./path-safety.ts";
 
 /**
  * Best-effort recursive removal of a staging directory. Swallows ENOENT
@@ -223,4 +224,41 @@ export async function rollbackReplacementCommon(
   }
 
   return Object.freeze(leaks);
+}
+
+/**
+ * PURL-03 / NFR-10 / D-77-03: resolve a git-subdir plugin root under the clone
+ * root with clone-root-anchored containment. Returns the `escapes` /
+ * `missing-subdir` discriminated arms on failure; a `materialized`-tagged
+ * pluginRoot on success (the caller stamps the resolvedSha). fs-only -- no git
+ * seam, no network -- so both the git-tainted clone-cache seam and the
+ * network-free presence probe can share it.
+ */
+export async function resolveGitSubdirRoot(
+  cloneRoot: string,
+  subPath: string,
+): Promise<
+  | { kind: "materialized"; pluginRoot: string }
+  | { kind: "escapes"; detail: string }
+  | { kind: "missing-subdir"; detail: string }
+> {
+  const pluginRoot = path.resolve(cloneRoot, subPath);
+  try {
+    await assertPathInside(cloneRoot, pluginRoot, `git-subdir path "${subPath}"`);
+  } catch (err) {
+    if (err instanceof PathContainmentError) {
+      return { kind: "escapes", detail: err.message };
+    }
+
+    throw err;
+  }
+
+  if (!(await pathExists(pluginRoot))) {
+    return {
+      kind: "missing-subdir",
+      detail: `git-subdir path "${subPath}" does not exist in the plugin clone`,
+    };
+  }
+
+  return { kind: "materialized", pluginRoot };
 }

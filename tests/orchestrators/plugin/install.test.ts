@@ -8,13 +8,23 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolvePluginPin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   __test_classifyEntityShapeError,
   __test_classifyInstallFailure,
   __test_composeInstallFailureMessage,
   __test_narrowResolverReasons,
   installPlugin,
+  type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -25,7 +35,9 @@ import {
   __resetCacheForTests,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -467,7 +479,7 @@ test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> fail
 // PI-4 -- non-installable plugin (e.g. github source is not installable)
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () => {
+test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi4-"));
     try {
@@ -476,10 +488,10 @@ test("PI-4: non-path source -> V2 unavailable/{unsupported source}", async () =>
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        // MM-3 / PR-2: only path sources are installable; "github:foo/bar"
-        // classifies as github and the resolver returns the not-installable
-        // variant.
-        rawSourceOverride: "github:anthropics/some-repo",
+        // PR-2 / PURL-01: path + the three git kinds (url / git-subdir / github)
+        // are installable; `npm` stays out of scope and resolves the
+        // not-installable `unavailable {unsupported source}` variant.
+        rawSourceOverride: { source: "npm", package: "some-pkg" },
       });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -3714,9 +3726,11 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "p1",
-        // Non-path source -> resolver returns the `unavailable` arm, which
-        // `requireForceInstallable` still rejects (FORCE-05).
-        rawSourceOverride: "github:anthropics/some-repo",
+        // An `npm` source stays out of scope (PURL-01 widens only url /
+        // git-subdir / github) -> resolver returns the `unavailable` arm, which
+        // `requirePartialInstallable` still rejects (FORCE-05). Using npm (not a
+        // git kind) keeps this a pure structural rejection with no clone.
+        rawSourceOverride: { source: "npm", package: "some-pkg" },
       });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -3767,6 +3781,678 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
       assert.ok(notifications.length >= 1, "a notification must surface on missing marketplace");
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["ghost-mp"], undefined, "no marketplace record conjured");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// PURL-01..04 / PURL-09 -- git-source (url / git-subdir / github) install via
+// the clone-cache seam. The mock gitOps copies a real plugin fixture tree into
+// the staging dir on clone(); the seam renames it into plugin-clones/<key>/,
+// and the resolver reads the materialized clone exactly as a path source.
+// ───────────────────────────────────────────────────────────────────────────
+
+const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+
+/**
+ * Bind the clone-cache seam entrypoints to a mock gitOps so install's
+ * git-source path runs without touching the network.
+ */
+function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
+  return {
+    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+    materializeOrRefreshPluginMirror: (args) =>
+      materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+/**
+ * Build a plugin fixture tree on disk (the "repo" the mock clone copies) and
+ * seed a marketplace whose manifest entry carries a git-object source.
+ *
+ * `subdirPath` places the plugin under `<repo>/<subdirPath>/` for git-subdir
+ * fixtures; when absent the plugin lives at the repo root (url / github).
+ */
+async function seedGitSourceMarketplace(opts: {
+  cwd: string;
+  marketplaceRoot: string;
+  marketplaceName: string;
+  pluginName: string;
+  source: unknown;
+  fixtureRepoDir: string;
+  subdirPath?: string;
+  scope?: "user" | "project";
+}): Promise<void> {
+  const scope = opts.scope ?? "project";
+  // The plugin tree the mock clone copies into staging. For git-subdir it lives
+  // under a subdirectory of the repo root; otherwise at the repo root.
+  const pluginRoot =
+    opts.subdirPath === undefined
+      ? opts.fixtureRepoDir
+      : path.join(opts.fixtureRepoDir, opts.subdirPath);
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: opts.pluginName, version: "9.9.9" }),
+  );
+  const skillDir = path.join(pluginRoot, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: greet\n---\n\nHello.\n`);
+
+  await mkdir(path.join(opts.marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: opts.marketplaceName,
+      plugins: [{ name: opts.pluginName, source: opts.source }],
+    }),
+  );
+
+  const locations = locationsFor(scope, opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      [opts.marketplaceName]: {
+        name: opts.marketplaceName,
+        scope,
+        source: pathSource(`./${path.basename(opts.marketplaceRoot)}`),
+        addedFromCwd: opts.cwd,
+        manifestPath,
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {},
+      },
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+}
+
+test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "a state record must be written for a url-source install");
+      assert.match(record.version, /^sha-[0-9a-f]{12}$/, "version is sha-<12hex>");
+      assert.equal(record.resolvedSha, GIT_SOURCE_SHA, "full 40-hex resolvedSha recorded");
+      assert.equal(
+        record.version,
+        `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
+        "version 12-hex == resolvedSha first-12",
+      );
+      // One clone (cold cache) and one checkout at the pin.
+      assert.equal(gitState.cloneCalls.length, 1, "one clone on cold cache");
+      assert.equal(gitState.checkoutCalls.length, 1, "one checkout at the pin");
+      assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA, "checkout pins the sha");
+      // The clone materialized under plugin-clones/<key>/.
+      const key = pluginCloneKey("https://example.com/org/repo", GIT_SOURCE_SHA);
+      const cloneRoot = await locations.pluginCloneDir(key);
+      assert.equal(record.resolvedSource, cloneRoot, "resolvedSource points at the clone root");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-dedup-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp1",
+        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+      // A second plugin (different name) referencing the SAME url+sha.
+      const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            {
+              name: "gp1",
+              source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+            },
+            {
+              name: "gp2",
+              source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+            },
+          ],
+        }),
+      );
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const seam = seamWith(gitOps);
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp1",
+        cloneCacheSeam: seam,
+      });
+      assert.equal(gitState.cloneCalls.length, 1, "first install clones once");
+
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp2",
+        cloneCacheSeam: seam,
+      });
+      assert.equal(
+        gitState.cloneCalls.length,
+        1,
+        "second install reuses the warm cache (no new clone)",
+      );
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.ok(
+        after.marketplaces["mp"]?.plugins["gp2"] !== undefined,
+        "second plugin still records",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-subdir-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: {
+          source: "git-subdir",
+          url: "https://example.com/org/mono",
+          path: "packages/gp",
+          sha: GIT_SOURCE_SHA,
+        },
+        fixtureRepoDir,
+        subdirPath: "packages/gp",
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "git-subdir install records");
+      const key = pluginCloneKey("https://example.com/org/mono", GIT_SOURCE_SHA);
+      const cloneRoot = await locations.pluginCloneDir(key);
+      assert.equal(
+        record.resolvedSource,
+        path.join(cloneRoot, "packages/gp"),
+        "pluginRoot = cloneRoot + subdir",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-03: a git-subdir path escaping the clone root fails the install", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-escape-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: {
+          source: "git-subdir",
+          url: "https://example.com/org/mono",
+          path: "../../etc",
+          sha: GIT_SOURCE_SHA,
+        },
+        fixtureRepoDir,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"], undefined, "no record on escape");
+      assert.ok(notifications.length >= 1, "a failure notification surfaces on escape");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-03: a missing git-subdir path fails the install", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-missing-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: {
+          source: "git-subdir",
+          url: "https://example.com/org/mono",
+          path: "packages/absent",
+          sha: GIT_SOURCE_SHA,
+        },
+        fixtureRepoDir,
+        // Seed the plugin at a DIFFERENT subdir so the declared path is absent.
+        subdirPath: "packages/present",
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"],
+        undefined,
+        "no record on missing subdir",
+      );
+      assert.ok(notifications.length >= 1, "a failure notification surfaces on missing subdir");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-77-06: a github-object source dedups to the same clone as a url naming the same repo", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-github-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+      const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "gh", source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA } },
+            {
+              name: "u",
+              source: { source: "url", url: "https://github.com/org/repo", sha: GIT_SOURCE_SHA },
+            },
+          ],
+        }),
+      );
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const seam = seamWith(gitOps);
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gh",
+        cloneCacheSeam: seam,
+      });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "u",
+        cloneCacheSeam: seam,
+      });
+
+      // github reconstructs https://github.com/org/repo -- same canonical url as
+      // the url entry, so both dedup to ONE clone.
+      assert.equal(
+        gitState.cloneCalls.length,
+        1,
+        "github + url naming the same repo share one clone",
+      );
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const ghRecord = after.marketplaces["mp"]?.plugins["gh"];
+      const uRecord = after.marketplaces["mp"]?.plugins["u"];
+      assert.equal(
+        ghRecord?.resolvedSource,
+        uRecord?.resolvedSource,
+        "both resolve to the same clone root",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and records the HEAD sha", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+      });
+
+      // The mirror seam reads HEAD from the refreshed clone, not resolveRemoteRef;
+      // seed the mock HEAD so the checked-out sha is deterministic.
+      const headSha = "0f1e2d3c4b5a69788796a5b4c3d2e1f0aabbccdd";
+      const { gitOps, state: gitState } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: headSha,
+        localRefs: { "refs/heads/main": headSha },
+        remoteRefs: { "refs/remotes/origin/main": headSha },
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "unpinned install records");
+      assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
+      assert.equal(
+        record.version,
+        `sha-${headSha.slice(0, 12)}`,
+        "version from the mirror HEAD sha",
+      );
+
+      // The record anchors to the BARE mirror key `plugin-clones/<12hex>/`
+      // (no `-<sha>` suffix), so GC's first-segment derivation protects it.
+      const mirrorKey = pluginMirrorKey("https://example.com/org/repo");
+      const mirrorRoot = await locations.pluginCloneDir(mirrorKey);
+      assert.equal(record.resolvedSource, mirrorRoot, "resolvedSource points at the mirror root");
+      const segment = path.basename(record.resolvedSource);
+      assert.match(segment, /^[0-9a-f]{12}$/, "resolvedSource segment is a bare 12-hex mirror key");
+
+      // The pin-only resolveRemoteRef path is NOT taken for the mirror route.
+      assert.equal(
+        gitState.resolveRemoteRefCalls.length,
+        0,
+        "unpinned mirror install does not resolve a remote ref (mirror reads HEAD)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror under the bare key", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-subdir-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "git-subdir", url: "https://example.com/org/mono", path: "packages/gp" },
+        fixtureRepoDir,
+        subdirPath: "packages/gp",
+      });
+
+      const headSha = "1a2b3c4d5e6f70819283a4b5c6d7e8f901234567";
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: headSha,
+        localRefs: { "refs/heads/main": headSha },
+        remoteRefs: { "refs/remotes/origin/main": headSha },
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "unpinned git-subdir install records");
+      assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
+      assert.equal(
+        record.version,
+        `sha-${headSha.slice(0, 12)}`,
+        "version from the mirror HEAD sha",
+      );
+
+      // resolvedSource is the subdir UNDER the bare mirror key; the first
+      // path segment under plugin-clones is still the bare 12-hex mirror key.
+      const mirrorKey = pluginMirrorKey("https://example.com/org/mono");
+      const mirrorRoot = await locations.pluginCloneDir(mirrorKey);
+      assert.equal(
+        record.resolvedSource,
+        path.join(mirrorRoot, "packages/gp"),
+        "resolvedSource is mirrorRoot + subdir",
+      );
+      assert.match(
+        path.basename(mirrorRoot),
+        /^[0-9a-f]{12}$/,
+        "the mirror root segment is a bare 12-hex key",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12hex> path", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pinned-key-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "pinned install records");
+      const perShaKey = pluginCloneKey("https://example.com/org/repo", GIT_SOURCE_SHA);
+      const perShaRoot = await locations.pluginCloneDir(perShaKey);
+      assert.equal(record.resolvedSource, perShaRoot, "pinned resolvedSource is the per-sha clone");
+      assert.match(
+        path.basename(record.resolvedSource),
+        /^[0-9a-f]{12}-[0-9a-f]{12}$/,
+        "pinned key is <12hex>-<12hex> (unchanged)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-09 / sha over ref: a source with both ref and sha records the sha's version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-shaoverref-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: {
+          source: "url",
+          url: "https://example.com/org/repo",
+          ref: "v2.0.0",
+          sha: GIT_SOURCE_SHA,
+        },
+        fixtureRepoDir,
+      });
+
+      // remoteResolveMap maps the ref to a DIFFERENT sha; sha must win.
+      const refSha = "ffffffffffffffffffffffffffffffffffffffff";
+      const { gitOps, state: gitState } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        remoteResolveMap: { "v2.0.0": refSha },
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, GIT_SOURCE_SHA, "sha wins over ref");
+      assert.equal(record?.version, `sha-${GIT_SOURCE_SHA.slice(0, 12)}`, "version from the sha");
+      // resolveRemoteRef is NOT consulted when a sha is set.
+      assert.equal(
+        gitState.resolveRemoteRefCalls.length,
+        0,
+        "no remote-ref resolve when sha is pinned",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-09 regression: a path-source install keeps its 3-tier ladder version (not sha)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pathreg-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p",
+        pluginVersion: "3.4.5",
+        // Omit the plugin.json version so the entry.version tier wins (proving
+        // the 3-tier ladder still runs for path sources, NOT the sha branch).
+        pluginJsonVersion: null,
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "p" });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["p"];
+      assert.equal(record?.version, "3.4.5", "path source keeps the entry.version tier");
+      assert.equal(record?.resolvedSha, undefined, "path source records no resolvedSha");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

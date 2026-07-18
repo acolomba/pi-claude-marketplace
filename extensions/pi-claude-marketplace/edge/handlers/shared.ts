@@ -20,14 +20,16 @@
 // itself.
 
 import { notifyUsageError } from "../../shared/notify.ts";
+import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
 
 /**
  * Position-independent `--local` flag scanner. Walks the tokenised args,
  * recognises `--scope <value>` as a downstream-consumed pair, recognises
- * `--local` as the flag this helper extracts, and rejects any other long
- * flag via `notifyUsageError` UNLESS listed in `passThroughLongFlags` (a
+ * the catalog-owned scope-target flag (`SCOPE_TARGET_FLAG`, `--local`) as
+ * the flag this helper extracts, and rejects any other long flag via
+ * `notifyUsageError` UNLESS listed in `passThroughLongFlags` (a
  * caller-supplied allow-list of additional boolean long flags handled by
  * the downstream domain parser, e.g. install/update's `--map-model`).
  *
@@ -58,7 +60,7 @@ export function extractLocalFlag(
       continue;
     }
 
-    if (tok === "--local") {
+    if (tok === SCOPE_TARGET_FLAG) {
       local = true;
       i += 1;
       continue;
@@ -79,5 +81,5 @@ export function extractLocalFlag(
     i += 1;
   }
 
-  return { local, residualArgs: tokens.filter((t) => t !== "--local").join(" ") };
+  return { local, residualArgs: tokens.filter((t) => t !== SCOPE_TARGET_FLAG).join(" ") };
 }

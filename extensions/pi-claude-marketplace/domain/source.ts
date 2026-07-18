@@ -78,16 +78,30 @@ export type ParsedSource =
 /** Per-user tilde reject message (SP-4). */
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";
 
-/** SSH/other-URL reject message (SP-3). */
+/**
+ * D-76-01: reject message for non-https URL schemes. Only `https://` URLs and
+ * local paths are accepted; `http://`, `ssh://`, and `git@host:` scp-form each
+ * name themselves so the diagnostic tells the user which scheme was rejected.
+ */
 function unsupportedUrlReason(raw: string): string {
-  return `${raw} is not supported; only github URLs and local paths are accepted`;
+  const scheme = rejectedScheme(raw);
+  return `${raw} is not supported; ${scheme} URLs are rejected -- only https:// URLs and local paths are accepted`;
 }
 
-/** owner/repo@<ref> reject message (SP-2). */
-function ownerRepoAtRefReason(raw: string, atIdx: number): string {
-  const owner = raw.slice(0, atIdx);
-  const ref = raw.slice(atIdx + 1);
-  return `${raw} uses unsupported owner/repo@<ref> form; use https://github.com/${owner}#${ref}`;
+function rejectedScheme(raw: string): string {
+  if (raw.startsWith("git@")) {
+    return "git@host: scp-form";
+  }
+
+  if (raw.startsWith("http://")) {
+    return "http://";
+  }
+
+  if (raw.startsWith("ssh://")) {
+    return "ssh://";
+  }
+
+  return "this URL scheme";
 }
 
 /** MM-4: non-relative string sources -- the "fallthrough" reason. */
@@ -99,12 +113,29 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
   return typeof obj[key] === "string" ? obj[key] : undefined;
 }
 
-function withOptionalSourceFields<T extends ParsedSource>(
+/**
+ * Clone-key / sha-version invariant (domain/clone-key.ts, domain/version.ts):
+ * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
+ * and `shaVersion` slice its first 12 chars unchecked.
+ */
+const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
+
+/**
+ * Spread the manifest object's optional `ref` / `sha` onto a git-backed source
+ * (the only kinds that carry them -- the constraint keeps path/npm/unknown
+ * sources from smuggling the fields through the spread). `ref` is freeform (any
+ * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
+ * source degrades to unpinned rather than mis-keying the clone cache or
+ * emitting a `sha-<12hex>` version that fails SHA_VERSION_RE. A valid sha is
+ * lowercased for the same reason (SHA_VERSION_RE is lowercase-only).
+ */
+function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
   source: T,
   obj: Record<string, unknown>,
 ): T {
   const ref = optionalString(obj, "ref");
-  const sha = optionalString(obj, "sha");
+  const rawSha = optionalString(obj, "sha");
+  const sha = rawSha !== undefined && FULL_SHA_RE.test(rawSha) ? rawSha.toLowerCase() : undefined;
   return {
     ...source,
     ...(ref !== undefined && { ref }),
@@ -135,9 +166,21 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
 
 function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
   const url = optionalString(obj, "url");
-  return url === undefined
-    ? unknownObjectSource(obj, "url source is missing url")
-    : withOptionalSourceFields({ kind: "url", raw: url, url }, obj);
+  if (url === undefined) {
+    return unknownObjectSource(obj, "url source is missing url");
+  }
+
+  // D-76-02: an object-form url pointing at github.com funnels through the
+  // github parser so it normalizes to `github` kind (canonical identity;
+  // Device Flow auth stays applicable), carrying the object's ref/sha fields.
+  if (url.startsWith("https://github.com/")) {
+    const parsed = parsePluginSource(url);
+    if (parsed.kind === "github") {
+      return withOptionalSourceFields(parsed, obj);
+    }
+  }
+
+  return withOptionalSourceFields(parseUrlSource(url), obj);
 }
 
 function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
@@ -266,35 +309,99 @@ export function parsePluginSource(raw: unknown): ParsedSource {
     return { kind: "path", raw, logical: raw };
   }
 
-  // GitHub HTTPS URL
+  // GitHub HTTPS URL. D-76-02: the github-host check MUST run BEFORE the
+  // generic-https arm below so github.com always normalizes to `github` kind
+  // (one canonical identity per repo; Device Flow auth stays applicable).
   if (raw.startsWith("https://github.com/")) {
     return parseGitHubUrl(raw);
   }
 
-  // SP-3: SSH and arbitrary URL schemes
+  // MURL-01 / D-76-01: any other https:// host is a generic `url` source.
+  // Must sit AFTER the github check and BEFORE the scheme reject below.
+  if (raw.startsWith("https://")) {
+    return parseUrlSource(raw);
+  }
+
+  // D-76-01: http://, ssh://, and git@host: scp-form stay rejected -- only
+  // https:// URLs (and local paths) are accepted.
   if (raw.startsWith("git@") || raw.includes("://")) {
     return { kind: "unknown", raw, reason: unsupportedUrlReason(raw) };
   }
 
-  // SP-2: owner/repo@<ref> reject with hint
-  const atIdx = raw.indexOf("@");
+  // D-76-04: owner/repo@<ref> upstream shorthand folds into `github` + ref.
+  // Split on the LAST `@`; only fold when the left side is a valid owner/repo.
+  const atIdx = raw.lastIndexOf("@");
   if (atIdx !== -1) {
-    return { kind: "unknown", raw, reason: ownerRepoAtRefReason(raw, atIdx) };
+    const left = raw.slice(0, atIdx);
+    const ref = raw.slice(atIdx + 1);
+    const github = parseOwnerRepo(left, raw);
+    if (github.kind === "github" && ref.length > 0) {
+      return { ...github, ref };
+    }
+
+    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
   }
 
   // SP-5: owner/repo -- exactly one slash, both halves non-empty
   const slashCount = (raw.match(/\//g) ?? []).length;
   if (slashCount === 1) {
-    const [owner, repo] = raw.split("/");
-    if (!owner || !repo) {
-      return { kind: "unknown", raw, reason: `${raw} owner/repo halves must be non-empty` };
-    }
-
-    return { kind: "github", raw, owner, repo };
+    return parseOwnerRepo(raw, raw);
   }
 
   // MM-4: anything else (foo/bar/baz, foo, "", whitespace-only, etc.) is unknown
   return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+}
+
+/**
+ * D-76-04: parse a bare `owner/repo` candidate into a `GitHubSource`, echoing
+ * `raw` (which may carry an `@ref` suffix the caller strips) as the verbatim
+ * input. Returns `unknown` when the candidate is not exactly one non-empty
+ * slash-separated pair.
+ */
+function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
+  const slashCount = (candidate.match(/\//g) ?? []).length;
+  if (slashCount !== 1) {
+    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  }
+
+  const [owner, repo] = candidate.split("/");
+  if (!owner || !repo) {
+    return { kind: "unknown", raw, reason: `${raw} owner/repo halves must be non-empty` };
+  }
+
+  return { kind: "github", raw, owner, repo };
+}
+
+/**
+ * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
+ * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
+ * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then
+ * strip a single trailing `.git`. Normalizing the `.git` suffix at parse time
+ * is the identity rule that lets `sourceLogical` / `samePlannedSource` compare
+ * `https://host/repo.git` and `https://host/repo` as the same source (D-76-01).
+ */
+function parseUrlSource(raw: string): UrlSource {
+  let rest = raw;
+
+  while (rest.endsWith("/")) {
+    rest = rest.slice(0, -1);
+  }
+
+  let ref: string | undefined;
+  const hashIdx = rest.indexOf("#");
+  if (hashIdx !== -1) {
+    const frag = rest.slice(hashIdx + 1);
+    rest = rest.slice(0, hashIdx);
+    if (frag.length > 0) {
+      ref = frag;
+    }
+  }
+
+  if (rest.endsWith(".git")) {
+    rest = rest.slice(0, -".git".length);
+  }
+
+  return ref === undefined ? { kind: "url", raw, url: rest } : { kind: "url", raw, url: rest, ref };
 }
 
 function parseGitHubUrl(raw: string): ParsedSource {
@@ -429,7 +536,10 @@ export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlan
         : "different";
     case "path":
       return current.kind === "path" && planned.logical === current.logical ? "same" : "different";
-    /* c8 ignore next 3 -- callers only generate path/github sources today */
+    // MURL-06: url identity is `sourceLogical` equality, which is ref-aware
+    // (the `#ref` suffix is appended) and .git-canonical (D-76-01 strips it at
+    // parse time), so a config-declared url reconciles against its stored form
+    // without a spurious remove-then-re-add. git-subdir/npm share the arm.
     case "url":
     case "git-subdir":
     case "npm":

@@ -7,16 +7,24 @@
 // (it strips comments before searching). IL-2: exactly one `notify()`
 // call per invocation.
 //
-// INFO-05 source-kind gate: only `"path"` sources are locally
-// resolvable. Every other source kind (`github` / `url` / `git-subdir`
-// / `npm` / `unknown`) emits `componentsResolved: false` -- fetching a
-// remote source to resolve components would violate NFR-5. The gate
-// excludes non-path SOURCES, not the not-installable verdict: a path-
-// source plugin whose resolver returned `installable: false` (e.g.
-// unsupported hooks, persistence-vs-disk disagreement) still enumerates
-// components from disk via `composeResolvedComponents` on the
-// not-installable variant -- both variants carry symmetric
-// `componentPaths` / `mcpServers` / `hooksConfigPath`.
+// INFO-05 source-kind gate: `"path"` sources are locally resolvable.
+// `npm` / `unknown` sources stay unresolved (`componentsResolved: false`).
+// The gate excludes non-resolvable SOURCES, not the not-installable
+// verdict: a path-source plugin whose resolver returned
+// `installable: false` (e.g. unsupported hooks, persistence-vs-disk
+// disagreement) still enumerates components from disk via
+// `composeResolvedComponents` on the not-installable variant -- both
+// variants carry symmetric `componentPaths` / `mcpServers` /
+// `hooksConfigPath`.
+//
+// RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04: a git source (url /
+// git-subdir / github) is classified from its fs-only clone/mirror
+// presence via `makePresenceProbe`. A COLD clone renders `(remote)` +
+// `components: not resolved`; a WARM one resolves fs-only via the
+// three-way resolver against the on-disk tree (available /
+// partially-available / unavailable) and enumerates components from
+// that warm `pluginRoot`. Reading the warm clone is fs-only -- never a
+// fetch -- so NFR-5 holds.
 
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -35,12 +43,20 @@ import {
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
   resolveStrict,
+  type GitPluginRootResult,
+  type ResolveContext,
   type ResolvedPluginUnavailable,
   type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
-import { parsePluginSource, type ParsedSource } from "../../domain/source.ts";
+import {
+  parsePluginSource,
+  type GitHubSource,
+  type GitSubdirSource,
+  type ParsedSource,
+  type UrlSource,
+} from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
-import { locationsFor } from "../../persistence/locations.ts";
+import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 import {
@@ -55,8 +71,17 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
+import {
+  canonicalCloneUrl,
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolveGitSubdirRoot,
+  resolvePluginPin,
+} from "./clone-cache.ts";
+import { makePresenceProbe } from "./git-source-probe.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -68,6 +93,7 @@ import type {
   PluginInfoRow,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 // SURF-01: TOOL_EVENTS is a string[] tuple; rewrap as a Set
 // for O(1) membership tests in the HookSummaryEntry projector. Module-
@@ -93,6 +119,67 @@ export interface GetPluginInfoOptions {
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
+  /**
+   * FTCH-03 / D-81-04: fetch the git-source clone/mirror THEN resolve and list
+   * components in one step. Network on cache miss (pinned) or on the mirror
+   * refresh (unpinned) (D-81-05, MIRR-02); a fetch failure degrades to the
+   * existing `components: not resolved` arm with an existing closed-set reason
+   * and NEVER fails info. Omitted / false keeps info network-free (bare info
+   * behaves exactly as before).
+   */
+  readonly fetch?: boolean;
+  /**
+   * Test-only clone-cache seam override. When undefined (production), the
+   * git-source fetch flows through the real `resolvePluginPin` /
+   * `materializePluginClone` / `materializeOrRefreshPluginMirror` imports; tests
+   * inject mock-backed versions so `info --fetch` runs without the network.
+   */
+  readonly cloneCacheSeam?: InfoCloneCacheSeam;
+  /** FTCH-06 credential seam (install parity); tests inject a mock. */
+  readonly credentialOps?: CredentialOps;
+  /** FTCH-06 Device Flow HTTP seam (install parity); tests inject a mock. */
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** FTCH-06 / D-79-02 once-per-host auth memo. */
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+}
+
+/**
+ * FTCH-04 / NFR-5: injected clone-cache seam for the `info --fetch` hook. info.ts
+ * is a FORBIDDEN_TARGET for the git surface (no-orchestrator-network gate), so
+ * the fetch-materialize flows through the sibling `clone-cache.ts` seam by name
+ * -- info NEVER references the git ops directly. Mirrors
+ * `install.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
+ * uses the real imports (which default to the real git backend internally).
+ */
+export interface InfoCloneCacheSeam {
+  readonly resolvePluginPin: typeof resolvePluginPin;
+  readonly materializePluginClone: typeof materializePluginClone;
+  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+}
+
+/**
+ * FTCH-03 / D-81-05: derive the per-command fetch context from the caller
+ * options. Returns undefined unless `--fetch` was passed (so every row builder
+ * stays fs-only for bare info). Production defaults to the real clone-cache
+ * imports + `DEFAULT_CREDENTIAL_OPS`; tests inject mock-backed seams. The
+ * command-scope auth memo caps a Device Flow at once per host (D-79-02).
+ */
+function buildInfoFetchContext(opts: GetPluginInfoOptions): InfoFetchContext | undefined {
+  if (opts.fetch !== true) {
+    return undefined;
+  }
+
+  return {
+    ctx: opts.ctx,
+    seam: opts.cloneCacheSeam ?? {
+      resolvePluginPin,
+      materializePluginClone,
+      materializeOrRefreshPluginMirror,
+    },
+    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+  };
 }
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -118,6 +205,20 @@ function isLocallyResolvable(src: ParsedSource): boolean {
       assertNever(src);
       return false;
   }
+}
+
+/**
+ * RSTA-01 / RSTA-06: a git-clonable source (url / git-subdir / github). These
+ * three kinds materialize from a remote clone at install time. Offline, a
+ * not-installed git entry is classified from its fs-only clone/mirror presence
+ * (D-80-04): a COLD clone renders `(remote)`; a WARM one resolves fs-only via
+ * the three-way resolver. `npm` / `unknown` are NOT git sources (they stay on
+ * the structural `(unavailable)` path), and `path` is the locally-resolvable
+ * kind handled by its own arm. Narrows to the git-source union so callers can
+ * feed the presence probe (whose input is exactly these three kinds).
+ */
+function isGitSource(src: ParsedSource): src is UrlSource | GitSubdirSource | GitHubSource {
+  return src.kind === "url" || src.kind === "git-subdir" || src.kind === "github";
 }
 
 /**
@@ -578,8 +679,15 @@ async function buildBlock(
   scope: Scope,
   mpRecord: MarketplaceRecord,
   autoupdate: boolean,
+  cwd: string,
+  fetchCtx?: InfoFetchContext,
 ): Promise<PluginInfoMessage> {
   const marketplaceDetails = { autoupdate };
+
+  // RSTA-06 / NFR-5: the per-scope locations feed `makePresenceProbe`'s
+  // fs-only clone/mirror presence check so a git-source row resolves warm
+  // trees without touching the network. Built once per block.
+  const locations = locationsFor(scope, cwd);
 
   // (a) Manifest read failure -> bare `(failed) {<reason>}` row under
   // the marketplace header. The reason is CLASSIFIED via the same
@@ -655,11 +763,14 @@ async function buildBlock(
       mpRecord,
       installedRecord: installed,
       parsedSource,
+      locations,
+      ...(fetchCtx !== undefined && { fetchCtx }),
     });
     return wrapBlock(marketplace, scope, marketplaceDetails, row);
   }
 
-  // (d) / (e) Not installed -> resolve to classify available / unavailable.
+  // (d) / (e) Not installed -> resolve to classify remote / available /
+  // partially-available / unavailable.
   const row = await buildNotInstalledRow(
     pluginName,
     manifestVersion,
@@ -668,6 +779,8 @@ async function buildBlock(
     entry,
     mpRecord,
     parsedSource,
+    locations,
+    fetchCtx,
   );
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
@@ -868,6 +981,263 @@ function buildNonPathInstalledRow(
 }
 
 /**
+ * FTCH-06 / D-81-05: the per-command auth + seam context for the `info --fetch`
+ * hook. Built once in `getPluginInfo` when `opts.fetch === true`, threaded down
+ * to the git-source row builders. `locations` are supplied per-block by the
+ * caller. Mirrors the install clone-probe's auth bundle wiring; info reaches the
+ * git surface ONLY through the `clone-cache.ts` seam + `auth-host.ts`
+ * re-exports (no-orchestrator-network gate, NFR-5).
+ */
+interface InfoFetchContext {
+  readonly ctx: ExtensionContext;
+  readonly seam: InfoCloneCacheSeam;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+}
+
+/**
+ * A git-source presence/materialize probe: maps a git source to its on-disk
+ * `pluginRoot` (fs-only for bare info, materializing for `info --fetch`). Both
+ * arms return the same `GitPluginRootResult` shape so the row builders classify
+ * warm/cold identically regardless of which probe ran.
+ */
+type GitProbe = (
+  source: UrlSource | GitSubdirSource | GitHubSource,
+) => Promise<GitPluginRootResult>;
+
+/**
+ * FTCH-06 / T-81-08: build the host-keyed auth bundle for a resolved cloneUrl at
+ * install parity (PROV-02/03/04): a registered provider host authenticates, a
+ * no-provider / public host clones authless. `buildAuthForHost` never
+ * interpolates credentials into any surfaced string (AUTH-09). Mirrors
+ * `install.ts::buildProbeAuth`.
+ */
+function buildFetchAuth(
+  cloneUrl: string,
+  kind: "url" | "git-subdir" | "github",
+  fetchCtx: InfoFetchContext,
+) {
+  const host = hostFromCloneUrl(cloneUrl, kind);
+  return buildAuthForHost({
+    host,
+    credentialOps: fetchCtx.credentialOps,
+    ctx: fetchCtx.ctx,
+    ...(fetchCtx.deviceFlowHttp !== undefined && { deviceFlowHttp: fetchCtx.deviceFlowHttp }),
+    ...(fetchCtx.authMemo !== undefined && { authMemo: fetchCtx.authMemo }),
+  });
+}
+
+/**
+ * PURL-03 / NFR-10: apply the git-subdir containment tail to a materialized
+ * clone/mirror root and stamp the resolved sha. A git-subdir source resolves the
+ * pluginRoot under the clone root (escapes / missing-subdir arms propagate);
+ * other kinds materialize at the clone root itself. Mirrors
+ * `install.ts::resolveGitPluginRootWithSubdir`.
+ */
+async function resolveFetchedPluginRoot(
+  gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  cloneRoot: string,
+  resolvedSha: string,
+): Promise<GitPluginRootResult> {
+  if (gitSource.kind === "git-subdir") {
+    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
+    if (subdirResult.kind !== "materialized") {
+      return subdirResult;
+    }
+
+    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
+  }
+
+  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
+}
+
+/**
+ * FTCH-03 / FTCH-04 / D-81-05: build the MATERIALIZING git probe for the
+ * `info --fetch` hook. A pinned source (manifest sha) clones once into the
+ * per-sha immutable cache (network on cache miss); an unpinned source refreshes
+ * the single mutable URL-keyed mirror even when warm (MIRR-02 refresh-on-warm --
+ * the mirror refresh IS the consented fetch, so it hits the network on every
+ * run). A materialize throw PROPAGATES so the row builder's existing
+ * try/catch degrades to `components: not resolved` (D-81-04). Mirrors
+ * `install.ts::makeInstallCloneProbe`; the pinned/unpinned fork lives inside the
+ * callback so info still names no git surface (it reaches the seam only by name).
+ */
+function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
+  const probeUnpinned = async (
+    gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  ): Promise<GitPluginRootResult> => {
+    const cloneUrl = canonicalCloneUrl(gitSource);
+    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const { pluginRoot: mirrorRoot, resolvedSha } =
+      await fetchCtx.seam.materializeOrRefreshPluginMirror({
+        locations,
+        cloneUrl,
+        ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
+        ...(authBundle !== undefined && { auth: authBundle }),
+      });
+    return resolveFetchedPluginRoot(gitSource, mirrorRoot, resolvedSha);
+  };
+
+  const probePinned = async (
+    gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  ): Promise<GitPluginRootResult> => {
+    const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
+    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const cloneRoot = await fetchCtx.seam.materializePluginClone({
+      locations,
+      cloneUrl,
+      pin,
+      ...(ref !== undefined && { ref }),
+      ...(authBundle !== undefined && { auth: authBundle }),
+    });
+    return resolveFetchedPluginRoot(gitSource, cloneRoot, pin);
+  };
+
+  return (gitSource) =>
+    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+}
+
+/**
+ * FTCH-04 / D-81-04 / T-81-08: classify an `info --fetch` materialize throw into
+ * the EXISTING closed-set `network unreachable` / `authentication required`
+ * REASONS -- no new token. Duck-typed on the isomorphic-git `HttpError`
+ * (`.code === "HttpError"` + 401/403 status), the `UserCanceledError` a
+ * denied/expired Device Flow surfaces (the git layer's onAuth returns
+ * `{ cancel: true }`), + the errno ladder, mirroring
+ * `update.ts::classifyGitProbeFailure` (no isomorphic-git import in the
+ * orchestrator tier). Returns undefined for a non-network throw so the caller
+ * folds through the existing `narrowProbeError` ladder instead.
+ */
+function classifyFetchFailure(
+  err: unknown,
+): "network unreachable" | "authentication required" | undefined {
+  if (!(err instanceof Error)) {
+    return undefined;
+  }
+
+  const code = (err as NodeJS.ErrnoException).code;
+  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
+    return "authentication required";
+  }
+
+  // isomorphic-git throws `UserCanceledError` (both `code` and `name` carry the
+  // string) when onAuth returns `{ cancel: true }` -- a denied/expired Device
+  // Flow is an auth failure, not a network one.
+  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
+    return "authentication required";
+  }
+
+  if (
+    code === "ENETUNREACH" ||
+    code === "ECONNREFUSED" ||
+    code === "ENOTFOUND" ||
+    code === "ETIMEDOUT" ||
+    code === "ECONNRESET" ||
+    code === "EAI_AGAIN"
+  ) {
+    return "network unreachable";
+  }
+
+  return undefined;
+}
+
+/**
+ * D-81-04: fold a git-source fetch/read throw to a closed-set reason. A
+ * network/auth materialize failure narrows to `network unreachable` /
+ * `authentication required` (fetch parity with install/update); any other throw
+ * (warm-tree disk error, etc.) falls through to the existing `narrowProbeError`
+ * ladder. Never returns a new REASONS member.
+ */
+function foldFetchOrProbeError(err: unknown): ContentReason {
+  return classifyFetchFailure(err) ?? narrowProbeError(err);
+}
+
+/**
+ * RSTA-04 / D-78-04 / INFO-05 / NFR-5: build the `(installed)` /
+ * `(partially-installed)` row for an installed git source (url / git-subdir /
+ * github) by resolving its WARM clone fs-only. `makePresenceProbe(locations)`
+ * returns `materialized` for a WARM clone/mirror, whose `pluginRoot` is the
+ * on-disk tree; `resolveStrict` (probe injected) then enumerates components:
+ *   - `installable` -> `(installed)` with components resolved fs-only from the
+ *     warm `pluginRoot`.
+ *   - non-installable -> the recorded `buildNonPathInstalledRow` marker (the
+ *     install itself succeeded; a live resolver defect does not un-install it).
+ * A COLD/missing clone (`not-cached`) OR a `resolveStrict` /
+ * `composeResolvedComponents` throw preserves the D-78-04 degrade -- the
+ * recorded `(installed)` / `(partially-installed)` status holds, NEVER `(remote)`
+ * (that derives only on the not-installed path) nor `(unavailable)`. No network.
+ */
+async function buildInstalledGitRow(opts: {
+  pluginName: string;
+  version: string | undefined;
+  description: string | undefined;
+  dependencies: readonly string[] | undefined;
+  entry: MarketplaceManifest["plugins"][number];
+  mpRecord: MarketplaceRecord;
+  installedRecord: MarketplaceRecord["plugins"][string];
+  gitSource: UrlSource | GitSubdirSource | GitHubSource;
+  locations: ScopedLocations;
+  fetchCtx?: InfoFetchContext;
+}): Promise<PluginInfoRow> {
+  const {
+    pluginName,
+    version,
+    description,
+    dependencies,
+    entry,
+    mpRecord,
+    installedRecord,
+    gitSource,
+    locations,
+    fetchCtx,
+  } = opts;
+  // FTCH-03: `info --fetch` materializes the clone/mirror (network on cache
+  // miss when pinned, on the mirror refresh when unpinned -- D-81-05, MIRR-02)
+  // via the fetch probe; bare info uses the fs-only presence probe. A fetch
+  // throw is caught below and preserves the recorded status (D-78-04).
+  const probe =
+    fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
+  try {
+    const presence = await probe(gitSource);
+    if (presence.kind === "materialized") {
+      const resolved = await resolveStrict(entry, {
+        marketplaceRoot: mpRecord.marketplaceRoot,
+        resolveGitPluginRoot: probe,
+      });
+      if (resolved.state === "installable") {
+        return {
+          status: "installed",
+          name: pluginName,
+          ...(version !== undefined && { version }),
+          ...(description !== undefined && { description }),
+          componentsResolved: true,
+          components: await composeResolvedComponents(presence.pluginRoot, resolved),
+          ...(dependencies !== undefined && { dependencies }),
+        };
+      }
+    }
+  } catch (err) {
+    // D-78-04: a warm-tree resolve/read failure OR a fetch failure never
+    // un-installs the plugin; the recorded status holds either way. Bare info
+    // degrades silently (the fs-only probe carries no fetch consent), but
+    // `info --fetch` surfaces the consented fetch/read failure as an existing
+    // closed-set reason on the recorded row (D-81-04 parity with the
+    // not-installed arm) -- otherwise a failed `--fetch` would render
+    // byte-identical to bare info.
+    if (fetchCtx !== undefined) {
+      const base = buildNonPathInstalledRow(pluginName, version, description, installedRecord);
+      return { ...base, reasons: [...(base.reasons ?? []), foldFetchOrProbeError(err)] };
+    }
+  }
+
+  // COLD / missing clone, non-installable warm resolve, or a probe/read throw:
+  // preserve the recorded install status (D-78-04) with `components: not resolved`.
+  return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
+}
+
+/**
  * Build an `(installed)` row. When the source kind is `"path"` (the
  * only locally resolvable kind), run `resolveStrict` to compute the
  * per-kind component arrays + sort them. For all other source kinds,
@@ -887,6 +1257,8 @@ async function buildInstalledRow(opts: {
   mpRecord: MarketplaceRecord;
   installedRecord: MarketplaceRecord["plugins"][string];
   parsedSource: ParsedSource;
+  locations: ScopedLocations;
+  fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
   const {
     pluginName,
@@ -897,8 +1269,30 @@ async function buildInstalledRow(opts: {
     mpRecord,
     installedRecord,
     parsedSource,
+    locations,
+    fetchCtx,
   } = opts;
   if (!isLocallyResolvable(parsedSource)) {
+    // RSTA-04 / D-78-04: a git source with a WARM clone resolves its components
+    // fs-only (amends INFO-05); a COLD/missing clone keeps the recorded
+    // `(installed)` / `(partially-installed)` marker via `buildNonPathInstalledRow`
+    // -- it NEVER regresses to `(remote)` (that derives only on the not-installed
+    // path) nor to `(unavailable)`.
+    if (isGitSource(parsedSource)) {
+      return buildInstalledGitRow({
+        pluginName,
+        version,
+        description,
+        dependencies,
+        entry,
+        mpRecord,
+        installedRecord,
+        gitSource: parsedSource,
+        locations,
+        ...(fetchCtx !== undefined && { fetchCtx }),
+      });
+    }
+
     return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
   }
 
@@ -1018,6 +1412,183 @@ async function buildNotInstalledPathRow(
 }
 
 /**
+ * RSTA-01 / D-80-04 / NFR-5: the `(remote)` not-installed row for a git source
+ * (url / git-subdir / github) whose clone/mirror is COLD (nothing materialized
+ * locally). There is no local tree to resolve, so components stay unresolved --
+ * `componentsResolved: false` renders the existing `components: not resolved`
+ * marker (D-80-04 preserves that wording). The entry is still a valid install
+ * target (install performs the fetch); `(remote)` replaces the manifest-only
+ * `(available)` over-claim.
+ */
+function buildRemoteNotInstalledRow(
+  pluginName: string,
+  version: string | undefined,
+  description: string | undefined,
+  dependencies: readonly string[] | undefined,
+): PluginInfoRow {
+  return {
+    status: "remote",
+    name: pluginName,
+    ...(version !== undefined && { version }),
+    ...(description !== undefined && { description }),
+    componentsResolved: false,
+    ...(dependencies !== undefined && { dependencies }),
+  };
+}
+
+/**
+ * RSTA-04 / RSTA-05 / RSTA-06 / NFR-5: resolve a not-installed git-source plugin
+ * against its WARM clone/mirror, fs-only. `makePresenceProbe(locations)` returns
+ * `not-cached` for a COLD clone (-> `(remote)` row) or `materialized` for a WARM
+ * one, whose `pluginRoot` is the on-disk tree. On warm, `resolveStrict` runs the
+ * three-way verdict (the presence probe injected as `resolveGitPluginRoot`):
+ *   - `installable` -> `(available)` row with components enumerated fs-only from
+ *     the warm `pluginRoot` via `composeResolvedComponents`.
+ *   - `partially-available` / `unavailable` -> the SAME reason-brace arm a path
+ *     source gets (`buildNotInstalledPathRow`), with components enumerated from
+ *     the warm `pluginRoot`.
+ * A `resolveStrict` / `composeResolvedComponents` throw folds to
+ * `componentsResolved: false` + `narrowProbeError` (never a throw). No network.
+ */
+async function buildGitNotInstalledRow(opts: {
+  pluginName: string;
+  version: string | undefined;
+  description: string | undefined;
+  dependencies: readonly string[] | undefined;
+  entry: MarketplaceManifest["plugins"][number];
+  mpRecord: MarketplaceRecord;
+  gitSource: UrlSource | GitSubdirSource | GitHubSource;
+  locations: ScopedLocations;
+  fetchCtx?: InfoFetchContext;
+}): Promise<PluginInfoRow> {
+  const { pluginName, version, description, dependencies, entry, mpRecord, gitSource, locations } =
+    opts;
+  const fetchCtx = opts.fetchCtx;
+  // FTCH-03: `info --fetch` materializes the clone/mirror (network on cache
+  // miss when pinned, on the mirror refresh when unpinned -- D-81-05, MIRR-02)
+  // via the fetch probe; bare info uses the fs-only presence probe.
+  const probe =
+    fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
+
+  let presence: GitPluginRootResult;
+  try {
+    presence = await probe(gitSource);
+  } catch (err) {
+    // D-81-04: a fetch materialize throw NEVER fails info -- degrade to the
+    // existing `components: not resolved` arm with an existing closed-set reason
+    // (network unreachable / authentication required, else the probe-error
+    // ladder). The `(remote)` token is the not-installed git surface.
+    return {
+      status: "remote",
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      reasons: [foldFetchOrProbeError(err)],
+      componentsResolved: false,
+    };
+  }
+
+  if (presence.kind !== "materialized") {
+    return buildRemoteNotInstalledRow(pluginName, version, description, dependencies);
+  }
+
+  const pluginRoot = presence.pluginRoot;
+  const ctx: ResolveContext = {
+    marketplaceRoot: mpRecord.marketplaceRoot,
+    resolveGitPluginRoot: probe,
+  };
+  try {
+    const resolved = await resolveStrict(entry, ctx);
+    if (resolved.state !== "installable") {
+      // `return await` so a `composeResolvedComponents` throw inside the helper
+      // is caught by THIS try/catch and folds to the unreadable arm below.
+      return await buildWarmGitNonInstallableRow(resolved, {
+        pluginName,
+        version,
+        description,
+        pluginRoot,
+      });
+    }
+
+    return await buildAvailableRow({
+      pluginName,
+      version,
+      description,
+      dependencies,
+      pluginRoot,
+      resolvedForComponents: resolved,
+    });
+  } catch (err) {
+    // Warm-tree disk error -> fold to `componentsResolved: false` on the
+    // `(remote)` token (the clone is present but unreadable); never a throw.
+    return {
+      status: "remote",
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      reasons: [narrowProbeError(err)],
+      componentsResolved: false,
+    };
+  }
+}
+
+/**
+ * RSTA-04 / RSTA-05: render the not-installable arm of a WARM git-source
+ * resolution. Enumerates components fs-only from the warm `pluginRoot` and
+ * routes reasons through the same closed-set arms a path source uses --
+ * `partially-available` -> `(partially-available)`, `unavailable` ->
+ * `(unavailable)` -- so the reason braces match the path-plugin path. A
+ * `composeResolvedComponents` throw folds to `componentsResolved: false`.
+ */
+async function buildWarmGitNonInstallableRow(
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
+  opts: {
+    pluginName: string;
+    version: string | undefined;
+    description: string | undefined;
+    pluginRoot: string;
+  },
+): Promise<PluginInfoRow> {
+  const { pluginName, version, description, pluginRoot } = opts;
+  const status = resolved.state === "partially-available" ? "partially-available" : "unavailable";
+  const resolverReasons =
+    resolved.state === "partially-available"
+      ? narrowUnsupportedKinds(resolved.unsupported)
+      : narrowResolverNotes(resolved.notes);
+  // The `unavailable` arm carries no `componentPaths` (NFR-7); enumerate from
+  // the conventional `<pluginRoot>/{skills,commands,agents}` locations so the
+  // warm tree still lists on-disk components (mirrors `deriveLenientComponentPaths`).
+  const forComponents =
+    resolved.state === "partially-available"
+      ? resolved
+      : {
+          componentPaths: { skills: ["skills"], commands: ["commands"], agents: ["agents"] },
+          mcpServers: {},
+        };
+  try {
+    const components = await composeResolvedComponents(pluginRoot, forComponents);
+    return {
+      status,
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      componentsResolved: true,
+      components,
+    };
+  } catch (err) {
+    return {
+      status,
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      reasons: [...resolverReasons, narrowProbeError(err)],
+      componentsResolved: false,
+    };
+  }
+}
+
+/**
  * Build the row for a plugin that is NOT in the state's installed
  * bucket. `resolveStrict` decides between `(available)`, `(partially-available)`, and
  * `(unavailable)`; the per-kind component arrays follow the same
@@ -1031,7 +1602,32 @@ async function buildNotInstalledRow(
   entry: MarketplaceManifest["plugins"][number],
   mpRecord: MarketplaceRecord,
   parsedSource: ParsedSource,
+  locations: ScopedLocations,
+  fetchCtx?: InfoFetchContext,
 ): Promise<PluginInfoRow> {
+  // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
+  // git-subdir / github) is classified from its clone/mirror presence. Bare info
+  // reads it fs-only: a COLD clone renders `(remote)` + `components: not
+  // resolved`; a WARM one resolves fs-only via the three-way resolver.
+  // FTCH-03: `info --fetch` materializes the clone/mirror first (network on
+  // cache miss when pinned, on the mirror refresh when unpinned -- D-81-05,
+  // MIRR-02), then resolves the now-warm tree; a fetch throw degrades in-place
+  // (D-81-04). Branch BEFORE the path `resolveStrict` below (whose git arm maps
+  // the absent clone to `unavailable{not installed}`).
+  if (isGitSource(parsedSource)) {
+    return buildGitNotInstalledRow({
+      pluginName,
+      version,
+      description,
+      dependencies,
+      entry,
+      mpRecord,
+      gitSource: parsedSource,
+      locations,
+      ...(fetchCtx !== undefined && { fetchCtx }),
+    });
+  }
+
   let resolved;
   try {
     resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
@@ -1053,33 +1649,7 @@ async function buildNotInstalledRow(
   }
 
   if (resolved.state !== "installable") {
-    if (!isLocallyResolvable(parsedSource)) {
-      // XSURF-02 / IN-01: derive the token AND its reason source from
-      // `resolved.state`, mirroring the path-source arm and the list surface,
-      // instead of hardcoding `unavailable`. The `resolved.state !==
-      // "installable"` guard above narrows to `partially-available | unavailable`, so
-      // `resolved.unsupported` is reachable on the `partially-available` arm. Today
-      // non-path sources never resolve `partially-available` (no-network), so this is
-      // latent-divergence repair -- existing non-path `unavailable` rows stay
-      // byte-unchanged.
-      const reasons =
-        resolved.state === "partially-available"
-          ? narrowUnsupportedKinds(resolved.unsupported)
-          : narrowResolverNotes(resolved.notes);
-      return {
-        status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
-        name: pluginName,
-        ...(version !== undefined && { version }),
-        ...(description !== undefined && { description }),
-        ...(reasons.length > 0 && { reasons }),
-        componentsResolved: false,
-      };
-    }
-
-    // Path source whose resolver returned a non-installable arm: enumerate
-    // components from disk. `partially-available` reads its component payload
-    // directly; `unavailable` re-derives independently (D-64-05).
-    return buildNotInstalledPathRow(resolved, {
+    return buildNotInstalledNonInstallableRow(resolved, {
       pluginName,
       version,
       description,
@@ -1101,6 +1671,61 @@ async function buildNotInstalledRow(
     dependencies,
     pluginRoot: resolved.pluginRoot,
     resolvedForComponents: resolved,
+  });
+}
+
+/**
+ * Build the not-installed row for a plugin whose `resolveStrict` returned a
+ * non-installable arm (`partially-available` / `unavailable`). Non-path sources
+ * (npm / unknown -- git sources short-circuit to `(available)` upstream) render
+ * the resolver token + reasons without enumerating components; a path source
+ * enumerates its on-disk components via `buildNotInstalledPathRow`.
+ */
+function buildNotInstalledNonInstallableRow(
+  resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
+  opts: {
+    pluginName: string;
+    version: string | undefined;
+    description: string | undefined;
+    entry: MarketplaceManifest["plugins"][number];
+    mpRecord: MarketplaceRecord;
+    parsedSource: ParsedSource;
+  },
+): Promise<PluginInfoRow> | PluginInfoRow {
+  const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  if (!isLocallyResolvable(parsedSource)) {
+    // XSURF-02 / IN-01: derive the token AND its reason source from
+    // `resolved.state`, mirroring the path-source arm and the list surface,
+    // instead of hardcoding `unavailable`. The `resolved.state !==
+    // "installable"` guard at the caller narrows to `partially-available |
+    // unavailable`, so `resolved.unsupported` is reachable on the
+    // `partially-available` arm. Today non-path sources never resolve
+    // `partially-available` (no-network), so this is latent-divergence repair --
+    // existing non-path `unavailable` rows stay byte-unchanged.
+    const reasons =
+      resolved.state === "partially-available"
+        ? narrowUnsupportedKinds(resolved.unsupported)
+        : narrowResolverNotes(resolved.notes);
+    return {
+      status: resolved.state === "partially-available" ? "partially-available" : "unavailable",
+      name: pluginName,
+      ...(version !== undefined && { version }),
+      ...(description !== undefined && { description }),
+      ...(reasons.length > 0 && { reasons }),
+      componentsResolved: false,
+    };
+  }
+
+  // Path source whose resolver returned a non-installable arm: enumerate
+  // components from disk. `partially-available` reads its component payload
+  // directly; `unavailable` re-derives independently (D-64-05).
+  return buildNotInstalledPathRow(resolved, {
+    pluginName,
+    version,
+    description,
+    entry,
+    mpRecord,
+    parsedSource,
   });
 }
 
@@ -1227,6 +1852,13 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // scopes are searched; otherwise the explicit scope only.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
+  // FTCH-03 / D-81-05: build the fetch context ONCE when `--fetch` is passed so
+  // the git-source row builders materialize the clone/mirror (network on cache
+  // miss when pinned, on the mirror refresh when unpinned -- MIRR-02) before
+  // resolving. Omitted `fetch` leaves it undefined -> every row builder stays
+  // on the fs-only presence probe (bare info is network-free).
+  const fetchCtx = buildInfoFetchContext(opts);
+
   // Collect (scope, record) tuples so the fan-out renderer preserves
   // the outer-loop iteration order. Each scope's state is loaded
   // read-only via `loadState` (NFR-5 preserved -- NO network).
@@ -1291,6 +1923,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       sole.scope,
       sole.record,
       sole.autoupdate,
+      opts.cwd,
+      fetchCtx,
     );
     notify(opts.ctx, opts.pi, block);
     return;
@@ -1313,7 +1947,15 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const blocks = await Promise.all(
     infoFound.map((f) =>
-      buildBlock(opts.marketplace, opts.plugin, f.scope, f.record, f.autoupdate),
+      buildBlock(
+        opts.marketplace,
+        opts.plugin,
+        f.scope,
+        f.record,
+        f.autoupdate,
+        opts.cwd,
+        fetchCtx,
+      ),
     ),
   );
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");

@@ -19,7 +19,11 @@ import { fileURLToPath } from "node:url";
 import {
   computeHashVersion,
   HASH_WALK_SKIP,
+  looksLikeShaVersion,
+  SHA_VERSION_RE,
+  shaVersion,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
+import { renderVersion } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = path.join(HERE, "fixtures/hash-stability");
@@ -75,4 +79,40 @@ test("PI-7 SNAPSHOT: sample-plugin fixture hash is pinned (D-11/D-12 contract)",
     "hash-743f35130ec4",
     `Snapshot mismatch -- got ${got}. If the algorithm/truncation/walk-filter changed intentionally, update the pinned snapshot value in tests/domain/version.test.ts and add a CHANGELOG entry per the PI-7 contract.`,
   );
+});
+
+// PURL-09 / D-77-01 sha-version helper contract. Parallels the PI-7
+// hash-version convention: `sha-<12hex>` names the git-commit provenance,
+// stays compact on the list surface, and compares by exact string equality.
+
+const FULL_SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+
+test("PURL-09 / D-77-01 shaVersion returns sha- + first 12 hex of the full sha", () => {
+  assert.equal(shaVersion(FULL_SHA), "sha-a1b2c3d4e5f6");
+});
+
+test("PURL-09 / D-77-01 SHA_VERSION_RE is the anchored-exact 12-lowercase-hex shape", () => {
+  assert.deepEqual(SHA_VERSION_RE, /^sha-[0-9a-f]{12}$/);
+});
+
+test("PURL-09 / D-77-01 looksLikeShaVersion accepts exactly sha-<12 lowercase hex>", () => {
+  assert.equal(looksLikeShaVersion("sha-a1b2c3d4e5f6"), true);
+});
+
+test("PURL-09 / D-77-01 looksLikeShaVersion rejects uppercase, wrong length, hash-, and semver", () => {
+  assert.equal(looksLikeShaVersion("sha-A1B2C3D4E5F6"), false);
+  assert.equal(looksLikeShaVersion("sha-a1b2"), false);
+  assert.equal(looksLikeShaVersion("hash-a1b2c3d4e5f6"), false);
+  assert.equal(looksLikeShaVersion("1.0.0"), false);
+});
+
+test("PURL-09 / D-77-01 renderVersion renders sha-<12hex> as v#<first 7 hex>", () => {
+  assert.equal(renderVersion("sha-2ea95f857031"), "v#2ea95f8");
+});
+
+test("PURL-09 / D-77-01 renderVersion leaves hash-<12hex> and SemVer unchanged", () => {
+  // The hash arm is unaffected by the sha arm (each formatter no-ops the
+  // other's shape); SemVer passes straight through.
+  assert.equal(renderVersion("hash-2ea95f85703d"), "v#2ea95f8");
+  assert.equal(renderVersion("1.0.0"), "v1.0.0");
 });

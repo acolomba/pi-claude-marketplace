@@ -577,6 +577,31 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // D-77-01 / PURL-09: a persisted git-source `sha-<12hex>` version renders as
+    // the git-style short SHA on a list-surface inventory row
+    // (`sha-a1b2c3d4e5f6` -> `v#a1b2c3d`).
+    "sha-version-list": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: false,
+                name: "git-plugin",
+                version: "sha-a1b2c3d4e5f6",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // PL-4: description on all four list-surface variants. Beta's description
     // is 80 chars (> 66) so it truncates to 63 + "..." = 66 chars rendered.
     "description-lines": {
@@ -667,6 +692,58 @@ const FIXTURES: FixtureMap = {
                 severity: "info",
                 needsReload: false,
                 description: "Disabled plugin that still surfaces its description.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
+    // git-source plugin whose clone/mirror is not materialized locally. The
+    // `(remote)` closed-set token wears the dedicated `◌` glyph. Bare row --
+    // no scope bracket (SNM-11), no reasons brace (D-80-03). Severity `info`;
+    // `needsReload: false`.
+    "remote-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "remote",
+                name: "git-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // PL-4: the remote inventory row carries the manifest description on a
+    // second 4-space-indented line, same as the other list-surface variants.
+    "remote-inventory-with-description": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "remote",
+                name: "git-plugin",
+                version: "1.2.3",
+                severity: "info",
+                needsReload: false,
+                description: "Remote git-source plugin not yet fetched locally.",
               },
             ],
           },
@@ -1674,6 +1751,37 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // D-78-06 / PURL-06: a git-source update from `sha-<12hex>OLD` to
+    // `sha-<12hex>NEW` renders the version arrow as `v#<7hex> → v#<7hex>` through
+    // the SAME composeVersionArrow -> renderVersion -> formatShaVersionForDisplay
+    // path the hash-version arrow uses (`sha-a1b2c3d4e5f6` -> `v#a1b2c3d`,
+    // `sha-2222333344455` -> `v#2222333`). Verify-only: no render code changes.
+    "sha-version-arrow": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "plural",
+        tally: { verb: "updated", count: 1 },
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "info",
+                needsReload: true,
+                name: "git-plugin",
+                from: "sha-a1b2c3d4e5f6",
+                to: "sha-222233334445",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // SEV-04 / D-69-02 / XSURF-03: a TARGETED `update <plugin>@<marketplace>`
     // that declines a partially-upgradable candidate (no `--partial`) is actionable
     // -> warning. The decline flips to the `partially-upgradable` token (consistent
@@ -1790,6 +1898,119 @@ const FIXTURES: FixtureMap = {
         kind: "marketplace-not-added",
         name: "ghost-mp",
       } satisfies NotificationMessage,
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // /claude:plugin fetch -- pi-only cache-warming verb (FTCH-02 / FTCH-03).
+  // A post-fetch success renders the plugin's DERIVED status row (available /
+  // partially-available / unavailable), a no-op renders `(skipped) {up-to-date}`,
+  // and the plural sweep carries a default `successes` tally. A fetch installs
+  // nothing, so no row is a reload-trigger.
+  // -------------------------------------------------------------------------
+  "/claude:plugin fetch": {
+    // FTCH-02: a cold git-source plugin warmed to an installable tree resolves
+    // `available`; the bare row omits the scope bracket (MSG-PL-6 / SNM-11).
+    // Single cardinality -> no tally. Info; no reload-hint.
+    "single-available": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "available",
+                name: "gp",
+                version: "1.0.0",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // FTCH-02: the warmed tree resolves `partially-available`; the `⊖` row
+    // carries the `{lsp}` degrade reason via the same narrowUnsupportedKinds
+    // seam `list` uses. Info; no reload-hint.
+    "single-partially-available": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-available",
+                name: "gp",
+                version: "1.0.0",
+                reasons: ["lsp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // FTCH-03 / D-81-02: a path/non-git source or a pinned-warm clone is a
+    // no-op; the row is `⊘ (skipped) {up-to-date}` at info severity, carrying
+    // the existing `up-to-date` reason (closed set does not grow).
+    "single-noop-skipped": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "gp",
+                reasons: ["up-to-date"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // FTCH-02 / D-81-01: the plural sweep captures a per-plugin throw as a
+    // `(failed)` row and continues; the succeeding plugin renders its fresh
+    // derived status row. The default tally counts the info row as one success
+    // and folds the failure in -> `Plugin fetch: 1 failure, 1 success`.
+    // Severity `error` (first-match wins); no reload-hint (a fetch installs
+    // nothing).
+    "bulk-mixed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin fetch",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "available",
+                name: "ok",
+                version: "1.0.0",
+              },
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "bad",
+                reasons: ["network unreachable"],
+              },
+            ],
+          },
+        ],
+      },
     },
   },
 
@@ -2227,6 +2448,38 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-76-08: a url-source `marketplace add` whose clone hits an HTTP auth
+    // challenge (401/403). Truthful attribution -- `{authentication required}`,
+    // NOT `{network unreachable}`. The reason + HTTP cause chain ride a
+    // synthetic-child failed row (marketplace headers carry no `cause`; SNM-10),
+    // mirroring the `update-path-invalid-manifest` recipe. The subject is the
+    // user-typed URL (pre-name failure). Severity `error`; no reload-hint.
+    "add-authentication-required": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "https://gitlab.com/acme/private-mp",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "https://gitlab.com/acme/private-mp",
+                reasons: ["authentication required"],
+                cause: new Error("HTTP Error: 401 Unauthorized"),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------
@@ -2277,6 +2530,34 @@ const FIXTURES: FixtureMap = {
         scope: "user",
         details: { autoupdate: false },
         source: { sourceKind: "github", owner: "someuser", repo: "community-mp" },
+      } satisfies NotificationMessage,
+    },
+
+    // MURL-05 / D-76-09 / D-76-10: url source with ref, lastUpdatedAt, and
+    // description. The `url: <url>#<ref>` line replaces `github:`/`path:`, and
+    // `last_updated:` renders because url is a git-backed kind. Non-github host.
+    "url-single-scope-full": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "acme-mp",
+        scope: "user",
+        details: { autoupdate: true, lastUpdatedAt: "2026-06-03T00:00:00Z" },
+        source: { sourceKind: "url", url: "https://gitlab.com/acme/mp", ref: "main" },
+        description: "An ACME marketplace hosted on GitLab.",
+      } satisfies NotificationMessage,
+    },
+
+    // MURL-05 / D-76-09: url source with NO ref -> the `url:` line drops the
+    // `#<ref>` suffix; no lastUpdatedAt so no `last_updated:` line.
+    "url-single-scope-minimal": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "marketplace-info",
+        name: "acme-mp",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "url", url: "https://gitlab.com/acme/mp" },
       } satisfies NotificationMessage,
     },
 
@@ -2534,6 +2815,29 @@ const FIXTURES: FixtureMap = {
           name: "remote-plugin",
           version: "1.0.0",
           description: "Remote plugin sourced from an external npm package.",
+          componentsResolved: false,
+        },
+      } satisfies NotificationMessage,
+    },
+
+    // RSTA-01 / D-80-04: info-surface row for a not-installed git-source plugin
+    // whose clone/mirror is not materialized. The status glyph is `◌`
+    // (`pluginInfoStatusGlyph` remote arm) and the row reads `(remote)`. The
+    // `componentsResolved: false` arm keeps the `components: not resolved`
+    // marker (existing wording preserved) -- an unfetched source has no warm
+    // tree to resolve. Severity `info`.
+    "remote-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "remote",
+          name: "git-helper",
+          version: "0.5.0",
+          description: "Git-source helper plugin; not yet fetched.",
           componentsResolved: false,
         },
       } satisfies NotificationMessage,

@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   githubSource,
+  parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -146,6 +147,36 @@ async function seedGithubMarketplace(opts: {
   return { cloneDir };
 }
 
+async function seedUrlMarketplace(opts: {
+  cwd: string;
+  name: string;
+  ref?: string;
+}): Promise<{ cloneDir: string }> {
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const cloneDir = await locations.sourceCloneDir(opts.name);
+  await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+  const rawUrl = `https://gitlab.example.com/team/${opts.name}${
+    opts.ref === undefined ? "" : `#${opts.ref}`
+  }`;
+  const urlSrc = parsePluginSource(rawUrl);
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      [opts.name]: {
+        name: opts.name,
+        scope: "project",
+        source: urlSrc,
+        addedFromCwd: opts.cwd,
+        manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: cloneDir,
+        plugins: {},
+      },
+    },
+  });
+  return { cloneDir };
+}
+
 function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][string] {
   return {
     version: "0.0.1",
@@ -207,6 +238,99 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     // change -> NO `/reload` trailer (UXG-05 is orthogonal to the reload-hint).
     assert.equal(first.message, "● official [project] (skipped) {up-to-date}");
     assert.equal(first.message.includes("/reload to pick up changes"), false);
+  });
+});
+
+test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout with NO auth bundle", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+
+    await updateMarketplace({ ctx, pi, name: "urlmp", scope: "project", cwd, gitOps });
+
+    // Same atomic-swap path as github: fetch -> forceUpdateRef -> checkout.
+    assert.equal(state.fetchCalls.length, 1);
+    assert.equal(state.forceUpdateRefCalls.length, 1);
+    assert.equal(state.checkoutCalls.length, 1);
+    const fur = state.forceUpdateRefCalls[0];
+    assert.ok(fur !== undefined);
+    assert.equal(fur.ref, "refs/heads/main");
+    assert.equal(fur.value, "abcdef0000000000000000000000000000000009");
+
+    // D-76-07: the url refresh passes NO auth bundle to fetch.
+    const fetchCall = state.fetchCalls[0];
+    assert.ok(fetchCall !== undefined);
+    assert.equal(Object.hasOwn(fetchCall, "auth"), false);
+    assert.equal(fetchCall.auth, undefined);
+  });
+});
+
+test("MURL-03: unpinned url refresh follows the default-branch head-advance path (same as unpinned github)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedUrlMarketplace({ cwd, name: "urlmp-default" });
+    const { ctx, pi } = makeCtx();
+    const remoteSha = "abcdef0000000000000000000000000000000010";
+    const { gitOps, state } = makeMockGitOps({
+      remoteRefs: {
+        "refs/remotes/origin/HEAD": remoteSha,
+        "refs/remotes/origin/main": remoteSha,
+      },
+      localRefs: { "refs/heads/main": "0000000000000000000000000000000000000001" },
+      currentBranchOverride: "main",
+    });
+
+    await updateMarketplace({ ctx, pi, name: "urlmp-default", scope: "project", cwd, gitOps });
+
+    // Default-branch head-advance path (same as unpinned github): resolveRef
+    // refs/remotes/origin/HEAD -> currentBranch -> forceUpdateRef -> checkout.
+    assert.equal(state.fetchCalls.length, 1);
+    assert.equal(state.forceUpdateRefCalls.length, 1);
+    const fur = state.forceUpdateRefCalls[0];
+    assert.ok(fur !== undefined);
+    assert.equal(fur.ref, "refs/heads/main");
+    assert.equal(fur.value, remoteSha);
+    const fetchCall = state.fetchCalls[0];
+    assert.ok(fetchCall !== undefined);
+    assert.equal(Object.hasOwn(fetchCall, "auth"), false);
+  });
+});
+
+test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentication required} plus the single no-provider cause line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    // Duck-typed isomorphic-git HttpError: code === "HttpError",
+    // data.statusCode carries the HTTP status (mirrors D-76-08).
+    const httpErr = Object.assign(new Error("HTTP 401 from fetch"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+    const { gitOps, state } = makeMockGitOps({ fetchThrows: httpErr });
+
+    await updateMarketplace({ ctx, pi, name: "urlmp-private", scope: "project", cwd, gitOps });
+
+    // PROV-02: gitlab.example.com has no registered provider, so the fetch
+    // carried NO auth bundle (authless refresh; the 401 is structural).
+    assert.equal(state.fetchCalls.length, 1);
+    assert.equal(Object.hasOwn(state.fetchCalls[0] ?? {}, "auth"), false);
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /^⊘ urlmp-private \[project\] \(failed\)$/m);
+    // D-79-03: the existing closed-set token -- NO new REASONS token.
+    assert.ok(
+      first.message.includes("{authentication required}"),
+      `expected the authentication-required child row, got: ${first.message}`,
+    );
+    assert.equal(first.message.includes("{network unreachable}"), false);
+    // D-79-03 / PROV-04: exactly one new cause line, riding the synthetic
+    // failed-plugin child's depth-5 cause-chain trailer.
+    assert.match(first.message, /cause:.*no auth provider is registered for gitlab\.example\.com/);
   });
 });
 

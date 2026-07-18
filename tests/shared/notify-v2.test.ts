@@ -1542,7 +1542,7 @@ test("PL-4: disabled inventory row with description emits description line", () 
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   assert.equal(
     body,
-    "● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)\n    Disabled plugin that still surfaces its description.",
+    "● official [user]\n  ◍ foo-plugin v1.2.3 (disabled)\n    Disabled plugin that still surfaces its description.",
   );
 });
 
@@ -2730,6 +2730,37 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   // The persisted `hash-2ea95f85703d` renders the version token `v#2ea95f8`
   // (NOT the verbose `v` + raw hash); first 7 hex of the 12-hex truncation.
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `● demo [user] (added)\n  ● commit-commands v#2ea95f8 (installed)\n\n/reload to pick up changes`,
+  ]);
+});
+
+test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via renderVersion chokepoint", () => {
+  const ctx = makeCtx();
+  const pi = piWithNothingLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "demo",
+        scope: "user",
+        status: "added",
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "commit-commands",
+            version: "sha-2ea95f857031",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  // The persisted `sha-2ea95f857031` renders the version token `v#2ea95f8`
+  // (first 7 hex of the 12-hex truncation), mirroring the hash-version arm.
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● demo [user] (added)\n  ● commit-commands v#2ea95f8 (installed)\n\n/reload to pick up changes`,
   ]);
@@ -4417,7 +4448,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", () => {
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ◌ to-disable (will disable)`);
+  assert.equal(args[0], `● mp [user]\n  ● to-enable (will enable)\n  ◍ to-disable (will disable)`);
 });
 
 test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", () => {
@@ -4513,7 +4544,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   // info severity -> no 2nd arg.
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user] <autoupdate>\n  ◌ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user] <autoupdate>\n  ◍ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", () => {
@@ -4531,7 +4562,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◍ foo-plugin (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", () => {
@@ -4558,7 +4589,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● shared [user]\n  ◌ foo-plugin [project] v1.2.3 (disabled)`);
+  assert.equal(args[0], `● shared [user]\n  ◍ foo-plugin [project] v1.2.3 (disabled)`);
 });
 
 test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", () => {
@@ -4585,7 +4616,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● official [user]\n  ◍ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emit the /reload trailer (realized transition; byte-identical row form)", () => {
@@ -4622,7 +4653,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
     args[0],
     [
       "● claude-plugins-official [user]",
-      "  ◌ foo-plugin v1.2.3 (disabled)",
+      "  ◍ foo-plugin v1.2.3 (disabled)",
       "",
       "/reload to pick up changes",
     ].join("\n"),
@@ -4658,7 +4689,7 @@ test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false sta
   notify(ctx as never, pi as never, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
   assert.equal(args.length, 1);
-  assert.equal(args[0], `● claude-plugins-official [user]\n  ◌ foo-plugin v1.2.3 (disabled)`);
+  assert.equal(args[0], `● claude-plugins-official [user]\n  ◍ foo-plugin v1.2.3 (disabled)`);
 });
 
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", () => {

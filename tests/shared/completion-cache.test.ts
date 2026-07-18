@@ -47,7 +47,7 @@ test("schemaVersion snapshot :: MARKETPLACE_NAMES_CACHE_SCHEMA.schemaVersion ===
   assert.equal(properties.schemaVersion.const, 2);
 });
 
-test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 4", () => {
+test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 6", () => {
   __resetCacheForTests();
   const properties = PLUGIN_INDEX_CACHE_SCHEMA.properties;
   // LIST-02 / D-67-02: bumped 1 -> 2 for the finer-status union. WR-02: bumped
@@ -55,8 +55,13 @@ test("schemaVersion snapshot :: PLUGIN_INDEX_CACHE_SCHEMA.schemaVersion === 4", 
   // (which flattened that case to plain `force-installed`) drop+rebuild via the
   // existing mismatch path. D-75-01: bumped 3 -> 4 for the partial-status
   // vocabulary rename; stale v3 caches (carrying the old force-status literals)
+  // drop+rebuild via the same mismatch path. PURL-08: bumped 4 -> 5 so stale v4
+  // caches (which carried not-installed git-source rows misclassified
+  // `unavailable`) drop+rebuild once the bucketizer learned the git-source
+  // short-circuit. RSTA-03: bumped 5 -> 6 so stale v5 caches (carrying the OLD
+  // not-installed git-source `available` classification, now `remote`)
   // drop+rebuild via the same mismatch path.
-  assert.equal(properties.schemaVersion.const, 4);
+  assert.equal(properties.schemaVersion.const, 6);
 });
 
 // ---------------------------------------------------------------------------
@@ -239,7 +244,7 @@ test("D-03-TTL :: getPluginIndex re-reads file after 10-min TTL via injected clo
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 6,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [{ name: "after", status: "installed" }],
       }),
@@ -276,7 +281,7 @@ test("D-03-TTL :: stale plugin-index file rebuilds instead of serving old status
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 6,
         lastRefreshedAt: new Date(clock - 10 * 60 * 1000 - 1).toISOString(),
         plugins: [{ name: "before", status: "available" }],
       }),
@@ -332,7 +337,81 @@ test("D-75-01 :: stale v3 plugin-index cache (old force literals) drops + rebuil
     );
 
     assert.deepEqual(rows, [{ name: "legacy", status: "partially-installed" }]);
-    assert.equal(rebuildCalls, 1, "stale v3 schema must drop+rebuild into v4");
+    assert.equal(rebuildCalls, 1, "stale v3 schema must drop+rebuild into the current version");
+  });
+});
+
+test("PURL-08 :: stale v4 plugin-index cache (git-source rows misclassified unavailable) drops + rebuilds", async () => {
+  __resetCacheForTests();
+  await withTempDir(async (dir) => {
+    const filePath = path.join(dir, "plugins", "mp-a.json");
+    const clock = 1_000_000;
+    let rebuildCalls = 0;
+    await mkdir(path.dirname(filePath), { recursive: true });
+    // A pre-fix v4 cache: schemaVersion 4 whose git-source entry was
+    // misclassified `unavailable`. A fresh timestamp
+    // proves the drop is schema-driven, not TTL. The rebuild regenerates the
+    // entry as `available` via the git-source short-circuit.
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        schemaVersion: 4,
+        lastRefreshedAt: new Date(clock).toISOString(),
+        plugins: [{ name: "git-plug", status: "unavailable" }],
+      }),
+      "utf8",
+    );
+
+    const rows = await getPluginIndex(
+      filePath,
+      "user",
+      "mp-a",
+      () => {
+        rebuildCalls++;
+        return Promise.resolve([{ name: "git-plug", status: "available" }]);
+      },
+      { now: () => clock },
+    );
+
+    assert.deepEqual(rows, [{ name: "git-plug", status: "available" }]);
+    assert.equal(rebuildCalls, 1, "stale v4 schema must drop+rebuild into the current version");
+  });
+});
+
+test("RSTA-03 :: stale v5 plugin-index cache (git-source rows classified `available`) drops + rebuilds into `remote`", async () => {
+  __resetCacheForTests();
+  await withTempDir(async (dir) => {
+    const filePath = path.join(dir, "plugins", "mp-a.json");
+    const clock = 1_000_000;
+    let rebuildCalls = 0;
+    await mkdir(path.dirname(filePath), { recursive: true });
+    // A pre-fix v5 cache: schemaVersion 5 whose not-fetched git-source entry
+    // carried the old over-claimed `available` classification. A fresh timestamp
+    // proves the drop is schema-driven, not TTL. The rebuild regenerates the
+    // entry as `remote` via the presence-derived classifier.
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        schemaVersion: 5,
+        lastRefreshedAt: new Date(clock).toISOString(),
+        plugins: [{ name: "git-plug", status: "available" }],
+      }),
+      "utf8",
+    );
+
+    const rows = await getPluginIndex(
+      filePath,
+      "user",
+      "mp-a",
+      () => {
+        rebuildCalls++;
+        return Promise.resolve([{ name: "git-plug", status: "remote" }]);
+      },
+      { now: () => clock },
+    );
+
+    assert.deepEqual(rows, [{ name: "git-plug", status: "remote" }]);
+    assert.equal(rebuildCalls, 1, "stale v5 schema must drop+rebuild into the current version");
   });
 });
 
@@ -359,7 +438,7 @@ test("D-03-TTL :: getPluginIndex serves in-memory before TTL expiry", async () =
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 6,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [{ name: "external-change", status: "installed" }],
       }),
@@ -505,7 +584,7 @@ test("TC-8 :: rebuild that throws manifest error caches { plugins: [], _loadErro
       plugins: unknown[];
       _loadError?: string;
     };
-    assert.equal(parsed.schemaVersion, 4);
+    assert.equal(parsed.schemaVersion, 6);
     assert.deepEqual(parsed.plugins, []);
     assert.match(parsed._loadError ?? "", /missing manifest/);
   });
@@ -520,7 +599,7 @@ test("TC-8 :: subsequent reads of TC-8-poisoned cache return [] (no throw)", asy
     await writeFile(
       filePath,
       JSON.stringify({
-        schemaVersion: 4,
+        schemaVersion: 6,
         lastRefreshedAt: new Date().toISOString(),
         plugins: [],
         _loadError: "stale failure",

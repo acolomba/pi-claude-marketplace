@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  parsePluginSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import {
   __test_narrowCascadeFailure,
   removeMarketplace,
@@ -25,6 +29,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -545,6 +550,183 @@ test("MR-7 inverse: github-source clone dir REMOVED on full cascade success", as
       assert.equal(await pathExists(cloneDir), false, "clone dir removed on full success");
       const after = await loadState(locations.extensionRoot);
       assert.equal("acme-mp" in after.marketplaces, false, "record removed on full success");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MURL-04: url-source clone dir REMOVED on full cascade success (no orphan)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-url-"));
+    try {
+      const { ctx, pi } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      const cloneDir = await locations.sourceCloneDir("url-mp");
+      await mkdir(cloneDir, { recursive: true });
+      await writeFile(path.join(cloneDir, "SENTINEL.txt"), "should be deleted");
+
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "url-mp": {
+            name: "url-mp",
+            scope: "user",
+            source: parsePluginSource("https://gitlab.example.com/team/url-mp"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: cloneDir,
+            plugins: { "plugin-a": makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        });
+
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "url-mp",
+        scope: "user",
+        cwd,
+        cascade: stubCascade,
+      });
+
+      // MURL-04 / NFR-3: url clone dir deleted so re-add never hits {stale clone}.
+      assert.equal(await pathExists(cloneDir), false, "url clone dir removed on full success");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("url-mp" in after.marketplaces, false, "record removed on full success");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MURL-04: path-source remove does NOT attempt to delete a clone dir (path sources have none)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-pathnoclone-"));
+    try {
+      const { ctx, pi } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // A stray dir at sources/<name>/ that a path remove must NOT touch (path
+      // sources own no clone; the gate is github||url only).
+      const cloneDir = await locations.sourceCloneDir("path-mp");
+      await mkdir(cloneDir, { recursive: true });
+      await writeFile(path.join(cloneDir, "SENTINEL.txt"), "must survive a path remove");
+
+      const localMpDir = fixtureMarketplaceDir("valid-marketplace");
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "path-mp": {
+            name: "path-mp",
+            scope: "user",
+            source: pathSource(localMpDir),
+            addedFromCwd: cwd,
+            manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: localMpDir,
+            plugins: { "plugin-a": makePluginRecord() },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        });
+
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "path-mp",
+        scope: "user",
+        cwd,
+        cascade: stubCascade,
+      });
+
+      // The path source has no clone; the deletion gate is github||url only, so
+      // the stray sources/<name>/ dir must be untouched.
+      assert.ok(
+        await pathExists(path.join(cloneDir, "SENTINEL.txt")),
+        "path remove must not delete a sources/<name>/ dir",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MURL-04 / NFR-3: remove of a url marketplace then re-add of the same repo succeeds (no {stale clone} orphan)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-readd-"));
+    try {
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // First add a url marketplace via the real add path (clones the fixture,
+      // whose manifest name is "valid-marketplace").
+      const { ctx: ctxAdd, pi: piAdd } = makeCtx();
+      const { gitOps: gitOpsAdd } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      await addMarketplace({
+        ctx: ctxAdd,
+        pi: piAdd,
+        scope: "user",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/valid-marketplace",
+        gitOps: gitOpsAdd,
+      });
+
+      const cloneDir = await locations.sourceCloneDir("valid-marketplace");
+      assert.ok(await pathExists(cloneDir), "add must land a clone at sources/<name>/");
+
+      // Remove it.
+      const { ctx: ctxRm, pi: piRm } = makeCtx();
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        });
+      await removeMarketplace({
+        ctx: ctxRm,
+        pi: piRm,
+        name: "valid-marketplace",
+        scope: "user",
+        cwd,
+        cascade: stubCascade,
+      });
+      assert.equal(await pathExists(cloneDir), false, "remove must delete the url clone dir");
+
+      // Re-add the same repo: must succeed with NO {stale clone} orphan.
+      const { ctx: ctxRe, pi: piRe, notifications: reNotes } = makeCtx();
+      const { gitOps: gitOpsRe } = makeMockGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      await addMarketplace({
+        ctx: ctxRe,
+        pi: piRe,
+        scope: "user",
+        cwd,
+        rawSource: "https://gitlab.example.com/team/valid-marketplace",
+        gitOps: gitOpsRe,
+      });
+
+      assert.ok(
+        !reNotes.some((n) => n.message.includes("{stale clone}")),
+        "re-add after remove must not trip {stale clone}",
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.ok("valid-marketplace" in after.marketplaces, "re-add must record the marketplace");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1173,7 +1355,7 @@ test("WB-01: cascade removes the marketplace entry AND every plugin entry ending
   });
 });
 
-test("WB-01: --local routes the cascade to claude-plugins.local.json; base file untouched", async () => {
+test("cross-layer: standalone remove sweeps the marketplace from BOTH the base and local files", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-local-"));
     try {
@@ -1195,7 +1377,8 @@ test("WB-01: --local routes the cascade to claude-plugins.local.json; base file 
 
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      // Base file retains mp1; the local file is the override carrying mp1.
+      // Both layers declare mp1 -- the cross-layer sweep must clear both so no
+      // dangling declaration survives in either physical file.
       await saveConfig(
         projLoc.configJsonPath,
         { schemaVersion: 1, marketplaces: { mp1: { source: "./src1" } } },
@@ -1207,22 +1390,19 @@ test("WB-01: --local routes the cascade to claude-plugins.local.json; base file 
         projLoc.scopeRoot,
       );
 
-      const { readFile, stat } = await import("node:fs/promises");
-      const baseBytesBefore = await readFile(projLoc.configJsonPath, "utf8");
-      const baseStatBefore = await stat(projLoc.configJsonPath);
-
       const { ctx, pi } = makeCtx();
       await removeMarketplace({ ctx, pi, name: "mp1", scope: "project", cwd, local: true });
 
-      // Base file MUST be byte-identical.
-      const baseBytesAfter = await readFile(projLoc.configJsonPath, "utf8");
-      const baseStatAfter = await stat(projLoc.configJsonPath);
-      assert.equal(baseBytesAfter, baseBytesBefore);
-      assert.equal(baseStatAfter.mtimeMs, baseStatBefore.mtimeMs);
-
-      // Local file has mp1 removed.
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Base file has mp1 removed.
+      const baseCfg = await loadConfig(projLoc.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.equal(baseCfg.config.marketplaces?.["mp1"], undefined);
+      }
+
+      // Local file has mp1 removed.
       const localCfg = await loadConfig(projLoc.configLocalJsonPath);
       assert.equal(localCfg.status, "valid");
       if (localCfg.status === "valid") {
@@ -1292,6 +1472,93 @@ test("WR-09 / T-56-02-01: orchestrated remove SKIPS the cascade write-back; conf
   });
 });
 
+test("cross-layer cascade: --local plugin declaration under the removed marketplace is swept from BOTH config files (no perpetual dangling-reference)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-xlayer-"));
+    try {
+      const projLoc = locationsFor("project", cwd);
+      // State records the marketplace + one installable plugin row -- the
+      // shape a previous extension version left behind after a --local install.
+      await seedState(projLoc.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "claude-plugins-official": {
+            name: "claude-plugins-official",
+            scope: "project",
+            source: pathSource("./official-src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "official.json"),
+            marketplaceRoot: cwd,
+            plugins: { "pr-review-toolkit": makePluginRecord() },
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Base declares the marketplace entry but NO plugin key.
+      await saveConfig(
+        projLoc.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { "claude-plugins-official": { source: "./official-src" } },
+        },
+        projLoc.scopeRoot,
+      );
+      // Local declares ONLY the plugin key (prior-version --local install shape).
+      await saveConfig(
+        projLoc.configLocalJsonPath,
+        {
+          schemaVersion: 1,
+          plugins: { "pr-review-toolkit@claude-plugins-official": {} },
+        },
+        projLoc.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      // STANDALONE mode (notifications omitted), targeting the BASE layer.
+      await removeMarketplace({ ctx, pi, name: "claude-plugins-official", scope: "project", cwd });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+
+      // Base no longer declares the marketplace.
+      const baseCfg = await loadConfig(projLoc.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.equal(baseCfg.config.marketplaces?.["claude-plugins-official"], undefined);
+      }
+
+      // Local no longer declares the orphaned plugin key.
+      const localCfg = await loadConfig(projLoc.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(
+          localCfg.config.plugins?.["pr-review-toolkit@claude-plugins-official"],
+          undefined,
+        );
+      }
+
+      // Self-heal proof: the merged config + planReconcile yields zero
+      // sourceMismatches (no perpetual dangling-reference on the next reload).
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { merged } = await loadMergedScopeConfig(projLoc);
+      const stateAfter = await loadState(projLoc.extensionRoot);
+      const plan = planReconcile(merged, stateAfter, "project");
+      assert.equal(
+        plan.sourceMismatches.length,
+        0,
+        `expected zero sourceMismatches; got ${JSON.stringify(plan.sourceMismatches)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CFG-03 / T-56-02-05: invalid local config aborts the remove; basename-only cause; state untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "mp-remove-cfg03-"));
@@ -1337,6 +1604,78 @@ test("CFG-03 / T-56-02-05: invalid local config aborts the remove; basename-only
       // State was NOT mutated: mp1 still recorded.
       const after = await loadState(projLoc.extensionRoot);
       assert.ok("mp1" in after.marketplaces);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// PURL-06 last-ref clone GC in the marketplace-remove cascade ------
+
+test("PURL-06 / D-78-01: removing the last-referencing marketplace garbage-collects a git-source plugin's clone dir", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-purl06-"));
+    try {
+      const { ctx, pi } = makeCtx();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // A git-source install record: resolvedSha + resolvedSource under the
+      // plugin-clones cache root -> it contributes clone key <key> to the GC
+      // live-key derivation while it survives in state.
+      const key = "superpowers-abc123";
+      const gitPluginRecord: PluginRecord = {
+        ...makePluginRecord(),
+        resolvedSource: path.join(locations.pluginClonesDir, key),
+        resolvedSha: "a".repeat(40),
+      };
+
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "claude-plugins-official": {
+            name: "claude-plugins-official",
+            scope: "project",
+            source: { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { superpowers: gitPluginRecord },
+          },
+        },
+      });
+
+      // The leaked on-disk clone dir the remove cascade must reclaim.
+      await mkdir(await locations.pluginCloneDir(key), { recursive: true });
+
+      // Clean cascade stub so the marketplace + plugin records fully commit
+      // (failedPlugins.length === 0 -> the full-commit GC branch runs).
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: true,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+        });
+
+      await removeMarketplace({
+        ctx,
+        pi,
+        name: "claude-plugins-official",
+        scope: "project",
+        cwd,
+        cascade: stubCascade,
+      });
+
+      // PURL-06: the removed plugin's record is gone -> its clone is
+      // unreferenced -> the post-commit GC swept the leaked dir.
+      assert.equal(
+        await pathExists(await locations.pluginCloneDir(key)),
+        false,
+        "orphaned git-source clone dir must be garbage-collected by the remove cascade",
+      );
+
+      // The full-commit path ran: the marketplace record is deleted from state.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("claude-plugins-official" in after.marketplaces, false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -13,6 +13,7 @@
 
 import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
+import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
@@ -23,13 +24,18 @@ import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi
 const USAGE =
   "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]";
 
+// The downstream-consumed pass-through flags (`--map-model` / `--partial`)
+// derive from the catalog's update parse-set; `--local` is consumed by
+// extractLocalFlag itself.
+const PASS_THROUGH_FLAGS = passThroughFlagNames("update");
+
 export function makeUpdateHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    // Shared scanner; see edge/handlers/shared.ts. `--map-model` and
-    // `--partial` are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, ["--map-model", "--partial"]);
+    // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
+    // pass-through flags are downstream-consumed; pass through verbatim.
+    const localFlag = extractLocalFlag(args, ctx, USAGE, PASS_THROUGH_FLAGS);
     if (localFlag === undefined) {
       return;
     }

@@ -55,6 +55,7 @@ function makeHandlers(): { handlers: SubcommandHandlers; calls: HandlerCall[] } 
     install: mk("install"),
     uninstall: mk("uninstall"),
     update: mk("update"),
+    fetch: mk("fetch"),
     reinstall: mk("reinstall"),
     list: mk("list"),
     pluginInfo: mk("pluginInfo"),
@@ -155,6 +156,14 @@ test("routeClaudePlugin :: dispatches update to handlers.update", async () => {
   const { handlers, calls } = makeHandlers();
   await routeClaudePlugin("update foo@bar", handlers, ctx);
   assert.deepEqual(calls, [{ name: "update", args: "foo@bar" }]);
+  assert.deepEqual(notifications, []);
+});
+
+test("routeClaudePlugin :: dispatches fetch to handlers.fetch", async () => {
+  const { ctx, notifications } = makeCtx();
+  const { handlers, calls } = makeHandlers();
+  await routeClaudePlugin("fetch foo@bar", handlers, ctx);
+  assert.deepEqual(calls, [{ name: "fetch", args: "foo@bar" }]);
   assert.deepEqual(notifications, []);
 });
 

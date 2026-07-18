@@ -15,7 +15,7 @@
 //      "list").
 //   3. TC-2 -- head === "marketplace" && tokens.length === 1 -> nested
 //      marketplace subcommand keywords, including aliases (`rm`, `ls`).
-//   4. TC-6 -- head in {install, uninstall, update, reinstall, info}
+//   4. TC-6 -- head in {install, uninstall, update, reinstall, fetch, info}
 //      && tokens.length === 1 -> `<plugin>@<marketplace>` via
 //      `getPluginRefCompletions`. The `info` mode unions every status
 //      across both scopes; the orchestrator handles scope-mismatch via
@@ -35,6 +35,7 @@
 // this dispatcher. Tests inject a hermetic mock resolver.
 
 import { SCOPES } from "../../shared/types.ts";
+import { completionFlagEntries, isCatalogVerb } from "../flag-catalog.ts";
 import { MARKETPLACE_SUBCOMMANDS, TOP_LEVEL_SUBCOMMANDS } from "../router.ts";
 
 import {
@@ -46,6 +47,7 @@ import {
   splitCompletionInput,
 } from "./data.ts";
 
+import type { CatalogVerb } from "../flag-catalog.ts";
 import type { LocationsResolver } from "./data.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
@@ -82,45 +84,32 @@ function scopeValueCompletions(current: string, headPrefix: string): Autocomplet
   }));
 }
 
+/**
+ * Map a completion positional head to its catalog verb key, or `null` for
+ * heads that are not catalog verbs (e.g. `marketplace`). `ls` is the router
+ * alias for `list`. The verb set derives from the catalog via `isCatalogVerb`,
+ * so a new catalog verb gets flag completions without touching this file.
+ */
+function catalogVerbForHead(positionalHead: string): CatalogVerb | null {
+  const key = positionalHead === "ls" ? "list" : positionalHead;
+  return isCatalogVerb(key) ? key : null;
+}
+
 function flagCompletions(
   current: string,
   positionalHead: string,
   headPrefix: string,
 ): AutocompleteItem[] {
+  // `--scope` is the global base flag offered for EVERY head; the catalog governs
+  // only the per-verb extra flags spread after it. RINST-01 / D-67-03: reinstall
+  // contributes no extra completion flags -- overwrite is unconditional.
   const flags: { name: string; description?: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
-  // RINST-01 / D-67-03: reinstall offers no force-flag completion -- the retired
-  // reinstall force flag is gone and overwrite is unconditional.
 
-  if (positionalHead === "list" || positionalHead === "ls") {
-    flags.push(
-      // LIST-01 / D-67-01: `--installed` spans installed + partially-installed;
-      // `--partial` selects not-installed plugins that resolve to partially-available.
-      { name: "--installed", description: "Show installed plugins" },
-      { name: "--available", description: "Show available plugins" },
-      { name: "--unavailable", description: "Show unavailable plugins" },
-      { name: "--partial", description: "Show partially available plugins" },
-    );
-  }
-
-  if (positionalHead === "install" || positionalHead === "update") {
-    // AG-7 opt-in: surface `--map-model` as a completion suggestion under
-    // the install and update positional heads, mirroring the existing
-    // list-flag pattern.
-    // LIST-02 / D-67-02: `--partial` widens the install/update candidate set
-    // (install -> available + partially-available; update -> upgradable +
-    // partially-upgradable). FORCE-05: never admits `unavailable`.
-    flags.push(
-      {
-        name: "--map-model",
-        description: "Enable model field mapping in generated agents (default: omit)",
-      },
-      {
-        name: "--partial",
-        description: "Install over collisions and unsupported components (not unavailable)",
-      },
-    );
+  const verb = catalogVerbForHead(positionalHead);
+  if (verb !== null) {
+    flags.push(...completionFlagEntries(verb));
   }
 
   return flags
@@ -182,6 +171,7 @@ type PluginRefMode =
   | "install"
   | "uninstall"
   | "update"
+  | "fetch"
   | "reinstall"
   | "info"
   | "enable"
@@ -223,6 +213,16 @@ function pluginRefBranchConfig(
         mode: "update",
         allowMarketplaceOnly: true,
         partial,
+        ...(explicitScope !== undefined && { targetScope: explicitScope }),
+      };
+    case "fetch":
+      // FTCH-07: fetch mirrors update's ref surface -- it accepts the bare
+      // `@<marketplace>` form (allowMarketplaceOnly) as well as
+      // `<plugin>@<marketplace>`. The fetchable candidate set (D-81-03) is
+      // applied in data.ts via FETCH_STATUSES.
+      return {
+        mode: "fetch",
+        allowMarketplaceOnly: true,
         ...(explicitScope !== undefined && { targetScope: explicitScope }),
       };
     case "reinstall":

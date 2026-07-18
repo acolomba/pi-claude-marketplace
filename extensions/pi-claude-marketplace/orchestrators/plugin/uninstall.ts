@@ -54,6 +54,7 @@ import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
+import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { applyPartialCascadeFold, resolveCrossScopePluginTarget } from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
@@ -306,6 +307,31 @@ function emitMarketplaceNotAdded(args: {
 }
 
 /**
+ * Delete the `plugin@marketplace` key from ONE physical config layer. Loads
+ * the file fresh so the sweep sees that layer's on-disk truth.
+ *
+ * WR-02: proceed only when the layer is `valid` AND actually declares the key.
+ * An absent/invalid layer, or a valid layer that does not declare the key, is
+ * left untouched (never rewritten) -- writing anyway would rewrite the file, or
+ * CREATE it with empty maps when absent, for a semantic no-op (RECON-05
+ * byte/mtime stability). The sibling layer being invalid is NOT a CFG-03 abort
+ * (that is scoped to the target layer inside the guard closure).
+ */
+async function deletePluginFromLayer(
+  configPath: string,
+  scopeRoot: string,
+  plugin: string,
+  marketplace: string,
+): Promise<void> {
+  const cfg = await loadConfig(configPath);
+  if (cfg.status !== "valid" || cfg.config.plugins?.[`${plugin}@${marketplace}`] === undefined) {
+    return;
+  }
+
+  await deletePluginConfigEntry(cfg.config, configPath, scopeRoot, plugin, marketplace);
+}
+
+/**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  */
@@ -474,20 +500,23 @@ export async function uninstallPlugin(
       // (WB-01: uninstall alreadyGone leaves config untouched;
       // planReconcile surfaces the declared-but-missing on next load).
       //
-      // WR-02: ALSO skipped when the targeted physical
-      // file does not declare the key (e.g. declared only in
-      // claude-plugins.local.json while targeting base, or not declared at
-      // all). Writing anyway would rewrite the file -- or CREATE it with
-      // empty maps when absent -- for a semantic no-op, contradicting the
-      // RECON-05 byte/mtime-stability discipline.
-      if (
-        opts.notifications?.mode !== "orchestrated" &&
-        cfg.status === "valid" &&
-        cfg.config.plugins?.[`${plugin}@${marketplace}`] !== undefined
-      ) {
-        await deletePluginConfigEntry(
-          cfg.config,
-          targetConfigPath,
+      // Cross-layer sweep: the `plugin@marketplace` key may live in either
+      // claude-plugins.json or claude-plugins.local.json (e.g. a prior --local
+      // install left it in the sibling layer). Both files are inside the
+      // NFR-10 sanctioned write set. Deleting from only the target layer
+      // leaves the sibling declaration as a perpetual dangling-reference.
+      // Each layer is loaded fresh and swept independently (WR-02 no-op guard
+      // per file: an absent/invalid layer or one not declaring the key is
+      // skipped, never rewritten -- RECON-05 byte/mtime stability).
+      if (opts.notifications?.mode !== "orchestrated") {
+        await deletePluginFromLayer(
+          locations.configJsonPath,
+          locations.scopeRoot,
+          plugin,
+          marketplace,
+        );
+        await deletePluginFromLayer(
+          locations.configLocalJsonPath,
           locations.scopeRoot,
           plugin,
           marketplace,
@@ -605,6 +634,23 @@ export async function uninstallPlugin(
   const dataDir = await locations.pluginDataDir(marketplace, plugin);
   try {
     await rm(dataDir, { recursive: true, force: true });
+  } catch {
+    // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+
+  // PURL-05 / D-78-01: reclaim the git clone cache once no surviving record
+  // references it. Runs AFTER the state save committed above, so a
+  // still-installed record keeps its clone alive; the GC derives live keys
+  // from the just-committed state (a shared clone survives while any other
+  // plugin still references it). NFR-3: a crash before this leaves an orphan
+  // the next idempotent pass removes.
+  //
+  // Per D-19-01 this hygienic cleanup never becomes the primary user-facing
+  // path. garbageCollectPluginClones already swallows per-dir rm leaks into a
+  // returned string[] rather than throwing; the try/catch is belt-and-braces
+  // so a GC failure can never fail the user-visible uninstall.
+  try {
+    await garbageCollectPluginClones(locations);
   } catch {
     // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }

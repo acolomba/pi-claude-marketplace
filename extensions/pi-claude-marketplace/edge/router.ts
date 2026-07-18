@@ -28,6 +28,9 @@ export interface SubcommandHandlers {
   install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   update: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  // FTCH-01: pi-only `fetch` verb (upstream `/plugin` has no fetch). Warms a
+  // git-source plugin's clone/mirror cache without installing.
+  fetch: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   reinstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   // Named `pluginInfo` (NOT `info`) to disambiguate from
@@ -57,6 +60,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "install",
   "uninstall",
   "update",
+  "fetch",
   "reinstall",
   "list",
   "ls",
@@ -85,11 +89,12 @@ export const MARKETPLACE_SUBCOMMANDS = [
 ] as const;
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
@@ -149,6 +154,8 @@ export async function routeClaudePlugin(
       return handlers.uninstall(rest, ctx);
     case "update":
       return handlers.update(rest, ctx);
+    case "fetch":
+      return handlers.fetch(rest, ctx);
     case "reinstall":
       return handlers.reinstall(rest, ctx);
     case "list":

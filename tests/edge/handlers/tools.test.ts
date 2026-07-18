@@ -619,8 +619,9 @@ test("pi_claude_marketplace_plugin_list :: force-installed plugin projects [inst
 
 // Lines 175+195+238+315+207-208: projectRowStatus 'unavailable' arm,
 // statusLabel '[unavailable]', statusKey 'u', reasons trailer,
-// pluginScopeOrFallback fallback for unavailable.
-test("pi_claude_marketplace_plugin_list :: github-source manifest entry -> unavailable row with reasons trailer", async () => {
+// pluginScopeOrFallback fallback for unavailable. Fixture uses an npm
+// source: git sources are installable under PURL-01, npm stays unsupported.
+test("pi_claude_marketplace_plugin_list :: npm-source manifest entry -> unavailable row with reasons trailer", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-unavail-"));
     await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
@@ -629,7 +630,7 @@ test("pi_claude_marketplace_plugin_list :: github-source manifest entry -> unava
       manifestPath,
       JSON.stringify({
         name: "unavail-mkt",
-        plugins: [{ name: "pgithub", source: "https://github.com/org/repo" }],
+        plugins: [{ name: "pgithub", source: { source: "npm", package: "some-plugin" } }],
       }),
     );
 

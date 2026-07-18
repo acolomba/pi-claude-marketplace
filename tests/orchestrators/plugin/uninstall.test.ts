@@ -1672,7 +1672,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
   });
 });
 
-test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file untouched", async () => {
+test("cross-layer: standalone uninstall deletes the plugin key from BOTH the base and local files", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-local-"));
     try {
@@ -1681,7 +1681,8 @@ test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file
 
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      // Pre-seed both files; only the local-file entry should be removed.
+      // Both layers declare the key -- the cross-layer sweep must clear both so
+      // no dangling declaration survives in either physical file.
       await saveConfig(
         locations.configJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
@@ -1692,9 +1693,6 @@ test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
-
-      // Snapshot base bytes BEFORE the operation.
-      const baseBytesBefore = await readFile(locations.configJsonPath);
 
       const { ctx, pi } = makeCtx();
       await uninstallPlugin({
@@ -1709,15 +1707,18 @@ test("WB-01: --local uninstall deletes from claude-plugins.local.json; base file
 
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Both files no longer declare the key.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.equal(baseCfg.config.plugins?.["hello@mp"], undefined);
+      }
+
       const localCfg = await loadConfig(locations.configLocalJsonPath);
       assert.equal(localCfg.status, "valid");
       if (localCfg.status === "valid") {
         assert.equal(localCfg.config.plugins?.["hello@mp"], undefined);
       }
-
-      // Base file is byte-identical.
-      const baseBytesAfter = await readFile(locations.configJsonPath);
-      assert.deepEqual(baseBytesAfter, baseBytesBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1969,6 +1970,292 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       // ran inside `withLockedStateTransaction` right after
       // `removePluginConfigFromCache`.
       assert.equal(getRoutingBucket("PreToolUse").length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PURL-05 / D-78-01: post-state-commit clone garbage-collection.
+//
+// After the uninstall transaction commits, uninstall calls
+// garbageCollectPluginClones(locations) beside the existing
+// rm(pluginDataDir) cleanup (D-19-01 swallow discipline). A git-source
+// clone is reclaimed once no surviving record references it; a shared
+// clone survives while another installed plugin still references it. The
+// GC runs strictly AFTER the state save (T-78-08) and a GC leak never
+// fails the user-visible uninstall (T-78-09).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GIT_SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+/**
+ * Seed one git-source plugin record whose resolvedSource points at
+ * `<pluginClonesDir>/<key>` and whose resolvedSha marks it as a live
+ * referencer of that clone key, plus create the on-disk clone dir.
+ */
+async function seedGitPlugin(
+  locations: ReturnType<typeof locationsFor>,
+  marketplace: string,
+  plugins: Record<string, string>, // pluginName -> cloneKey
+  cwd: string,
+): Promise<void> {
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  const pluginRecords: Record<string, PluginRecord> = {};
+  for (const [pluginName, cloneKey] of Object.entries(plugins)) {
+    const record = makePluginRecord();
+    record.resolvedSource = path.join(locations.pluginClonesDir, cloneKey);
+    record.resolvedSha = GIT_SHA_A;
+    pluginRecords[pluginName] = record;
+    await mkdir(path.join(locations.pluginClonesDir, cloneKey), { recursive: true });
+  }
+
+  await seedState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      [marketplace]: {
+        name: marketplace,
+        scope: locations.scope,
+        source: pathSource("./src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "marketplace.json"),
+        marketplaceRoot: cwd,
+        plugins: pluginRecords,
+      },
+    },
+  });
+}
+
+test("uninstalling the last referencer of a git clone deletes its plugin-clones dir", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-last-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const cloneDir = path.join(locations.pluginClonesDir, "keySolo");
+      assert.equal(await pathExists(cloneDir), true, "clone dir present before uninstall");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "solo",
+      });
+
+      // Success row emitted, no error.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      // Last referencer removed -> clone dir garbage-collected.
+      assert.equal(
+        await pathExists(cloneDir),
+        false,
+        "clone dir removed after last referencer gone",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("uninstalling one of two plugins sharing a git clone leaves the clone until the last referencer is gone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-shared-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // Both plugins resolve to the SAME clone key.
+      await seedGitPlugin(locations, "mp", { alpha: "keyShared", beta: "keyShared" }, cwd);
+      const cloneDir = path.join(locations.pluginClonesDir, "keyShared");
+      assert.equal(await pathExists(cloneDir), true, "shared clone present before any uninstall");
+
+      // Uninstall the FIRST sharer -> the clone survives (beta still references it).
+      const first = makeCtx();
+      await uninstallPlugin({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "alpha",
+      });
+      assert.equal(
+        await pathExists(cloneDir),
+        true,
+        "shared clone survives while beta still references it",
+      );
+
+      // Uninstall the SECOND sharer -> now the last referencer is gone, GC sweeps it.
+      const second = makeCtx();
+      await uninstallPlugin({
+        ctx: second.ctx,
+        pi: second.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "beta",
+      });
+      assert.equal(
+        await pathExists(cloneDir),
+        false,
+        "shared clone removed once its last referencer is gone",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a GC rm leak does not fail the uninstall (leak swallowed per D-19-01)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-leak-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keyLocked" }, cwd);
+
+      // Make the pluginClonesDir read-only so GC's rm of the orphaned clone
+      // fails with EACCES; the helper records a leak string and never throws,
+      // and uninstall's belt-and-braces try/catch absorbs any throw. The
+      // user-visible uninstall must still report success.
+      const { chmod } = await import("node:fs/promises");
+      await chmod(locations.pluginClonesDir, 0o500);
+
+      const { ctx, pi, notifications } = makeCtx();
+      try {
+        await uninstallPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "solo",
+        });
+      } finally {
+        await chmod(locations.pluginClonesDir, 0o700);
+      }
+
+      // Uninstall still reports success (leak is not user-facing).
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      const errors = notifications.filter((n) => n.severity === "error");
+      assert.equal(errors.length, 0, "GC leak must not surface as an error notification");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GC never rolls back the committed uninstall: the state record is deleted even when GC leaks", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-postcommit-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keyLocked" }, cwd);
+
+      // Force the GC rm to leak (read-only clones dir). The state commit runs
+      // BEFORE GC, so the record must be gone from state.json regardless.
+      const { chmod } = await import("node:fs/promises");
+      await chmod(locations.pluginClonesDir, 0o500);
+
+      const { ctx, pi } = makeCtx();
+      try {
+        await uninstallPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "solo",
+        });
+      } finally {
+        await chmod(locations.pluginClonesDir, 0o700);
+      }
+
+      // Post-commit ordering: the record is deleted on disk even though GC leaked.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        "solo" in (after.marketplaces["mp"]?.plugins ?? {}),
+        false,
+        "committed uninstall must persist even when the post-commit GC leaks",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("cross-layer cascade: uninstall sweeps the plugin key from the sibling layer when declared there", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-xlayer-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // State records marketplace `m` with one installable plugin `p`.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          m: {
+            name: "m",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { p: makePluginRecord() },
+          },
+        },
+      });
+
+      const { saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      // Base declares the marketplace but NOT the plugin key.
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, marketplaces: { m: { source: "./src" } } },
+        locations.scopeRoot,
+      );
+      // Local declares ONLY the plugin key `p@m`.
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "p@m": {} } },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      // STANDALONE mode (notifications omitted), targeting BASE.
+      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "m", plugin: "p" });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+
+      // Neither physical file declares `p@m` afterward.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.equal(baseCfg.config.plugins?.["p@m"], undefined);
+      }
+
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.equal(localCfg.config.plugins?.["p@m"], undefined);
+      }
+
+      // Self-heal proof: merged planReconcile is clean.
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { merged } = await loadMergedScopeConfig(locations);
+      const stateAfter = await loadState(locations.extensionRoot);
+      const plan = planReconcile(merged, stateAfter, "project");
+      assert.equal(
+        plan.sourceMismatches.length,
+        0,
+        `expected zero sourceMismatches; got ${JSON.stringify(plan.sourceMismatches)}`,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

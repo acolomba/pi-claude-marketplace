@@ -10,6 +10,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { parseArgs } from "../../args.ts";
+import { passThroughFlagNames } from "../../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { Scope } from "../../../shared/types.ts";
@@ -41,28 +42,36 @@ export interface ParsedPositionalsResult {
   readonly partial: boolean;
 }
 
+// The downstream-consumed boolean flags recognized here derive from the
+// catalog parse-sets of the two verbs that route through this scanner
+// (install / update), minus the scope-target flag already consumed upstream
+// by `extractLocalFlag`. The drift guard pins both verbs to the same exact
+// set, so the union stays per-verb exact.
+const DOWNSTREAM_BOOLEAN_FLAGS = new Set([
+  ...passThroughFlagNames("install"),
+  ...passThroughFlagNames("update"),
+]);
+
 /**
- * Scans raw positional tokens for known boolean flags (currently --map-model)
- * and separates them from non-flag positionals. Returns undefined and emits
- * `notifyUsageError` if an unrecognised long flag is encountered (MSG-NC-2:
- * argument-parsing failure with Usage-block-appended sentence form).
+ * Scans raw positional tokens for the catalog-derived downstream boolean
+ * flags (`--map-model` / `--partial`) and separates them from non-flag
+ * positionals. Returns undefined and emits `notifyUsageError` if an
+ * unrecognised long flag is encountered (MSG-NC-2: argument-parsing failure
+ * with Usage-block-appended sentence form).
  */
 export function parsePositionalsWithFlags(
   tokens: readonly string[],
   ctx: ExtensionCommandContext,
   usage: string,
 ): ParsedPositionalsResult | undefined {
-  let mapModel = false;
-  let partial = false;
+  const flags = new Set<string>();
   const nonFlagPositionals: string[] = [];
   for (const token of tokens) {
-    if (token === "--map-model") {
-      mapModel = true;
-    } else if (token === "--partial") {
-      // D-65-05: install/update route through this shared scanner, so the
-      // `--partial` arm MUST precede the unknown-flag rejection below or the
-      // token falls through to `Unknown flag: "--partial".`.
-      partial = true;
+    if (DOWNSTREAM_BOOLEAN_FLAGS.has(token)) {
+      // D-65-05: recognized downstream flags (including `--partial`) MUST be
+      // consumed before the unknown-flag rejection below or the token falls
+      // through to `Unknown flag: "--partial".`.
+      flags.add(token);
     } else if (token.startsWith("--")) {
       notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
@@ -71,7 +80,11 @@ export function parsePositionalsWithFlags(
     }
   }
 
-  return { nonFlagPositionals, mapModel, partial };
+  return {
+    nonFlagPositionals,
+    mapModel: flags.has("--map-model"),
+    partial: flags.has("--partial"),
+  };
 }
 
 export interface ParsedMapModelArgs {

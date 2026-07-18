@@ -3,6 +3,7 @@ import {
   ICON_DISABLED,
   ICON_PARTIALLY_INSTALLED,
   ICON_INSTALLED,
+  ICON_REMOTE,
   ICON_UNINSTALLABLE,
   ICON_PARTIALLY_AVAILABLE,
   composeReasons,
@@ -17,6 +18,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
   type PluginInstalledMessage,
+  type PluginRemoteMessage,
   type PluginUnavailableMessage,
   type PluginPartiallyAvailableMessage,
   type PluginUpgradableMessage,
@@ -61,6 +63,9 @@ export const LIST_STATUSES = [
   // candidate would newly degrade it.
   "partially-installed",
   "partially-upgradable",
+  // RSTA-01 / D-80-06: the not-installed git-source row with no materialized
+  // clone. Appended last per the closed-set tuple-ordering discipline.
+  "remote",
 ] as const;
 export type ListStatus = (typeof LIST_STATUSES)[number];
 
@@ -74,7 +79,8 @@ export type ListMsg =
   | PluginDisabledMessage
   | PluginFailedMessage
   | PluginPartiallyInstalledMessage
-  | PluginPartiallyUpgradableMessage;
+  | PluginPartiallyUpgradableMessage
+  | PluginRemoteMessage;
 
 /**
  * Render map total over the list surface's OWN statuses (D-10): a missing arm
@@ -151,6 +157,20 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       composeReasons(undefined, false, false, probe),
     ]),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
+  // materialized locally. Clones the `available` arm, swapping the glyph
+  // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
+  // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
+  // NO reasons brace (D-80-03), so the `composeReasons` line is dropped. Body
+  // lifted verbatim from the central `renderPluginRow` remote arm.
+  remote: (p, _probe, mpScope) =>
+    joinTokens([
+      ICON_REMOTE,
+      p.name,
+      renderScopeBracket(undefined, mpScope),
+      renderVersion(p.version),
+      "(remote)",
+    ]),
 };
 
 /**

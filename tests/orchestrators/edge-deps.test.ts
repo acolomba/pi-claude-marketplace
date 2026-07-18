@@ -17,6 +17,7 @@ import { test } from "node:test";
 import { loadMarketplaceManifest } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
+import { __test_availableRowMessage } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import {
   classifyInstalledRecord,
   classifyManifestEntry,
@@ -619,6 +620,134 @@ test("D-67-02 / T-67-08 parity: the bucketizer rows equal the shared classifier 
       [...expectedByName.entries()].sort(),
       "bucketizer must emit exactly what the shared classifier derives",
     );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// PURL-08 / D-78-03: git-source parity fixtures. The path-source fixtures above
+// never exercised the git-source short-circuit -- which is exactly why the
+// completion bucketizer's `unavailable` misclassification went undetected. A
+// not-fetched git-source entry has nothing on disk to validate, so it must
+// classify `remote` (RSTA-01) on BOTH surfaces.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface GitSourcePlugin {
+  readonly name: string;
+  /** A git source string (url / git-subdir / github shorthand). */
+  readonly source: string;
+  readonly version?: string;
+}
+
+/**
+ * Lay out a marketplace whose manifest carries git-source entries with NO
+ * on-disk plugin trees and NO installed records. Returns the marketplace root so
+ * a caller (the list-surface parity check) can re-read the manifest.
+ */
+async function layoutGitSourceMarketplace(
+  cwd: string,
+  mpName: string,
+  plugins: readonly GitSourcePlugin[],
+): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
+  const srcRoot = await mkdtemp(path.join(tmpdir(), `edge-deps-git-${mpName}-`));
+  const manifestDir = path.join(srcRoot, ".claude-plugin");
+  await mkdir(manifestDir, { recursive: true });
+  const manifestPath = path.join(manifestDir, "marketplace.json");
+
+  const manifestPlugins = plugins.map((p) => ({
+    name: p.name,
+    source: p.source,
+    ...(p.version !== undefined && { version: p.version }),
+  }));
+  await writeFile(manifestPath, JSON.stringify({ name: mpName, plugins: manifestPlugins }), "utf8");
+
+  const projectLoc = locationsFor("project", cwd);
+  await mkdir(projectLoc.extensionRoot, { recursive: true });
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      [mpName]: {
+        name: mpName,
+        scope: "project",
+        source: { kind: "path", raw: srcRoot },
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: srcRoot,
+        plugins: {},
+      },
+    },
+  };
+  await saveState(projectLoc.extensionRoot, state);
+  return { marketplaceRoot: srcRoot, manifestPath };
+}
+
+const GIT_SOURCE_FIXTURE: readonly GitSourcePlugin[] = [
+  { name: "url-plug", source: "https://example.com/plugin.git", version: "1.0.0" },
+  {
+    name: "subdir-plug",
+    source: "https://example.com/repo.git#main:packages/plug",
+    version: "1.0.0",
+  },
+  { name: "gh-plug", source: "owner/repo", version: "1.0.0" },
+  { name: "path-plug", source: "./plugins/path-plug", version: "1.0.0" },
+];
+
+test("RSTA-01: a not-fetched url/git-subdir/github manifest entry is emitted `remote` by the completion bucketizer (install completion still offers it -- install performs the fetch)", async () => {
+  await withHermeticProjectScope(async ({ cwd }) => {
+    await layoutGitSourceMarketplace(cwd, "git-mp", GIT_SOURCE_FIXTURE);
+
+    const resolver = makeLocationsResolver(cwd);
+    const rows = await resolver.loadManifestForMarketplace("project", "git-mp");
+    const statusByName = new Map(rows.map((r) => [r.name, r.status]));
+
+    // RSTA-01: a not-fetched git source with nothing materialized locally
+    // classifies `remote` (no over-claimed `available`). Install completion
+    // still offers `remote` (INSTALL_STATUSES), since install performs the fetch.
+    assert.equal(statusByName.get("url-plug"), "remote");
+    assert.equal(statusByName.get("subdir-plug"), "remote");
+    assert.equal(statusByName.get("gh-plug"), "remote");
+    // The path entry has no on-disk tree -> structural unavailable (control).
+    assert.equal(statusByName.get("path-plug"), "unavailable");
+  });
+});
+
+test("RSTA-01 output-parity: the completion bucketizer emits `remote` for not-fetched git sources; the non-git buckets stay at parity with the list row builder", async () => {
+  await withHermeticProjectScope(async ({ cwd }) => {
+    const { marketplaceRoot } = await layoutGitSourceMarketplace(
+      cwd,
+      "parity-git-mp",
+      GIT_SOURCE_FIXTURE,
+    );
+
+    // Surface 1: the completion bucketizer (routes through the shared
+    // presence-derived `probeManifestEntry`).
+    const resolver = makeLocationsResolver(cwd);
+    const bucketizerRows = await resolver.loadManifestForMarketplace("project", "parity-git-mp");
+    const bucketizerByName = new Map(bucketizerRows.map((r) => [r.name, r.status]));
+
+    // Surface 2: the list row builder. `availableRowMessage` emits `message.status`
+    // in the not-installed status vocabulary the bucketizer uses.
+    const manifest = await loadMarketplaceManifest(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    );
+    const listLocations = locationsFor("project", cwd);
+    const listByName = new Map<string, PluginIndexRow["status"]>();
+    for (const entry of manifest.plugins) {
+      const { message } = await __test_availableRowMessage(entry, marketplaceRoot, listLocations);
+      listByName.set(entry.name, message.status);
+    }
+
+    // The path control stays `unavailable` everywhere.
+    assert.equal(listByName.get("path-plug"), "unavailable");
+    assert.equal(bucketizerByName.get("path-plug"), "unavailable");
+
+    // RSTA-03 output-parity drift-guard extended to the `remote` bucket: BOTH
+    // the list row builder and the completion bucketizer classify a not-fetched
+    // git source `remote` -- the consolidation onto the shared presence-derived
+    // classification makes this parity structural, not incidental.
+    for (const name of ["url-plug", "subdir-plug", "gh-plug"]) {
+      assert.equal(bucketizerByName.get(name), "remote", `completion must classify ${name} remote`);
+      assert.equal(listByName.get(name), "remote", `list must classify ${name} remote`);
+    }
   });
 });
 

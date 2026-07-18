@@ -11,12 +11,16 @@ import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
+import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
+
+// The accepted long flags derive from the catalog's info parse-set (FTCH-03).
+const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
@@ -38,11 +42,16 @@ export function makePluginInfoHandler(
       return;
     }
 
-    // `info` accepts ZERO boolean flags. Reject any unknown long flag
-    // inline (no shared `parsePositionalsWithFlags` because no flag is
-    // sanctioned for this command surface).
+    // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
+    // accepted set); every other long flag is rejected inline.
+    let fetch = false;
     const nonFlagPositionals: string[] = [];
     for (const token of parsed.positional) {
+      if (ACCEPTED_FLAGS.has(token)) {
+        fetch = true;
+        continue;
+      }
+
       if (token.startsWith("--")) {
         notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage: USAGE });
         return;
@@ -75,6 +84,7 @@ export function makePluginInfoHandler(
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       cwd: ctx.cwd,
+      ...(fetch && { fetch: true }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
   };

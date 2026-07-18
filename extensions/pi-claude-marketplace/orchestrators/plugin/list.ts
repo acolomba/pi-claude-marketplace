@@ -53,9 +53,10 @@
 //     after stripComments and asserts zero gitOps surface.
 
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict, type ResolveContext } from "../../domain/resolver.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
-import { locationsFor } from "../../persistence/locations.ts";
+import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever, errorMessage } from "../../shared/errors.ts";
 import {
@@ -71,6 +72,7 @@ import {
 } from "../../shared/probe-classifiers.ts";
 import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
+import { makePresenceProbe } from "./git-source-probe.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-classifier.ts";
 
@@ -84,6 +86,7 @@ import type {
   PluginPartiallyUpgradableMessage,
   PluginInstalledMessage,
   PluginNotificationMessage,
+  PluginRemoteMessage,
   PluginUnavailableMessage,
   PluginPartiallyAvailableMessage,
   PluginUpgradableMessage,
@@ -106,6 +109,9 @@ type PluginRenderStatus =
   | "installed"
   | "upgradable"
   | "available"
+  // RSTA-01 / D-80-03: the not-installed git-source row whose clone/mirror is not
+  // yet materialized locally. Replaces the manifest-only `(available)` over-claim.
+  | "remote"
   | "partially-available"
   | "unavailable"
   | "disabled"
@@ -130,7 +136,15 @@ type PluginRenderStatus =
  * not resolver-classified here -- they carry the `installed-inventory` bucket
  * and the filter keys on their render status instead.
  */
-type FilterBucket = "installed-inventory" | "available" | "partially-available" | "unavailable";
+type FilterBucket =
+  | "installed-inventory"
+  | "available"
+  | "partially-available"
+  | "unavailable"
+  // RSTA-07 / D-80-07: the `--remote` filter bucket -- a not-installed git source
+  // with no materialized clone. `--available` no longer admits it (intended
+  // behavior change); `--available --remote` restores the former `--available` set.
+  | "remote";
 
 /**
  * Options bag for {@link listPlugins}. The edge layer constructs this
@@ -164,6 +178,10 @@ export interface ListPluginsOptions {
    *  `partially-available` (the partially-available candidates). Keys on the internal
    *  resolver bucket, not the `(unavailable)` render token. */
   readonly partial?: boolean;
+  /** RSTA-07 / D-80-07 / PL-1 union filter: include the `(remote)` bucket -- a
+   *  not-installed git source with no materialized clone. Joins the PL-1 filter
+   *  family (`--installed` / `--available` / `--unavailable` / `--partial`). */
+  readonly remote?: boolean;
 }
 
 /**
@@ -175,7 +193,8 @@ function filtersPassive(opts: ListPluginsOptions): boolean {
     opts.installed !== true &&
     opts.available !== true &&
     opts.unavailable !== true &&
-    opts.partial !== true
+    opts.partial !== true &&
+    opts.remote !== true
   );
 }
 
@@ -211,6 +230,14 @@ function shouldShow(
   }
 
   if (opts.available === true && status === "available") {
+    return true;
+  }
+
+  // RSTA-07: `--remote` selects the `(remote)` bucket -- a not-installed git
+  // source with no materialized clone. A cold git source now carries render
+  // status `"remote"` and bucket `"remote"`, so it no longer passes the
+  // `--available` arm above (the INTENDED behavior change).
+  if (opts.remote === true && bucket === "remote") {
     return true;
   }
 
@@ -308,6 +335,7 @@ async function installedRowMessage(
   marketplaceRoot: string,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
+  cwd: string,
 ): Promise<
   | PluginInstalledMessage
   | PluginUpgradableMessage
@@ -376,10 +404,22 @@ async function installedRowMessage(
   // "could not assert a degrade" default), at parity with every sibling
   // force-resolve site (`availableRowMessage`, `info.ts`,
   // `resolvePendingForceInstalls`).
+  //
+  // PURL-08 / D-78-04 / NFR-5: inject the fs-only presence probe so a git-source
+  // upgrade candidate resolves against the WARM clone cache without cloning. A
+  // cold cache yields `not-cached` -> the resolver's git arm maps it to
+  // `unavailable{not installed}`, and the classifier's CR-01 degrade folds that
+  // (as an `undefined`-equivalent) back to the plain `(upgradable)` row -- an
+  // installed git plugin with a missing clone never regresses to `(unavailable)`.
+  // The probe never touches gitOps/network (no-orchestrator-network gate).
   let candidateResolved: Awaited<ReturnType<typeof resolveStrict>> | undefined;
   if (upgradable) {
+    const resolveCtx: ResolveContext = {
+      marketplaceRoot,
+      resolveGitPluginRoot: makePresenceProbe(locationsFor(pluginScope, cwd)),
+    };
     try {
-      candidateResolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+      candidateResolved = await resolveStrict(manifestEntry, resolveCtx);
     } catch {
       candidateResolved = undefined;
     }
@@ -476,18 +516,27 @@ function narrowProbeError(err: unknown): ListReason {
 
 /**
  * Resolve a not-yet-installed manifest entry into a `{ message, bucket }` pair
- * whose `message` is a `PluginAvailableMessage`, `PluginPartiallyAvailableMessage`, or
- * `PluginUnavailableMessage`.
+ * whose `message` is a `PluginRemoteMessage`, `PluginAvailableMessage`,
+ * `PluginPartiallyAvailableMessage`, or `PluginUnavailableMessage`.
  *
- * The row de-collapses by `resolved.state`: `installable` -> `(available)`;
- * `partially-available` -> `(partially-available)` with the dropped-component reasons narrowed
- * via the shared kind helper (partially-available); structural `unavailable` (or a
- * resolveStrict throw) -> `(unavailable)` with the failure reasons narrowed to
- * closed-set REASONS.
+ * RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry (url / git-subdir /
+ * github) is classified from its fs-only clone/mirror presence via
+ * `makePresenceProbe(locations)`:
+ *   - COLD (`not-cached`, nothing materialized locally) -> `(remote)` / bucket
+ *     `remote`. The entry is a valid install target (install performs the
+ *     fetch), but there is no local tree to resolve, so it is NOT over-claimed
+ *     `(available)`.
+ *   - WARM (`materialized`) -> the real three-way `resolveStrict` (with the
+ *     presence probe injected) feeding the `switch (resolved.state)` below:
+ *     `installable` -> `(available)`; `partially-available` ->
+ *     `(partially-available)` with dropped-component reasons; structural
+ *     `unavailable` -> `(unavailable)`.
+ * Non-git sources fall through to the existing `resolveStrict({ marketplaceRoot })`
+ * + `switch (resolved.state)` path unchanged. No network, no clone (NFR-5).
  *
- * SNM-11: the `available`, `partially-available`, and `unavailable` variants all OMIT
- * `scope` (the list surface does not emit `[<scope>]` brackets for these rows
- * per MSG-PL-6).
+ * SNM-11: the `remote`, `available`, `partially-available`, and `unavailable`
+ * variants all OMIT `scope` (the list surface does not emit `[<scope>]` brackets
+ * for these rows per MSG-PL-6).
  *
  * Probe failures (resolveStrict throws): the thrown error is classified
  * via `narrowProbeError` into a closed-set Reason and threaded onto the
@@ -498,17 +547,57 @@ function narrowProbeError(err: unknown): ListReason {
 async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
+  locations: ScopedLocations,
 ): Promise<{
-  message: PluginAvailableMessage | PluginPartiallyAvailableMessage | PluginUnavailableMessage;
+  message:
+    | PluginRemoteMessage
+    | PluginAvailableMessage
+    | PluginPartiallyAvailableMessage
+    | PluginUnavailableMessage;
   bucket: FilterBucket;
 }> {
-  // PL-4: description flows from the manifest entry onto the row for both
-  // available and unavailable variants.
+  // PL-4: description flows from the manifest entry onto the row for every
+  // not-installed variant (remote / available / partially-available / unavailable).
   const descriptionField: { readonly description?: string } =
     manifestEntry.description === undefined ? {} : { description: manifestEntry.description };
 
+  // RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
+  // fs-only clone/mirror presence. A cold clone (`not-cached`) is `(remote)` --
+  // a valid install target with no local tree to resolve. A warm clone
+  // (`materialized`) resolves the real three-way verdict against the on-disk tree
+  // via `resolveStrict` with the presence probe injected (D-80-02). No network,
+  // no clone (imports only `makePresenceProbe` + `resolveStrict`).
+  const parsedSource = parsePluginSource(manifestEntry.source);
+  const isGitSource =
+    parsedSource.kind === "url" ||
+    parsedSource.kind === "git-subdir" ||
+    parsedSource.kind === "github";
+
   try {
-    const resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+    let resolved: Awaited<ReturnType<typeof resolveStrict>>;
+    if (isGitSource) {
+      const probe = makePresenceProbe(locations);
+      const presence = await probe(parsedSource);
+      if (presence.kind === "not-cached") {
+        return {
+          message: {
+            status: "remote",
+            name: manifestEntry.name,
+            ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+            ...descriptionField,
+          },
+          bucket: "remote",
+        };
+      }
+
+      resolved = await resolveStrict(manifestEntry, {
+        marketplaceRoot,
+        resolveGitPluginRoot: probe,
+      });
+    } else {
+      resolved = await resolveStrict(manifestEntry, { marketplaceRoot });
+    }
+
     // D-67-02 / LIST-02: the filter BUCKET is derived by the SHARED
     // `classifyManifestEntry` (the same classifier the completion bucketizer
     // consumes) -- the `available | partially-available | unavailable` member maps
@@ -654,6 +743,7 @@ async function enumerateMarketplacePlugins(
       mpRecord.marketplaceRoot,
       record,
       manifestEntry,
+      opts.cwd,
     );
     // Installed-inventory rows are matched on render status; the resolver
     // bucket is not consulted for them (D-67-01).
@@ -681,9 +771,12 @@ async function enumerateMarketplacePlugins(
       continue;
     }
 
+    // RSTA-01 / NFR-5: thread the plugin-scope locations so the git-source
+    // presence probe reads the WARM clone/mirror cache fs-only (no network).
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
       mpRecord.marketplaceRoot,
+      locationsFor(pluginScope, opts.cwd),
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -1020,10 +1113,12 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
         // applies only to `available` / `unavailable`.
         return p.scope ?? marketplaceScope;
       case "available":
+      case "remote":
       case "unavailable":
       case "partially-available":
-        // USTAT-01 / SNM-11: the `partially-available` row has no `scope` field (the
-        // carve-out covers `available` / `unavailable` / `partially-available`).
+        // USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
+        // `partially-available` have no `scope` field (the SNM-11 carve-out
+        // family), so they fall back to the marketplace scope.
         return marketplaceScope;
       case "updated":
       case "reinstalled":
@@ -1177,3 +1272,11 @@ const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 // contract that callers (and the user) rely on.
 export { narrowProbeError as __test_narrowProbeError };
 export { narrowListFailReason as __test_narrowListFailReason };
+
+// PURL-08 / D-78-03: test-only re-export of the not-installed row builder. The
+// output-parity drift-guard (tests/orchestrators/edge-deps.test.ts) feeds the
+// SAME git-source manifest through this list-surface builder and the completion
+// bucketizer and asserts identical status buckets, guarding the list
+// `(available)` vs completion `unavailable` divergence class. Mirrors the
+// `__test_narrowProbeError` re-export precedent.
+export { availableRowMessage as __test_availableRowMessage };

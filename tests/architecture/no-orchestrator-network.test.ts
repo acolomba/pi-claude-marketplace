@@ -11,8 +11,15 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  *
  * Forbidden surface, by file:
  *   - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`
- *     (PI-2: install consults the cached manifest only; NO network sync).
+ *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`.
+ *     install.ts itself carries ZERO git surface: a git-source plugin
+ *     (url / git-subdir / github) clone is delegated to the `clone-cache.ts`
+ *     sibling seam (a gitOps consumer outside this gate's candidate set,
+ *     where the git surface legally lives), which install imports by
+ *     its own entrypoint name (`materializePluginClone` / `resolvePluginPin`)
+ *     and never names `gitOps`. install still reads the cached manifest with no
+ *     network sync of its own; the only network touch is the cache-miss clone
+ *     inside the seam (NFR-5 amended).
  *   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
  *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`
  *     (PL-3 + NFR-5: list is read-only against state + manifest; no network).
@@ -63,6 +70,12 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   // ENBL-03: the enable/disable orchestrator re-materializes from cache
   // -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
+  // entrypoint name), install-style. It names zero gitOps surface, so it is
+  // locked here permanently. It is NOT exempt: among the gated orchestrator
+  // candidates, update.ts is the only file allowed the gitOps surface (seam
+  // files such as clone-cache.ts sit outside this gate's candidate set).
+  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

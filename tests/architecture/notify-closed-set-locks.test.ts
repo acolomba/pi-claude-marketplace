@@ -26,25 +26,31 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-test("OUT-08: REASONS is the closed 32-entry reason set", () => {
-  assert.equal(REASONS.length, 32);
+test("OUT-08: REASONS is the closed 34-entry reason set", () => {
+  // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
+  // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
+  assert.equal(REASONS.length, 34);
 });
 
-test("SNM-02: STATUS_TOKENS is the closed 23-entry token set", () => {
+test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: +2 for the derived `partially-installed` /
   // `partially-upgradable` realized tokens. `will partially install` is a render
   // modifier on `will install`, NOT a token, so the set grows by exactly 2.
   // USTAT-02 / D-64-01: +1 for the de-collapsed not-installed `partially-available`
   // render token (22 -> 23).
-  assert.equal(STATUS_TOKENS.length, 23);
+  // RSTA-01 / D-80-06: +1 for the not-installed git-source `remote` token (23 -> 24).
+  assert.equal(STATUS_TOKENS.length, 24);
 });
 
-test("SNM-02: PLUGIN_STATUSES is the closed 18-entry plugin-status set", () => {
+test("SNM-02: PLUGIN_STATUSES is the closed 19-entry plugin-status set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: +2 for `partially-installed` / `partially-upgradable`.
   // USTAT-02 / D-64-01: +1 for `partially-available` (17 -> 18). Both tuples gain the
   // member; `PLUGIN_STATUSES` MUST because `PluginInfoRowBase.status` derives via
   // `Extract<PluginStatus, "partially-available">`.
-  assert.equal(PLUGIN_STATUSES.length, 18);
+  // RSTA-01 / D-80-06: +1 for `remote` (18 -> 19) -- likewise required in
+  // `PLUGIN_STATUSES` because the info surface renders `(remote)` via
+  // `Extract<PluginStatus, "remote">`.
+  assert.equal(PLUGIN_STATUSES.length, 19);
 });
 
 test("SNM-02: MARKETPLACE_STATUSES is the closed 7-entry marketplace-status set", () => {

@@ -77,7 +77,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 32-entry membership AND order are catalog-stable and MUST NOT change. The
+ * 34-entry membership AND order are catalog-stable and MUST NOT change. The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
  * lives in `shared/notify-reasons.ts` as typed VIEWS over this set; that module
@@ -127,6 +127,19 @@ export const REASONS = [
   // reads `resolved.orphanRewake` and pushes this token into `reasons[]`.
   // One row per plugin regardless of N orphan handlers.
   "orphan rewake",
+  // D-76-08: a marketplace clone hit an HTTP auth challenge (401/403). Error
+  // severity; truthful attribution -- a 401/403 is an auth failure, NOT
+  // `network unreachable`. The cause chain carries the HTTP detail. Reused by
+  // PROV-04's fail-clean case for provider-based auth.
+  "authentication required",
+  // PURL-06: a declared plugin key `${plugin}@${marketplace}` whose
+  // `@<marketplace>` is NOT declared in the merged config (an orphaned plugin
+  // declaration -- e.g. a previous-version `--local` install that a marketplace
+  // remove left behind). The reconcile planner's `dangling-reference`
+  // source-mismatch cause renders this token instead of `source mismatch`, so
+  // the operator sees the real problem (an undeclared marketplace) rather than a
+  // source-comparison failure that does not exist.
+  "dangling reference",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -232,6 +245,14 @@ export const STATUS_TOKENS = [
   // degrade-install (drop unsupported components) under `--partial`. Maps to the
   // dedicated `ICON_PARTIALLY_AVAILABLE` (`⊖`) glyph.
   "partially-available",
+  // RSTA-01 / D-80-06: the not-installed git-source inventory token for a
+  // plugin whose clone/mirror is not yet materialized locally (`(remote)`,
+  // `ICON_REMOTE` `◌`). Replaces the manifest-only `(available)` over-claim on
+  // the list/info/install-completion surfaces. Appended LAST (below the
+  // reload-hint trigger window, like `disabled` and the partial-state tokens):
+  // it is an inventory row (`info` severity, `needsReload: false`), never a
+  // realized transition. Bare row -- no `reasons` (D-80-03).
+  "remote",
 ] as const;
 
 export type StatusToken = (typeof STATUS_TOKENS)[number];
@@ -414,6 +435,13 @@ export const PLUGIN_STATUSES = [
   // is an inventory/list-surface row (no realized transition), so it stamps no
   // reload-hint trigger -- like `available` / `unavailable`.
   "partially-available",
+  // RSTA-01 / D-80-06: the not-installed git-source `(remote)` member.
+  // REQUIRED here (not just in STATUS_TOKENS) because `PluginInfoRowBase.status`
+  // derives via `Extract<PluginStatus, ...>`; the info surface renders
+  // `(remote)`, so without this entry `Extract<PluginStatus, "remote">`
+  // resolves to `never`. Inventory/list-surface row (no realized transition):
+  // stamps no reload-hint trigger, like `available` / `unavailable`.
+  "remote",
 ] as const;
 
 /**
@@ -646,7 +674,7 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
  * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
- * (`◌`) -- the same glyph the `will disable` row uses. PL-4: optional
+ * (`◍`) -- the same glyph the `will disable` row uses. PL-4: optional
  * `description` rendered as a second 4-space-indented line, truncated at
  * column 66 (same as the other list-surface inventory variants).
  */
@@ -667,6 +695,24 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
  */
 export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
+  readonly name: string;
+  readonly version?: string;
+  readonly description?: string;
+}
+
+/**
+ * `(remote)` -- list/info-surface row for a not-installed git-source plugin
+ * whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03).
+ * Replaces the manifest-only `(available)` over-claim for unfetched git
+ * sources. Modeled on `PluginAvailableMessage`: bare row -- NO `scope`
+ * (SNM-11 carve-out family, joining `available | partially-available |
+ * unavailable`); NO `reasons` (the REASONS closed set does not grow for this
+ * row -- parity with `available`); NO `dependencies`. Uses the dedicated
+ * `ICON_REMOTE` (`◌`) glyph. PL-4: optional `description` rendered as a second
+ * 4-space-indented line, truncated at column 66.
+ */
+export interface PluginRemoteMessage extends MessageBase {
+  readonly status: "remote";
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
@@ -918,6 +964,7 @@ export type PluginNotificationMessage =
   | PluginReinstalledMessage
   | PluginUninstalledMessage
   | PluginAvailableMessage
+  | PluginRemoteMessage
   | PluginUnavailableMessage
   | PluginPartiallyAvailableMessage
   | PluginUpgradableMessage
@@ -1102,10 +1149,10 @@ export interface CascadeNotificationMessage {
  * identifier (`name`, `scope`), the persisted `MarketplaceDetails` for the
  * `<autoupdate>` / `<no autoupdate>` marker AND for the `last_updated:`
  * ISO8601 line (read from `details.lastUpdatedAt` -- single source of
- * truth), the source-kind detail (`github: <owner>/<repo>[#<ref>]` vs
- * `path: <abs-path>`), and optional `description` (marketplace.json
- * description, optional) line. The `last_updated:` line renders only on the
- * github-source arm (INFO-01).
+ * truth), the source-kind detail (`github: <owner>/<repo>[#<ref>]`,
+ * `url: <url>[#<ref>]`, or `path: <abs-path>`), and optional `description`
+ * (marketplace.json description, optional) line. The `last_updated:` line
+ * renders for all git-backed kinds (github + url), never for path (D-76-10).
  *
  * The marketplace-absent (`{not added}`) condition is NOT emitted by this
  * variant -- it is the dedicated `MarketplaceNotAddedMessage` variant
@@ -1123,6 +1170,8 @@ export interface MarketplaceInfoMessage {
         readonly repo: string;
         readonly ref?: string;
       }
+    // MURL-05 / D-76-09: url sources project a kind-labeled `url:` line.
+    | { readonly sourceKind: "url"; readonly url: string; readonly ref?: string }
     | { readonly sourceKind: "path"; readonly absPath: string };
   readonly description?: string;
 }
@@ -1188,6 +1237,8 @@ interface PluginInfoRowBase {
     PluginStatus,
     | "installed"
     | "available"
+    // RSTA-01: the info surface renders `(remote)` for an unfetched git source.
+    | "remote"
     | "unavailable"
     | "partially-available"
     | "failed"
@@ -1433,8 +1484,19 @@ export const ICON_UNINSTALLABLE = "⊘";
  * `(manual recovery)`). Mirrors the realized + pending-tense precedent
  * already in the grammar (`●` for `(installed)` / `(will install)`,
  * `○` for `(available)` / `(will uninstall)`).
+ *
+ * D-80-01: uses `◍` (U+25CD, circle with vertical fill). The `◌` (U+25CC,
+ * dotted circle) it previously carried was reassigned to `ICON_REMOTE`.
  */
-export const ICON_DISABLED = "◌";
+export const ICON_DISABLED = "◍";
+
+/**
+ * RSTA-02 / D-80-01: dedicated glyph (`◌` U+25CC, dotted circle) for the
+ * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
+ * yet materialized locally. The dotted circle reads "declared but not
+ * present". Reassigned from `ICON_DISABLED`, which now uses `◍` (U+25CD).
+ */
+export const ICON_REMOTE = "◌";
 
 /**
  * FSTAT-02 / D-66-03: dedicated glyph for a `partially-installed` row -- a
@@ -1751,18 +1813,48 @@ function formatHashVersionForDisplay(v: string): string {
 }
 
 /**
+ * Anchored-exact predicate for a persisted git-source `sha-<12hex>` version
+ * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape
+ * produced by `domain/version.ts::shaVersion`. Local to the renderer tier
+ * (shared/ must not import domain/), mirroring `looksLikeHashVersion` above.
+ */
+const SHA_VERSION_DISPLAY_RE = /^sha-[0-9a-f]{12}$/;
+function looksLikeShaVersion(v: string): boolean {
+  return SHA_VERSION_DISPLAY_RE.test(v);
+}
+
+/**
+ * D-77-01 / PURL-09: render a persisted git-source `sha-<12hex>` version to the
+ * same compact git-style short SHA as the hash-version arm: `sha-2ea95f857031`
+ * -> `#2ea95f8` (the `sha-` prefix stripped, the first 7 of the 12 hex chars
+ * kept). Returns WITHOUT the `v` prefix -- `renderVersion` prepends it, yielding
+ * `v#2ea95f8`. A non-sha string passes through UNCHANGED so hash-versions and
+ * SemVer are untouched. Renderer-only: persistence stays `sha-<12hex>`.
+ */
+function formatShaVersionForDisplay(v: string): string {
+  if (!looksLikeShaVersion(v)) {
+    return v;
+  }
+
+  return `#${v.slice("sha-".length, "sha-".length + 7)}`;
+}
+
+/**
  * Prepend `v` to the version string, returning `""` when `version` is
  * undefined or empty so the join discipline collapses the slot cleanly.
- * Routes the token through `formatHashVersionForDisplay` first so a persisted
- * PI-7 `hash-<12hex>` renders as `v#<7hex>` while a SemVer passes through to
- * `v<version>` (SNM-35). Single canonical implementation.
+ * Routes the token through `formatHashVersionForDisplay` then
+ * `formatShaVersionForDisplay` so a persisted PI-7 `hash-<12hex>` OR a
+ * git-source `sha-<12hex>` (D-77-01 / PURL-09) renders as `v#<7hex>`, while a
+ * SemVer passes through to `v<version>` (SNM-35). Each formatter is a no-op on
+ * a string the other owns, so the order is irrelevant. Single canonical
+ * implementation.
  */
 export function renderVersion(version: string | undefined): string {
   if (version === undefined || version === "") {
     return "";
   }
 
-  return `v${formatHashVersionForDisplay(version)}`;
+  return `v${formatShaVersionForDisplay(formatHashVersionForDisplay(version))}`;
 }
 
 /**
@@ -2081,6 +2173,20 @@ function renderPluginRow(
         renderVersion(p.version),
         "(available)",
         composeReasons(undefined, false, false, probe),
+      ]);
+    case "remote":
+      // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is
+      // not materialized locally. Clones the `available` arm, swapping the
+      // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
+      // carve-out: `remote` has NO `scope?` field, so the scope bracket is
+      // omitted. Bare row -- NO reasons brace (D-80-03), so the
+      // `composeReasons` line is dropped.
+      return joinTokens([
+        ICON_REMOTE,
+        p.name,
+        renderScopeBracket(undefined, mpScope),
+        renderVersion(p.version),
+        "(remote)",
       ]);
     case "unavailable":
       return joinTokens([
@@ -2882,9 +2988,10 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  * INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
  * single-string body. Composes:
  *   - the marketplace-info header line at column 0 (`composeMpInfoHeader`),
- *   - the source-kind line (`github: <owner>/<repo>[#<ref>]` or
- *     `path: <abs-path>`),
- *   - optional `last_updated: <ISO8601>` (github sources only per INFO-01),
+ *   - the source-kind line (`github: <owner>/<repo>[#<ref>]`,
+ *     `url: <url>[#<ref>]`, or `path: <abs-path>`),
+ *   - optional `last_updated: <ISO8601>` (git-backed kinds github + url;
+ *     never path per D-76-10),
  *   - optional `description: <text>` (single attribute line, NOT wrapped
  *     -- description wrapping is `plugin info`-only per INFO-02).
  *
@@ -2900,17 +3007,14 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
     case "github": {
       const refSuffix = message.source.ref === undefined ? "" : `#${message.source.ref}`;
       lines.push(`github: ${message.source.owner}/${message.source.repo}${refSuffix}`);
+      break;
+    }
 
-      // WR-04: read the timestamp from the persisted
-      // `MarketplaceDetails.lastUpdatedAt` rather than a duplicate
-      // top-level `lastUpdated` field. The `details` record already carries
-      // this value through state-io; a parallel top-level field would mean
-      // two sources of truth that callers have to keep in sync. Github-
-      // source gate is enforced on the renderer side (INFO-01).
-      if (message.details.lastUpdatedAt !== undefined) {
-        lines.push(`last_updated: ${message.details.lastUpdatedAt}`);
-      }
-
+    // MURL-05 / D-76-09: url sources render `url: <url>[#<ref>]`, mirroring the
+    // github label==kind convention. NOT a `path:` line (the clone dir).
+    case "url": {
+      const refSuffix = message.source.ref === undefined ? "" : `#${message.source.ref}`;
+      lines.push(`url: ${message.source.url}${refSuffix}`);
       break;
     }
 
@@ -2920,6 +3024,15 @@ function renderMarketplaceInfo(message: MarketplaceInfoMessage, _probe: SoftDepS
 
     default:
       assertNever(message.source);
+  }
+
+  // D-76-10: `last_updated:` renders for all git-backed kinds (github + url),
+  // never for path. WR-04: the timestamp is read from the persisted
+  // `MarketplaceDetails.lastUpdatedAt` (single source of truth), not a
+  // duplicate top-level field. Lifted out of the github case so the widened
+  // gate fires for url too.
+  if (message.source.sourceKind !== "path" && message.details.lastUpdatedAt !== undefined) {
+    lines.push(`last_updated: ${message.details.lastUpdatedAt}`);
   }
 
   if (message.description !== undefined) {
@@ -2997,6 +3110,10 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
       return ICON_PARTIALLY_INSTALLED;
     case "available":
       return ICON_AVAILABLE;
+    case "remote":
+      // RSTA-01: not-installed git-source info row whose clone/mirror is not
+      // materialized -- the dedicated `◌` dotted-circle glyph.
+      return ICON_REMOTE;
     case "partially-available":
       // USTAT-01 / D-64-01: not-installed, partially-available info row -- the
       // dedicated `⊖` glyph, distinct from the `⊘` structural-unavailable arm.
@@ -3507,14 +3624,15 @@ function composePluginLinesWith(
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
   // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
-  // / `available` / `unavailable` / `partially-available` / `disabled` /
-  // `partially-installed` / `partially-upgradable`) carry the manifest description;
-  // cascade `installed` rows never set `description`, so the guard keeps them
-  // single-line.
+  // / `available` / `remote` / `unavailable` / `partially-available` /
+  // `disabled` / `partially-installed` / `partially-upgradable`) carry the
+  // manifest description; cascade `installed` rows never set `description`, so
+  // the guard keeps them single-line.
   if (
     (p.status === "installed" ||
       p.status === "upgradable" ||
       p.status === "available" ||
+      p.status === "remote" ||
       p.status === "unavailable" ||
       p.status === "partially-available" ||
       p.status === "disabled" ||

@@ -1,5 +1,32 @@
 # Milestones: pi-claude-marketplace
 
+## url-source URL Sources (Shipped: 2026-07-13)
+
+**Phases completed:** 4 phases, 20 plans, 49 tasks
+
+**Key accomplishments:**
+
+- Generic https:// sources now parse to a .git-canonical UrlSource, github.com URLs (string + object form) normalize to github kind, owner/repo@ref folds to github+ref, the samePlannedSource url arm is live and ref-aware, and the closed-set gains a truthful `authentication required` REASONS token.
+- The three marketplace lifecycle orchestrators now handle `url`-kind sources: `add` clones `source.url` verbatim with no auth via a shared clone-into-guard helper, `classifyAddError` maps a 401/403 HttpError to `authentication required`, `update` re-fetches via the origin remote with atomic-swap parity and no auth, and `remove` deletes the url clone dir so re-add never hits `{stale clone}`.
+- `marketplace info` now renders url sources as `url: <url>[#ref]` with `last_updated:` for git-backed kinds (never `path:`), a persisted url record loads correctly, and `import` maps both the flat legacy and nested upstream `extraKnownMarketplaces` shapes.
+- Source-addressed `<12hex(sha256(url))>-<sha12>` cache-key helper, the `sha-<12hex>` git-source version convention with its `#<7hex>` list-surface render, the `plugin-clones/` NFR-10 path chokepoint, and the additive-optional `resolvedSha` state field — the dependency roots every later Phase 77 plan consumes.
+- The resolver now classifies url / git-subdir / github-object plugin sources as installable by delegating clone-vs-probe to an injected `resolveGitPluginRoot` callback, staying network-free for list/info while anchoring git-subdir containment to the clone root (NFR-7 preserved via a materialized-only result arm).
+- `materializePluginClone` clones a git plugin source at its pinned/resolved sha into the source-addressed `plugin-clones/<key>/` cache via staging + atomic rename, deduped by url+sha with an offline warm-cache short-circuit and a concurrent-install-tolerant rename; `resolvePluginPin` canonicalizes the clone url and resolves the pin sha-over-ref (unpinned HEAD via the new `resolveRemoteRef` GitOps primitive).
+- `install.ts` now installs a `url` / `git-subdir` / `github`-object plugin end to end: it injects a clone-materializing `resolveGitPluginRoot` callback (Plan 02 seam) that runs the Plan 03 clone-cache seam, captures the resolved 40-hex sha as a side-channel, records `version: sha-<12hex>` (D-77-01) and the full `resolvedSha` (D-77-02), enforces git-subdir clone-root containment, and keeps zero git surface so the `no-orchestrator-network` gate stays green.
+- fs-only `garbageCollectPluginClones` that derives live clone keys from surviving git-source state records (derive-not-persist) and deletes unreferenced `plugin-clones/<key>` dirs through the containment chokepoint, with ENOENT no-op and leak-swallow semantics.
+- Uninstalled git-source plugins (url / git-subdir / github) now render `(available)` on `list` and `info` via a manifest short-circuit, and installed plugins with a cold clone cache degrade to plain `(upgradable)`/`(installed)` through an fs-only presence probe — all without cloning or touching the network.
+- Post-commit `garbageCollectPluginClones(locations)` call in uninstall.ts that reclaims a git-source plugin's cached clone once its last referencer is removed, leaves a shared clone intact while another installed plugin references it, and never fails the user-visible uninstall on a GC leak.
+- `update` now detects git-source sha changes (pinned manifest sha + unpinned re-resolved HEAD), materializes the new clone before the 3-phase swap, records the new resolvedSha, GCs the unreferenced old clone post-commit, and fails clean on a vanished repo -- with the version arrow already rendering `v#<7hex> → v#<7hex>`.
+- Standalone marketplace remove and plugin uninstall now sweep the declarative config across BOTH claude-plugins.json and claude-plugins.local.json, so an orphaned sibling-layer declaration can no longer persist as a perpetual reconcile dangling-reference.
+- The reconcile dangling-reference diagnostic now renders `{dangling reference}` instead of the reused `{source mismatch}` token, naming the real problem — an orphaned plugin declaration whose marketplace is undeclared — on both the marketplace row and the plugin child.
+- Extracted list.ts's git-source short-circuit and warm-cache presence probe into a shared fs-only module, wired it into the completion bucketizer, and bumped the plugin-index cache schema — so install completion now offers not-installed git-source plugins as (available) at parity with list.
+- Post-commit `garbageCollectPluginClones(locations)` call in `marketplace/remove.ts` that reclaims a git-source plugin's cached clone once the last marketplace referencing it is removed, at parity with the uninstall/update GC placement, without ever failing the user-visible remove and without adding any git surface.
+- GitAuthProvider registry (host->descriptor lookup) with the RFC-8628 Device Flow engine parameterized by an optional provider descriptor that defaults to GITHUB_PROVIDER, keeping github.com behavior byte-identical.
+- Registry-driven `buildAuthForHost` replaces the two inline `host="github.com"` Device Flow blocks in marketplace add/update, threads optional auth into `resolveRemoteRef`, and delivers the no-provider fail-clean contract -- with the D-79-03 cause line scoped (by user checkpoint decision) to the update path's cause-carrying child row.
+- The plugin install / update / reinstall clone paths thread a host-keyed `GitAuthBundle` (from Plan 02's `buildAuthForHost`) through the clone-cache seam: private git-source plugins authenticate on provider hosts, public / no-provider hosts clone authless, no-provider clones fail clean with the bare `authentication required` row, and a command-scope once-per-host memo caps the flow -- all while `install.ts` / `reinstall.ts` stay off the platform-git gate.
+
+---
+
 ## force-install Force Install (Shipped: 2026-07-02)
 
 **Phases completed:** 12 phases, 33 plans, 71 tasks

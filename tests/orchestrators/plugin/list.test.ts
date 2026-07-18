@@ -25,11 +25,15 @@
 //     truncated to col 66 with "..." suffix (63 chars + "...")
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as git from "isomorphic-git";
+
+import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   __test_narrowListFailReason,
@@ -430,6 +434,179 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// RSTA-01 / RSTA-07 / D-80-03 / D-80-07: the `(remote)` git-source row + the
+// `--remote` filter. A not-installed git source with no materialized clone
+// renders `◌ <name> (remote)` (bare) and lands in the `remote` filter bucket;
+// `--available` no longer admits it (the intended behavior change). A WARM clone
+// resolves the three-way verdict against the on-disk tree.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Stage a warm git mirror at the user-scope URL-keyed mirror dir carrying a
+ * minimal installable plugin, so the presence probe resolves `materialized` and
+ * `resolveStrict` validates the on-disk tree. Uses a canonical url (no `.git`)
+ * so the staged mirror key matches the parse-time canonical url the probe hashes.
+ */
+async function stageWarmMirror(cwd: string, canonicalUrl: string): Promise<void> {
+  const locations = locationsFor("user", cwd);
+  const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
+  await mkdir(path.join(mirrorDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mirrorDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "warm-plugin" }),
+  );
+  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
+  await git.commit({
+    fs,
+    dir: mirrorDir,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
+}
+
+test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `◌ <name> (remote)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "gitplug", source: "https://example.com/plugin.git", version: "1.0.0" }],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), no
+    // reason brace (D-80-03).
+    assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
+  });
+});
+
+test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available` alone EXCLUDES the cold git source; `--available --remote` includes both", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // path-source available (on-disk dir seeded below).
+          { name: "avail", source: "./avail", version: "1.0.0" },
+          // cold git source -> remote.
+          { name: "gitplug", source: "https://example.com/plugin.git", version: "2.0.0" },
+        ],
+      },
+      installablePluginDirs: ["avail"],
+    });
+
+    // --remote: only the remote git row.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", remote: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
+      assert.equal(out.includes("avail"), false, out);
+    }
+
+    // --available alone: the cold git source is EXCLUDED (the intended change);
+    // only the path-source available row shows.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
+      assert.equal(out.includes("gitplug"), false, out);
+    }
+
+    // --available --remote: BOTH rows restore the pre-milestone set.
+    {
+      const { ctx, pi, notifications } = makeCtx();
+      await listPlugins({ ctx, pi, cwd, scope: "user", available: true, remote: true });
+      const out = notifications[0]!.message;
+      assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
+      assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
+    }
+  });
+});
+
+test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies its three-way verdict (`available`), NOT `remote`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // Canonical url (no `.git`) so the manifest source and the staged mirror key
+    // agree on the hashed url.
+    const canonicalUrl = "https://example.com/plugin";
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "warm-plugin", source: canonicalUrl, version: "1.0.0" }],
+      },
+    });
+    await stageWarmMirror(cwd, canonicalUrl);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // A warm tree resolves `installable` -> `(available)`, never `(remote)`.
+    assert.match(out, /○ warm-plugin v1\.0\.0 \(available\)/, out);
+    assert.equal(out.includes("(remote)"), false, out);
+
+    // The warm source is NOT in the `--remote` bucket, and DOES pass `--available`.
+    {
+      const { ctx: c2, pi: p2, notifications: n2 } = makeCtx();
+      await listPlugins({ ctx: c2, pi: p2, cwd, scope: "user", remote: true });
+      assert.equal(n2[0]!.message.includes("warm-plugin"), false, n2[0]!.message);
+    }
+
+    {
+      const { ctx: c3, pi: p3, notifications: n3 } = makeCtx();
+      await listPlugins({ ctx: c3, pi: p3, cwd, scope: "user", available: true });
+      assert.match(n3[0]!.message, /○ warm-plugin v1\.0\.0 \(available\)/, n3[0]!.message);
+    }
+  });
+});
+
+test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(installed)`, never `(remote)`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        // Same version as installed -> steady-state `(installed)`, no upgrade.
+        plugins: [{ name: "gitplug", source: "https://example.com/plugin.git", version: "1.0.0" }],
+      },
+      // Recorded installed at 1.0.0; NO clone staged on disk.
+      installed: { gitplug: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The installed path (installedRowMessage) never renders `(remote)` -- the
+    // `remote` derivation lives only on the not-installed availableRowMessage
+    // path. A cold clone does not regress the row (D-78-04 degrade preserved).
+    assert.match(out, /● gitplug v1\.0\.0 \(installed\)/, out);
+    assert.equal(out.includes("(remote)"), false, out);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // LIST-01 / D-67-01: the four list filters partition cleanly.
 //   --unsupported  -> NOT-installed plugins that resolve `unsupported`
 //                     (the force-installable candidates); keyed on the internal
@@ -817,10 +994,10 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
-    // Catalog `disabled-inventory` row form: ◌ glyph (ICON_DISABLED), version
+    // Catalog `disabled-inventory` row form: ◍ glyph (ICON_DISABLED), version
     // pin rendered, `(disabled)` token. Severity info (inventory row, not a
     // failure).
-    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.match(out, /◍ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(installed)"), false, `must not render (installed): ${out}`);
     assert.equal(out.includes("(unavailable)"), false, `must not render (unavailable): ${out}`);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
@@ -846,7 +1023,7 @@ test("ENBL-04: disabled record with drifted manifest version does NOT render `(u
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    assert.match(out, /◌ alpha v1\.2\.3 \(disabled\)/, out);
+    assert.match(out, /◍ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(upgradable)"), false, out);
   });
 });
@@ -873,7 +1050,7 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
     const out = notifications[0]!.message;
-    assert.match(out, /◌ alpha v1\.0\.0 \(disabled\)/, out);
+    assert.match(out, /◍ alpha v1\.0\.0 \(disabled\)/, out);
     assert.equal(out.includes("○ beta"), false, out);
   });
 });
@@ -2090,5 +2267,180 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     assert.equal(notifications[0]!.severity, "error");
     // The error message should reference the JSON parse failure.
     assert.match(notifications[0]!.message, /state\.json/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RSTA-01 / D-80-03 / D-78-04: git-source plugins on the list surface.
+// An uninstalled git plugin (url / github / git-subdir) with NO materialized
+// clone renders `(remote)` -- a valid install target with no local tree to
+// resolve, NOT the over-claimed `(available)`. An installed git plugin whose
+// clone is missing shows no status change (status derives from the recorded
+// record, never a clone probe -- D-78-04 degrade preserved). Neither surface
+// clones or touches the network (NFR-5).
+// ──────────────────────────────────────────────────────────────────────────
+
+test("RSTA-01 / D-80-03: an uninstalled url-source plugin renders (remote), not (unavailable)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        // A url-source plugin NOT installed and with NO on-disk clone. The
+        // presence probe returns not-cached, so the row classifies `remote`
+        // (a valid install target with no local tree to resolve), NOT the
+        // over-claimed `available`.
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
+    assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
+  });
+});
+
+test("RSTA-01 / D-80-03: an uninstalled github-object-source plugin renders (remote)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "ghplug", source: { source: "github", repo: "owner/repo" }, version: "2.0.0" },
+        ],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /◌ ghplug v2\.0\.0 \(remote\)/, out);
+    assert.doesNotMatch(out, /ghplug.*\(unavailable\)/, out);
+  });
+});
+
+test("RSTA-01 / D-80-03: an uninstalled git-subdir-source plugin renders (remote)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "subplug",
+            source: { source: "git-subdir", url: "https://example.com/repo", path: "sub" },
+            version: "3.0.0",
+          },
+        ],
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /◌ subplug v3\.0\.0 \(remote\)/, out);
+    assert.doesNotMatch(out, /subplug.*\(unavailable\)/, out);
+  });
+});
+
+test("PURL-08 / D-78-04: an installed git-source plugin with a missing clone keeps its recorded (installed) status", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        // Same manifest version as the installed record (no upgrade) -> the
+        // installed row derives from the recorded record; the clone cache dir
+        // never exists on disk, and status must not regress to unavailable.
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    const out = notifications[0]!.message;
+    assert.match(out, /● gplug v1\.0\.0 \(installed\)/, out);
+    assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
+    assert.doesNotMatch(out, /gplug.*\(partially/, out);
+  });
+});
+
+test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest and a missing clone degrades to plain (upgradable), never (unavailable)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        // Newer manifest version than the recorded install -> upgradable. The
+        // presence probe finds no clone (cold cache) and returns not-cached, so
+        // the row degrades to plain (upgradable) -- NOT (unavailable).
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "2.0.0" }],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    const out = notifications[0]!.message;
+    assert.match(out, /● gplug v1\.0\.0 \(upgradable\)/, out);
+    assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
+  });
+});
+
+test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no plugin-clones dir on disk (no clone, no network)", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+
+    // No plugin-clones/ directory is ever created; a clone (or any network
+    // touch) would have to materialize one. Its absence after the render proves
+    // the surface neither cloned nor fetched.
+    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
+    let clonesExisted = true;
+    try {
+      await readFile(clonesDir);
+    } catch {
+      clonesExisted = false;
+    }
+
+    assert.equal(clonesExisted, false);
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
   });
 });

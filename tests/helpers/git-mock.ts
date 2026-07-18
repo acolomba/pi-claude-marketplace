@@ -60,6 +60,16 @@ export interface MockGitState {
   checkoutCalls: { dir: string; ref: string }[];
   resolveRefCalls: { dir: string; ref: string }[];
   currentBranchCalls: { dir: string }[];
+  resolveRemoteRefCalls: { url: string; ref?: string; auth?: GitAuthBundle }[];
+  /**
+   * Map of remote ref name -> SHA consulted by `resolveRemoteRef`. When the
+   * requested `ref` is present it resolves to the mapped SHA; an unpinned
+   * call (ref undefined) resolves the remote HEAD via `remoteHead`. Mutate to
+   * drive the unpinned-vs-pinned resolution paths.
+   */
+  remoteResolveMap: Record<string, string>;
+  /** SHA returned by `resolveRemoteRef` for an unpinned (HEAD) resolution. */
+  remoteHead?: string;
   /**
    * Optional override hooks: tests can install behavior overrides
    * for individual methods (e.g., make checkout throw to simulate
@@ -68,6 +78,7 @@ export interface MockGitState {
   cloneThrows?: Error;
   fetchThrows?: Error;
   checkoutThrows?: Error;
+  resolveRemoteRefThrows?: Error;
 }
 
 export interface MockGitOpsHandle {
@@ -90,10 +101,16 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
     checkoutCalls: [],
     resolveRefCalls: [],
     currentBranchCalls: [],
+    resolveRemoteRefCalls: [],
+    remoteResolveMap: { ...(initial?.remoteResolveMap ?? {}) },
     ...(initial?.fixtureSourceDir !== undefined && { fixtureSourceDir: initial.fixtureSourceDir }),
+    ...(initial?.remoteHead !== undefined && { remoteHead: initial.remoteHead }),
     ...(initial?.cloneThrows !== undefined && { cloneThrows: initial.cloneThrows }),
     ...(initial?.fetchThrows !== undefined && { fetchThrows: initial.fetchThrows }),
     ...(initial?.checkoutThrows !== undefined && { checkoutThrows: initial.checkoutThrows }),
+    ...(initial?.resolveRemoteRefThrows !== undefined && {
+      resolveRemoteRefThrows: initial.resolveRemoteRefThrows,
+    }),
     ...(initial?.currentBranchOverride !== undefined && {
       currentBranchOverride: initial.currentBranchOverride,
     }),
@@ -223,6 +240,35 @@ export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandl
       }
 
       return undefined;
+    },
+
+    async resolveRemoteRef(opts): Promise<string> {
+      // Record the optional auth bundle so a test can assert an unpinned
+      // private-repo resolution threaded auth (PROV-03). The conditional keys
+      // keep a no-auth / no-ref call recorded as a bare `{ url }` so existing
+      // deepEqual assertions stay green.
+      state.resolveRemoteRefCalls.push({
+        url: opts.url,
+        ...(opts.ref !== undefined && { ref: opts.ref }),
+        ...(opts.auth !== undefined && { auth: opts.auth }),
+      });
+      await Promise.resolve();
+      if (state.resolveRemoteRefThrows !== undefined) {
+        throw state.resolveRemoteRefThrows;
+      }
+
+      // A given ref resolves via the remoteResolveMap; an unpinned call
+      // (ref undefined) resolves the remote HEAD.
+      if (opts.ref !== undefined) {
+        const mapped = state.remoteResolveMap[opts.ref];
+        if (mapped !== undefined) {
+          return mapped;
+        }
+
+        throw new Error(`mock resolveRemoteRef: unknown ref "${opts.ref}"`);
+      }
+
+      return state.remoteHead ?? state.head;
     },
   };
 

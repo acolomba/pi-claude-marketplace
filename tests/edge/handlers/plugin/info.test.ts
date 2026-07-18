@@ -178,3 +178,34 @@ test("shim :: unknown long flag routes through notifyUsageError; orchestrator NO
     );
   });
 });
+
+test("FTCH-03 :: `info foo@mp --fetch` is accepted and delegates (reaches the absent-marketplace path)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makePluginInfoHandler(makePi());
+    await handler("foo@mp --fetch", ctx);
+    assert.equal(notifications.length, 1);
+    // Delegation proof: `--fetch` was NOT rejected as an unknown flag; the
+    // orchestrator ran and hit the absent-marketplace `{not added}` arm.
+    assert.equal(
+      notifications[0]!.message,
+      "A marketplace operation has failed.\n\n⊘ mp (failed) {not added}",
+    );
+    assert.equal(notifications[0]!.severity, "error");
+  });
+});
+
+test("FTCH-03 :: `--fetch` does not open the flag gate -- another unknown flag is still rejected", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makePluginInfoHandler(makePi());
+    await handler("foo@mp --fetch --bogus", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /Unknown flag: "--bogus"/);
+    assert.ok(
+      !notifications[0]!.message.includes("not added"),
+      "the orchestrator must not have been invoked",
+    );
+  });
+});

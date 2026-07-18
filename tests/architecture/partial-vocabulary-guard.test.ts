@@ -414,9 +414,10 @@ test("D-75-01 guard: PRD keeps FORCE-/FSTAT- IDs and the component `unsupported`
 });
 
 // ---------------------------------------------------------------------------
-// Completion `description:` string VALUES (edge/completions/{provider,data}.ts).
-// A completion description is user-facing prose: the retired plugin-level verb
-// "force" and the plugin-level noun "unsupported" (a PLUGIN is "partially
+// Completion `description:` string VALUES (edge/completions/{provider,data}.ts
+// and the edge/flag-catalog.ts single source of truth those completions derive
+// from). A completion description is user-facing prose: the retired plugin-level
+// verb "force" and the plugin-level noun "unsupported" (a PLUGIN is "partially
 // available", never "unsupported") must not resurface there. The component-level
 // "unsupported components/source/hooks/kinds" homonym stays allowed -- it names
 // the dropped COMPONENTS, not the plugin.
@@ -425,6 +426,7 @@ test("D-75-01 guard: PRD keeps FORCE-/FSTAT- IDs and the component `unsupported`
 const COMPLETION_DESCRIPTION_FILES = [
   "extensions/pi-claude-marketplace/edge/completions/provider.ts",
   "extensions/pi-claude-marketplace/edge/completions/data.ts",
+  "extensions/pi-claude-marketplace/edge/flag-catalog.ts",
 ];
 
 /** The double-quoted `description:` string values declared in `rel`. */
@@ -484,14 +486,13 @@ test("D-75-01 guard: completion descriptions carry no retired `force` verb", () 
 
 // Sanity: the extractor actually finds the `--partial` completion descriptions it
 // is meant to police -- guards against a silent zero-match pass if the
-// `description:` shape ever changes.
+// `description:` shape ever changes. The `--partial` descriptions live in the
+// flag-catalog single source of truth the completions derive from.
 test("D-75-01 guard: completion-description extractor finds the --partial rows", () => {
-  const provider = completionDescriptions(
-    "extensions/pi-claude-marketplace/edge/completions/provider.ts",
-  );
+  const catalog = completionDescriptions("extensions/pi-claude-marketplace/edge/flag-catalog.ts");
   assert.ok(
-    provider.some((d) => d.includes("partially available")) &&
-      provider.some((d) => d.includes("unsupported components")),
+    catalog.some((d) => d.includes("partially available")) &&
+      catalog.some((d) => d.includes("unsupported components")),
     "expected the partial list-filter and install/update completion descriptions to be extracted",
   );
 });

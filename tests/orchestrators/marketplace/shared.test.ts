@@ -76,6 +76,10 @@ function makeStubGitOps(opts: { resolveRefThrows?: Error; resolveRefReturns?: st
       await Promise.resolve();
       return undefined;
     },
+    async resolveRemoteRef(): Promise<string> {
+      await Promise.resolve();
+      return "0000000000000000000000000000000000000001";
+    },
   };
 
   return { gitOps, log };

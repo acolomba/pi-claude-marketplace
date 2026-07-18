@@ -102,6 +102,9 @@ function fixtureGitOps(): GitOps {
     currentBranch(): Promise<string> {
       return Promise.resolve("main");
     },
+    resolveRemoteRef(): Promise<string> {
+      return Promise.resolve("0000000000000000000000000000000000000001");
+    },
   };
 }
 

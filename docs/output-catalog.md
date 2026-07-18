@@ -10,7 +10,8 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 - `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers.
 - `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`. On marketplace headers: `(failed)` only.
 - `⊖` -- circled minus. On plugin rows: a partially-available plugin whose components would be dropped under `--partial` -- `(partially-available)` only, on the list / info inventory surfaces AND the install-failure surface (XSURF-01). Stays in the circled-operator family with `⊘` but reads "diminished / components dropped" rather than "blocked". Not used on marketplace headers.
-- `◌` -- dotted circle. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row. Not used on marketplace headers.
+- `◌` -- dotted circle. On plugin rows: a not-installed git-source plugin whose clone/mirror is not yet materialized locally -- `(remote)` only (RSTA-01 / D-80-01). Not used on marketplace headers.
+- `◍` -- fisheye. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row (D-80-01: reassigned from `◌`). Not used on marketplace headers.
 
 ### Always-marketplace-header form
 
@@ -35,7 +36,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◌` per the effective-state rule above.
+- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◌` / `◍` per the effective-state rule above.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `partially-available`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
@@ -134,6 +135,7 @@ ______________________________________________________________________
 | `(reinstalled)`         | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                 |
 | `(uninstalled)`         | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows.                                                                                                                                                                                                                                                                                                  |
 | `(available)`           | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11).                                                                                                                                                                                                                                                                                 |
+| `(remote)`              | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). Bare row: no scope bracket (SNM-11), no reasons brace.                                                                                                                                                     |
 | `(partially-available)` | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: lsp / hooks / unsupported source); carries `{unsupported hooks}` / `{lsp}` / `{unsupported source}`. Would degrade-install under `--partial` (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer. |
 | `(unavailable)`         | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source); carries the structural reasons.                                                                                                                                                                                    |
 | `(upgradable)`          | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                               |
@@ -143,8 +145,8 @@ ______________________________________________________________________
 | `(will install)`        | ●    | Plugin row -- `/claude:plugin pending` pending-tense install (DIFF-02).                                                                                                                                                                                                                                                                                                          |
 | `(will uninstall)`      | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                   |
 | `(will enable)`         | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                             |
-| `(will disable)`        | ◌    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                    |
-| `(disabled)`            | ◌    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker.                                                                                                                                                                                                  |
+| `(will disable)`        | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                    |
+| `(disabled)`            | ◍    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the empty-resources + `installable: true` marker.                                                                                                                                                                                                  |
 
 Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -290,6 +292,17 @@ Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is 
 
 The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `installed` inventory row carries no `/reload` trailer on the list surface.
 
+### Sha-version inventory row (git-source short-SHA display)
+
+<!-- catalog-state: sha-version-list -->
+
+```text
+● official [user]
+  ● git-plugin v#a1b2c3d (installed)
+```
+
+A git-source plugin (url / git-subdir / github) records its version as `sha-<12hex>` from the resolved commit (D-77-01, PURL-09); the list row renders it as the git-style short SHA `v#a1b2c3d` (the `sha-` prefix is stripped and only the first 7 of the 12 hex chars are shown, matching git `--short=7`). Persistence is unchanged -- `state.json` keeps the full `sha-a1b2c3d4e5f6` version plus the full 40-hex `resolvedSha` (D-77-02); the short form is renderer-only, and it never truncates the `resolvedSha` used for later comparison. The `installed` inventory row carries no `/reload` trailer on the list surface.
+
 ### Description lines (PL-4)
 
 <!-- catalog-state: description-lines -->
@@ -312,12 +325,12 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 
 ```text
 ● official [user] <autoupdate>
-  ◌ foo-plugin v1.2.3 (disabled)
+  ◍ foo-plugin v1.2.3 (disabled)
 ```
 
-Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◌` glyph (shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
+Triggered when the state record carries the empty-resources + `installable: true` marker (the load-bearing predicate is `orchestrators/reconcile/plan.ts::isRecordedButDisabled`). The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◍` glyph (D-80-01: reassigned from `◌`, which now marks `(remote)`; shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the variant carries no `reasons` (a disabled plugin is in the user-requested state, not a failure state), and the byte form differs (`(disabled)` vs `(unavailable)`). The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)).
 
-PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The six list-surface variants (`installed`, `upgradable`, `available`, `partially-available`, `unavailable`, `disabled`) all support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). The seven list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `unavailable`, `disabled`) all support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The renderer emits the description line only when the field is defined and non-empty.
 
 ### Disabled inventory row with a description (PL-4)
 
@@ -325,9 +338,32 @@ PL-4: when the manifest entry carries a non-empty `description` field, the rende
 
 ```text
 ● official [user] <autoupdate>
-  ◌ foo-plugin v1.2.3 (disabled)
+  ◍ foo-plugin v1.2.3 (disabled)
     Disabled plugin that still surfaces its description.
 ```
+
+### Remote inventory row (RSTA-01 / D-80-03)
+
+<!-- catalog-state: remote-inventory -->
+
+```text
+● official [user] <autoupdate>
+  ◌ git-plugin v1.2.3 (remote)
+```
+
+A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally renders `(remote)` instead of the manifest-only `(available)` over-claim (RSTA-01). The row uses the dedicated `◌` glyph (`ICON_REMOTE`, U+25CC), reassigned from the disabled rows which now wear `◍` (D-80-01). Bare row: no scope bracket (SNM-11 carve-out family, joining `available` / `partially-available` / `unavailable`), no reasons brace (the REASONS closed set does not grow -- parity with `available`, D-80-03). Severity `info`; no reload-hint (inventory row).
+
+### Remote inventory row with a description (PL-4)
+
+<!-- catalog-state: remote-inventory-with-description -->
+
+```text
+● official [user] <autoupdate>
+  ◌ git-plugin v1.2.3 (remote)
+    Remote git-source plugin not yet fetched locally.
+```
+
+Same `remote-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants: 4-space indent, truncated at column 66. Severity `info`; no reload-hint.
 
 Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
 
@@ -857,6 +893,21 @@ Plugin update: 1 updated
 
 UGRM-02/D-04: the single `updated` row is the one realized transition, so the updates-only headline reads `1 updated`. Both `from` and `to` are PI-7 hash-versions (`hash-2ea95f85703d` -> `hash-1c3d9a0bbef1`); each is shortened to its git-style 7-hex form with a `v#` prefix (`v#2ea95f8`, `v#1c3d9a0`) per `composeVersionArrow` (SNM-35, D-23-05). Persistence keeps the full `hash-<12hex>` on both sides. Severity: info. Reload-hint fires because `hashed-plugin` was updated.
 
+### Sha-version update arrow (git-source short-SHA display, both sides)
+
+<!-- catalog-state: sha-version-arrow -->
+
+```text
+● official [user]
+  ● git-plugin v#a1b2c3d → v#2222333 (updated)
+
+Plugin update: 1 updated
+
+/reload to pick up changes
+```
+
+D-78-06 / PURL-06: a git-source update swaps the recorded commit, so both `from` and `to` are git-source `sha-<12hex>` versions (`sha-a1b2c3d4e5f6` -> `sha-222233334445`). Each renders through the SAME `composeVersionArrow` -> `renderVersion` -> `formatShaVersionForDisplay` path the hash-version arrow uses, so it shortens to its git-style 7-hex form with a `v#` prefix (`v#a1b2c3d`, `v#2222333`) -- no new render grammar. Persistence keeps the full `sha-<12hex>` on both sides (D-77-01). Severity: info. Reload-hint fires because `git-plugin` was updated.
+
 ### Partially-upgradable decline, targeted update (SEV-04 / D-69-02)
 
 <!-- catalog-state: decline-partially-upgradable-targeted -->
@@ -907,6 +958,61 @@ Triggered when the bare `update @<marketplace>` form (no `--scope`) names a mark
 A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {not added}
+```
+
+______________________________________________________________________
+
+## `/claude:plugin fetch`
+
+Pi-only extension: upstream Claude Code `/plugin` has no `fetch` verb (verified 2026-07-13). `fetch` warms the local clone/mirror cache for a git-source plugin WITHOUT installing it, so a later `install` resolves offline. It renders the always-marketplace-header cascade form: a bare marketplace header at column 0 and per-plugin rows at 2-space indent. A fetch changes no Pi-visible resource (nothing is installed), so no state row is a reload-trigger and no `/reload to pick up changes` trailer ever fires. A post-fetch success renders the plugin's DERIVED status row -- exactly what `list` / `info` show (`(available)` / `(partially-available)` / `(unavailable)`) -- because the fetch is followed by a fresh `probeManifestEntry` against the now-warm tree, never an install cascade (FTCH-02). The `available` / `partially-available` / `unavailable` rows are bare: no `[scope]` bracket (MSG-PL-6 / SNM-11 carve-out). No catalog row introduces a new status token, glyph, or reason -- every member already exists.
+
+### Single plugin -- fetched, now available (FTCH-02)
+
+Triggered by `fetch <plugin>@<marketplace>` against a cold git-source plugin whose warmed tree resolves installable. The post-fetch probe classifies `available`, so the row reads `○ <name> v<version> (available)` (bare, no scope bracket). Single cardinality -> no trailing tally. Severity `info`; no reload-hint.
+
+<!-- catalog-state: single-available -->
+
+```text
+● official [user]
+  ○ gp v1.0.0 (available)
+```
+
+### Single plugin -- fetched, partially available (FTCH-02)
+
+The warmed tree resolves `partially-available` (some declared components are unsupported). The row reads `⊖ <name> v<version> (partially-available) {reason}` with the dedicated `⊖` glyph -- consistent with how `list` describes the same plugin. The degrade reason is sourced through the SAME `narrowUnsupportedKinds` seam as the `list` inventory row, so the `{lsp}` brace is byte-identical. Severity `info`; no reload-hint.
+
+<!-- catalog-state: single-partially-available -->
+
+```text
+● official [user]
+  ⊖ gp v1.0.0 (partially-available) {lsp}
+```
+
+### Single plugin -- no-op, nothing to fetch (FTCH-03 / D-81-02)
+
+Triggered when the target is a path/non-git source (nothing to fetch) OR a pinned source whose clone is already materialized (a pinned-warm no-op). The no-op gate runs the fs-only presence probe FIRST and renders `⊘ <name> (skipped) {up-to-date}` at info severity WITHOUT touching the git seam (network-free). The existing `up-to-date` reason is carried in the row's `reasons`; the closed set does not grow. Single cardinality -> no trailing tally. Severity `info`; no reload-hint.
+
+<!-- catalog-state: single-noop-skipped -->
+
+```text
+● official [user]
+  ⊘ gp (skipped) {up-to-date}
+```
+
+### Bulk fetch -- mixed outcomes (FTCH-02 / D-81-01)
+
+Triggered by the plural `fetch @<marketplace>` (or bare `fetch`) form: the failure-tolerant sweep enumerates the marketplace's fetchable manifest entries, and a per-plugin throw is captured as a `⊘ <name> (failed) {reason}` row (the sweep never aborts) while the succeeding plugin renders its fresh derived status row. The plural form carries a trailing tally under the `Plugin fetch` label. The default tally counts info rows uniformly as `successes` and the failure category folds in from the rows -> `Plugin fetch: 1 failure, 1 success`. Severity: `error` (a `failed` row drives the first-match ladder). No reload-hint (a fetch installs nothing).
+
+<!-- catalog-state: bulk-mixed -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ○ ok v1.0.0 (available)
+  ⊘ bad (failed) {network unreachable}
+
+Plugin fetch: 1 failure, 1 success
 ```
 
 ______________________________________________________________________
@@ -1163,11 +1269,25 @@ A marketplace operation has failed.
 ⊘ anthropics/claude-plugins-official [user] (failed) {invalid manifest}
 ```
 
+### Failure -- authentication required (D-76-08)
+
+Triggered when a `url`-source `marketplace add` clones a private/unauthorized repo and the HTTP transport returns a 401/403 auth challenge (`HttpError` from isomorphic-git -- not an errno, so `classifyAddError` gains a dedicated arm rather than falling through to `unparseable`). Truthful attribution: the reason is `{authentication required}`, NOT `{network unreachable}` -- an auth failure is distinct from a network-reachability failure. The reason and the HTTP cause chain ride a synthetic-child failed row at 4-space indent (marketplace headers carry no `cause`; SNM-10), mirroring the `update-path-invalid-manifest` recipe. Pre-name failure: the subject is the user-typed URL. The synthetic child makes the cascade a mixed-subject failure, so the summary prefix is the generic `Some operations have failed.` (the child counts as one plugin operation). Severity `error`; no reload-hint. `PROV-04`'s provider-auth fail-clean case reuses this same token.
+
+<!-- catalog-state: add-authentication-required -->
+
+```text
+Some operations have failed.
+
+⊘ https://gitlab.com/acme/private-mp [user] (failed)
+  ⊘ https://gitlab.com/acme/private-mp (failed) {authentication required}
+    cause: HTTP Error: 401 Unauthorized
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`
 
-Read-only detail surface (Phases 42-43). Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:` or `path:`; optional `last_updated:` for github sources; optional `description:` when `marketplace.json` carries one). Phase 43 / INFO-01 + INFO-03 + INFO-04 + INFO-07 lock the full state set below.
+Read-only detail surface. Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:`, `url:`, or `path:`; optional `last_updated:` for git-backed sources github + url per D-76-10; optional `description:` when `marketplace.json` carries one). INFO-01 + INFO-03 + INFO-04 + INFO-07 + MURL-05 lock the full state set below.
 
 Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{not added}` failure states and the `{invalid manifest}` manifest-failure state route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -1195,9 +1315,33 @@ Triggered by the same command against a github-sourced marketplace whose persist
 github: someuser/community-mp
 ```
 
+### Success -- url source with ref, lastUpdatedAt, and description
+
+Triggered against a url-sourced marketplace (an arbitrary non-github HTTPS git host, e.g. GitLab) whose persisted record carries `autoupdate: true`, a `#<ref>` fragment, a `lastUpdatedAt` ISO timestamp, and a `marketplace.json` with a `description`. The `url: <url>[#<ref>]` line replaces the `github:`/`path:` line (kind-labeled per the label==kind convention, D-76-09). The `last_updated:` line renders because url is a git-backed kind (the gate widened from github-only to all non-path kinds per D-76-10). Four-line body: header with `<autoupdate>` marker, the `url:` line, the `last_updated:` line, and the `description:` line. Severity `info`; no reload-hint.
+
+<!-- catalog-state: url-single-scope-full -->
+
+```text
+● acme-mp [user] <autoupdate>
+url: https://gitlab.com/acme/mp#main
+last_updated: 2026-06-03T00:00:00Z
+description: An ACME marketplace hosted on GitLab.
+```
+
+### Success -- url source, minimal (no ref, no lastUpdatedAt, no description)
+
+Triggered against the same url-sourced host whose record carries `autoupdate: false`, no `#<ref>` fragment, no `lastUpdatedAt`, and a `marketplace.json` without a `description`. Two-line body: header with `<no autoupdate>` marker and the `url:` line with NO `#<ref>` suffix. The `last_updated:` line is omitted (no source data) and the `description:` line is omitted (no manifest data). Severity `info`.
+
+<!-- catalog-state: url-single-scope-minimal -->
+
+```text
+● acme-mp [user] <no autoupdate>
+url: https://gitlab.com/acme/mp
+```
+
 ### Success -- path source, minimal
 
-Triggered against a path-sourced marketplace with `autoupdate: false` and no `marketplace.json` description. Two-line body: header with `<no autoupdate>` marker, and the `path: <abs-path>` source line. Path sources NEVER emit a `last_updated:` line (the renderer gates that on `source.sourceKind === "github"` per INFO-01); without a description on the manifest the `description:` line is omitted too. Severity `info`.
+Triggered against a path-sourced marketplace with `autoupdate: false` and no `marketplace.json` description. Two-line body: header with `<no autoupdate>` marker, and the `path: <abs-path>` source line. Path sources NEVER emit a `last_updated:` line (the renderer gates that on `source.sourceKind !== "path"` per D-76-10, and path is excluded); without a description on the manifest the `description:` line is omitted too. Severity `info`.
 
 <!-- catalog-state: path-single-scope -->
 
@@ -1321,6 +1465,19 @@ Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `
     Quick chat helper plugin; experimental.
     commands: chat
     skills: chat-init
+```
+
+### Success -- remote single scope (RSTA-01 / D-80-04)
+
+Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally. The status glyph switches to `◌` (`ICON_REMOTE`, per `pluginInfoStatusGlyph`) and the row reads `(remote)`, replacing the manifest-only `(available)` over-claim (RSTA-01). Because nothing is fetched there is no warm tree to resolve, so the `componentsResolved: false` arm fires and emits the `components: not resolved` marker (existing wording preserved, D-80-04). Severity `info`.
+
+<!-- catalog-state: remote-single-scope -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ◌ git-helper v0.5.0 (remote)
+    Git-source helper plugin; not yet fetched.
+    components: not resolved
 ```
 
 ### Disabled inventory row (D-54-01 / ENBL-04)
@@ -1469,14 +1626,14 @@ A marketplace recorded in `state.json` but no longer declared in `claude-plugins
 
 ### Enable / disable transitions
 
-A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◌` glyph). Severity `info`; no reload-hint.
+A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◍` glyph). Severity `info`; no reload-hint.
 
 <!-- catalog-state: enable-disable-transitions -->
 
 ```text
 ● mp [user]
   ● to-enable (will enable)
-  ◌ to-disable (will disable)
+  ◍ to-disable (will disable)
 ```
 
 ### Source mismatch (declared source diverges from recorded source)
@@ -1906,7 +2063,7 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artefacts (skills/commands/ag
 
 ```text
 ● claude-plugins-official [user]
-  ◌ foo-plugin v1.2.3 (disabled)
+  ◍ foo-plugin v1.2.3 (disabled)
 
 /reload to pick up changes
 ```

@@ -138,7 +138,20 @@ test("LIST-01 / D-67-01 :: --partial flag calls listPlugins with partial: true",
   });
 });
 
-test("LIST-01 / D-67-01 :: an unknown flag still errors and USAGE carries [--partial]", async () => {
+test("RSTA-07 / D-80-07 :: --remote flag calls listPlugins with remote: true", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeListHandler(STUB_PI);
+    await handler("--remote", ctx);
+    // The flag is accepted (not an unknown-flag usage error) and reaches the
+    // orchestrator, which renders the empty-state sentinel against empty state.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});
+
+test("LIST-01 / D-67-01 / RSTA-07 :: an unknown flag still errors and USAGE carries [--partial] and [--remote]", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { ctx, notifications } = makeCtx(cwd);
     const handler = makeListHandler(STUB_PI);
@@ -146,7 +159,8 @@ test("LIST-01 / D-67-01 :: an unknown flag still errors and USAGE carries [--par
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
     assert.match(notifications[0]!.message, /Unknown option: "--xyz"\./);
-    // notifyUsageError appends the USAGE string; it advertises the new filter.
+    // notifyUsageError appends the USAGE string; it advertises the filters.
     assert.match(notifications[0]!.message, /\[--partial\]/);
+    assert.match(notifications[0]!.message, /\[--remote\]/);
   });
 });

@@ -47,10 +47,19 @@ export type InstalledClassification =
   | "partially-upgradable";
 
 /**
- * The not-installed manifest-entry states, mapping 1:1 onto the resolver's
- * three-way `ResolvedPlugin.state` discriminant (D-64-01).
+ * The not-installed manifest-entry states. `available` / `partially-available` /
+ * `unavailable` map 1:1 onto the resolver's three-way `ResolvedPlugin.state`
+ * discriminant (D-64-01). `remote` (RSTA-01 / D-80-06) is the extra
+ * not-installed git-source-with-no-materialized-clone bucket: it is derived at
+ * the CLASSIFICATION layer (in `git-source-probe.ts::probeManifestEntry`) from
+ * fs-only clone/mirror presence, NOT a resolver arm -- the resolver union stays
+ * strictly three-way (NFR-7).
  */
-export type ManifestEntryClassification = "available" | "partially-available" | "unavailable";
+export type ManifestEntryClassification =
+  | "available"
+  | "partially-available"
+  | "unavailable"
+  | "remote";
 
 /**
  * The minimal structural view of a persisted install record the classifier
@@ -163,8 +172,15 @@ export function classifyInstalledRecord(
  * are distinct here (the render collapse to a single `(unavailable)` token is a
  * caller concern, not a classification one). The exhaustive `switch` +
  * `assertNever` makes a future fourth `ResolvedPlugin` arm a compile-time error.
+ *
+ * Return type EXCLUDES `remote` (RSTA-01 / NFR-7): `remote` is derived at the
+ * classification layer from fs-only clone/mirror presence
+ * (`git-source-probe.ts::probeManifestEntry`), never from a `ResolvedPlugin`, so
+ * a resolver-driven classification is provably one of the three-way arms.
  */
-export function classifyManifestEntry(resolved: ResolvedPlugin): ManifestEntryClassification {
+export function classifyManifestEntry(
+  resolved: ResolvedPlugin,
+): Exclude<ManifestEntryClassification, "remote"> {
   switch (resolved.state) {
     case "installable":
       return "available";

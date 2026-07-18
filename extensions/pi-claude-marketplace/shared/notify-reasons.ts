@@ -4,14 +4,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 32-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 34-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 32-entry set.
+ * 34-entry set.
  *
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
@@ -100,6 +100,10 @@ export const FAILURE_REASONS = [
   "permission denied",
   "source missing",
   "network unreachable",
+  // D-76-08: HTTP auth challenge (401/403) on a marketplace clone. A distinct
+  // failure-class member -- truthful attribution keeps it out of `network
+  // unreachable`.
+  "authentication required",
   "unreadable",
   "unparseable",
   "unreadable manifest",
@@ -108,6 +112,11 @@ export const FAILURE_REASONS = [
   "rollback partial",
   "lock held",
   "source mismatch",
+  // PURL-06: an orphaned plugin declaration whose `@<marketplace>` is not
+  // declared in the merged config. A distinct failure-class member so the
+  // reconcile dangling-reference diagnostic names the real problem instead of
+  // reusing `source mismatch`.
+  "dangling reference",
   "concurrently uninstalled",
   "concurrently updated",
 ] as const;

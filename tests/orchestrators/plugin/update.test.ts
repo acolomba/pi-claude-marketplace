@@ -6,11 +6,20 @@ import path from "node:path";
 import test from "node:test";
 
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolvePluginPin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   updatePlugins,
   updateSinglePlugin,
@@ -20,8 +29,11 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -3629,6 +3641,484 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
       // A force-installed degrade is a realized update, so the no-op headline
       // must NOT fire.
       assert.doesNotMatch(body, /nothing to update/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// PURL-06 / D-78-05 / D-78-01 -- git-source (url / git-subdir / github) update:
+// pin re-resolution, materialize-before-swap, GC-after-swap. update.ts is
+// gitOps-exempt (it imports GitOps for marketplace sync) so it may resolveRemoteRef
+// for unpinned entries and materialize the new clone inline. The mock gitOps
+// copies a real plugin fixture tree into the clone staging dir; the seam renames
+// it into plugin-clones/<key>/ and the resolver reads it exactly as a path source.
+//
+// The MARKETPLACE source stays path (so syncCloneOnce is a NFR-5 no-op); only the
+// PLUGIN entry is git-source. The recorded resolvedSha drives the swap-or-not
+// decision: manifest sha (pinned) or re-resolved HEAD (unpinned) != recorded ->
+// swap; equal -> (unchanged). The old clone is GC'd after the swap iff no
+// surviving record references it (D-78-01 derive-not-persist).
+// ───────────────────────────────────────────────────────────────────────────
+
+const SHA_OLD = "1111111111111111111111111111111111111111";
+const SHA_NEW = "2222222222222222222222222222222222222222";
+
+/**
+ * Bind the clone-cache seam entrypoints to a mock gitOps so update's git-source
+ * path materializes without touching the network. Mirrors install.test.ts's
+ * seamWith.
+ */
+function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
+  return {
+    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+    materializeOrRefreshPluginMirror: (args) =>
+      materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+/**
+ * Build a plugin fixture tree on disk (the "repo" the mock clone copies) whose
+ * plugin.json version encodes `versionTag` so successive fixtures are
+ * distinguishable, seed a PATH-source marketplace whose manifest entry carries a
+ * git-object source, and (optionally) an installed state record pinned at
+ * `recordedSha` whose resolvedSource points at the corresponding warm clone.
+ */
+async function seedGitPluginMarketplace(opts: {
+  cwd: string;
+  cloneUrl: string;
+  fixtureRepoDir: string;
+  versionTag: string;
+  /** Manifest entry source (pinned carries `sha`; unpinned omits it). */
+  entrySource: unknown;
+  /** When set, seed an installed record pinned at this sha (git-source). */
+  recordedSha?: string;
+  /** Extra installed git plugins (name -> recordedSha + entrySource) sharing the mp. */
+  extraPlugins?: Record<string, { entrySource: unknown; recordedSha: string }>;
+}): Promise<{ marketplaceRoot: string; manifestPath: string; oldCloneRoot?: string }> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  const pluginName = "gp";
+
+  // The plugin tree the mock clone copies into staging.
+  await mkdir(path.join(opts.fixtureRepoDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(opts.fixtureRepoDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: pluginName, version: opts.versionTag }),
+  );
+  const skillDir = path.join(opts.fixtureRepoDir, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    `---\nname: greet\n---\n\nHello ${opts.versionTag}.\n`,
+  );
+
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const entries: { name: string; source: unknown }[] = [
+    { name: pluginName, source: opts.entrySource },
+  ];
+  for (const [name, spec] of Object.entries(opts.extraPlugins ?? {})) {
+    entries.push({ name, source: spec.entrySource });
+  }
+
+  await writeFile(manifestPath, JSON.stringify({ name: "mp", plugins: entries }));
+
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  const plugins: Record<string, PluginRecord> = {};
+
+  const seedGitRecord = async (name: string, sha: string): Promise<string> => {
+    // Materialize the warm clone for the recorded sha so a warm-cache update
+    // does NOT re-clone, and so the on-disk clone dir exists for the GC
+    // assertions. Uses a gitOps that resolves the recorded sha at checkout.
+    const key = pluginCloneKey(opts.cloneUrl, sha);
+    const cloneRoot = await locations.pluginCloneDir(key);
+    // Copy the fixture tree into the clone root directly (warm cache seed).
+    await mkdir(path.dirname(cloneRoot), { recursive: true });
+    await cp(opts.fixtureRepoDir, cloneRoot, { recursive: true });
+    const record = makePluginRecord(`sha-${sha.slice(0, 12)}`);
+    plugins[name] = {
+      ...record,
+      resolvedSource: cloneRoot,
+      resolvedSha: sha,
+    };
+    return cloneRoot;
+  };
+
+  let oldCloneRoot: string | undefined;
+  if (opts.recordedSha !== undefined) {
+    oldCloneRoot = await seedGitRecord(pluginName, opts.recordedSha);
+  }
+
+  for (const [name, spec] of Object.entries(opts.extraPlugins ?? {})) {
+    await seedGitRecord(name, spec.recordedSha);
+  }
+
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins,
+      },
+    },
+  });
+
+  return oldCloneRoot === undefined
+    ? { marketplaceRoot, manifestPath }
+    : { marketplaceRoot, manifestPath, oldCloneRoot };
+}
+
+test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-pinned-swap-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      // Installed at SHA_OLD; manifest now carries SHA_NEW (a pinned bump).
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "a state record must survive the swap");
+      assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
+      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+
+      const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
+      assert.equal(record.resolvedSource, newCloneRoot, "resolvedSource points at the new clone");
+      assert.match(
+        path.basename(record.resolvedSource),
+        /^[0-9a-f]{12}-[0-9a-f]{12}$/,
+        "pinned key stays <12hex>-<12hex> (per-sha, unchanged)",
+      );
+      assert.equal(await pathExists(newCloneRoot), true, "new clone materialized on disk");
+      assert.equal(
+        await pathExists(seeded.oldCloneRoot ?? ""),
+        false,
+        "old clone GC'd (no surviving record references it)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcome (unchanged), no swap, clone dirs untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-pinned-unchanged-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        // Manifest sha EQUALS the recorded sha.
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_OLD },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, SHA_OLD, "recorded sha unchanged");
+      assert.equal(record?.version, `sha-${SHA_OLD.slice(0, 12)}`, "version unchanged");
+      // The warm-cache clone was never re-cloned, and the (unchanged) short-
+      // circuit did not GC the still-referenced clone.
+      assert.equal(gitState.cloneCalls.length, 0, "no clone on an equal-sha (unchanged) update");
+      assert.equal(
+        await pathExists(seeded.oldCloneRoot ?? ""),
+        true,
+        "the still-referenced clone survives an unchanged update",
+      );
+      const body = notifications[0]?.message ?? "";
+      assert.match(
+        body,
+        /\(skipped\) \{up-to-date\}|nothing to update/,
+        "renders the up-to-date form",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anchors the record to the bare mirror key with the HEAD sha", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-unpinned-swap-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        // Unpinned entry: no sha, no ref -> the probe routes to the mirror seam.
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_OLD,
+      });
+
+      // The mirror seam reads HEAD from the refreshed clone (no resolveRemoteRef).
+      const { gitOps, state: gitState } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // The mirror route reads HEAD directly; it does NOT resolve a remote ref.
+      assert.equal(
+        gitState.resolveRemoteRefCalls.length,
+        0,
+        "unpinned mirror update reads HEAD, not resolveRemoteRef",
+      );
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
+      assert.equal(record?.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(HEAD)");
+
+      // The record re-anchors to the BARE mirror key `plugin-clones/<12hex>/`.
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      assert.equal(record?.resolvedSource, mirrorRoot, "resolvedSource re-anchors to the mirror");
+      assert.match(
+        path.basename(record?.resolvedSource ?? ""),
+        /^[0-9a-f]{12}$/,
+        "resolvedSource segment is a bare 12-hex mirror key",
+      );
+      assert.equal(await pathExists(mirrorRoot), true, "the mirror clone materialized");
+      // The old per-sha clone is no longer referenced -> GC sweeps it.
+      assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), false, "old per-sha clone GC'd");
+
+      // MIRR-06 derive-not-persist: the post-swap GC leaves ONLY the bare mirror
+      // dir under plugin-clones/ -- no per-sha orphan, and no persisted migration
+      // artifact (refcount file / migration stamp) is written anywhere.
+      const { readdir } = await import("node:fs/promises");
+      const cloneEntries = (await readdir(locations.pluginClonesDir)).sort();
+      assert.deepEqual(
+        cloneEntries,
+        [pluginMirrorKey(cloneUrl)],
+        "plugin-clones/ holds only the bare mirror key after re-anchor + sweep (no migration state)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url+sha -> updating one keeps the old clone (the second still references it)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-shared-clone-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      // gp updates SHA_OLD -> SHA_NEW; sibling "other" stays pinned at SHA_OLD,
+      // so the SHA_OLD clone must SURVIVE the GC (still referenced).
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        extraPlugins: {
+          other: {
+            entrySource: { source: "url", url: cloneUrl, sha: SHA_OLD },
+            recordedSha: SHA_OLD,
+          },
+        },
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        // Update ONLY gp; "other" keeps referencing the SHA_OLD clone.
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.resolvedSha, SHA_NEW, "gp swapped");
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["other"]?.resolvedSha,
+        SHA_OLD,
+        "sibling still pinned at the old sha",
+      );
+      assert.equal(
+        await pathExists(seeded.oldCloneRoot ?? ""),
+        true,
+        "the shared old clone SURVIVES because the sibling still references it",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -> fails clean; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-vanished-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const seeded = await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_OLD,
+      });
+
+      // The upstream repo vanished: the mirror seam's cold clone throws a
+      // DNS-resolution failure (errno ENOTFOUND) -- the network-unreachable
+      // class. The mirror key has no warm dir, so the seam materializes cold and
+      // the clone throw propagates through the probe unchanged.
+      const networkError = new Error("getaddrinfo ENOTFOUND example.com") as NodeJS.ErrnoException;
+      networkError.code = "ENOTFOUND";
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        cloneThrows: networkError,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      // NFR-3 fail-clean: the plugin STAYS on its recorded sha (no swap).
+      assert.equal(record?.resolvedSha, SHA_OLD, "plugin stays on its recorded sha");
+      assert.equal(
+        record?.version,
+        `sha-${SHA_OLD.slice(0, 12)}`,
+        "version stays at the recorded sha",
+      );
+      // The old clone is untouched (still referenced).
+      assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), true, "recorded clone untouched");
+      // A failure surfaced through the EXISTING network-unreachable REASON token
+      // (no new token); the plugin declined its swap and stayed put.
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /\{network unreachable\}/, "existing network-unreachable REASON token");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError classifies as {authentication required}, not {no longer installable}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-usercanceled-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_OLD,
+      });
+
+      // An unsuccessful device-flow auth (denied / expired / poll network
+      // error) makes platform/git.ts's onAuth return `{ cancel: true }`, which
+      // isomorphic-git throws as `UserCanceledError` -- NOT HttpError 401/403.
+      const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        cloneThrows: authError,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      // NFR-3 fail-clean: the plugin STAYS on its recorded sha (no swap).
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"]?.resolvedSha,
+        SHA_OLD,
+        "plugin stays on its recorded sha",
+      );
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /\{authentication required\}/,
+        "an auth failure renders the existing authentication-required REASON token",
+      );
+      assert.doesNotMatch(
+        body,
+        /\{no longer installable\}/,
+        "an auth failure must NOT render the lying no-longer-installable reason",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
