@@ -1491,3 +1491,34 @@ test("PROV-02: a public no-provider url add clones authless -- no auth key, no c
     );
   });
 });
+
+test("PROV-01: a url add whose host case-folds to github.com carries the provider auth bundle on the clone", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+
+    // The case-sensitive github.com prefix check leaves this a `url` source,
+    // but URL host parsing lowercases to github.com -- a provider-registered
+    // host, so the url clone must thread the github auth bundle (unlike the
+    // no-provider gitlab.example.com adds above).
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://GitHub.com/acme/mp",
+      gitOps,
+      credentialOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp");
+    assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
+    assert.equal(cloneCall.auth.host, "github.com");
+  });
+});

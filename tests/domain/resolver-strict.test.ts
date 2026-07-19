@@ -1188,3 +1188,27 @@ test("PURL-01: materialized clone whose dir is absent -> unavailable (source dir
     `notes: ${r.notes.join(" / ")}`,
   );
 });
+
+test("PR-2(1) unclassifiable source (non-string/non-object) -> unavailable with the unknown-kind reason", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(basicEntry({ source: 42 }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) =>
+      n.includes("unsupported source kind: unknown (source must be a string or object)"),
+    ),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("PR-2(1) object source with an unrecognized discriminator -> unavailable, reason carries the parser detail", async () => {
+  const ctx = mockCtx(MP, {});
+  const r = await resolveStrict(basicEntry({ source: { source: "weird" } }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) =>
+      n.includes("unsupported source kind: unknown (unrecognized source kind: weird)"),
+    ),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});

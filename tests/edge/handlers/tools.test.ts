@@ -526,6 +526,13 @@ test("pi_claude_marketplace_plugin_list :: unsupported row projects to unavailab
   assert.equal(projectRowStatus("partially-available"), "unavailable");
 });
 
+// RSTA-01 / D-80-05: a not-installed git-source `remote` row projects onto the
+// `available` tool bucket -- install still offers it (install performs the
+// fetch), so the LLM-tool surface treats it as installable.
+test("pi_claude_marketplace_plugin_list :: remote row projects to available tool bucket", () => {
+  assert.equal(projectRowStatus("remote"), "available");
+});
+
 // FSTAT-02 / FSTAT-04 / D-66-03: both derived force states flatten to the
 // coarse `installed` tool bucket. A force-installed plugin is recorded-installed
 // (degraded, but present); a force-upgradable plugin is a currently-clean

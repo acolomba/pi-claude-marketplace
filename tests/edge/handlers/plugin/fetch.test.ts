@@ -178,3 +178,13 @@ test("shim :: bad args short-circuit BEFORE fetchPlugins (no orchestrator output
     assert.ok(!notifications[0]!.message.includes("(no marketplaces)"));
   });
 });
+
+test("shim :: `--scope project` threads the parsed scope into fetchPlugins (empty state -> `(no marketplaces)`)", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeFetchHandler(makePi());
+    await handler("--scope project", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.message, "(no marketplaces)");
+  });
+});

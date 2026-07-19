@@ -2444,3 +2444,36 @@ test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no p
     assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
   });
 });
+
+test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its name case-ties a sibling row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // Case-insensitively IDENTICAL names force the block sorter past
+          // the name comparison into the per-row scope derivation, which must
+          // fall back to the marketplace scope for the scope-less `remote`
+          // variant (the SNM-11 carve-out family) without disturbing the
+          // sibling `available` row.
+          { name: "caseplug", source: "./caseplug", version: "1.0.0" },
+          { name: "CasePlug", source: "https://example.com/caseplug.git", version: "2.0.0" },
+        ],
+      },
+      installablePluginDirs: ["caseplug"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Both rows render inside the one mp1 block; the scope tie-break returns
+    // equal scopes, so the original (manifest) order is preserved.
+    assert.match(out, /○ caseplug v1\.0\.0 \(available\)/, out);
+    assert.match(out, /◌ CasePlug v2\.0\.0 \(remote\)/, out);
+  });
+});

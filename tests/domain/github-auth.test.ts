@@ -744,3 +744,39 @@ test("initiateDeviceFlow: approveThrows propagates -- initiateDeviceFlow does no
     /keychain locked/,
   );
 });
+
+test("initiateDeviceFlow: omitting `http` builds the default fetch-backed seam from the provider endpoints (init failure folds to ok:false)", async () => {
+  const { credOps } = makeMockCredentialOps();
+  const { notifyFn, calls } = makeNotifyRecorder();
+
+  // D-32-02: no injected http -- the engine constructs the default seam from
+  // the provider's endpoints. The provider points at a closed loopback port,
+  // so the requestCode fetch fails fast and deterministically OFFLINE; the
+  // engine must fold that into the init-failure result, never throw.
+  const result = await initiateDeviceFlow({
+    host: "auth.invalid",
+    credentialOps: credOps,
+    notifyFn,
+    provider: {
+      id: "loopback-test",
+      hostMatch: (host: string): boolean => host === "auth.invalid",
+      deviceCodeUrl: "http://127.0.0.1:1/device/code",
+      tokenUrl: "http://127.0.0.1:1/oauth/access_token",
+      clientId: "test-client-id",
+      scope: "repo",
+      credentialFrom: (accessToken: string) => ({
+        username: "x-access-token",
+        password: accessToken,
+      }),
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.reason, /^Device Flow initialization failed: /);
+    assert.equal(result.authAttempted, true);
+  }
+
+  // AUTH-03 gate never fired: no device code was obtained, so nothing to show.
+  assert.equal(calls.length, 0);
+});

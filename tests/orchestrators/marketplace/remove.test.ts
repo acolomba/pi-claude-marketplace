@@ -1681,3 +1681,89 @@ test("PURL-06 / D-78-01: removing the last-referencing marketplace garbage-colle
     }
   });
 });
+
+test("a record persisted with an `unknown` source kind still removes cleanly (kind recorded, no clone-dir delete)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-unknown-src-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // A stray dir at sources/<name>/ that the unknown-kind remove must NOT
+      // touch (the clone-dir delete gate is github||url only).
+      const strayDir = await locations.sourceCloneDir("unknown-mp");
+      await mkdir(strayDir, { recursive: true });
+      await writeFile(path.join(strayDir, "SENTINEL.txt"), "must not be deleted");
+
+      // loadState's source normalization passes `{kind: "unknown"}` records
+      // through unchanged -- the persisted forward-compat tail (NFR-12).
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "unknown-mp": {
+            name: "unknown-mp",
+            scope: "user",
+            source: { kind: "unknown", raw: "mystery", reason: "unrecognized" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      await removeMarketplace({ ctx, pi, name: "unknown-mp", scope: "user", cwd });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● unknown-mp [user] (removed)");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("unknown-mp" in after.marketplaces, false, "record removed");
+      assert.ok(await pathExists(strayDir), "unknown-kind remove must not delete sources/<name>/");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-19-01: a clone-GC throw (plugin-clones path is a FILE) is swallowed -- the remove still succeeds", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "remove-gc-throw-"));
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      const locations = locationsFor("user", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // A regular FILE at the plugin-clones path makes the GC's readdir throw
+      // ENOTDIR (not the benign ENOENT no-op). The remove's belt-and-braces
+      // catch must swallow it -- hygienic cleanup never becomes the primary
+      // user-facing path.
+      await writeFile(locations.pluginClonesDir, "not a directory");
+
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          "gc-mp": {
+            name: "gc-mp",
+            scope: "user",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+
+      await removeMarketplace({ ctx, pi, name: "gc-mp", scope: "user", cwd });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● gc-mp [user] (removed)");
+      assert.equal(notifications[0]?.severity, undefined, "clean remove stays info severity");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("gc-mp" in after.marketplaces, false, "record removed despite GC throw");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

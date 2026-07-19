@@ -254,3 +254,31 @@ test("import foundation modules stay pure and expose the expected API", async ()
     assert.equal(barrel.includes(exported), true, `barrel must export ${exported}`);
   }
 });
+
+test("MURL-07 planMarketplaceSourcesForRefs leaves malformed nested url/github/directory payloads unmappable", () => {
+  const got = planMarketplaceSourcesForRefs(
+    "user",
+    [
+      ref("a@badurl", "badurl", "a"),
+      ref("b@badrepo", "badrepo", "b"),
+      ref("c@badpath", "badpath", "c"),
+    ],
+    {
+      // A recognized discriminator whose payload field carries the wrong
+      // type must stay unmappable, not coerce into a bogus source string.
+      badurl: { source: { source: "url", url: 123 } },
+      badrepo: { source: { source: "github", repo: null } },
+      badpath: { source: { source: "directory", path: 42 } },
+    },
+  );
+
+  assert.deepEqual(got.marketplacesToEnsure, []);
+  assert.deepEqual(
+    got.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.marketplace]),
+    [
+      ["unmappable-marketplace-source", "badurl"],
+      ["unmappable-marketplace-source", "badrepo"],
+      ["unmappable-marketplace-source", "badpath"],
+    ],
+  );
+});

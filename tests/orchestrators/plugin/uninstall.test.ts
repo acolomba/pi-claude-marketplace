@@ -2261,3 +2261,41 @@ test("cross-layer cascade: uninstall sweeps the plugin key from the sibling laye
     }
   });
 });
+
+test("D-19-01: a clone-GC throw (plugin-clones path is a FILE) is swallowed -- the uninstall still succeeds", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-throw-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      // A regular FILE at the plugin-clones path makes the GC's readdir throw
+      // ENOTDIR (not the benign ENOENT no-op). The uninstall's belt-and-braces
+      // catch must swallow it -- hygienic cleanup never becomes the primary
+      // user-facing path.
+      await writeFile(locations.pluginClonesDir, "not a directory");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // The success notification is byte-identical to the clean PU-1 path:
+      // the GC throw leaves no trace on the user surface.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
