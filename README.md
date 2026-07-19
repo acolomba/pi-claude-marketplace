@@ -271,19 +271,21 @@ List plugins available for installation. Omit the marketplace name to list acros
 /claude:plugin list --available
 ```
 
-Filter the list by plugin status, installed, available for installation, partially available, or unavailable to install.
+Filter the list by plugin status, installed, available for installation, partially available, remote (a git-source plugin not yet fetched), or unavailable to install.
 
 ```text
 /claude:plugin list --installed
 /claude:plugin list --available
 /claude:plugin list --partial
+/claude:plugin list --remote
 /claude:plugin list --unavailable
 ```
 
-Show details for one plugin.
+Show details for one plugin. For a remote git-source plugin, pass `--fetch` to fetch its clone first so components resolve in the same step; on an installed plugin whose clone is missing, `--fetch` re-materializes it.
 
 ```text
 /claude:plugin info context7-plugin@context7-marketplace
+/claude:plugin info context7-plugin@context7-marketplace --fetch
 ```
 
 Install a plugin, using the `<plugin>@<marketplace>` format.
@@ -324,11 +326,7 @@ Limit reinstall to one scope with `--scope user` or `--scope project`. The flag 
 /claude:plugin reinstall @context7-marketplace --scope user
 ```
 
-Force a reinstall should any foreign content have altered the plugin.
-
-```text
-/claude:plugin reinstall context7-plugin@context7-marketplace --force
-```
+Reinstall always overwrites the installed content, so it also repairs a plugin altered by foreign content.
 
 Uninstall a plugin.
 
@@ -336,7 +334,7 @@ Uninstall a plugin.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Pre-fetch a git-source plugin so a later install resolves offline. `fetch` is a pi-only extension: Claude Code's upstream `/plugin` has no `fetch` verb. It warms the local clone cache without installing the plugin, then reports the plugin's resulting status (`available`, `partially-available`, or `unavailable`). Fetch one plugin, every plugin from one marketplace, or all plugins.
+Pre-fetch a git-source plugin so a later install resolves offline. A git-source plugin with no local clone lists as `remote`; fetching warms the local clone cache without installing the plugin, then reports the resulting status (`available`, `partially-available`, or `unavailable`). `fetch` is a pi-only extension: Claude Code's upstream `/plugin` has no `fetch` verb. Fetch one plugin, every plugin from one marketplace, or all plugins.
 
 ```text
 /claude:plugin fetch context7-plugin@context7-marketplace
