@@ -481,12 +481,19 @@ export function convertAgent(input: {
   warnings.push(...toolsResult.warnings);
   if (toolsResult.mapped.length === 0) {
     // AG-11: empty mapped tool list. Include source values so the user can
-    // correct upstream.
+    // correct upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently
+    // excluded from classification (it maps to inheritSkills, not a Pi
+    // tool), so a `tools: Skill`-only agent would otherwise see one
+    // declared tool produce zero mapped tools with no explanation --
+    // append the note whenever Skill was among the raw source tokens.
+    const skillNote = splitCsv(raw.tools).includes("Skill")
+      ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
+      : "";
     throw new Error(
       `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
         `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
         `Source tools: ${raw.tools ?? "(default read,bash,edit)"}; ` +
-        `disallowedTools: ${raw.disallowedTools ?? "(none)"}.`,
+        `disallowedTools: ${raw.disallowedTools ?? "(none)"}.${skillNote}`,
     );
   }
 

@@ -187,6 +187,9 @@ test("AG-11 convertAgent throws when mapped tool list is empty (only unknown too
       assert.match(err.message, /mapped tool list is empty/);
       assert.match(err.message, /Source tools: WebFetch/);
       assert.match(err.message, /disallowedTools:/);
+      // AGSK-03: without Skill among the raw tokens, the error carries no
+      // inheritSkills note -- the note is Skill-gated.
+      assert.doesNotMatch(err.message, /inheritSkills/);
       return true;
     },
   );
@@ -204,7 +207,13 @@ test("AG-11 convertAgent throws when disallowedTools strips everything", () => {
         sourceHash: "abc",
         mapModel: false,
       }),
-    (err: unknown) => err instanceof Error && err.message.includes("mapped tool list is empty"),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /mapped tool list is empty/);
+      // AGSK-03: no Skill among the raw tokens, so no inheritSkills note.
+      assert.doesNotMatch(err.message, /inheritSkills/);
+      return true;
+    },
   );
 });
 
@@ -602,6 +611,26 @@ test("AGSK-03 omitted tools: keeps only the implicit-default warning", () => {
   assert.deepEqual(out.warnings, [
     "source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
   ]);
+});
+
+test("AG-11 / AGSK-03 / D-83.1-02 a Skill-only tools list throws with a note explaining the inheritSkills translation", () => {
+  // `tools: Skill` is a legal Claude Code agent (skill invocation only).
+  // Skill maps to inheritSkills rather than a Pi tool, so the mapped list
+  // is empty and AG-11 fires -- the message must explain why the one
+  // declared tool produced zero mapped tools.
+  assert.throws(
+    () => convertSpecTree({ description: "d", tools: "Skill" }),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /mapped tool list is empty/);
+      assert.match(err.message, /Source tools: Skill/);
+      assert.match(
+        err.message,
+        /Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list\./,
+      );
+      return true;
+    },
+  );
 });
 
 test("AGSK-03 Skill in disallowedTools only is ignored: no drop entry, no warning", () => {
