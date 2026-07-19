@@ -188,6 +188,7 @@ export interface GeneratedFrontmatterFields {
   readonly tools: readonly string[];
   readonly thinking?: string;
   readonly skills: readonly string[];
+  readonly inheritSkills?: boolean;
 }
 
 /**
@@ -249,9 +250,10 @@ export function emitGeneratedAgentFile(input: {
   const { frontmatter, provenance, body, legend } = input;
 
   // Frontmatter block in deterministic order. systemPromptMode /
-  // inheritProjectContext / inheritSkills are extension-side defaults and
-  // intentionally hardcoded -- they describe how this bridge interacts with
-  // pi-subagents and are not derived from the source agent.
+  // inheritProjectContext are extension-side defaults and intentionally
+  // hardcoded -- they describe how this bridge interacts with pi-subagents.
+  // inheritSkills is derived from the source agent's Skill tool declaration
+  // (AGSK-05, D-83-01) and defaults to false when the field is absent.
   const lines: string[] = [
     `name: ${frontmatter.name}`,
     `description: ${emitYamlScalar(frontmatter.description)}`,
@@ -269,7 +271,11 @@ export function emitGeneratedAgentFile(input: {
     lines.push(`skills: ${frontmatter.skills.join(",")}`);
   }
 
-  lines.push("systemPromptMode: replace", "inheritProjectContext: true", "inheritSkills: false");
+  lines.push(
+    "systemPromptMode: replace",
+    "inheritProjectContext: true",
+    `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
+  );
   const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
   // Provenance HTML comment. Free-text fields are sanitized so a literal
