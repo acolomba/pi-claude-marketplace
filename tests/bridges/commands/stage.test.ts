@@ -724,8 +724,7 @@ test("TR-05 commitPreparedCommands rollback rename failure surfaces via appendLe
     // access (forward rename) and the non-empty blocker dir path on second
     // access (rollback rename).
     const deployPair = prepared._renamePairs.find((p) => p.to.endsWith("acme:deploy.md")) as
-      | { from: string; to: string }
-      | undefined;
+      { from: string; to: string } | undefined;
     assert.ok(deployPair, "expected an acme:deploy staged pair");
 
     const realFrom = deployPair.from;

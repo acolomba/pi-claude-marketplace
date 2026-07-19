@@ -90,13 +90,7 @@ const PARTIAL_UPDATE_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
 ]);
 
 type PluginRefCompletionMode =
-  | "install"
-  | "uninstall"
-  | "update"
-  | "reinstall"
-  | "info"
-  | "enable"
-  | "disable";
+  "install" | "uninstall" | "update" | "reinstall" | "info" | "enable" | "disable";
 
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.

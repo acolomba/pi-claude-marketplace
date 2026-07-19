@@ -95,8 +95,7 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  *   typed `EnableDisablePluginOutcome` for `applyReconcile`.
  */
 export type EnableDisablePluginNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
  * RECON-03: discriminated outcome returned by `setPluginEnabled` in
