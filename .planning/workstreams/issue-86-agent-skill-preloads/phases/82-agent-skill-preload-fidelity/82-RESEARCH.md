@@ -508,16 +508,21 @@ Note the tools result: `Bash, Read` maps in source order to `bash,read` (splitCs
 | A4 | pi-subagents 0.35.x accepts block-list `skills:` (upstream claim from CONTEXT.md, not re-verified) | State of the Art | None for this phase — CSV emission is the locked floor contract |
 | A5 | The parenthesized "(not available in this session)" form is the right resolution of the D-82-05 em-dash vs AGSK-04 parenthesized-wording conflict | Pattern 4 | If user insists on em-dash shape, use `—` escapes — both paths documented |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three questions below were resolved during planning — 82-04-PLAN.md's objective encodes them under "Resolved discretion choices — encode exactly, do not revisit."
 
 1. **Exact legend line format for the not-preloaded case** (D-82-05 accepted shape vs AGSK-04 literal wording — see Pattern 4).
    - What we know: heading and overall shape are locked; annotation strings conflict between two locked sources; em-dash literal cannot be committed in `.ts` files.
    - Recommendation: planner picks the parenthesized ASCII form (satisfies AGSK-04/SC-4 verbatim) with `→` arrow, documents the choice in the plan, pins it with a user-contract test. Does not need user input — it is inside the declared discretion area.
+   - RESOLVED: 82-04-PLAN.md locks the parenthesized ASCII forms "(preloaded in your context)" / "(not available in this session)" with the arrow escaped as `→` in source literals.
 
 2. **Should the legend's not-available line still show the Pi-name mapping?** D-82-05's example omits the arrow for the not-available skill; AGSK-04 says the note maps "each referenced Claude skill name to its Pi skill name."
    - Recommendation: include the mapping on both line kinds (AGSK-04 is the requirement; D-82-05's example is "accepted shape", phrasing beyond it is discretion). Pin whichever is chosen.
+   - RESOLVED: 82-04-PLAN.md renders the mapping on both line kinds, per AGSK-04.
 
 3. **Legend entry ordering** (first-occurrence vs sorted): either is deterministic; recommend first-occurrence in body order. Planner decides and pins.
+   - RESOLVED: 82-04-PLAN.md pins first-occurrence body order.
 
 ## Environment Availability
 
