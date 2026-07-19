@@ -581,3 +581,155 @@ test("AGSK-03 aggregate warnings order: tools slot strictly before skills slot",
   });
   assert.deepEqual(out.warnings, [SKILL_DROP_WARNING, crossPluginSkillWarning("other-plugin:x")]);
 });
+
+// ---------------------------------------------------------------------------
+// AGSK-04 / D-82-06 / D-82-07: body skill-token detection feeding the legend
+// ---------------------------------------------------------------------------
+
+const LEGEND_HEADING = "## Pi coding agent skill legend";
+
+/** Exact legend entry line as rendered by the emitter (arrow is U+2192). */
+function legendEntryLine(token: string, generatedName: string, preloaded: boolean): string {
+  const annotation = preloaded ? "preloaded in your context" : "not available in this session";
+  return `- \`${token}\` \u2192 skill \`${generatedName}\` (${annotation})`;
+}
+
+function convertSpecTreeWithBody(
+  raw: RawAgentFrontmatter,
+  body: string,
+  knownSkills: readonly string[] = ["spec-tree-review-changes"],
+): ReturnType<typeof convertAgent> {
+  return convertAgent({
+    pluginName: "spec-tree",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills,
+    discovered: makeDiscovered({ raw, body }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+}
+
+test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a preloaded legend entry", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read", skills: "spec-tree:review-changes" },
+    "Invoke spec-tree:review-changes on the diff.",
+  );
+  assert.ok(out.fileContent.includes(LEGEND_HEADING));
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+    ),
+  );
+});
+
+test("AGSK-04 / D-82-06 known-but-not-emitted skill token annotates not available", () => {
+  // The skill is discovered in the plugin (knownSkills) but absent from the
+  // source `skills:` list, so it is not preloaded into the child context.
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Invoke spec-tree:review-changes on the diff.",
+  );
+  assert.ok(out.fileContent.includes(LEGEND_HEADING));
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", false),
+    ),
+  );
+});
+
+test("AGSK-04 / D-82-06 unknown-skill token gets no legend", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Use spec-tree:phantom.",
+  );
+  assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+});
+
+test("AGSK-04 / D-82-06 cross-plugin token gets no legend", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Use other-plugin:review-changes.",
+  );
+  assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+});
+
+test("AGSK-04 token embedded in a longer word is not a reference (lookbehind boundary)", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Use other-spec-tree:review-changes.",
+  );
+  assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+});
+
+test("AGSK-04 sentence-final punctuation does not poison the token candidate", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read", skills: "spec-tree:review-changes" },
+    "Use spec-tree:review-changes.",
+  );
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+    ),
+  );
+});
+
+test("AGSK-04 legend entries dedupe by token in first-occurrence body order", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "First spec-tree:review-changes then spec-tree:review-changes again, later spec-tree:other.",
+    ["spec-tree-review-changes", "spec-tree-other"],
+  );
+  const reviewLine = legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", false);
+  const otherLine = legendEntryLine("spec-tree:other", "spec-tree-other", false);
+  // Exactly two entries...
+  assert.equal(out.fileContent.split("\u2192 skill").length - 1, 2);
+  // ...in first-occurrence order.
+  const reviewIdx = out.fileContent.indexOf(reviewLine);
+  const otherIdx = out.fileContent.indexOf(otherLine);
+  assert.ok(reviewIdx !== -1 && otherIdx !== -1 && reviewIdx < otherIdx);
+});
+
+test("AGSK-04 / D-82-07 token appearing only inside a fenced code block still yields a legend entry", () => {
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read", skills: "spec-tree:review-changes" },
+    "Run this:\n\n```\npi skill spec-tree:review-changes\n```\n",
+  );
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+    ),
+  );
+});
+
+test("AGSK-04 token-free body emits no legend and stays byte-identical to the pre-legend output", () => {
+  // Constant captured from convertAgent BEFORE the legend wiring existed.
+  const preLegendExpected = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read
+skills: spec-tree-review-changes
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+---
+
+<!--
+generated by pi-claude-marketplace
+plugin: spec-tree
+sourceAgent: bot
+sourcePath: /abs/path/source.md
+droppedFields: (none)
+droppedTools: (none)
+warnings: (none)
+-->
+
+Review the diff.
+`;
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read", skills: "spec-tree:review-changes" },
+    "Review the diff.",
+  );
+  assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+  assert.equal(out.fileContent, preLegendExpected);
+});
