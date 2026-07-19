@@ -9,11 +9,11 @@
 ### Conversion Correctness
 
 - [x] **AGSK-01**: A source Claude agent using the documented YAML block-list form for `skills:` (and `tools:`) converts with its list values intact — dash items fold into the field's value, no bogus `- <token>` entries land in `droppedFields`, and existing CSV / inline-array forms keep parsing byte-identically.
-- [ ] **AGSK-02**: A `skills:` entry qualified with the plugin's own name (`<plugin>:<skill>`) maps to the converted Pi skill name exactly as its bare form does; a cross-plugin qualifier (`other-plugin:skill`) is dropped with a warning naming the token.
+- [x] **AGSK-02**: A `skills:` entry qualified with the plugin's own name (`<plugin>:<skill>`) maps to the converted Pi skill name exactly as its bare form does; a cross-plugin qualifier (`other-plugin:skill`) is dropped with a warning naming the token.
 
 ### Child-Context Transparency
 
-- [ ] **AGSK-03**: When the `Skill` tool is dropped during tools mapping, the generated provenance warnings state that dynamic skill invocation is unavailable in Pi and only preloaded skills are in the child's context.
+- [x] **AGSK-03**: When the `Skill` tool is dropped during tools mapping, the generated provenance warnings state that dynamic skill invocation is unavailable in Pi and only preloaded skills are in the child's context.
 - [x] **AGSK-04**: A generated agent whose body references `<plugin>:<source-skill>` tokens carries a visible converter-authored note mapping each referenced Claude skill name to its Pi skill name — "(preloaded in your context)" when the skill is in the emitted `skills:` list, "(not available in this session)" otherwise; an agent body with no such references produces byte-identical output to today.
 
 ### Dynamic Skill Access
@@ -38,8 +38,8 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AGSK-01 | Phase 82 | Complete |
-| AGSK-02 | Phase 82 | Pending |
-| AGSK-03 | Phase 82 | Pending |
+| AGSK-02 | Phase 82 | Complete |
+| AGSK-03 | Phase 82 | Complete |
 | AGSK-04 | Phase 82 | Complete |
 | AGSK-05 | Phase 83 | Pending |
 

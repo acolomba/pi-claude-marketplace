@@ -44,7 +44,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 82-02-PLAN.md — Dash-list frontmatter folding in parseFrontmatter (AGSK-01; Wave 2)
-- [ ] 82-03-PLAN.md — Plugin-qualified skill mapping + Skill-drop provenance warning (AGSK-02/03; Wave 2)
+- [x] 82-03-PLAN.md — Plugin-qualified skill mapping + Skill-drop provenance warning (AGSK-02/03; Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -71,7 +71,7 @@ Phase 82, then Phase 83.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 82. Agent Skill Preload Fidelity | 2/4 | In Progress|  |
+| 82. Agent Skill Preload Fidelity | 3/4 | In Progress|  |
 | 83. Skill Tool Inherit Mapping | 0/TBD | Not started | - |
 
 ## Coverage

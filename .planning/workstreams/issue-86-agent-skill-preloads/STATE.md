@@ -5,13 +5,13 @@ milestone_name: milestone
 current_phase: 82
 current_plan: 1
 status: executing
-last_updated: "2026-07-19T14:52:29.873Z"
+last_updated: "2026-07-19T15:03:59.227Z"
 last_activity: 2026-07-19
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 ## Current Position
 
 Phase: 82 (agent-skill-preload-fidelity) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 **Status:** Ready to execute
 **Current Phase:** 82
 **Last Activity:** 2026-07-19
@@ -56,6 +56,9 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - Generated frontmatter keeps emitting CSV `skills:` — compatibility floor is pi-subagents 0.28.x (comma-split only); upstream 0.35.x also accepts block lists
 - Cross-plugin qualified skill references (`other-plugin:skill`) warn-and-drop; installability of the other plugin is unknown at convert time
 - Note emission is reference-gated: only when the body literally contains `<plugin>:<source-skill>` tokens; otherwise generated output stays byte-identical
+- [Phase 82]: Cross-plugin skill warning wording locked: skill reference "<token>" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded) — SC-3 requires naming the token; matches existing lowercase ' -- ' warning convention
+- [Phase 82]: Unknown-skill warnings name the full original token (qualifier included), never the stripped remainder — Users can grep the warning text verbatim in source frontmatter
+- [Phase 82]: No dedupe in mapSkills emit list — Byte-identity for duplicate-bearing bare-form agents; pi-subagents dedupes downstream
 
 ### Blockers
 
@@ -63,7 +66,7 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Completed 82-02-PLAN.md
+**Stopped At:** Completed 82-03-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -72,3 +75,4 @@ None.
 |-------|------|----------|-------|
 | Phase 82 P01 | 7 min | 2 tasks | 1 files |
 | Phase 82 P02 | 8 min | 2 tasks | 2 files |
+| Phase 82 P03 | 7 min | 2 tasks | 2 files |
