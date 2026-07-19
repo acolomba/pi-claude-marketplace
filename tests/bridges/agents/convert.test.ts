@@ -709,6 +709,17 @@ test("AGSK-04 token embedded in a longer word is not a reference (lookbehind bou
   assert.ok(!out.fileContent.includes(LEGEND_HEADING));
 });
 
+test("AGSK-04 dotted plugin-name prefix is not a reference (lookbehind boundary)", () => {
+  // Plugin names may legally contain `.`; `other.spec-tree:review-changes`
+  // references a plugin named `other.spec-tree`, not `spec-tree`, and must
+  // not produce a spurious legend entry.
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Use other.spec-tree:review-changes.",
+  );
+  assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+});
+
 test("AGSK-04 sentence-final punctuation does not poison the token candidate", () => {
   const out = convertSpecTreeWithBody(
     { description: "d", tools: "Read", skills: "spec-tree:review-changes" },

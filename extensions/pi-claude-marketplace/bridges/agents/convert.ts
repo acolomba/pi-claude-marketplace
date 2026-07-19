@@ -126,7 +126,9 @@ function escapeRegExp(value: string): string {
  * (D-82-07: the legend is aggregated at the top and nothing is rewritten
  * inline, so code-block matches are safe and useful). The lookbehind
  * rejects tokens embedded in a longer word (`other-spec-tree:x` is not a
- * `spec-tree:` reference); the candidate class excludes `.` so sentence
+ * `spec-tree:` reference, and `.` sits in the boundary class so a dotted
+ * plugin-name prefix `other.spec-tree:x` is not one either); the
+ * candidate class excludes `.` so sentence
  * punctuation never joins a candidate (skill names containing dots would
  * be missed -- none exist in the wild). Only candidates resolving into
  * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
@@ -142,7 +144,7 @@ function detectSkillTokens(
   const known = new Set(knownSkills);
   const emitted = new Set(emittedSkills);
   const tokenRe = new RegExp(
-    `(?<![A-Za-z0-9_:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
+    `(?<![A-Za-z0-9_.:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
     "g",
   );
   const seen = new Set<string>();
