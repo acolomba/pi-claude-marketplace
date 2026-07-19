@@ -1,8 +1,8 @@
 # Milestones: pi-claude-marketplace
 
-## url-source URL Sources (Shipped: 2026-07-13)
+## url-source URL Sources & Git-Source Fetch (Shipped: 2026-07-18)
 
-**Phases completed:** 4 phases, 20 plans, 49 tasks
+**Phases completed:** 4 phases, 20 plans, 49 tasks (url-source archives), plus the fetch-plugin phases folded into this entry -- their planning artifacts were developed out-of-repo and not preserved; scope is recorded in the accomplishments below. Both milestones shipped together as npm 0.9.0.
 
 **Key accomplishments:**
 
@@ -24,6 +24,10 @@
 - GitAuthProvider registry (host->descriptor lookup) with the RFC-8628 Device Flow engine parameterized by an optional provider descriptor that defaults to GITHUB_PROVIDER, keeping github.com behavior byte-identical.
 - Registry-driven `buildAuthForHost` replaces the two inline `host="github.com"` Device Flow blocks in marketplace add/update, threads optional auth into `resolveRemoteRef`, and delivers the no-provider fail-clean contract -- with the D-79-03 cause line scoped (by user checkpoint decision) to the update path's cause-carrying child row.
 - The plugin install / update / reinstall clone paths thread a host-keyed `GitAuthBundle` (from Plan 02's `buildAuthForHost`) through the clone-cache seam: private git-source plugins authenticate on provider hosts, public / no-provider hosts clone authless, no-provider clones fail clean with the bare `authentication required` row, and a command-scope once-per-host memo caps the flow -- all while `install.ts` / `reinstall.ts` stay off the platform-git gate.
+- Honest remote status (fetch-plugin milestone): a not-installed git-source plugin with no local clone renders `(remote)` (`◌`) instead of over-claiming `(available)`, and `list --remote` filters that bucket; where a clone is already warm, `list` and `info` resolve components fs-only with no network touch. The disabled glyph moves from `◌` to `◍` to free `◌` for remote.
+- New `fetch` verb (fetch-plugin milestone): `fetch <plugin>@<marketplace>` (or `@<marketplace>`, or bare `fetch` for everything) warms git-source clone caches ahead of install, and `info --fetch` fetches-then-resolves in one step. Fetched-but-uninstalled clones stay GC-sweepable and self-heal back to `(remote)`; a per-plugin fetch failure renders a `(failed)` row with an actionable reason and never aborts the sweep, and a corrupt marketplace manifest degrades to a per-marketplace failed block instead of aborting the command.
+- Release-review hardening from the five-agent 0.9.0 branch review: fetch failure rows stamp error severity; a declined or expired Device Flow classifies as `authentication required` instead of `source missing`; `info --fetch` surfaces a failed fetch on installed plugins instead of degrading silently; a corrupt mirror clone degrades that one plugin instead of blanking its marketplace's tab completions; manifest shas validate as 40-hex at the parser; and a per-verb CLI flag catalog is the single source of truth for argv parsing and completion surfaces, pinned by an architecture guard.
+- Same-repo mirror seeding (quick 260718-v2a/x2o): a git-source plugin whose canonical clone URL is the marketplace's own repository is seeded from the local checkout at `marketplace add` time (git-URL marketplaces via their source record; path marketplaces via an fs-only read of the checkout's origin remote), so it shows installable right after add with zero network; the seeded mirror's origin is the real remote URL, pinned shas seed only when locally reachable, and seeded clones participate in normal GC.
 
 ---
 
