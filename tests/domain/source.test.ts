@@ -291,6 +291,40 @@ test("D-76-02 https github.com string stays github kind (host wins)", () => {
   }
 });
 
+// D-76-01: a scheme outside the named git@/http/ssh set falls through to the
+// generic "this URL scheme" diagnostic.
+test("D-76-01 unrecognized scheme (ftp://) rejects with the generic this-URL-scheme reason", () => {
+  const got = parsePluginSource("ftp://host/repo");
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /this URL scheme/);
+  }
+});
+
+// urlObjectSource -- missing url field
+test("urlObjectSource: missing url yields unknown with reason", () => {
+  const obj = { source: "url" };
+  const got = parsePluginSource(obj);
+  assert.equal(got.kind, "unknown");
+  if (got.kind === "unknown") {
+    assert.match(got.reason, /url source is missing url/);
+    assert.equal(got.raw, JSON.stringify(obj));
+  }
+});
+
+// npmObjectSource -- optional registry carried through
+test("npmObjectSource: registry field is preserved on the parsed npm source", () => {
+  const got = parsePluginSource({
+    source: "npm",
+    package: "@scope/pkg",
+    registry: "https://registry.example.com",
+  });
+  assert.equal(got.kind, "npm");
+  if (got.kind === "npm") {
+    assert.equal(got.registry, "https://registry.example.com");
+  }
+});
+
 // D-76-01: unsupportedUrlReason no longer claims only-github; it names the scheme.
 test("D-76-01 unsupported-scheme reason no longer says 'only github URLs'", () => {
   const got = parsePluginSource("ssh://git@host/repo");

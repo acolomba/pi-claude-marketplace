@@ -398,6 +398,114 @@ void test("PROV-04: a git-source install on a no-provider host whose clone 401s 
   });
 });
 
+void test("NFR-3: a git-source install whose clone throws a NETWORK errno renders the bare (failed) row with a cause line, NOT {authentication required}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-net-fail-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "netless",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+
+      // A network-class transport failure stays OUTSIDE install's auth-only
+      // narrowing: the row is the bare `(failed)` (no reasons brace) and the
+      // raw error text rides the cause-chain trailer.
+      const netErr = new Error("connect ENETUNREACH 10.0.0.1:443") as NodeJS.ErrnoException;
+      netErr.code = "ENETUNREACH";
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        cloneThrows: netErr,
+      });
+      const { credOps: credentialOps } = makeMockCredentialOps();
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "netless",
+        cloneCacheSeam: seamWith(gitOps),
+        credentialOps,
+      });
+
+      const note = notifications.find((n) => n.severity === "error");
+      assert.ok(note, "a network-failed clone must render an error");
+      assert.match(note.message, /netless \(failed\)/, "the bare failed row names the plugin");
+      assert.equal(
+        note.message.includes("{authentication required}"),
+        false,
+        "a network errno is NOT narrowed to the auth reason by install",
+      );
+      assert.ok(
+        note.message.includes("ENETUNREACH"),
+        "the raw network error text rides the cause-chain trailer",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+void test("NFR-3: a git-source install whose clone seam throws a NON-Error value renders the bare (failed) row without a synthesized cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-nonerror-fail-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "oddball",
+        source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const inner = seamWith(gitOps);
+      const seam: InstallCloneCacheSeam = {
+        resolvePluginPin: inner.resolvePluginPin,
+        materializePluginClone: () => {
+          // A non-Error throw (bad citizen dependency): install must still
+          // fail clean with the bare row -- no crash, no fabricated reason.
+          throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
+        },
+        materializeOrRefreshPluginMirror: inner.materializeOrRefreshPluginMirror,
+      };
+      const { credOps: credentialOps } = makeMockCredentialOps();
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "oddball",
+        cloneCacheSeam: seam,
+        credentialOps,
+      });
+
+      const note = notifications.find((n) => n.severity === "error");
+      assert.ok(note, "a non-Error throw must still render an error row");
+      assert.match(note.message, /oddball \(failed\)/, "the bare failed row names the plugin");
+      assert.equal(
+        note.message.includes("{authentication required}"),
+        false,
+        "a non-Error throw is never narrowed to the auth reason",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 void test("device-flow auth failure: a clone throw shaped UserCanceledError renders (failed) {authentication required}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-usercanceled-"));

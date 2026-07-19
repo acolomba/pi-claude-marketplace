@@ -778,6 +778,371 @@ test("FTCH-01 a fetched git-subdir whose declared subdir is absent renders (unav
   });
 });
 
+test("RSTA-01 a materialize that reports success while the cache stays cold renders the bare (remote) row with its manifest version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-remote-row-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const sha = "dddddddddddddddddddddddddddddddddddddddd";
+
+      await seedMarketplace({
+        cwd,
+        entries: [
+          {
+            name: "gp",
+            source: { source: "url", url: cloneUrl, sha },
+            version: "3.2.1",
+            description: "A remote plugin.",
+          },
+        ],
+      });
+
+      // A seam that resolves WITHOUT writing anything into the cache (e.g. a
+      // concurrent GC swept the clone between the seam return and the probe):
+      // the post-fetch derived row must fall back to `(remote)` -- still
+      // unmaterialized -- rather than over-claiming `(available)`.
+      const seam: FetchCloneCacheSeam = {
+        resolvePluginPin: () => Promise.resolve({ cloneUrl, pin: sha }),
+        materializePluginClone: () => Promise.resolve(path.join(cwd, "never-written")),
+        materializeOrRefreshPluginMirror: () =>
+          Promise.resolve({ pluginRoot: path.join(cwd, "never-written"), resolvedSha: sha }),
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps: makeMockCredentialOps().credOps,
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      // D-80-03: the remote row is BARE -- no reasons brace -- and carries the
+      // manifest version.
+      assert.match(body, /◌ gp v3\.2\.1 \(remote\)/, "renders the bare (remote) row with version");
+      assert.doesNotMatch(body, /\(available\)/, "a cold tree is never over-claimed available");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FTCH-01 a corrupt warm mirror (unreadable HEAD ref) renders (unavailable) {source missing} via the probe-error narrowing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-corrupt-mirror-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await writeFixtureRepo(fixtureRepoDir, "gp", "1.0.0");
+
+      await seedMarketplace({
+        cwd,
+        // Unpinned: routes through the mirror seam and the mirror-presence probe.
+        entries: [{ name: "gp", source: { source: "url", url: cloneUrl } }],
+      });
+
+      // A warm mirror whose .git/HEAD is a symbolic ref with NO loose ref file
+      // and NO packed-refs: the fs-only HEAD read throws, so the post-fetch
+      // probe folds to `unavailable` and the reasoned re-resolve narrows the
+      // SAME throw to its closed-set probe-error class.
+      const locations = locationsFor("project", cwd);
+      const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await mkdir(path.dirname(mirrorDir), { recursive: true });
+      await cp(fixtureRepoDir, mirrorDir, { recursive: true });
+      await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
+      await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/main\n");
+
+      // The refresh seam reports success but leaves the corrupt mirror as-is.
+      const seam: FetchCloneCacheSeam = {
+        resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps: makeMockGitOps().gitOps }),
+        materializePluginClone: () => Promise.resolve(mirrorDir),
+        materializeOrRefreshPluginMirror: () =>
+          Promise.resolve({
+            pluginRoot: mirrorDir,
+            resolvedSha: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          }),
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps: makeMockCredentialOps().credOps,
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /⊘ gp \(unavailable\) \{source missing\}/,
+        "the probe throw narrows to the closed-set source-missing reason",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FTCH-07 non-transport materialize throws narrow to fs/permission reasons: EACCES -> {permission denied}; plain and non-Error throws -> {source missing}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-fs-narrow-"));
+    try {
+      const shaA = "1111111111111111111111111111111111111110";
+      const shaB = "2222222222222222222222222222222222222220";
+      const shaC = "3333333333333333333333333333333333333330";
+
+      await seedMarketplace({
+        cwd,
+        entries: [
+          { name: "eacces", source: { source: "url", url: "https://example.com/o/a", sha: shaA } },
+          { name: "plain", source: { source: "url", url: "https://example.com/o/b", sha: shaB } },
+          {
+            name: "weird",
+            source: { source: "url", url: "https://example.com/o/c", sha: shaC },
+            version: "9.9.9",
+          },
+        ],
+      });
+
+      const seam: FetchCloneCacheSeam = {
+        resolvePluginPin: (args) =>
+          Promise.resolve({
+            cloneUrl: args.source.kind === "github" ? "" : args.source.url,
+            pin: "unused",
+          }),
+        materializePluginClone: (args) => {
+          if (args.cloneUrl.endsWith("/a")) {
+            const err = new Error("EACCES: permission denied") as NodeJS.ErrnoException;
+            err.code = "EACCES";
+            throw err;
+          }
+
+          if (args.cloneUrl.endsWith("/b")) {
+            throw new Error("clone corrupted");
+          }
+
+          // Non-Error throw: failedRow synthesizes the cause Error and the
+          // narrowing falls through to the fail-clean source-missing default.
+          throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
+        },
+        materializeOrRefreshPluginMirror: () =>
+          Promise.resolve({ pluginRoot: "/unused", resolvedSha: shaA }),
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps: makeMockCredentialOps().credOps,
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /⊘ eacces \(failed\) \{permission denied\}/,
+        "an EACCES materialize throw narrows to permission denied",
+      );
+      assert.match(
+        body,
+        /⊘ plain \(failed\) \{source missing\}/,
+        "an unrecognized Error folds to the fail-clean source-missing default",
+      );
+      assert.match(
+        body,
+        /⊘ weird v9\.9\.9 \(failed\) \{source missing\}/,
+        "a non-Error throw folds to source missing and keeps the manifest version on the row",
+      );
+      assert.equal(
+        notifications.some((n) => n.severity === "error"),
+        true,
+        "failed rows stamp error severity",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FTCH-06 unpinned github source with a ref threads BOTH the ref hint and the host-keyed auth bundle into the mirror seam", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-unpinned-ref-auth-"));
+    try {
+      const cloneUrl = "https://github.com/acme/priv";
+      const headSha = "4444444444444444444444444444444444444440";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await writeFixtureRepo(fixtureRepoDir, "gp", "1.0.0");
+
+      await seedMarketplace({
+        cwd,
+        // Unpinned github source with a ref: no sha -> the mirror arm; ref ->
+        // the singleBranch fetch hint; github.com -> a registered provider.
+        entries: [{ name: "gp", source: { source: "github", repo: "acme/priv", ref: "main" } }],
+      });
+
+      // Pre-warm the mirror so the post-refresh probe reads a valid HEAD.
+      const locations = locationsFor("project", cwd);
+      const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await mkdir(path.dirname(mirrorDir), { recursive: true });
+      await cp(fixtureRepoDir, mirrorDir, { recursive: true });
+      await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
+      await writeFile(path.join(mirrorDir, ".git", "HEAD"), `${headSha}\n`);
+
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: headSha,
+        localRefs: { "refs/heads/main": headSha },
+        remoteRefs: { "refs/remotes/origin/main": headSha },
+      });
+      const captured: { ref: string | undefined; authHost: string | undefined } = {
+        ref: undefined,
+        authHost: undefined,
+      };
+      const seam: FetchCloneCacheSeam = {
+        resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+        materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+        materializeOrRefreshPluginMirror: (args) => {
+          captured.ref = args.ref;
+          captured.authHost = args.auth?.host;
+          return materializeOrRefreshPluginMirror({ ...args, gitOps });
+        },
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps: makeMockCredentialOps().credOps,
+        deviceFlowHttp: makeMockDeviceFlowHttp().http,
+      });
+
+      assert.equal(captured.ref, "main", "the mirror refresh received the ref hint");
+      assert.equal(
+        captured.authHost,
+        "github.com",
+        "the provider host's auth bundle threaded into the mirror seam",
+      );
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /\(available\)/, "the refreshed mirror renders the fresh row");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FTCH-01 pinned source with a ref forwards the resolved ref hint into the clone seam", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-pinned-ref-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const sha = "5555555555555555555555555555555555555550";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await writeFixtureRepo(fixtureRepoDir, "gp", "1.0.0");
+
+      await seedMarketplace({
+        cwd,
+        // Pinned sha PLUS a ref: resolvePluginPin returns the ref so the clone
+        // uses it as the singleBranch fetch hint.
+        entries: [{ name: "gp", source: { source: "url", url: cloneUrl, sha, ref: "v2" } }],
+      });
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const captured: { ref: string | undefined } = { ref: undefined };
+      const seam: FetchCloneCacheSeam = {
+        resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+        materializePluginClone: (args) => {
+          captured.ref = args.ref;
+          return materializePluginClone({ ...args, gitOps });
+        },
+        materializeOrRefreshPluginMirror: (args) =>
+          materializeOrRefreshPluginMirror({ ...args, gitOps }),
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seam,
+        credentialOps: makeMockCredentialOps().credOps,
+      });
+
+      assert.equal(captured.ref, "v2", "the pinned clone received the ref hint");
+      assert.equal(
+        gitState.cloneCalls[0]?.singleBranch,
+        true,
+        "the ref hint drives a singleBranch clone",
+      );
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /\(available\)/, "the pinned clone renders the fresh row");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FTCH-01 a github-source plugin with an unsupported component renders (partially-available) {lsp} (reasoned re-resolve on the github kind)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "fetch-github-partial-"));
+    try {
+      const sha = "6666666666666666666666666666666666666660";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await writeFixtureRepo(fixtureRepoDir, "lspy", "1.0.0");
+
+      await seedMarketplace({
+        cwd,
+        entries: [
+          {
+            name: "lspy",
+            source: { source: "github", repo: "acme/lspy", sha },
+            lspServers: { ls: {} },
+          },
+        ],
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const spy = seamSpy(gitOps);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await fetchPlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "lspy", marketplace: "mp" },
+        cloneCacheSeam: spy.seam,
+        credentialOps: makeMockCredentialOps().credOps,
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /⊖ lspy \(partially-available\) \{lsp\}/,
+        "the github-kind reasoned row carries the exact dropped-kind reason",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("FTCH-07 bare fetch with scope omitted enumerates BOTH scopes and orders same-name blocks project-first", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "fetch-dual-scope-"));

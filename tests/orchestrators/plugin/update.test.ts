@@ -4067,6 +4067,268 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
   });
 });
 
+/**
+ * PURL-03 / D-77-03: seed a git-subdir plugin whose monorepo fixture carries the
+ * plugin tree under `plugins/p`, with an installed record pinned at
+ * `recordedSha` (warm old clone on disk). The marketplace source stays path so
+ * syncCloneOnce is a NFR-5 no-op; only the PLUGIN entry is git-subdir.
+ */
+async function seedGitSubdirMarketplace(opts: {
+  cwd: string;
+  cloneUrl: string;
+  fixtureRepoDir: string;
+  entrySource: unknown;
+  recordedSha: string;
+}): Promise<{ oldCloneRoot: string }> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  const pluginDir = path.join(opts.fixtureRepoDir, "plugins", "p");
+  await mkdir(path.join(pluginDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "gp", version: "9.9.9" }),
+  );
+  const skillDir = path.join(pluginDir, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: greet\n---\n\nHello.\n`);
+
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "gp", source: opts.entrySource }] }),
+  );
+
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  // Warm old clone at the recorded sha; the record anchors to its subdir root.
+  const oldCloneRoot = await locations.pluginCloneDir(
+    pluginCloneKey(opts.cloneUrl, opts.recordedSha),
+  );
+  await mkdir(path.dirname(oldCloneRoot), { recursive: true });
+  await cp(opts.fixtureRepoDir, oldCloneRoot, { recursive: true });
+
+  const record = makePluginRecord(`sha-${opts.recordedSha.slice(0, 12)}`);
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          gp: {
+            ...record,
+            resolvedSource: path.join(oldCloneRoot, "plugins", "p"),
+            resolvedSha: opts.recordedSha,
+          },
+        },
+      },
+    },
+  });
+
+  return { oldCloneRoot };
+}
+
+test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the pluginRoot and the ref hint threads into the clone seam", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-pinned-"));
+    try {
+      const cloneUrl = "https://example.com/org/monorepo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSubdirMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        // Pinned sha bump PLUS a ref: resolvePluginPin returns the ref so the
+        // re-clone consumes it as the singleBranch fetch hint.
+        entrySource: {
+          source: "git-subdir",
+          url: cloneUrl,
+          path: "plugins/p",
+          sha: SHA_NEW,
+          ref: "main",
+        },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined, "a state record survives the swap");
+      assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
+      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+
+      const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
+      assert.equal(
+        record.resolvedSource,
+        path.join(newCloneRoot, "plugins", "p"),
+        "resolvedSource anchors to the SUBDIR under the new clone root (never the monorepo root)",
+      );
+      assert.equal(gitState.cloneCalls[0]?.ref, "main", "the re-clone consumed the ref hint");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new clone declines {no longer installable}; plugin stays on its recorded sha", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-missing-"));
+    try {
+      const cloneUrl = "https://example.com/org/monorepo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSubdirMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        // The new pinned tree does NOT carry plugins/missing.
+        entrySource: { source: "git-subdir", url: cloneUrl, path: "plugins/missing", sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      // Fail-clean: the missing-subdir candidate declines; no swap.
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"]?.resolvedSha,
+        SHA_OLD,
+        "plugin stays on its recorded sha",
+      );
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /\{no longer installable\}/,
+        "the structural missing-subdir decline renders the existing REASON token",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors the pluginRoot and the record re-anchors to the mirror HEAD sha", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-unpinned-"));
+    try {
+      const cloneUrl = "https://example.com/org/monorepo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSubdirMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        // Unpinned (no sha) with a ref: routes to the mirror seam with the
+        // ref hint threaded.
+        entrySource: { source: "git-subdir", url: cloneUrl, path: "plugins/p", ref: "main" },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      assert.equal(
+        record?.resolvedSource,
+        path.join(mirrorRoot, "plugins", "p"),
+        "resolvedSource anchors to the SUBDIR under the mirror root",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the refreshed mirror declines {no longer installable}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-subdir-unpinned-missing-"));
+    try {
+      const cloneUrl = "https://example.com/org/monorepo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSubdirMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        entrySource: { source: "git-subdir", url: cloneUrl, path: "plugins/missing" },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const locations = locationsFor("project", cwd);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"]?.resolvedSha,
+        SHA_OLD,
+        "plugin stays on its recorded sha",
+      );
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /\{no longer installable\}/,
+        "the mirror-route missing-subdir decline renders the existing REASON token",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-git-usercanceled-"));

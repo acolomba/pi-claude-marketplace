@@ -2375,6 +2375,102 @@ test("SEV-02 / D-69-03: composeInstallFailureMessage points at --force iff the v
   assert.equal(structuralMsg.severity, "error");
 });
 
+test("composeInstallFailureMessage threads a resolved version onto both not-installable arms and omits an empty-string version", async () => {
+  const { PluginShapeError } =
+    await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
+
+  const partialableErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "helper",
+    reasons: ["contains lspServers"],
+    partialable: true,
+  });
+  const partialableRow = __test_classifyEntityShapeError(partialableErr, {
+    plugin: "helper",
+    marketplace: "mp",
+    scope: "project",
+  });
+  const withVersion = __test_composeInstallFailureMessage({
+    err: partialableErr,
+    plugin: "helper",
+    scope: "project",
+    version: "1.2.3",
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: partialableRow,
+  });
+  assert.equal(withVersion.status, "partially-available");
+  assert.ok(withVersion.status === "partially-available");
+  assert.equal(withVersion.version, "1.2.3", "the partially-available arm carries the version");
+
+  const structuralErr = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "helper",
+    reasons: ["source dir does not exist"],
+    partialable: false,
+  });
+  const structuralRow = __test_classifyEntityShapeError(structuralErr, {
+    plugin: "helper",
+    marketplace: "mp",
+    scope: "project",
+  });
+  const unavailableWithVersion = __test_composeInstallFailureMessage({
+    err: structuralErr,
+    plugin: "helper",
+    scope: "project",
+    version: "2.0.0",
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: structuralRow,
+  });
+  assert.equal(unavailableWithVersion.status, "unavailable");
+  assert.ok(unavailableWithVersion.status === "unavailable");
+  assert.equal(unavailableWithVersion.version, "2.0.0", "the unavailable arm carries the version");
+
+  // An empty-string version (a placeholder resolve) is OMITTED from both arms.
+  const emptyPartial = __test_composeInstallFailureMessage({
+    err: partialableErr,
+    plugin: "helper",
+    scope: "project",
+    version: "",
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: partialableRow,
+  });
+  assert.ok(emptyPartial.status === "partially-available");
+  assert.equal(emptyPartial.version, undefined, "empty-string version is omitted");
+
+  const emptyStructural = __test_composeInstallFailureMessage({
+    err: structuralErr,
+    plugin: "helper",
+    scope: "project",
+    version: "",
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: structuralRow,
+  });
+  assert.ok(emptyStructural.status === "unavailable");
+  assert.equal(emptyStructural.version, undefined, "empty-string version is omitted");
+});
+
+test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bare failed row (no cause) with the version threaded", () => {
+  const msg = __test_composeInstallFailureMessage({
+    err: "disk exploded",
+    plugin: "helper",
+    scope: "project",
+    version: "2.0.0",
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: undefined,
+  });
+  assert.equal(msg.status, "failed");
+  assert.ok(msg.status === "failed");
+  assert.deepEqual(msg.reasons, [], "no fabricated reason on a generic runtime throw");
+  assert.equal(msg.cause, undefined, "a non-Error throw carries no cause");
+  assert.equal(msg.version, "2.0.0", "the runtime arm threads the version");
+  assert.equal(msg.severity, "error");
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PHOOK-04 -- partial-hook `install --force` stages a STRICT SUBSET of the
 // source `hooks.json`: the dropped event / matcher group is absent from the
