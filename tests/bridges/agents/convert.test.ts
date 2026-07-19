@@ -763,7 +763,7 @@ test("AGSK-04 / D-82-07 token appearing only inside a fenced code block still yi
 test("AGSK-04 plugin-prefix-only body candidate never throws and gets no legend", () => {
   // `spec-tree:spec-tree-` scans to candidate `spec-tree-`, which elides to
   // an empty skill name inside generatedSkillName (assertSafeName would
-  // throw). The scanner must skip it -- a body scan never throws (T-82-12).
+  // throw). The scanner must skip it -- a body scan never throws.
   let out: ReturnType<typeof convertAgent> | undefined;
   assert.doesNotThrow(() => {
     out = convertSpecTreeWithBody(
