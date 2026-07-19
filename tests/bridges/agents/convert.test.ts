@@ -703,6 +703,20 @@ test("AGSK-04 / D-82-07 token appearing only inside a fenced code block still yi
   );
 });
 
+test("AGSK-04 plugin-prefix-only body candidate never throws and gets no legend", () => {
+  // `spec-tree:spec-tree-` scans to candidate `spec-tree-`, which elides to
+  // an empty skill name inside generatedSkillName (assertSafeName would
+  // throw). The scanner must skip it -- a body scan never throws (T-82-12).
+  let out: ReturnType<typeof convertAgent> | undefined;
+  assert.doesNotThrow(() => {
+    out = convertSpecTreeWithBody(
+      { description: "d", tools: "Read" },
+      "Use spec-tree:spec-tree- now.",
+    );
+  });
+  assert.ok(out !== undefined && !out.fileContent.includes(LEGEND_HEADING));
+});
+
 test("AGSK-04 token-free body emits no legend and stays byte-identical to the pre-legend output", () => {
   // Constant captured from convertAgent BEFORE the legend wiring existed.
   const preLegendExpected = `---
