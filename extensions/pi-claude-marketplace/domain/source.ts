@@ -68,12 +68,7 @@ export interface UnknownSource {
 }
 
 export type ParsedSource =
-  | PathSource
-  | GitHubSource
-  | UrlSource
-  | GitSubdirSource
-  | NpmSource
-  | UnknownSource;
+  PathSource | GitHubSource | UrlSource | GitSubdirSource | NpmSource | UnknownSource;
 
 /** Per-user tilde reject message (SP-4). */
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";

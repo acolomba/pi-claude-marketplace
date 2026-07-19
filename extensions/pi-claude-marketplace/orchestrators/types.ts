@@ -88,9 +88,7 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
 }
 
 export type ReinstallPluginOutcome =
-  | ReinstallReinstalledOutcome
-  | ReinstallSkippedOutcome
-  | ReinstallFailedOutcome;
+  ReinstallReinstalledOutcome | ReinstallSkippedOutcome | ReinstallFailedOutcome;
 
 /** MU-7 partition tag. plugin/update.ts returns one outcome per plugin. */
 export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";

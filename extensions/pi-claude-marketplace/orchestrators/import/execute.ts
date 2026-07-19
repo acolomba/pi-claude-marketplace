@@ -95,10 +95,7 @@ export interface ImportWarningOutcome {
   readonly marketplace: string;
   readonly ref: string;
   readonly reason:
-    | "unmappable-marketplace-source"
-    | "marketplace-failed"
-    | "unavailable"
-    | "uninstallable";
+    "unmappable-marketplace-source" | "marketplace-failed" | "unavailable" | "uninstallable";
   readonly cause?: string;
 }
 
