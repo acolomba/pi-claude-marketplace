@@ -20,10 +20,13 @@
 // (sha over ref; unpinned resolves remote HEAD via resolveRemoteRef, D-77-05).
 
 import { randomUUID } from "node:crypto";
-import { mkdir, rename } from "node:fs/promises";
+import { cp, mkdir, readFile, rename } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import {
@@ -248,6 +251,205 @@ export async function materializeOrRefreshPluginMirror(args: {
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
   return { pluginRoot: mirrorRoot, resolvedSha };
+}
+
+/**
+ * D-SEED-02 / NFR-5: fs-only read of a checkout's `origin` remote URL from
+ * `<checkoutRoot>/.git/config`. Mirrors the fs-only `.git`-reading idiom of
+ * `readMirrorHeadSha` in git-source-probe.ts -- NO `git` subprocess, NO network
+ * -- so reading a path-source marketplace's canonical URL stays a local
+ * metadata read. Returns undefined when the config file is absent, unreadable,
+ * or declares no `[remote "origin"]` url.
+ */
+async function readOriginRemoteUrl(checkoutRoot: string): Promise<string | undefined> {
+  let config: string;
+  try {
+    config = await readFile(path.join(checkoutRoot, ".git", "config"), "utf8");
+  } catch {
+    return undefined;
+  }
+
+  let inOrigin = false;
+  for (const rawLine of config.split("\n")) {
+    const line = rawLine.trim();
+    if (line.startsWith("[")) {
+      inOrigin = /^\[remote\s+"origin"\]$/.test(line);
+      continue;
+    }
+
+    if (inOrigin) {
+      const match = /^url\s*=\s*(.+)$/.exec(line);
+      if (match?.[1] !== undefined) {
+        return match[1].trim();
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * D-SEED-02: derive the canonical clone URL of the repository the marketplace
+ * lives in, reusing ONLY the existing `canonicalCloneUrl` (no second
+ * canonicalization). A github/url marketplace source canonicalizes its own
+ * record; a path source's URL is read fs-only from the checkout's `.git/config`
+ * origin remote (network-free, NFR-5) and reparsed through the SAME
+ * `parsePluginSource` + `canonicalCloneUrl` the plugin sources use. Returns
+ * undefined when no same-repo URL can be discovered (a non-git dir, no origin,
+ * or an origin that does not canonicalize to a git source) -- nothing to seed.
+ */
+async function deriveMarketplaceUrl(
+  storedSource: unknown,
+  marketplaceRoot: string,
+): Promise<string | undefined> {
+  const source = parsePluginSource(storedSource);
+  if (source.kind === "github" || source.kind === "url") {
+    return canonicalCloneUrl(source);
+  }
+
+  if (source.kind === "path") {
+    const origin = await readOriginRemoteUrl(marketplaceRoot);
+    if (origin === undefined) {
+      return undefined;
+    }
+
+    const parsed = parsePluginSource(origin);
+    if (parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github") {
+      return canonicalCloneUrl(parsed);
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * D-SEED-03 / NFR-1 / NFR-10: seed ONE same-repo plugin mirror by copying the
+ * marketplace checkout tree (including `.git`, so the origin remote is preserved
+ * BY CONSTRUCTION -- SEED-05) into a staging dir, then an atomic same-FS rename
+ * into the plugin-clone cache (sources-staging/ and plugin-clones/ are siblings
+ * under extensionRoot). Unpinned -> the URL-keyed mirror dir; pinned -> the
+ * per-sha clone dir gated by a checkout of the sha against the copied history
+ * (SEED-04). The destination is composed ONLY from `pluginMirrorKey` /
+ * `pluginCloneKey` outputs routed through `locations.pluginCloneDir` -- the
+ * SC-7/NFR-10 containment chokepoint; no manifest/user string joins the path.
+ */
+async function seedOnePluginMirror(
+  locations: ScopedLocations,
+  gitOps: GitOps,
+  source: UrlSource | GitSubdirSource | GitHubSource,
+  marketplaceUrl: string,
+  marketplaceRoot: string,
+): Promise<void> {
+  const key =
+    source.sha === undefined
+      ? pluginMirrorKey(marketplaceUrl)
+      : pluginCloneKey(marketplaceUrl, source.sha);
+  const dest = await locations.pluginCloneDir(key);
+
+  // Warm short-circuit: a present key dir is a byte-equivalent warm cache (same
+  // key => same content). Leave it untouched (idempotent, NFR-3).
+  if (await pathExists(dest)) {
+    return;
+  }
+
+  const staging = await locations.sourcesStagingDir(randomUUID());
+  await mkdir(path.dirname(staging), { recursive: true });
+  // Copy the working tree AND `.git`, so the seeded mirror's origin remote is
+  // the real remote URL (SEED-05), never the local checkout path. `cp` is
+  // cross-FS safe; the visible mirror still appears only via the atomic rename.
+  await cp(marketplaceRoot, staging, { recursive: true });
+
+  // SEED-04: a pinned source is seeded ONLY after its sha checks out against the
+  // copied history -- a successful checkout IS the reachability proof. An
+  // unreachable pin (CommitNotFetchedError, or any throw) is skipped so the
+  // normal network path materializes it later; never fabricate an immutable
+  // per-sha entry from non-matching content.
+  if (source.sha !== undefined) {
+    try {
+      await gitOps.checkout({ dir: staging, ref: source.sha });
+    } catch {
+      await cleanupStaging(staging, "plugin mirror seed staging");
+      return;
+    }
+  }
+
+  // Atomic same-FS rename staging -> dest (NFR-1).
+  try {
+    await mkdir(path.dirname(dest), { recursive: true });
+    await rename(staging, dest);
+  } catch (err) {
+    // EEXIST/ENOTEMPTY: a concurrent seed/materialize won the race; its tree is
+    // byte-equivalent, so clean staging and treat dest as a warm-cache win. Any
+    // other rename error cleans staging and rethrows to the per-entry boundary.
+    const code = (err as NodeJS.ErrnoException).code;
+    await cleanupStaging(staging, "plugin mirror seed staging");
+    if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+      throw err;
+    }
+  }
+}
+
+/**
+ * SEED-01..06 / D-SEED-01..03: seed the same-repo plugin mirror(s) declared by a
+ * just-added marketplace from the local marketplace checkout, network-free.
+ *
+ * When a marketplace manifest declares a git-source plugin (url / github /
+ * git-subdir) whose canonical clone URL is the SAME repository the marketplace
+ * itself lives in, that plugin's clone bytes are already on disk in the
+ * marketplace checkout. Copy that tree into the plugin-clone cache instead of
+ * re-cloning identical bytes over the network (SEED-01 Case A / SEED-02 Case B).
+ * After seeding, the read-only presence probe finds the warm mirror on its own,
+ * so the plugin stops rendering `(remote)` right after `marketplace add`.
+ *
+ * Called best-effort post-commit from `marketplace add` (D-SEED-01): it runs
+ * AFTER the add already committed, per-entry failures are swallowed, and the
+ * whole sweep never disturbs the committed add. A plugin whose canonical URL
+ * differs from the marketplace's is left untouched (SEED-03 different-repo). A
+ * pinned source seeds only when its sha is reachable in the copied history
+ * (SEED-04); an unreachable pin falls back to the normal network path. install
+ * / fetch continue to handle a cold mirror through their normal materialize
+ * path, so no second hook is needed. clone-cache.ts is the git-surface-allowed
+ * seam, so no gated read orchestrator gains a git token (NFR-5).
+ */
+export async function seedSameRepoPluginMirrors(args: {
+  locations: ScopedLocations;
+  marketplaceName: string;
+  gitOps?: GitOps;
+}): Promise<void> {
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  const { locations, marketplaceName } = args;
+
+  const state = await loadState(locations.extensionRoot);
+  const mp = state.marketplaces[marketplaceName];
+  if (mp === undefined) {
+    return;
+  }
+
+  const marketplaceUrl = await deriveMarketplaceUrl(mp.source, mp.marketplaceRoot);
+  if (marketplaceUrl === undefined) {
+    return;
+  }
+
+  const manifest = await loadMarketplaceManifest(mp.manifestPath);
+  for (const entry of manifest.plugins) {
+    const src = parsePluginSource(entry.source);
+    if (src.kind !== "url" && src.kind !== "git-subdir" && src.kind !== "github") {
+      continue;
+    }
+
+    // SEED-03: a different-repo git source is unaffected -- skip it so it keeps
+    // its normal `(remote)` -> network-clone behavior.
+    if (canonicalCloneUrl(src) !== marketplaceUrl) {
+      continue;
+    }
+
+    try {
+      await seedOnePluginMirror(locations, gitOps, src, marketplaceUrl, mp.marketplaceRoot);
+    } catch {
+      // Best-effort (D-SEED-01): a per-entry seed failure leaves the plugin
+      // `(remote)` for the normal network path; the committed add is untouched.
+    }
+  }
 }
 
 /**

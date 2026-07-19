@@ -73,6 +73,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
@@ -582,6 +583,18 @@ export async function addMarketplace(
     // shape for "cache failure after a successful state mutation" and
     // emitting a second notify() would double severity routing. The state
     // mutation already succeeded; only the completion-cache is stale.
+  }
+
+  // D-SEED-01 / SEED-01..06: best-effort post-commit seeding of same-repo git
+  // plugin mirrors from the local marketplace checkout, network-free. Runs in
+  // the same swallowing tier as the cache invalidation above so a seeding
+  // failure can never roll back the already-committed add (NFR-3). Placed BEFORE
+  // the orchestrated return so both standalone and reconcile-driven adds seed;
+  // seeding touches no network, so it is load-time safe (NFR-5).
+  try {
+    await seedSameRepoPluginMirrors({ locations, marketplaceName: recordedName, gitOps });
+  } catch {
+    // Seeding is best-effort; the add already committed.
   }
 
   if (orchestrated) {
