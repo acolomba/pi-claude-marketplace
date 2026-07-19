@@ -215,19 +215,25 @@ function mapModel(raw: string | undefined): {
 
 /**
  * Map source tool tokens to Pi names via TOOL_MAP; unknown tokens land in
- * `dropped`. Pure mapping/dropping -- no warnings here. AGSK-03 / D-82-08:
- * ONLY the `Skill` drop is explained (exact match, like TOOL_MAP lookups)
- * -- warning on every dropped tool would change output bytes for agents
- * that must stay byte-identical. The Skill warning is pushed by mapTools
- * AFTER disallowedTools is read, because its wording branches on
- * declared-AND-allowed (AGSK-05 / D-83-01): allowed agents get the
- * D-83-04 skill-discovery wording; declared-but-disallowed agents keep
- * the D-82-09 wording. Tests pin both wordings byte-for-byte.
+ * `dropped`. Pure mapping/dropping -- no warnings here. AGSK-03 / AGSK-05 /
+ * D-83.1-01 / D-83.1-02: `Skill` is excluded from classification entirely
+ * (neither mapped nor dropped) because it translates to the `inheritSkills`
+ * flag computed in mapTools from the raw tokens -- both branches operate
+ * exactly as Claude Code does, so there is no droppedTools entry and no
+ * warning in any branch. Every other TOOL_MAP miss still records a
+ * `droppedTools` entry.
  */
 function mapToolTokens(tokens: readonly string[]): { mapped: string[]; dropped: string[] } {
   const mapped: string[] = [];
   const dropped: string[] = [];
   for (const token of tokens) {
+    // AGSK-03 / D-83.1-02: Skill is translated to inheritSkills (computed
+    // in mapTools from raw tokens), never dropped -- no droppedTools entry
+    // and no warning in any branch. Exact match, like TOOL_MAP lookups.
+    if (token === "Skill") {
+      continue;
+    }
+
     const piName = TOOL_MAP[token];
     if (piName === undefined) {
       dropped.push(token);
@@ -270,18 +276,6 @@ function mapTools(
   const inheritSkills = skillDeclared && !disallowedTokens.includes("Skill");
 
   const { mapped, dropped } = mapToolTokens(tokens);
-
-  // AGSK-03 / AGSK-05: the Skill drop is the only explained drop; the
-  // wording branches on declared-AND-allowed (D-83-01 / D-83-04). Order is
-  // preserved in the tools slot: the only other tools-slot warning (the
-  // omitted-tools default) can never co-occur with a Skill declaration.
-  if (skillDeclared) {
-    warnings.push(
-      inheritSkills
-        ? 'dropped tool "Skill" -- mapped to Pi skill discovery (inheritSkills: true): installed Pi skills are discoverable in the child\'s catalog and loadable on demand; catalog names are Pi names, which differ from Claude skill names (see the skill legend in the agent body)'
-        : 'dropped tool "Skill" -- generated agents run with skills discovery disabled (inheritSkills: false); only the skills listed in skills: are preloaded into the child\'s context',
-    );
-  }
 
   // Apply disallowedTools after mapping. Disallowed values are Claude-side
   // names; map them to Pi names then filter the mapped list.

@@ -579,38 +579,23 @@ test("AGSK-02 crafted cross-plugin token cannot terminate the provenance comment
 });
 
 // ---------------------------------------------------------------------------
-// AGSK-03 / D-82-08 / D-82-09: Skill-drop provenance warning in tools mapping
+// AGSK-03 / D-83.1-01 / D-83.1-02: silent Skill conversion in tools mapping
 // ---------------------------------------------------------------------------
 
-/**
- * D-82-09 exact wording -- byte-identical to the literal in convert.ts.
- * After AGSK-05 this remains the wording for agents that do NOT get skill
- * inheritance: Skill declared but disallowed (D-83-01 / D-83-04).
- */
-const SKILL_DROP_WARNING_NO_INHERIT =
-  'dropped tool "Skill" -- generated agents run with skills discovery disabled (inheritSkills: false); only the skills listed in skills: are preloaded into the child\'s context';
-
-/**
- * D-83-04 exact wording -- byte-identical to the literal in convert.ts.
- * The wording for Skill-declared-and-allowed agents (inheritSkills: true).
- */
-const SKILL_INHERIT_WARNING =
-  'dropped tool "Skill" -- mapped to Pi skill discovery (inheritSkills: true): installed Pi skills are discoverable in the child\'s catalog and loadable on demand; catalog names are Pi names, which differ from Claude skill names (see the skill legend in the agent body)';
-
-test("AGSK-03 / AGSK-05 / D-83-04 dropping an allowed Skill tool emits the exact discovery warning", () => {
+test("AGSK-03 / AGSK-05 / D-83.1-01 an allowed Skill tool converts silently: no droppedTools entry, no warning", () => {
   const out = convertSpecTree({ description: "d", tools: "Bash, Read, Skill" });
-  assert.deepEqual([...out.droppedTools], ["Skill"]);
+  assert.deepEqual([...out.droppedTools], []);
+  assert.deepEqual([...out.warnings], []);
   assert.match(frontmatterOf(out.fileContent), /^tools: bash,read$/m);
-  assert.ok(out.warnings.includes(SKILL_INHERIT_WARNING));
 });
 
-test("AGSK-03 / D-82-08 non-Skill drops stay silent in warnings", () => {
+test("AGSK-03 non-Skill drops stay silent in warnings", () => {
   const out = convertSpecTree({ description: "d", tools: "Read,WebFetch" });
   assert.deepEqual([...out.droppedTools], ["WebFetch"]);
   assert.ok(!out.warnings.some((w) => w.startsWith("dropped tool")));
 });
 
-test("AGSK-03 / D-82-08 omitted tools: keeps only the implicit-default warning", () => {
+test("AGSK-03 omitted tools: keeps only the implicit-default warning", () => {
   // The read,bash,edit default contains no Skill, so only today's
   // omitted-tools warning fires.
   const out = convertSpecTree({ description: "d" });
@@ -630,11 +615,12 @@ test("AGSK-03 Skill in disallowedTools only is ignored: no drop entry, no warnin
 });
 
 /**
- * AGSK-05 / D-83-06 / D-83-01 (#86): whole-file bytes for an agent that
- * declares Skill in tools: AND lists Skill in disallowedTools, captured
- * from the converter at the pre-AGSK-05 HEAD. Per D-83-01 a disallowed
- * Skill keeps inheritSkills: false; per D-83-06 this input class must
- * stay byte-identical while Skill-declared-and-allowed agents change.
+ * AGSK-03 / AGSK-05 / D-83.1-01 / D-83.1-02 / D-83.1-04 (#86): whole-file
+ * bytes for an agent that declares Skill in tools: AND lists Skill in
+ * disallowedTools. Pins the amended-AGSK-03 silent contract: a
+ * Skill-declared-but-disallowed agent converts with no Skill warning, no
+ * droppedTools entry, and inheritSkills: false -- Claude-consistent
+ * disallowed-wins suppression.
  * Raw literal on purpose -- no interpolated test constants, so later
  * constant renames can never touch this pin. Never edit this constant to
  * make a converter change pass.
@@ -654,62 +640,55 @@ plugin: spec-tree
 sourceAgent: bot
 sourcePath: /abs/path/source.md
 droppedFields: (none)
-droppedTools: Skill
-warnings: dropped tool "Skill" -- generated agents run with skills discovery disabled (inheritSkills: false); only the skills listed in skills: are preloaded into the child's context
+droppedTools: (none)
+warnings: (none)
 -->
 
 Body content.
 `;
 
-test("AGSK-05 / D-83-06 Skill declared but disallowed is pinned at pre-AGSK-05 bytes", () => {
+test("AGSK-03 / AGSK-05 / D-83.1-04 Skill declared but disallowed pins the silent whole-file bytes", () => {
   const out = convertSpecTree({
     description: "d",
     tools: "Bash, Read, Skill",
     disallowedTools: "Skill",
   });
-  // The drop record is independent of the disallow.
-  assert.deepEqual([...out.droppedTools], ["Skill"]);
+  assert.deepEqual([...out.droppedTools], []);
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: false$/m);
   assert.equal(out.fileContent, DISALLOWED_SKILL_EXPECTED);
 });
 
-test("AGSK-03 aggregate warnings order: tools slot strictly before skills slot", () => {
+test("AGSK-03 / D-83.1-01 Skill contributes zero warnings even alongside other warnings", () => {
   // Warnings order is provenance-visible bytes: description -> model ->
-  // tools -> thinking -> skills. The Skill-drop warning lands in the tools
-  // slot, the cross-plugin drop in the skills slot.
+  // tools -> thinking -> skills. The Skill declaration adds nothing to the
+  // tools slot; only the cross-plugin skill drop fires.
   const out = convertSpecTree({
     description: "d",
     tools: "Bash, Read, Skill",
     skills: "other-plugin:x",
   });
-  assert.deepEqual(out.warnings, [
-    SKILL_INHERIT_WARNING,
-    crossPluginSkillWarning("other-plugin:x"),
-  ]);
+  assert.deepEqual(out.warnings, [crossPluginSkillWarning("other-plugin:x")]);
 });
 
 // ---------------------------------------------------------------------------
 // AGSK-05 / D-83-01: Skill tool declaration maps to inheritSkills
 // ---------------------------------------------------------------------------
 
-test("AGSK-05 / D-83-01 / D-83-02 Skill declared and allowed emits inheritSkills: true and keeps the drop record", () => {
+test("AGSK-05 / D-83.1-02 Skill declared and allowed: inheritSkills true, no drop record, no warning", () => {
   const out = convertSpecTree({ description: "d", tools: "Bash, Read, Skill" });
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: true$/m);
-  // D-83-02: Skill stays in droppedTools even when the flag is true.
-  assert.deepEqual([...out.droppedTools], ["Skill"]);
-  assert.ok(out.warnings.includes(SKILL_INHERIT_WARNING));
-  assert.ok(!out.warnings.includes(SKILL_DROP_WARNING_NO_INHERIT));
+  assert.deepEqual([...out.droppedTools], []);
+  assert.deepEqual([...out.warnings], []);
 });
 
-test("AGSK-05 / D-83-01 / D-83-04 Skill declared but disallowed keeps inheritSkills: false and the no-inherit wording", () => {
+test("AGSK-03 / D-83.1-01 Skill declared but disallowed: inheritSkills false, silent", () => {
   const out = convertSpecTree({
     description: "d",
     tools: "Bash, Read, Skill",
     disallowedTools: "Skill",
   });
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: false$/m);
-  assert.ok(out.warnings.includes(SKILL_DROP_WARNING_NO_INHERIT));
-  assert.ok(!out.warnings.includes(SKILL_INHERIT_WARNING));
+  assert.deepEqual([...out.warnings], []);
 });
 
 test("AGSK-05 / D-83-01 Skill not declared keeps inheritSkills: false with no dropped-tool warning", () => {
@@ -1035,12 +1014,12 @@ function convertCanonical(sourceText: string): ReturnType<typeof convertAgent> {
   });
 }
 
-test("#86 canonical agent converts end to end with correct frontmatter, provenance, warning, and legend", () => {
+test("#86 canonical agent converts end to end with correct frontmatter, provenance, and legend", () => {
   const out = convertCanonical(
     makeCanonicalSource("Invoke spec-tree:review-changes on the diff.\n"),
   );
 
-  // Frontmatter: Skill dropped from tools, block-list skill mapped.
+  // Frontmatter: Skill translated to inheritSkills, block-list skill mapped.
   const frontmatter = frontmatterOf(out.fileContent);
   assert.match(frontmatter, /^tools: bash,read$/m);
   assert.match(frontmatter, /^skills: spec-tree-review-changes$/m);
@@ -1049,9 +1028,10 @@ test("#86 canonical agent converts end to end with correct frontmatter, provenan
   assert.ok(!out.droppedFields.includes("- spec-tree"));
   assert.deepEqual([...out.droppedFields], []);
 
-  // Provenance: the Skill drop is recorded and explained (D-83-04).
-  assert.deepEqual([...out.droppedTools], ["Skill"]);
-  assert.ok(out.warnings.includes(SKILL_INHERIT_WARNING));
+  // Provenance: the Skill translation is silent (AGSK-03 / D-83.1-01 /
+  // D-83.1-02) -- no droppedTools entry, no warning.
+  assert.deepEqual([...out.droppedTools], []);
+  assert.deepEqual([...out.warnings], []);
 
   // Legend: the body reference maps to the preloaded Pi skill.
   assert.ok(
@@ -1081,8 +1061,8 @@ plugin: spec-tree
 sourceAgent: changes-reviewer
 sourcePath: /abs/path/source.md
 droppedFields: (none)
-droppedTools: Skill
-warnings: ${SKILL_INHERIT_WARNING}
+droppedTools: (none)
+warnings: (none)
 -->
 
 ## Pi coding agent skill legend
@@ -1104,8 +1084,8 @@ test("#86 canonical agent without a body token converts with no legend (referenc
   assert.match(frontmatter, /^tools: bash,read$/m);
   assert.match(frontmatter, /^skills: spec-tree-review-changes$/m);
   assert.deepEqual([...out.droppedFields], []);
-  assert.deepEqual([...out.droppedTools], ["Skill"]);
-  assert.ok(out.warnings.includes(SKILL_INHERIT_WARNING));
+  assert.deepEqual([...out.droppedTools], []);
+  assert.deepEqual([...out.warnings], []);
 
   // ...but no legend anywhere in the generated file.
   assert.ok(!out.fileContent.includes(LEGEND_HEADING));
