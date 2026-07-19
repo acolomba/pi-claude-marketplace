@@ -2,7 +2,7 @@
 
 ## url-source URL Sources & Git-Source Fetch (Shipped: 2026-07-18)
 
-**Phases completed:** 4 phases, 20 plans, 49 tasks (url-source archives), plus the fetch-plugin phases folded into this entry -- their planning artifacts were developed out-of-repo and not preserved; scope is recorded in the accomplishments below. Both milestones shipped together as npm 0.9.0.
+**Phases completed:** 4 phases, 20 plans, 49 tasks (url-source archives), plus the fetch-plugin milestone folded into this entry (phases 79.1, 80, 81 -- recovered from the pre-squash development history and archived under `fetch-plugin-*`); scope is summarized in the accomplishments below. Both milestones shipped together as npm 0.9.0.
 
 **Key accomplishments:**
 
