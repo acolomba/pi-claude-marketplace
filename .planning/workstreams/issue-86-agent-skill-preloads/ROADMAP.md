@@ -62,7 +62,19 @@ Plans:
   3. For `Skill`-declaring agents, the body legend annotates known-but-not-preloaded skills as available on demand under their Pi name instead of "not available in this session".
   4. A skill appearing both in the emitted `skills:` list and the inherited catalog is documented by a pinning test as accepted duplication (eager injection + lazy catalog listing).
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+
+- [ ] 83-01-PLAN.md — Disallowed-direction whole-file pin captured at HEAD before any converter change (D-83-06; Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 83-02-PLAN.md — Emitter inheritSkills field + legend "available on demand" render state (D-83-01/05; Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 83-03-PLAN.md — mapTools inherit flag, warning wording branch, threading, and end-to-end pins (D-83-01..07; Wave 3)
 
 ## Progress
 
@@ -72,7 +84,7 @@ Phase 82, then Phase 83.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 82. Agent Skill Preload Fidelity | 4/4 | Complete    | 2026-07-19 |
-| 83. Skill Tool Inherit Mapping | 0/TBD | Not started | - |
+| 83. Skill Tool Inherit Mapping | 0/3 | Planned | - |
 
 ## Coverage
 
