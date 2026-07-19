@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Same-repo git plugin sources are now seeded from the local marketplace checkout at `marketplace add` time instead of re-cloned over the network. When a marketplace manifest declares a git-source plugin (generic git URL, `github`, or `git-subdir`) whose canonical clone URL is the repository the marketplace itself lives in, that plugin's clone is materialized by copying the marketplace's own checkout, so it shows as available/installable right after add (no longer `(remote)`) with no extra network. A sha-pinned source is seeded only when the pin is reachable in the local checkout; an unreachable pin falls back to the normal network path. A source pointing at a different repository is unaffected.
+
 ## [0.9.0] - 2026-07-18
 
 - Git-source plugins. Marketplace manifests can now declare plugin sources as generic git URLs and `git-subdir` references in addition to `github`, with the full lifecycle supported: install, update, reinstall, uninstall, and garbage collection all work against a per-scope clone cache. A source pinned to a manifest `sha` uses an immutable per-sha cache entry; an unpinned source is backed by exactly one mutable mirror clone per canonical URL, refreshed in place, so fetched state always derives from a single well-known directory.
