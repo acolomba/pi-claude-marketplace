@@ -18,7 +18,7 @@
 
 ### Dynamic Skill Access
 
-- [ ] **AGSK-05**: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. Provenance warning for these agents states the mapping and that catalog names differ from Claude names (see body legend); the legend annotates known-but-not-preloaded skills as available on demand under their Pi name. Agents not declaring `Skill` keep `inheritSkills: false` byte-identically.
+- [x] **AGSK-05**: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. Provenance warning for these agents states the mapping and that catalog names differ from Claude names (see body legend); the legend annotates known-but-not-preloaded skills as available on demand under their Pi name. Agents not declaring `Skill` keep `inheritSkills: false` byte-identically.
 
 ## v2 Requirements
 
@@ -41,7 +41,7 @@
 | AGSK-02 | Phase 82 | Complete |
 | AGSK-03 | Phase 82 | Complete |
 | AGSK-04 | Phase 82 | Complete |
-| AGSK-05 | Phase 83 | Pending |
+| AGSK-05 | Phase 83 | Complete |
 
 **Coverage:**
 

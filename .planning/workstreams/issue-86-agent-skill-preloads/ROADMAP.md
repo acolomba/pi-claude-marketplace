@@ -18,7 +18,7 @@ A converted Claude plugin agent that declares skill preloads must work self-suff
 Phase numbering continues from the fetch-plugin milestone (last used: 81).
 
 - [x] **Phase 82: Agent Skill Preload Fidelity** - Block-list frontmatter parsing, plugin-qualified skill mapping, `Skill`-drop provenance warning, and body advisory note — issue #86 end to end (completed 2026-07-19)
-- [ ] **Phase 83: Skill Tool Inherit Mapping** - Source `Skill` tool declaration maps to `inheritSkills: true` with accurate provenance and legend wording
+- [x] **Phase 83: Skill Tool Inherit Mapping** - Source `Skill` tool declaration maps to `inheritSkills: true` with accurate provenance and legend wording (completed 2026-07-19)
 
 ## Phase Details
 
@@ -74,7 +74,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 83-03-PLAN.md — mapTools inherit flag, warning wording branch, threading, and end-to-end pins (D-83-01..07; Wave 3)
+- [x] 83-03-PLAN.md — mapTools inherit flag, warning wording branch, threading, and end-to-end pins (D-83-01..07; Wave 3)
 
 ## Progress
 
@@ -84,7 +84,7 @@ Phase 82, then Phase 83.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 82. Agent Skill Preload Fidelity | 4/4 | Complete    | 2026-07-19 |
-| 83. Skill Tool Inherit Mapping | 2/3 | In Progress|  |
+| 83. Skill Tool Inherit Mapping | 3/3 | Complete   | 2026-07-19 |
 
 ## Coverage
 
