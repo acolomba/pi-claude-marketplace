@@ -4,15 +4,15 @@ milestone: agent-skill-preloads
 milestone_name: milestone
 current_phase: 82
 current_plan: 1
-status: executing
-last_updated: "2026-07-19T15:03:59.227Z"
+status: verifying
+last_updated: "2026-07-19T15:23:10.410Z"
 last_activity: 2026-07-19
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 50
 ---
 
 # Project State
@@ -21,7 +21,7 @@ progress:
 
 Phase: 82 (agent-skill-preload-fidelity) — EXECUTING
 Plan: 4 of 4
-**Status:** Ready to execute
+**Status:** Phase complete — ready for verification
 **Current Phase:** 82
 **Last Activity:** 2026-07-19
 **Last Activity Description:** Phase 82 execution started
@@ -59,6 +59,8 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - [Phase 82]: Cross-plugin skill warning wording locked: skill reference "<token>" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded) — SC-3 requires naming the token; matches existing lowercase ' -- ' warning convention
 - [Phase 82]: Unknown-skill warnings name the full original token (qualifier included), never the stripped remainder — Users can grep the warning text verbatim in source frontmatter
 - [Phase 82]: No dedupe in mapSkills emit list — Byte-identity for duplicate-bearing bare-form agents; pi-subagents dedupes downstream
+- [Phase 82]: Skill legend annotations locked as ASCII parenthesized forms with the U+2192 arrow on both entry kinds, first-occurrence dedupe by token — AGSK-04 satisfied verbatim while surviving the fix-unicode-dashes hook; arrow written as an escape in all .ts literals
+- [Phase 82]: Legend scanner skips the plugin-prefix-only candidate that elides to an empty skill name — A body scan must never throw; assertSafeName throws on the empty elision remainder (T-82-12 completeness)
 
 ### Blockers
 
@@ -66,7 +68,7 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Completed 82-03-PLAN.md
+**Stopped At:** Completed 82-04-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -76,3 +78,4 @@ None.
 | Phase 82 P01 | 7 min | 2 tasks | 1 files |
 | Phase 82 P02 | 8 min | 2 tasks | 2 files |
 | Phase 82 P03 | 7 min | 2 tasks | 2 files |
+| Phase 82 P04 | 14 min | 3 tasks | 4 files |
