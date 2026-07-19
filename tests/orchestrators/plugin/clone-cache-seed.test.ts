@@ -14,7 +14,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -34,6 +34,7 @@ import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 const REPO_URL = "https://example.com/repo";
 const OTHER_URL = "https://other.example.com/different";
@@ -44,6 +45,19 @@ async function freshLocations(): Promise<ScopedLocations> {
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return locations;
+}
+
+/**
+ * Count the leftover entries under `<extensionRoot>/sources-staging/`. A seed
+ * that cleaned its staging dir (warm-cache win or rethrow-and-swallow) leaves
+ * zero -- the parent dir may exist but must be empty.
+ */
+async function stagingEntryCount(locations: ScopedLocations): Promise<number> {
+  try {
+    return (await readdir(path.join(locations.extensionRoot, "sources-staging"))).length;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -275,4 +289,95 @@ void test("SEED-01: an absent marketplace name is a no-op (does not throw)", asy
   await assert.doesNotReject(
     seedSameRepoPluginMirrors({ locations, marketplaceName: "does-not-exist" }),
   );
+});
+
+void test("SEED-02 Case B: a path-marketplace whose origin is not a git source seeds nothing", async () => {
+  const locations = await freshLocations();
+  // The checkout HAS an origin remote, but its URL is a local filesystem path
+  // (not an https git source), so deriveMarketplaceUrl parses it to a `path`
+  // kind and falls through -- no same-repo URL to match, nothing to seed.
+  const mpRoot = await buildMarketplaceCheckout({
+    originUrl: "/some/local/checkout",
+    plugins: [gitSubdirEntry()],
+  });
+  await saveMarketplace(locations, mpRoot, mpRoot);
+
+  await seedSameRepoPluginMirrors({ locations, marketplaceName: "mp" });
+
+  const dest = await locations.pluginCloneDir(pluginMirrorKey(REPO_URL));
+  assert.equal(await pathExists(dest), false, "a non-git-canonical origin seeds nothing");
+});
+
+void test("SEED-04: a concurrent seed winning the rename race is a warm-cache win, not an overwrite", async () => {
+  const locations = await freshLocations();
+  const mpRoot = await buildMarketplaceCheckout({
+    originUrl: REPO_URL,
+    plugins: [gitSubdirEntry({ sha: PIN_40 })],
+  });
+  await saveMarketplace(locations, mpRoot, REPO_URL);
+
+  const dest = await locations.pluginCloneDir(pluginCloneKey(REPO_URL, PIN_40));
+
+  // Simulate a concurrent seed/materialize that populates dest AFTER the warm
+  // short-circuit passed but BEFORE our rename fires: the rename then fails
+  // ENOTEMPTY and the seed treats dest as a byte-equivalent warm-cache win.
+  const base = makeMockGitOps();
+  const gitOps: GitOps = {
+    ...base.gitOps,
+    async checkout(opts): Promise<void> {
+      await base.gitOps.checkout(opts);
+      await mkdir(dest, { recursive: true });
+      await writeFile(path.join(dest, "WINNER"), "concurrent");
+    },
+  };
+
+  await assert.doesNotReject(
+    seedSameRepoPluginMirrors({ locations, marketplaceName: "mp", gitOps }),
+  );
+
+  assert.ok(
+    await pathExists(path.join(dest, "WINNER")),
+    "the concurrent winner's tree survives -- no overwrite by the losing seed",
+  );
+  assert.equal(await stagingEntryCount(locations), 0, "the losing seed's staging dir is cleaned");
+});
+
+void test("SEED-04: a non-EEXIST rename failure is swallowed per-entry; other same-repo entries still seed", async () => {
+  const locations = await freshLocations();
+  // Two same-repo entries: a pinned one whose rename fails ENOENT (below) and an
+  // unpinned one that seeds normally -- proving per-entry isolation.
+  const mpRoot = await buildMarketplaceCheckout({
+    originUrl: REPO_URL,
+    plugins: [
+      { name: "pinned", source: { source: "git-subdir", url: REPO_URL, path: "p", sha: PIN_40 } },
+      gitSubdirEntry(),
+    ],
+  });
+  await saveMarketplace(locations, mpRoot, REPO_URL);
+
+  // The pinned entry's checkout removes the staging tree, so its later
+  // rename(staging -> dest) fails ENOENT -- NOT EEXIST/ENOTEMPTY -- and rethrows
+  // from seedOnePluginMirror into the per-entry swallow in the sweep.
+  const base = makeMockGitOps();
+  const gitOps: GitOps = {
+    ...base.gitOps,
+    async checkout(opts): Promise<void> {
+      await base.gitOps.checkout(opts);
+      await rm(opts.dir, { recursive: true, force: true });
+    },
+  };
+
+  await assert.doesNotReject(
+    seedSameRepoPluginMirrors({ locations, marketplaceName: "mp", gitOps }),
+  );
+
+  const pinnedDest = await locations.pluginCloneDir(pluginCloneKey(REPO_URL, PIN_40));
+  assert.equal(await pathExists(pinnedDest), false, "the ENOENT-failed pinned entry is not seeded");
+
+  const mirrorDest = await locations.pluginCloneDir(pluginMirrorKey(REPO_URL));
+  assert.ok(
+    await pathExists(mirrorDest),
+    "the unpinned entry still seeds -- a per-entry failure does not abort the sweep",
+  );
+  assert.equal(await stagingEntryCount(locations), 0, "the failed entry's staging dir is cleaned");
 });
