@@ -14,7 +14,7 @@ findings:
   warning: 2
   info: 3
   total: 6
-status: issues_found
+status: fixed
 ---
 
 # Phase 82: Code Review Report
@@ -221,6 +221,31 @@ forbids ("phrasing whose only purpose is to record which planning
 artefact authored the line").
 **Fix:** Drop the parenthetical; the surrounding sentence already carries
 the invariant.
+
+## Fixes Applied
+
+Fixed 2026-07-19. `npm run check` green after each commit; byte-identity
+corpus (7 tests) untouched and passing throughout.
+
+- **CR-01** -- `bf62c77b` fix(agents): warn-drop unsafe skill tokens
+  instead of throwing. Catch-based guard around `generatedSkillName`
+  replaces the `""`/`"."`/`".."` enumeration; covers qualified remainders
+  AND bare tokens. Regression tests pin separator, control-char, and
+  bare-token inputs.
+- **WR-01** -- `fade105c` fix(agents): trim whitespace around skill
+  qualifier colon. Both colon slices trimmed; test pins
+  `spec-tree: review-changes` and `spec-tree :review-changes` to the
+  preloaded outcome.
+- **WR-02** -- `fb158171` fix(agents): add dot to legend scanner
+  lookbehind boundary. `.` added to the boundary class; test pins
+  `other.spec-tree:` producing no legend.
+- **IN-03** -- `8f5fcb3d` test(agents): drop planning-artifact reference
+  from comment. `(T-82-12)` parenthetical removed; sweep found no other
+  T-82-NN references.
+
+Not fixed (left as documented observations per fix scope): IN-01
+(duplicate Skill-token warning), IN-02 (`__proto__` frontmatter
+hardening).
 
 ---
 
