@@ -75,6 +75,14 @@ export type ParsedSource =
   | NpmSource
   | UnknownSource;
 
+/**
+ * The git-clonable source kinds (url / git-subdir / github): the sources that
+ * materialize a plugin from a remote clone. One shared alias so consumers
+ * (presence/materialize probes, clone seams, row builders) reference a single
+ * name instead of re-declaring the three-member union.
+ */
+export type GitBackedSource = UrlSource | GitSubdirSource | GitHubSource;
+
 /** Per-user tilde reject message (SP-4). */
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";
 
@@ -373,15 +381,13 @@ function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
 }
 
 /**
- * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
- * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
- * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then
- * strip a single trailing `.git`. Normalizing the `.git` suffix at parse time
- * is the identity rule that lets `sourceLogical` / `samePlannedSource` compare
- * `https://host/repo.git` and `https://host/repo` as the same source (D-76-01).
+ * Shared canonicalization tail for https sources (`parseUrlSource` /
+ * `parseGitHubUrl`): strip trailing slashes, split off an optional `#<ref>`
+ * fragment (SP-5: empty fragment dropped), then strip a single trailing
+ * `.git` suffix.
  */
-function parseUrlSource(raw: string): UrlSource {
-  let rest = raw;
+function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
+  let rest = input;
 
   while (rest.endsWith("/")) {
     rest = rest.slice(0, -1);
@@ -401,12 +407,25 @@ function parseUrlSource(raw: string): UrlSource {
     rest = rest.slice(0, -".git".length);
   }
 
-  return ref === undefined ? { kind: "url", raw, url: rest } : { kind: "url", raw, url: rest, ref };
+  return { base: rest, ref };
+}
+
+/**
+ * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
+ * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
+ * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then
+ * strip a single trailing `.git`. Normalizing the `.git` suffix at parse time
+ * is the identity rule that lets `sourceLogical` / `samePlannedSource` compare
+ * `https://host/repo.git` and `https://host/repo` as the same source (D-76-01).
+ */
+function parseUrlSource(raw: string): UrlSource {
+  const { base, ref } = stripUrlDecorations(raw);
+  return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
 function parseGitHubUrl(raw: string): ParsedSource {
   // strip prefix
-  let rest = raw.slice("https://github.com/".length);
+  const rest = raw.slice("https://github.com/".length);
 
   // SP-3: browser-paste /tree/<ref> URL
   const treeIdx = rest.indexOf("/tree/");
@@ -420,29 +439,12 @@ function parseGitHubUrl(raw: string): ParsedSource {
     };
   }
 
-  // strip trailing slash
-  while (rest.endsWith("/")) {
-    rest = rest.slice(0, -1);
-  }
-
-  // optional #<ref> fragment (SP-5: empty fragment dropped)
-  let ref: string | undefined;
-  const hashIdx = rest.indexOf("#");
-  if (hashIdx !== -1) {
-    const frag = rest.slice(hashIdx + 1);
-    rest = rest.slice(0, hashIdx);
-    if (frag.length > 0) {
-      ref = frag;
-    }
-  }
-
-  // strip optional .git suffix
-  if (rest.endsWith(".git")) {
-    rest = rest.slice(0, -".git".length);
-  }
+  // strip trailing slash, optional #<ref> fragment (SP-5: empty fragment
+  // dropped), and optional .git suffix
+  const { base, ref } = stripUrlDecorations(rest);
 
   // validate exactly owner/repo
-  const parts = rest.split("/");
+  const parts = base.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     return {
       kind: "unknown",

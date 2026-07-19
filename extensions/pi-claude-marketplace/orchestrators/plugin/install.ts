@@ -120,6 +120,7 @@ import {
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
 import { notify } from "../../shared/notify.ts";
@@ -153,7 +154,7 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
-import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -513,7 +514,7 @@ function buildProbeAuth(
  * Shared by the pinned and the unpinned (mirror) probe arms.
  */
 async function resolveGitPluginRootWithSubdir(
-  gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  gitSource: GitBackedSource,
   cloneRoot: string,
   resolvedSha: string,
 ): Promise<GitPluginRootResult> {
@@ -559,7 +560,7 @@ function makeInstallCloneProbe(
     authMemo?: Map<string, AuthAttemptResult>;
   },
 ): {
-  probe: (source: UrlSource | GitSubdirSource | GitHubSource) => Promise<GitPluginRootResult>;
+  probe: (source: GitBackedSource) => Promise<GitPluginRootResult>;
   resolvedSha: () => string | undefined;
 } {
   let captured: string | undefined;
@@ -569,9 +570,7 @@ function makeInstallCloneProbe(
   // `plugin-clones/<urlhash12>/`, not the per-sha immutable cache. The fork
   // lives INSIDE the probe callback so install.ts still names no git surface;
   // it reaches the mirror seam only by name.
-  const probeUnpinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
     const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
@@ -591,9 +590,7 @@ function makeInstallCloneProbe(
     return result;
   };
 
-  const probePinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await seam.resolvePluginPin({ source: gitSource });
     const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
     const cloneRoot = await seam.materializePluginClone({
@@ -614,9 +611,7 @@ function makeInstallCloneProbe(
     return result;
   };
 
-  const probe = (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> =>
+  const probe = (gitSource: GitBackedSource): Promise<GitPluginRootResult> =>
     gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
 
   return { probe, resolvedSha: () => captured };
@@ -1876,9 +1871,10 @@ function composeNotInstallableMessage(
  * unsuccessful device flow (denied / expired / poll network error) makes
  * platform/git.ts's onAuth return `{ cancel: true }`, which isomorphic-git
  * throws as `UserCanceledError` instead. The seam append-leak-rethrows either
- * up to the install catch. Duck-typed on `.code === "HttpError"` + 401/403 and
- * on the `UserCanceledError` code/name (D-13: no isomorphic-git import in the
- * orchestrator tier), mirroring `plugin/update.ts::classifyGitProbeFailure`.
+ * up to the install catch; both shapes narrow through the shared
+ * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
+ * classification: a network-class transport failure stays undefined here so it
+ * rides the generic-runtime cause-chain fallthrough.
  *
  * D-79-03 (amended): the install row is the BARE `(failed) {authentication
  * required}` -- no `no auth provider is registered for <host>` cause line (the
@@ -1888,24 +1884,9 @@ function composeNotInstallableMessage(
  * keeps its generic-runtime cause-chain fallthrough.
  */
 function classifyGitAuthFailure(err: unknown): "authentication required" | undefined {
-  if (!(err instanceof Error)) {
-    return undefined;
-  }
-
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-    return "authentication required";
-  }
-
-  // A device flow that terminates unsuccessfully makes onAuth return
-  // `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError` --
-  // a real auth failure, NOT an HttpError 401/403.
-  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
-    return "authentication required";
-  }
-
-  return undefined;
+  return classifyGitTransportFailure(err) === "authentication required"
+    ? "authentication required"
+    : undefined;
 }
 
 function composeInstallFailureMessage(args: {

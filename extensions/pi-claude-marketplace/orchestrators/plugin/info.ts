@@ -48,17 +48,12 @@ import {
   type ResolvedPluginUnavailable,
   type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
-import {
-  parsePluginSource,
-  type GitHubSource,
-  type GitSubdirSource,
-  type ParsedSource,
-  type UrlSource,
-} from "../../domain/source.ts";
+import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -217,7 +212,7 @@ function isLocallyResolvable(src: ParsedSource): boolean {
  * kind handled by its own arm. Narrows to the git-source union so callers can
  * feed the presence probe (whose input is exactly these three kinds).
  */
-function isGitSource(src: ParsedSource): src is UrlSource | GitSubdirSource | GitHubSource {
+function isGitSource(src: ParsedSource): src is GitBackedSource {
   return src.kind === "url" || src.kind === "git-subdir" || src.kind === "github";
 }
 
@@ -771,17 +766,17 @@ async function buildBlock(
 
   // (d) / (e) Not installed -> resolve to classify remote / available /
   // partially-available / unavailable.
-  const row = await buildNotInstalledRow(
+  const row = await buildNotInstalledRow({
     pluginName,
-    manifestVersion,
+    version: manifestVersion,
     description,
     dependencies,
     entry,
     mpRecord,
     parsedSource,
     locations,
-    fetchCtx,
-  );
+    ...(fetchCtx !== undefined && { fetchCtx }),
+  });
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
 
@@ -1002,9 +997,7 @@ interface InfoFetchContext {
  * arms return the same `GitPluginRootResult` shape so the row builders classify
  * warm/cold identically regardless of which probe ran.
  */
-type GitProbe = (
-  source: UrlSource | GitSubdirSource | GitHubSource,
-) => Promise<GitPluginRootResult>;
+type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
 
 /**
  * FTCH-06 / T-81-08: build the host-keyed auth bundle for a resolved cloneUrl at
@@ -1036,7 +1029,7 @@ function buildFetchAuth(
  * `install.ts::resolveGitPluginRootWithSubdir`.
  */
 async function resolveFetchedPluginRoot(
-  gitSource: UrlSource | GitSubdirSource | GitHubSource,
+  gitSource: GitBackedSource,
   cloneRoot: string,
   resolvedSha: string,
 ): Promise<GitPluginRootResult> {
@@ -1064,9 +1057,7 @@ async function resolveFetchedPluginRoot(
  * callback so info still names no git surface (it reaches the seam only by name).
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
-  const probeUnpinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
     const { pluginRoot: mirrorRoot, resolvedSha } =
@@ -1079,9 +1070,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveFetchedPluginRoot(gitSource, mirrorRoot, resolvedSha);
   };
 
-  const probePinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
     const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
@@ -1099,59 +1088,17 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
 }
 
 /**
- * FTCH-04 / D-81-04 / T-81-08: classify an `info --fetch` materialize throw into
- * the EXISTING closed-set `network unreachable` / `authentication required`
- * REASONS -- no new token. Duck-typed on the isomorphic-git `HttpError`
- * (`.code === "HttpError"` + 401/403 status), the `UserCanceledError` a
- * denied/expired Device Flow surfaces (the git layer's onAuth returns
- * `{ cancel: true }`), + the errno ladder, mirroring
- * `update.ts::classifyGitProbeFailure` (no isomorphic-git import in the
- * orchestrator tier). Returns undefined for a non-network throw so the caller
- * folds through the existing `narrowProbeError` ladder instead.
- */
-function classifyFetchFailure(
-  err: unknown,
-): "network unreachable" | "authentication required" | undefined {
-  if (!(err instanceof Error)) {
-    return undefined;
-  }
-
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-    return "authentication required";
-  }
-
-  // isomorphic-git throws `UserCanceledError` (both `code` and `name` carry the
-  // string) when onAuth returns `{ cancel: true }` -- a denied/expired Device
-  // Flow is an auth failure, not a network one.
-  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
-    return "authentication required";
-  }
-
-  if (
-    code === "ENETUNREACH" ||
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNRESET" ||
-    code === "EAI_AGAIN"
-  ) {
-    return "network unreachable";
-  }
-
-  return undefined;
-}
-
-/**
- * D-81-04: fold a git-source fetch/read throw to a closed-set reason. A
- * network/auth materialize failure narrows to `network unreachable` /
- * `authentication required` (fetch parity with install/update); any other throw
- * (warm-tree disk error, etc.) falls through to the existing `narrowProbeError`
- * ladder. Never returns a new REASONS member.
+ * FTCH-04 / D-81-04 / T-81-08: fold a git-source fetch/read throw to a
+ * closed-set reason. An `info --fetch` materialize failure narrows through the
+ * shared `classifyGitTransportFailure` ladder (HttpError 401/403 and a
+ * denied/expired Device Flow's `UserCanceledError` -> `authentication
+ * required`, network errnos -> `network unreachable` -- fetch parity with
+ * install/update); any other throw (warm-tree disk error, etc.) falls through
+ * to the existing `narrowProbeError` ladder. Never returns a new REASONS
+ * member.
  */
 function foldFetchOrProbeError(err: unknown): ContentReason {
-  return classifyFetchFailure(err) ?? narrowProbeError(err);
+  return classifyGitTransportFailure(err) ?? narrowProbeError(err);
 }
 
 /**
@@ -1177,7 +1124,7 @@ async function buildInstalledGitRow(opts: {
   entry: MarketplaceManifest["plugins"][number];
   mpRecord: MarketplaceRecord;
   installedRecord: MarketplaceRecord["plugins"][string];
-  gitSource: UrlSource | GitSubdirSource | GitHubSource;
+  gitSource: GitBackedSource;
   locations: ScopedLocations;
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
@@ -1457,7 +1404,7 @@ async function buildGitNotInstalledRow(opts: {
   dependencies: readonly string[] | undefined;
   entry: MarketplaceManifest["plugins"][number];
   mpRecord: MarketplaceRecord;
-  gitSource: UrlSource | GitSubdirSource | GitHubSource;
+  gitSource: GitBackedSource;
   locations: ScopedLocations;
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
@@ -1594,17 +1541,19 @@ async function buildWarmGitNonInstallableRow(
  * `(unavailable)`; the per-kind component arrays follow the same
  * INFO-05 source-kind gate as the installed row.
  */
-async function buildNotInstalledRow(
-  pluginName: string,
-  version: string | undefined,
-  description: string | undefined,
-  dependencies: readonly string[] | undefined,
-  entry: MarketplaceManifest["plugins"][number],
-  mpRecord: MarketplaceRecord,
-  parsedSource: ParsedSource,
-  locations: ScopedLocations,
-  fetchCtx?: InfoFetchContext,
-): Promise<PluginInfoRow> {
+async function buildNotInstalledRow(opts: {
+  pluginName: string;
+  version: string | undefined;
+  description: string | undefined;
+  dependencies: readonly string[] | undefined;
+  entry: MarketplaceManifest["plugins"][number];
+  mpRecord: MarketplaceRecord;
+  parsedSource: ParsedSource;
+  locations: ScopedLocations;
+  fetchCtx?: InfoFetchContext;
+}): Promise<PluginInfoRow> {
+  const { pluginName, version, description, dependencies, entry, mpRecord, parsedSource } = opts;
+  const { locations, fetchCtx } = opts;
   // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
   // git-subdir / github) is classified from its clone/mirror presence. Bare info
   // reads it fs-only: a COLD clone renders `(remote)` + `components: not

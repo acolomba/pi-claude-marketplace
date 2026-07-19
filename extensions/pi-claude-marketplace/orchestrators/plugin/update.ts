@@ -106,6 +106,7 @@ import {
   PluginUpdatePhase3Error,
   type Phase3Failure,
 } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import {
   notifyUpdateNoOpWithContext,
@@ -145,12 +146,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
-import type {
-  GitHubSource,
-  GitSubdirSource,
-  ParsedSource,
-  UrlSource,
-} from "../../domain/source.ts";
+import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -766,7 +762,7 @@ function makeUpdateCloneProbe(
     authMemo?: Map<string, AuthAttemptResult>;
   },
 ): {
-  probe: (source: UrlSource | GitSubdirSource | GitHubSource) => Promise<GitPluginRootResult>;
+  probe: (source: GitBackedSource) => Promise<GitPluginRootResult>;
   resolvedSha: () => string | undefined;
 } {
   let captured: string | undefined;
@@ -774,7 +770,7 @@ function makeUpdateCloneProbe(
   // PROV-02/03 / T-79-09: build a host-keyed auth bundle from the CANONICAL clone
   // url (undefined for a public / no-provider host, or whenever `ctx` is absent
   // -- the cascade path has no user UI to prompt). Shared by both probe arms.
-  const buildBundle = (gitSource: UrlSource | GitSubdirSource | GitHubSource, cloneUrl: string) => {
+  const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
     if (auth.ctx === undefined) {
       return undefined;
     }
@@ -796,9 +792,7 @@ function makeUpdateCloneProbe(
   // tests/architecture/no-orchestrator-network.test.ts), but the mirror git
   // surface still lives in the clone-cache seam; the probe reaches it only by
   // name for parity with install.
-  const probeUnpinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = buildBundle(gitSource, cloneUrl);
     const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
@@ -824,9 +818,7 @@ function makeUpdateCloneProbe(
     return { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha };
   };
 
-  const probePinned = async (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> => {
+  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const authBundle = buildBundle(gitSource, canonicalCloneUrl(gitSource));
     // The bundle threads into BOTH the pin resolution AND the re-clone.
     const { cloneUrl, pin, ref } = await seam.resolvePluginPin({
@@ -857,60 +849,10 @@ function makeUpdateCloneProbe(
     return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: pin };
   };
 
-  const probe = (
-    gitSource: UrlSource | GitSubdirSource | GitHubSource,
-  ): Promise<GitPluginRootResult> =>
+  const probe = (gitSource: GitBackedSource): Promise<GitPluginRootResult> =>
     gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
 
   return { probe, resolvedSha: () => captured };
-}
-
-/**
- * PURL-06 / D-78-05 / NFR-3: classify a git-source candidate-probe throw
- * (mirror-refresh / materialize network failure) into the EXISTING closed-set
- * `network unreachable` / `authentication required` REASONS -- no new token. The
- * probe re-resolves an unpinned entry's remote HEAD by refreshing its mirror at
- * update time, so a vanished or unreachable repo surfaces here as a fail-clean
- * skipped outcome (the plugin stays on its recorded sha). Duck-typed on the
- * isomorphic-git `HttpError` (`.code === "HttpError"` + 401/403 status), the
- * `UserCanceledError` shape an unsuccessful device-flow auth surfaces as, and
- * the errno ladder, mirroring `marketplace/add.ts::classifyAddError` (D-13: no
- * isomorphic-git import in the orchestrator tier). Returns undefined for a
- * non-network throw so the caller keeps its `no longer installable` fallthrough.
- */
-function classifyGitProbeFailure(
-  err: unknown,
-): "network unreachable" | "authentication required" | undefined {
-  if (!(err instanceof Error)) {
-    return undefined;
-  }
-
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-    return "authentication required";
-  }
-
-  // A device flow that terminates unsuccessfully (denied / expired / poll
-  // network error) makes platform/git.ts's onAuth return `{ cancel: true }`,
-  // which isomorphic-git throws as `UserCanceledError` -- a real auth failure,
-  // NOT an HttpError 401/403.
-  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
-    return "authentication required";
-  }
-
-  if (
-    code === "ENETUNREACH" ||
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNRESET" ||
-    code === "EAI_AGAIN"
-  ) {
-    return "network unreachable";
-  }
-
-  return undefined;
 }
 
 /**
@@ -948,9 +890,7 @@ async function deriveUpdateToVersion(
 async function resolveUpdateCandidate(
   entry: PluginEntry,
   marketplaceRoot: string,
-  resolveGitPluginRoot: (
-    source: UrlSource | GitSubdirSource | GitHubSource,
-  ) => Promise<GitPluginRootResult>,
+  resolveGitPluginRoot: (source: GitBackedSource) => Promise<GitPluginRootResult>,
   ctx: { readonly plugin: string; readonly fromVersion: string; readonly partial: boolean },
 ): Promise<MaterializablePlugin | PluginUpdateOutcome> {
   const { plugin, fromVersion, partial } = ctx;
@@ -975,11 +915,13 @@ async function resolveUpdateCandidate(
     // unpinned entry's remote HEAD (D-78-05) and materializes the clone -- so a
     // vanished / unreachable repo throws a network error HERE.
     //
-    // PURL-06 / NFR-3: a git-probe network throw is fail-clean -- classify it to
-    // the EXISTING `network unreachable` / `authentication required` REASON (no
-    // new token); the plugin STAYS on its recorded sha. The raw error text rides
-    // `notes` for the cause chain.
-    const networkReason = classifyGitProbeFailure(err);
+    // PURL-06 / NFR-3 / D-78-05: a git-probe network throw is fail-clean --
+    // classify it through the shared `classifyGitTransportFailure` ladder to the
+    // EXISTING `network unreachable` / `authentication required` REASON (no new
+    // token); the plugin STAYS on its recorded sha. The raw error text rides
+    // `notes` for the cause chain; an unclassified (non-transport) throw keeps
+    // the `no longer installable` fallthrough below.
+    const networkReason = classifyGitTransportFailure(err);
     if (networkReason !== undefined) {
       return {
         partition: "skipped",

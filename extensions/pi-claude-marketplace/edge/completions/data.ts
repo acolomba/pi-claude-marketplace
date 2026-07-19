@@ -419,6 +419,20 @@ async function getInstalledPluginToMarketplacesMap(
   // (`upgradable` + `partially-upgradable` + `partially-installed-upgradable`) -- plain
   // `installed` / `partially-installed` have no newer candidate to upgrade to.
   const allowed = partial ? PARTIAL_UPDATE_STATUSES : INSTALLED_INVENTORY_STATUSES;
+  return collectPluginToMarketplacesMap(resolver, explicitScope, allowed);
+}
+
+/**
+ * Shared scope sweep for the status-filtered candidate maps: walk every
+ * marketplace in the requested scopes (both when no explicit `--scope`),
+ * read each cached plugin index, and admit every row whose derived status is
+ * in `allowed` into the plugin -> marketplaces map.
+ */
+async function collectPluginToMarketplacesMap(
+  resolver: LocationsResolver,
+  explicitScope: Scope | undefined,
+  allowed: ReadonlySet<PluginIndexRow["status"]>,
+): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
@@ -455,27 +469,7 @@ async function getFetchPluginToMarketplacesMap(
   resolver: LocationsResolver,
   explicitScope: Scope | undefined,
 ): Promise<Map<string, string[]>> {
-  const result = new Map<string, string[]>();
-  const scopes: readonly Scope[] =
-    explicitScope === undefined ? ["project", "user"] : [explicitScope];
-  for (const scope of scopes) {
-    const names = await marketplaceNamesForScope(resolver, scope);
-    for (const mp of names) {
-      const cachePath = await resolver.pluginCachePath(scope, mp);
-      const rows = await getPluginIndex(cachePath, scope, mp, () =>
-        rebuildPluginIndex(resolver, scope, mp),
-      );
-      for (const row of rows) {
-        if (!FETCH_STATUSES.has(row.status)) {
-          continue;
-        }
-
-        addMapping(result, row.name, mp);
-      }
-    }
-  }
-
-  return result;
+  return collectPluginToMarketplacesMap(resolver, explicitScope, FETCH_STATUSES);
 }
 
 /**

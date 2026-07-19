@@ -20,8 +20,8 @@
  * only `import type` from platform/git.ts is permitted -- so consumers
  * (install.ts) that import it stay clean under the no-orchestrator-network
  * gate. It imports the provider registry (domain), the Device Flow engine
- * (domain), the raw notify seam (shared), the `DEFAULT_CREDENTIAL_OPS` value
- * (platform/git-credential.ts), and credential/auth types.
+ * (domain), the raw notify seam (shared), and credential/auth types, and
+ * re-exports the `DEFAULT_CREDENTIAL_OPS` value (platform/git-credential.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
@@ -29,7 +29,6 @@
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../platform/git-credential.ts";
 import { makeRawNotifyFn } from "../shared/notify.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
@@ -44,7 +43,7 @@ import type { GitAuthBundle } from "./marketplace/shared.ts";
 // no-orchestrator-network gate greps for any `platform/git` import, even
 // type-only -- so this gate-clean module is their single sanctioned re-export
 // point for the auth bundle inputs (T-79-10).
-export { DEFAULT_CREDENTIAL_OPS };
+export { DEFAULT_CREDENTIAL_OPS } from "../platform/git-credential.ts";
 export type { AuthAttemptResult, CredentialOps, DeviceFlowHttp };
 
 /**

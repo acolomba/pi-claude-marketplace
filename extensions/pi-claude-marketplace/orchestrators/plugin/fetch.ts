@@ -31,6 +31,7 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -54,7 +55,7 @@ import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
 import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notify.ts";
@@ -62,7 +63,6 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
-type GitSource = UrlSource | GitSubdirSource | GitHubSource;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public surface
@@ -186,9 +186,10 @@ export async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
     });
   }
 
-  const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks.sort((a, b) =>
+  blocks.sort((a, b) =>
     compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
   );
+  const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks;
 
   notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
 }
@@ -332,7 +333,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     return skippedUpToDate(entry);
   }
 
-  const gitSource: GitSource = source;
+  const gitSource: GitBackedSource = source;
 
   try {
     // (2) fs-only no-op gate. A PINNED source whose clone is already present is
@@ -364,7 +365,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
  * only through the seam.
  */
 async function materializeThroughSeam(
-  gitSource: GitSource,
+  gitSource: GitBackedSource,
   deps: FetchOneDeps,
   locations: ScopedLocations,
 ): Promise<void> {
@@ -550,43 +551,23 @@ function failedRow(entry: ManifestEntry, err: unknown): FetchMsg {
 
 /**
  * Narrow a git-materialize throw into an EXISTING closed-set REASON -- no new
- * token. Duck-typed on the isomorphic-git `HttpError` (401/403 -> auth) and
- * `UserCanceledError` (auth flow terminated), plus the errno ladder
- * (network / fs), mirroring update's `classifyGitProbeFailure` + the errno arms
- * of `reasonsFromTypedError`. A non-recognized throw folds to `source missing`
- * (the fail-clean default -- the tree could not be produced).
+ * token. The shared `classifyGitTransportFailure` ladder handles the
+ * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (the auth
+ * flow terminated unsuccessfully), and network-errno arms; fetch adds the fs
+ * errno arms of `reasonsFromTypedError` and folds any non-recognized throw to
+ * `source missing` (the fail-clean default -- the tree could not be produced).
  */
 function narrowFetchFailure(err: unknown): ContentReason {
-  if (!(err instanceof Error)) {
-    return "source missing";
+  const transport = classifyGitTransportFailure(err);
+  if (transport !== undefined) {
+    return transport;
   }
 
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-    return "authentication required";
-  }
-
-  // isomorphic-git throws UserCanceledError when onAuth returns
-  // `{ cancel: true }` -- the device flow terminated unsuccessfully (denied /
-  // expired / poll failure). An auth outcome, not a missing source.
-  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
-    return "authentication required";
-  }
-
-  if (
-    code === "ENETUNREACH" ||
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNRESET" ||
-    code === "EAI_AGAIN"
-  ) {
-    return "network unreachable";
-  }
-
-  if (code === "EACCES" || code === "EPERM") {
-    return "permission denied";
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      return "permission denied";
+    }
   }
 
   return "source missing";
