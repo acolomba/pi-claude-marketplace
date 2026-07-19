@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: agent-skill-preloads
 milestone_name: milestone
 current_phase: 83
-current_plan: Not started
+current_plan: 1
 status: executing
-last_updated: "2026-07-19T16:30:40.754Z"
+last_updated: "2026-07-19T16:41:51.075Z"
 last_activity: 2026-07-19
 progress:
   total_phases: 2
@@ -19,24 +19,24 @@ progress:
 
 ## Current Position
 
-Phase: 82 (agent-skill-preload-fidelity) — EXECUTING
-Plan: 4 of 4
+Phase: 83 (skill-tool-inherit-mapping) — EXECUTING
+Plan: 2 of 3
 **Status:** Ready to execute
 **Current Phase:** 83
 **Last Activity:** 2026-07-19
-**Last Activity Description:** Phase 83 planning complete — 3 plans ready
+**Last Activity Description:** Phase 83 execution started
 
 ## Progress
 
 **Phases Complete:** 0 of 1
-**Current Plan:** Not started
+**Current Plan:** 1
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-07-19)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
-**Current focus:** Phase 83 — skill tool inherit mapping
+**Current focus:** Phase 83 — skill-tool-inherit-mapping
 
 ## Working Context
 
@@ -79,3 +79,4 @@ None.
 | Phase 82 P02 | 8 min | 2 tasks | 2 files |
 | Phase 82 P03 | 7 min | 2 tasks | 2 files |
 | Phase 82 P04 | 14 min | 3 tasks | 4 files |
+| Phase 83 P01 | 6 min | 2 tasks | 1 files |

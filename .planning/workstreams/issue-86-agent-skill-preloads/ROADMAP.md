@@ -66,7 +66,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 83-01-PLAN.md — Disallowed-direction whole-file pin captured at HEAD before any converter change (D-83-06; Wave 1)
+- [x] 83-01-PLAN.md — Disallowed-direction whole-file pin captured at HEAD before any converter change (D-83-06; Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -84,7 +84,7 @@ Phase 82, then Phase 83.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 82. Agent Skill Preload Fidelity | 4/4 | Complete    | 2026-07-19 |
-| 83. Skill Tool Inherit Mapping | 0/3 | Planned | - |
+| 83. Skill Tool Inherit Mapping | 1/3 | In Progress|  |
 
 ## Coverage
 
