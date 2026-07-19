@@ -112,7 +112,7 @@ All 5 v1 requirements mapped. No orphans.
 Plans:
 **Wave 1**
 
-- [ ] 83.1-01-PLAN.md — Silent Skill conversion: Seam A droppedTools exclusion, warning removal, provenance re-pins (AGSK-03/05; Wave 1)
+- [x] 83.1-01-PLAN.md — Silent Skill conversion: Seam A droppedTools exclusion, warning removal, provenance re-pins (AGSK-03/05; Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
