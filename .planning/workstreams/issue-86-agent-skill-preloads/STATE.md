@@ -1,9 +1,18 @@
 ---
-workstream: issue-86-agent-skill-preloads
-created: 2026-07-19
+gsd_state_version: 1.0
 milestone: agent-skill-preloads
-milestone_version: 0.10.0
+milestone_name: milestone
+current_phase: 82 (Agent Skill Preload Fidelity) — not started
+current_plan: N/A
 status: planning
+last_updated: "2026-07-19T13:49:35.363Z"
+last_activity: 2026-07-19
+progress:
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -34,6 +43,10 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - Phase numbering continues at **Phase 82** (fetch-plugin used 80-81; its planning artifacts were developed out-of-repo)
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 83 added: AGSK-05: map source Skill tool to inheritSkills: true; out-of-scope rationale found overstated after pi-subagents/pi source review
 
 ### Decisions
 
