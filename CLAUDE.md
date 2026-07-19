@@ -10,6 +10,7 @@
 - Git commit messages: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters.
 - Run `pre-commit run --all-files` (or `pre-commit run --files <changed files>`) **before** attempting `git commit`. Fix any failures, restage, and re-run until clean. Do not commit and recover from hook failures after the fact -- a failed pre-commit hook means the commit did NOT happen, so iterating with `--amend` is wrong (it would alter the previous commit).
 - NEVER use `--no-verify` to skip the hooks.
+- NEVER rebase, never rewrite history. Update branches by merging.
 - When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`. The trufflehog hook's auto-updater fails to spawn child processes under the worktree sandbox even though the underlying scan succeeds; running `pre-commit run trufflehog --all-files` separately (outside `git commit`) still passes and should be done before the commit to confirm the scan is clean. Do not extend `SKIP=` to other hooks.
 - When writing PR descriptions, use the `humanizer` skill if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.

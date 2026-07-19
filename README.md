@@ -271,7 +271,7 @@ List plugins available for installation. Omit the marketplace name to list acros
 /claude:plugin list --available
 ```
 
-Filter the list by plugin status, installed, available for installation, partially available (not all features supported), remote (a git-source plugin not yet fetched), or unavailable to install.
+Filter the list by plugin status, installed, available for installation, partially available (not all features supported), remote (a plugin in a remote repository not yet fetched), or unavailable to install.
 
 ```text
 /claude:plugin list --installed
@@ -281,11 +281,10 @@ Filter the list by plugin status, installed, available for installation, partial
 /claude:plugin list --unavailable
 ```
 
-Show details for one plugin. For a remote git-source plugin, pass `--fetch` to fetch its clone first so components resolve in the same step; on an installed plugin whose clone is missing, `--fetch` re-materializes it.
+Show details for one plugin.
 
 ```text
 /claude:plugin info context7-plugin@context7-marketplace
-/claude:plugin info context7-plugin@context7-marketplace --fetch
 ```
 
 Install a plugin, using the `<plugin>@<marketplace>` format.
@@ -326,26 +325,46 @@ Limit reinstall to one scope with `--scope user` or `--scope project`. The flag 
 /claude:plugin reinstall @context7-marketplace --scope user
 ```
 
-Reinstall always overwrites the installed content, so it also repairs a plugin altered by foreign content.
-
 Uninstall a plugin.
 
 ```text
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
-Pre-fetch a git-source plugin so a later install resolves offline. A git-source plugin with no local clone lists as `remote`; fetching warms the local clone cache without installing the plugin, then reports the resulting status (`available`, `partially-available`, or `unavailable`). `fetch` is a pi-only extension: Claude Code's upstream `/plugin` has no `fetch` verb. Fetch one plugin, every plugin from one marketplace, or all plugins.
-
-```text
-/claude:plugin fetch context7-plugin@context7-marketplace
-/claude:plugin fetch @context7-marketplace
-/claude:plugin fetch
-```
-
 Reload Pi after changes.
 
 ```text
 /reload
+```
+
+#### Remote plugins
+
+Marketplaces can declare remote plugins hosted in a different Git repository. They can be listed with the `--remote` option.
+
+```text
+/claude:plugin list --remote
+```
+
+Repositories of remote plugins are lazily fetched, so `/claude:plugin info` will not resolve their components. The `--fetch` option can be passed to fetch the repository of a specific plugin.
+
+```text
+/claude:plugin info 2crunch-api-security-testing@claude-plugins-official --fetch
+```
+
+The repository of a specific remote plugin, of all the plugins in a marketplace, or of all remote plugins across all marketplaces can also be be eagerly fetched:
+
+```text
+/claude:plugin fetch 2crunch-api-security-testing@claude-plugins-official
+/claude:plugin fetch @claude-plugins-official
+/claude:plugin fetch
+```
+
+Once fetched, plugins are determined to be available, partially-available or unavailable for installation.
+
+The `/claude:plugin install` command automatically fetches a remote plugin.
+
+```text
+/claude:plugin install 2crunch-api-security-testing@claude-plugins-official
 ```
 
 ### Bootstrap
