@@ -34,18 +34,18 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AGSK-01 | — | Pending |
-| AGSK-02 | — | Pending |
-| AGSK-03 | — | Pending |
-| AGSK-04 | — | Pending |
+| AGSK-01 | Phase 82 | Pending |
+| AGSK-02 | Phase 82 | Pending |
+| AGSK-03 | Phase 82 | Pending |
+| AGSK-04 | Phase 82 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 4 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 4
+- Mapped to phases: 4 (all Phase 82)
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-07-19*
-*Last updated: 2026-07-19 after initial definition*
+*Last updated: 2026-07-19 after roadmap creation (all requirements mapped to Phase 82)*
