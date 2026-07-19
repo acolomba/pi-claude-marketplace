@@ -108,4 +108,12 @@ All 5 v1 requirements mapped. No orphans.
   2. An agent with `Skill` both declared and disallowed converts with `inheritSkills: false`, no Skill-related warning, and no `Skill` entry in `droppedTools` — matching Claude Code's disallowed-wins semantics silently.
   3. The legend's non-preloaded annotation reads "(available on demand)" for all agents regardless of `inheritSkills`; "(not available in this session)" no longer appears anywhere in generated output.
   4. Genuinely unmapped tools (e.g. `WebFetch`) keep appearing in `droppedTools` exactly as before, and agents with no `Skill` declaration and no body skill tokens stay byte-identical to their Phase 83 output.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 83.1-01-PLAN.md — Silent Skill conversion: Seam A droppedTools exclusion, warning removal, provenance re-pins (AGSK-03/05; Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 83.1-02-PLAN.md — Unified legend state "(available on demand)" + phase-gate sweep (AGSK-04; Wave 2)
