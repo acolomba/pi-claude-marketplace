@@ -604,6 +604,14 @@ test("AGSK-03 non-Skill drops stay silent in warnings", () => {
   assert.ok(!out.warnings.some((w) => w.startsWith("dropped tool")));
 });
 
+test("AGSK-03 / D-83.1-02 Skill alongside an unknown tool still records the unknown drop", () => {
+  // The Skill skip is per-token: it must not suppress the droppedTools
+  // record for a genuinely unmapped tool declared alongside it.
+  const out = convertSpecTree({ description: "d", tools: "Read, Skill, WebFetch" });
+  assert.deepEqual([...out.droppedTools], ["WebFetch"]);
+  assert.deepEqual([...out.warnings], []);
+});
+
 test("AGSK-03 omitted tools: keeps only the implicit-default warning", () => {
   // The read,bash,edit default contains no Skill, so only today's
   // omitted-tools warning fires.
