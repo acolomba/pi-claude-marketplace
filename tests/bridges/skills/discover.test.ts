@@ -276,7 +276,10 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
 
     const container = path.join(tmp, "skills");
     await mkdir(path.join(container, "implement"), { recursive: true });
-    await writeFile(path.join(container, "implement", "SKILL.md"), "---\nname: implement\n---\nbody");
+    await writeFile(
+      path.join(container, "implement", "SKILL.md"),
+      "---\nname: implement\n---\nbody",
+    );
 
     const resolved: ResolvedPluginInstallable = {
       state: "installable",

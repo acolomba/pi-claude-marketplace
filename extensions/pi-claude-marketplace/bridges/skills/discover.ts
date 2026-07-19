@@ -12,6 +12,10 @@
 //     throwing. RN-6 within-plugin source-name collision (same source name
 //     twice in the SAME dir) is handled by `domain/name.ts::assertSafeName`
 //     + `assertNoSkillCollisions` -- it remains a HARD error.
+//   - A declared `componentPaths.skills` element that is ITSELF a skill dir
+//     (contains `SKILL.md` directly, rather than being a parent of skill
+//     subdirs) is discovered as a single skill, threaded through the same
+//     first-wins dedup. Callers may point `skills` straight at one skill dir.
 //
 // SK-2 elision is delegated to `domain/name.ts::generatedSkillName`; this
 // module is purely the discovery/filter step.
@@ -66,7 +70,9 @@ async function isSkillDir(entry: Dirent, skillsDir: string): Promise<boolean> {
 
 async function isSelfSkillDir(skillsDir: string): Promise<boolean> {
   const stat = await lstat(skillsDir).catch(() => null);
-  return stat?.isDirectory() === true && !stat.isSymbolicLink() && (await hasRegularSkillFile(skillsDir));
+  return (
+    stat?.isDirectory() === true && !stat.isSymbolicLink() && (await hasRegularSkillFile(skillsDir))
+  );
 }
 
 function duplicateWarning(sourceName: string, skillsDir: string, generatedName: string): string {
@@ -75,6 +81,44 @@ function duplicateWarning(sourceName: string, skillsDir: string, generatedName: 
     `"${generatedName}" already produced by an earlier componentPaths.skills entry; ` +
     `ignoring duplicate.`
   );
+}
+
+/**
+ * Handle the self-skill-dir case: a declared `componentPaths.skills` element
+ * whose own path is a skill dir (contains `SKILL.md` directly) rather than a
+ * parent of skill subdirs. The single skill is threaded through the shared
+ * first-wins `seenByGenerated` dedup, so a collision with an earlier entry
+ * surfaces via `warnings` (same channel as the subdir path) instead of
+ * duplicating.
+ *
+ * Returns `true` when `skillsDir` was itself a skill dir and has been handled
+ * here; `false` when the caller should fall through to subdir enumeration.
+ */
+async function collectSelfSkillDir(
+  pluginName: string,
+  skillsDir: string,
+  seenByGenerated: Map<string, DiscoveredSkill>,
+  warnings: string[],
+): Promise<boolean> {
+  if (!(await isSelfSkillDir(skillsDir))) {
+    return false;
+  }
+
+  const sourceName = path.basename(skillsDir);
+  assertSafeName(sourceName, `skill directory name in ${skillsDir}`);
+
+  const generatedName = generatedSkillName(pluginName, sourceName);
+  if (seenByGenerated.has(generatedName)) {
+    warnings.push(duplicateWarning(sourceName, skillsDir, generatedName));
+    return true;
+  }
+
+  seenByGenerated.set(generatedName, {
+    sourceName,
+    generatedName,
+    skillDir: skillsDir,
+  });
+  return true;
 }
 
 /**
@@ -109,21 +153,7 @@ export async function discoverPluginSkills(input: {
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
 
-    if (await isSelfSkillDir(skillsDir)) {
-      const sourceName = path.basename(skillsDir);
-      assertSafeName(sourceName, `skill directory name in ${skillsDir}`);
-
-      const generatedName = generatedSkillName(input.pluginName, sourceName);
-      if (seenByGenerated.has(generatedName)) {
-        warnings.push(duplicateWarning(sourceName, skillsDir, generatedName));
-        continue;
-      }
-
-      seenByGenerated.set(generatedName, {
-        sourceName,
-        generatedName,
-        skillDir: skillsDir,
-      });
+    if (await collectSelfSkillDir(input.pluginName, skillsDir, seenByGenerated, warnings)) {
       continue;
     }
 
