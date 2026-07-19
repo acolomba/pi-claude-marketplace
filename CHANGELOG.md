@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Skill discovery now handles a plugin whose `skills` component path points directly at a skill directory containing `SKILL.md`, rather than at a parent of skill subdirectories; such a plugin is discovered as a single skill instead of installing with zero skills. Upstream Claude Code supports this shape (e.g. `mattpocock/skills`). Thanks to @gabadi for the contribution (#88).
+
 ## [0.8.0] - 2026-07-02
 
 - BREAKING: the force/unsupported vocabulary is renamed to partial/partially-available across every user-visible surface. The `--force` install/update flag and the `--unsupported` list filter both become `--partial` (no alias -- update any scripted invocations); `reinstall` still rejects `--force` as an unknown flag. The status tokens move in lockstep: a not-installed force-installable plugin renders `(partially-available)` (was `(unsupported)`), a degraded install renders `(partially-installed)` (was `(force-installed)`), a would-newly-degrade upgrade renders `(partially-upgradable)` (was `(force-upgradable)`), and a deferred degrade install previews as `(will partially install)`. The degrade-decline hint now reads `Re-run with --partial to install/update the supported components.` This is a pure rename: no behavior changes, the `⊖` / `◉` glyph characters are unchanged, and the component-level supportability language (`{unsupported hooks}` / `{unsupported source}` reason markers, the per-hook-event `(unsupported)` suffix on `info`) is deliberately preserved -- a plugin is *partially available* because some component kinds are unsupported.
