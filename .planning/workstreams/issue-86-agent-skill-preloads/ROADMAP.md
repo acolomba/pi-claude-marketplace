@@ -19,6 +19,7 @@ Phase numbering continues from the fetch-plugin milestone (last used: 81).
 
 - [x] **Phase 82: Agent Skill Preload Fidelity** - Block-list frontmatter parsing, plugin-qualified skill mapping, `Skill`-drop provenance warning, and body advisory note — issue #86 end to end (completed 2026-07-19)
 - [x] **Phase 83: Skill Tool Inherit Mapping** - Source `Skill` tool declaration maps to `inheritSkills: true` with accurate provenance and legend wording (completed 2026-07-19)
+- [x] **Phase 83.1: Silent Skill Mapping (INSERTED)** - Skill converts silently in every branch (no warning, no `droppedTools` entry); legend non-preloaded state unified to "(available on demand)" — post-UAT correction (completed 2026-07-19)
 
 ## Phase Details
 
@@ -85,6 +86,7 @@ Phase 82, then Phase 83.
 |-------|----------------|--------|-----------|
 | 82. Agent Skill Preload Fidelity | 4/4 | Complete    | 2026-07-19 |
 | 83. Skill Tool Inherit Mapping | 3/3 | Complete    | 2026-07-19 |
+| 83.1. Silent Skill Mapping | 2/2 | Complete    | 2026-07-19 |
 
 ## Coverage
 
