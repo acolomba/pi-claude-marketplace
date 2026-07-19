@@ -531,6 +531,21 @@ test("AGSK-02 bare tokens that fail name validation warn-drop instead of throwin
   }
 });
 
+test("AGSK-02 conventional spacing around the qualifier colon still preloads the skill", () => {
+  // A dash-list item like `- spec-tree: review-changes` folds verbatim
+  // with the space after the colon; both colon slices are trimmed so the
+  // intended skill still preloads instead of silently dropping.
+  for (const token of ["spec-tree: review-changes", "spec-tree :review-changes"]) {
+    const out = convertSpecTree({ description: "d", tools: "Read", skills: token });
+    assert.match(
+      frontmatterOf(out.fileContent),
+      /^skills: spec-tree-review-changes$/m,
+      `expected preload for token ${JSON.stringify(token)}`,
+    );
+    assert.deepEqual(out.warnings, []);
+  }
+});
+
 test("AGSK-02 bare skill behavior is unchanged: unknown warns, known emits, duplicates kept", () => {
   const unknown = convertSpecTree({ description: "d", tools: "Read", skills: "phantom" });
   assert.ok(unknown.warnings.includes(`unknown skill reference "phantom" -- dropped`));

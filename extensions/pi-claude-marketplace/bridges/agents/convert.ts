@@ -361,8 +361,12 @@ function mapSkills(
     let effective = token;
     const colon = token.indexOf(":");
     if (colon !== -1) {
-      const qualifier = token.slice(0, colon);
-      const rest = token.slice(colon + 1);
+      // Tolerate conventional YAML `key: value` spacing around the colon:
+      // `spec-tree: review-changes` and `spec-tree :review-changes`
+      // resolve like the tight form instead of silently dropping the
+      // preload the user obviously intended.
+      const qualifier = token.slice(0, colon).trim();
+      const rest = token.slice(colon + 1).trim();
       if (qualifier !== pluginName) {
         warnings.push(
           `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
