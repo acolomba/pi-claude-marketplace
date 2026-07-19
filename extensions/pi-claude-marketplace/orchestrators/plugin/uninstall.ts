@@ -76,8 +76,7 @@ import type { Scope } from "../../shared/types.ts";
  *   (IL-2).
  */
 export type UninstallPluginNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
  * RECON-03: discriminated outcome returned by `uninstallPlugin` in

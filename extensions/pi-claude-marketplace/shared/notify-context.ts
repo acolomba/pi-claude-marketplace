@@ -315,8 +315,7 @@ function dispatchRow<Status extends string, Msg>(
   mpScope: Scope,
 ): string {
   const arm = context.render[p.status as Status] as
-    | RenderFn<Extract<Msg, { status: Status }>>
-    | undefined;
+    RenderFn<Extract<Msg, { status: Status }>> | undefined;
   if (arm === undefined) {
     // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
     // must not surface as a quiet `info`. `cascadeSeverity` MAX-reduces the

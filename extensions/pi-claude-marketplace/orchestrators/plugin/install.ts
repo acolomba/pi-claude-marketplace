@@ -246,8 +246,7 @@ export type InstallPluginOutcome =
  *   is INTENTIONAL and consistent with D-19-01.
  */
 export type InstallPluginNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 export interface InstallPluginOptions {
   readonly ctx: ExtensionContext;

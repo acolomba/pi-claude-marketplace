@@ -39,7 +39,7 @@ repos:
         # floats and CI resolved a version that reformats TS union types
         # differently from the local check).
         additional_dependencies:
-          - prettier@3.8.3
+          - prettier@3.9.5
 
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
