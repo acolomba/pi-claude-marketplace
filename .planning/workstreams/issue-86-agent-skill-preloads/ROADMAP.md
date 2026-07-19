@@ -39,7 +39,7 @@ Phase numbering continues from the fetch-plugin milestone (last used: 81).
 Plans:
 **Wave 1**
 
-- [ ] 82-01-PLAN.md — Byte-identity regression corpus pinned against pre-fix HEAD (Wave 1)
+- [x] 82-01-PLAN.md — Byte-identity regression corpus pinned against pre-fix HEAD (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -71,7 +71,7 @@ Phase 82, then Phase 83.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 82. Agent Skill Preload Fidelity | 0/4 | Not started | - |
+| 82. Agent Skill Preload Fidelity | 1/4 | In Progress|  |
 | 83. Skill Tool Inherit Mapping | 0/TBD | Not started | - |
 
 ## Coverage
