@@ -621,7 +621,8 @@ test("AGSK-03 / D-82-08 omitted tools: keeps only the implicit-default warning",
 
 test("AGSK-03 Skill in disallowedTools only is ignored: no drop entry, no warning", () => {
   // Disallowed tokens that are not in TOOL_MAP never reach the dropped
-  // list; Skill/disallowedTools semantics are out of scope here (AGSK-05).
+  // list; Skill absent from tools: keeps inheritSkills: false per D-83-01
+  // -- disallowedTools alone never flips the flag (AGSK-05).
   const out = convertSpecTree({ description: "d", tools: "Read,Bash", disallowedTools: "Skill" });
   assert.deepEqual([...out.droppedTools], []);
   assert.match(frontmatterOf(out.fileContent), /^tools: read,bash$/m);
@@ -722,15 +723,36 @@ test("AGSK-05 / D-83-01 omitted tools: default read,bash,edit never flips inheri
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: false$/m);
 });
 
+// A skill in the emitted skills: list is eagerly FULL-CONTENT injected into
+// the child's context AND lazily listed in the child's inherited catalog
+// under the same Pi name. Accepted behavior, no dedup logic (D-83-07).
+test("AGSK-05 / D-83-07 a preloaded skill also remains discoverable in the inherited catalog (accepted duplication)", () => {
+  const out = convertSpecTree({
+    description: "d",
+    tools: "Read, Skill",
+    skills: "spec-tree:review-changes",
+  });
+  const frontmatter = frontmatterOf(out.fileContent);
+  assert.match(frontmatter, /^skills: spec-tree-review-changes$/m);
+  assert.match(frontmatter, /^inheritSkills: true$/m);
+});
+
 // ---------------------------------------------------------------------------
 // AGSK-04 / D-82-06 / D-82-07: body skill-token detection feeding the legend
 // ---------------------------------------------------------------------------
 
 const LEGEND_HEADING = "## Pi coding agent skill legend";
 
+/** D-82-05 / D-83-05: the three exact annotation texts the emitter renders. */
+type LegendAnnotation =
+  "preloaded in your context" | "not available in this session" | "available on demand";
+
 /** Exact legend entry line as rendered by the emitter (arrow is U+2192). */
-function legendEntryLine(token: string, generatedName: string, preloaded: boolean): string {
-  const annotation = preloaded ? "preloaded in your context" : "not available in this session";
+function legendEntryLine(
+  token: string,
+  generatedName: string,
+  annotation: LegendAnnotation,
+): string {
   return `- \`${token}\` \u2192 skill \`${generatedName}\` (${annotation})`;
 }
 
@@ -758,7 +780,11 @@ test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a preloade
   assert.ok(out.fileContent.includes(LEGEND_HEADING));
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "preloaded in your context",
+      ),
     ),
   );
 });
@@ -773,7 +799,64 @@ test("AGSK-04 / D-82-06 known-but-not-emitted skill token annotates not availabl
   assert.ok(out.fileContent.includes(LEGEND_HEADING));
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", false),
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "not available in this session",
+      ),
+    ),
+  );
+});
+
+test("AGSK-05 / D-83-05 Skill-declaring agent annotates a known-but-not-emitted skill as available on demand", () => {
+  // skills: is absent, so the known skill is not preloaded; with Skill
+  // declared and allowed the child can still discover and load it from
+  // its inherited catalog under the Pi name.
+  const out = convertSpecTreeWithBody(
+    { description: "d", tools: "Read, Skill" },
+    "Consult spec-tree:review-changes when needed.",
+  );
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "available on demand",
+      ),
+    ),
+  );
+  assert.match(frontmatterOf(out.fileContent), /^inheritSkills: true$/m);
+});
+
+test("AGSK-05 / D-83-05 the on-demand annotation requires Skill declared AND allowed", () => {
+  // Without Skill in tools: the two-state legend applies...
+  const noSkill = convertSpecTreeWithBody(
+    { description: "d", tools: "Read" },
+    "Consult spec-tree:review-changes when needed.",
+  );
+  assert.ok(
+    noSkill.fileContent.includes(
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "not available in this session",
+      ),
+    ),
+  );
+
+  // ...and a disallowed Skill turns inheritance off (D-83-01), so the same
+  // two-state legend applies even though Skill was declared.
+  const disallowed = convertSpecTreeWithBody(
+    { description: "d", tools: "Read, Skill", disallowedTools: "Skill" },
+    "Consult spec-tree:review-changes when needed.",
+  );
+  assert.ok(
+    disallowed.fileContent.includes(
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "not available in this session",
+      ),
     ),
   );
 });
@@ -820,7 +903,11 @@ test("AGSK-04 sentence-final punctuation does not poison the token candidate", (
   );
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "preloaded in your context",
+      ),
     ),
   );
 });
@@ -831,8 +918,16 @@ test("AGSK-04 legend entries dedupe by token in first-occurrence body order", ()
     "First spec-tree:review-changes then spec-tree:review-changes again, later spec-tree:other.",
     ["spec-tree-review-changes", "spec-tree-other"],
   );
-  const reviewLine = legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", false);
-  const otherLine = legendEntryLine("spec-tree:other", "spec-tree-other", false);
+  const reviewLine = legendEntryLine(
+    "spec-tree:review-changes",
+    "spec-tree-review-changes",
+    "not available in this session",
+  );
+  const otherLine = legendEntryLine(
+    "spec-tree:other",
+    "spec-tree-other",
+    "not available in this session",
+  );
   // Exactly two entries...
   assert.equal(out.fileContent.split("\u2192 skill").length - 1, 2);
   // ...in first-occurrence order.
@@ -848,7 +943,11 @@ test("AGSK-04 / D-82-07 token appearing only inside a fenced code block still yi
   );
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "preloaded in your context",
+      ),
     ),
   );
 });
@@ -957,7 +1056,11 @@ test("#86 canonical agent converts end to end with correct frontmatter, provenan
   // Legend: the body reference maps to the preloaded Pi skill.
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes", true),
+      legendEntryLine(
+        "spec-tree:review-changes",
+        "spec-tree-review-changes",
+        "preloaded in your context",
+      ),
     ),
   );
 
