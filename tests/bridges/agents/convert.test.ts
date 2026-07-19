@@ -500,6 +500,37 @@ test("AGSK-02 qualifier with '.' or '..' remainder warn-drops instead of throwin
   }
 });
 
+test("AGSK-02 qualified remainder with path separator or control char warn-drops instead of throwing", () => {
+  // assertSafeName also rejects path separators and ASCII control
+  // characters; the catch-based guard must keep these remainders on the
+  // warn-drop path (a warn-drop must never become a throw).
+  for (const token of ["spec-tree:sub/skill", "spec-tree:a\tb"]) {
+    let out: ReturnType<typeof convertAgent> | undefined;
+    assert.doesNotThrow(() => {
+      out = convertSpecTree({ description: "d", tools: "Read", skills: token });
+    });
+    assert.ok(
+      out?.warnings.includes(`unknown skill reference "${token}" -- dropped`),
+      `expected warn-drop naming the full token ${JSON.stringify(token)}`,
+    );
+  }
+});
+
+test("AGSK-02 bare tokens that fail name validation warn-drop instead of throwing", () => {
+  // Bare (unqualified) tokens reach the same generatedSkillName call, so
+  // the catch-based guard must protect them too.
+  for (const token of [".", "..", "sub/skill"]) {
+    let out: ReturnType<typeof convertAgent> | undefined;
+    assert.doesNotThrow(() => {
+      out = convertSpecTree({ description: "d", tools: "Read", skills: token });
+    });
+    assert.ok(
+      out?.warnings.includes(`unknown skill reference "${token}" -- dropped`),
+      `expected warn-drop naming the token ${JSON.stringify(token)}`,
+    );
+  }
+});
+
 test("AGSK-02 bare skill behavior is unchanged: unknown warns, known emits, duplicates kept", () => {
   const unknown = convertSpecTree({ description: "d", tools: "Read", skills: "phantom" });
   assert.ok(unknown.warnings.includes(`unknown skill reference "phantom" -- dropped`));

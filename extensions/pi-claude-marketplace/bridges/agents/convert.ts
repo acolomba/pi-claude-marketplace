@@ -370,19 +370,22 @@ function mapSkills(
         continue;
       }
 
-      // assertSafeName throws on empty, "." and ".." -- remainders the
-      // full colon-bearing token used to smuggle past it. A warn-drop
-      // must never become a throw.
-      if (rest === "" || rest === "." || rest === "..") {
-        warnings.push(`unknown skill reference "${token}" -- dropped`);
-        continue;
-      }
-
       effective = rest;
     }
 
-    const generated = generatedSkillName(pluginName, effective);
-    if (known.has(generated)) {
+    // AGSK-02 (#86): assertSafeName rejects empty, "." / "..", path
+    // separators, and control characters. A warn-drop must never become a
+    // throw -- catch the validator instead of enumerating its conditions,
+    // so every unsafe token (qualified remainder or bare) falls through to
+    // the unknown-reference drop below.
+    let generated: string | null;
+    try {
+      generated = generatedSkillName(pluginName, effective);
+    } catch {
+      generated = null;
+    }
+
+    if (generated !== null && known.has(generated)) {
       emit.push(generated);
     } else {
       // The warning names the FULL original token (qualifier included) so
