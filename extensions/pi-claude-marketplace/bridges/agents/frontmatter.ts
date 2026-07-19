@@ -13,9 +13,12 @@
 //
 // On the INPUT side, parseFrontmatter mirrors pi-subagents' own line-based
 // key:value parser so we can read source agents the same way pi-subagents
-// will read what we write back. The parser is deliberately naive (no nested
-// YAML, no list-of-dash arrays) -- pi-subagents is what we round-trip
-// through, not real YAML.
+// will read what we write back. The parser is deliberately line-based, not
+// real YAML (D-82-02) -- pi-subagents is what we round-trip through. One
+// YAML-ish extension (AGSK-01, #86): a key with an empty inline value
+// followed by `- item` lines folds the items into that key's comma-joined
+// value, for ANY key (D-82-01). A non-empty inline value wins -- dash
+// items beneath it are ignored (D-82-03).
 //
 // AG-6 contract: tolerates `:` in description values (line-based parser
 // splits on FIRST `:`, value side is taken verbatim).
@@ -70,8 +73,14 @@ export interface ParsedFrontmatter {
 
 /**
  * AG-6: parse simple `key: value` frontmatter delimited by `---` lines.
- * No nested YAML, no list-of-dash arrays. Comma-separated lists stay raw.
- * Tolerates `:` inside the value (split on FIRST `:` only).
+ * Line-based, not real YAML (D-82-02); no nested mappings. Comma-separated
+ * lists stay raw. Tolerates `:` inside the value (split on FIRST `:` only).
+ *
+ * AGSK-01 (#86): a key with an empty inline value followed by `- item`
+ * lines folds the items into a comma-joined value, for any key (D-82-01).
+ * Items are taken verbatim, never colon-split. A non-empty inline value
+ * wins -- dash items beneath it are ignored (D-82-03). Known limitation:
+ * an item containing a literal comma splits into two tokens downstream.
  */
 export function parseFrontmatter(text: string): ParsedFrontmatter {
   // Frontmatter must start with `---` on its own line at the very top.
