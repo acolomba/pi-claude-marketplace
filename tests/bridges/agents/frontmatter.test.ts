@@ -52,6 +52,90 @@ test("AG-6 parseFrontmatter handles CRLF line endings", () => {
   assert.match(body, /body/);
 });
 
+// AGSK-01 (#86): dash-list folding. A key with an empty inline value
+// followed by `- item` continuation lines folds the items into that key's
+// comma-joined value; dash items are taken verbatim (never colon-split).
+
+test("AGSK-01 parseFrontmatter folds colon-bearing dash item verbatim into skills (#86)", () => {
+  const text =
+    "---\n" +
+    "name: reviewer\n" +
+    "description: Reviews changes.\n" +
+    "skills:\n" +
+    "  - spec-tree:review-changes\n" +
+    "---\n" +
+    "\n" +
+    "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.skills, "spec-tree:review-changes");
+  assert.equal("- spec-tree" in raw, false);
+});
+
+test("D-82-01 parseFrontmatter folds multiple dash items comma-joined in source order", () => {
+  const text =
+    "---\n" + "name: bot\n" + "tools:\n" + "  - Read\n" + "  - Bash\n" + "---\n" + "\n" + "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.tools, "Read,Bash");
+});
+
+test("D-82-01 parseFrontmatter folds unsupported list keys cleanly with no bogus dash keys", () => {
+  const text =
+    "---\n" + "name: bot\n" + "hooks:\n" + "  - a:b\n" + "  - c\n" + "---\n" + "\n" + "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.hooks, "a:b,c");
+  for (const key of Object.keys(raw)) {
+    assert.equal(key.startsWith("- "), false, `unexpected dash key: ${key}`);
+  }
+});
+
+test("D-82-03 parseFrontmatter mixed form keeps the inline value and ignores dash items", () => {
+  const text =
+    "---\n" +
+    "name: bot\n" +
+    "tools: Read\n" +
+    "  - Edit\n" +
+    "  - Write:x\n" +
+    "---\n" +
+    "\n" +
+    "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.tools, "Read");
+  assert.equal("- Write" in raw, false);
+});
+
+test("AGSK-01 parseFrontmatter ignores orphan dash items and bare dash lines", () => {
+  const text = "---\n" + "- x\n" + "- a:b\n" + "-\n" + "name: bot\n" + "---\n" + "\n" + "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.name, "bot");
+  assert.deepEqual(Object.keys(raw), ["name"]);
+});
+
+test("D-82-01 parseFrontmatter folds dash items with CRLF line endings", () => {
+  const text =
+    "---\r\n" +
+    "name: bot\r\n" +
+    "tools:\r\n" +
+    "  - Read\r\n" +
+    "  - Bash\r\n" +
+    "---\r\n" +
+    "\r\n" +
+    "Body.\r\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.tools, "Read,Bash");
+});
+
+test("AGSK-01 parseFrontmatter leaves CSV, inline-array, and empty-value forms unchanged", () => {
+  const csv = parseFrontmatter("---\ntools: Read,Bash\n---\nBody.\n");
+  assert.equal(csv.raw.tools, "Read,Bash");
+
+  const inlineArray = parseFrontmatter('---\ntools: ["Read", "Bash"]\n---\nBody.\n');
+  assert.equal(inlineArray.raw.tools, '["Read", "Bash"]');
+
+  const emptyValue = parseFrontmatter("---\nskills:\nname: bot\n---\nBody.\n");
+  assert.equal(emptyValue.raw.skills, "");
+  assert.equal(emptyValue.raw.name, "bot");
+});
+
 test("AG-8 emitYamlScalar single-quote-flips when value starts and ends with double-quote", () => {
   const out = emitYamlScalar('"hello world"');
   assert.equal(out, "'\"hello world\"'");
