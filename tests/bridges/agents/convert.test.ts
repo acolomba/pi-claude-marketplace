@@ -530,3 +530,54 @@ test("AGSK-02 crafted cross-plugin token cannot terminate the provenance comment
   assert.ok(out.warnings.includes(crossPluginSkillWarning("evil-->qual:skill")));
   assert.equal(out.fileContent.split("-->").length - 1, 1);
 });
+
+// ---------------------------------------------------------------------------
+// AGSK-03 / D-82-08 / D-82-09: Skill-drop provenance warning in tools mapping
+// ---------------------------------------------------------------------------
+
+/** D-82-09 exact wording -- byte-identical to the literal in convert.ts. */
+const SKILL_DROP_WARNING =
+  'dropped tool "Skill" -- generated agents run with skills discovery disabled (inheritSkills: false); only the skills listed in skills: are preloaded into the child\'s context';
+
+test("AGSK-03 / D-82-09 dropping the Skill tool emits the exact provenance warning", () => {
+  const out = convertSpecTree({ description: "d", tools: "Bash, Read, Skill" });
+  assert.deepEqual([...out.droppedTools], ["Skill"]);
+  assert.match(frontmatterOf(out.fileContent), /^tools: bash,read$/m);
+  assert.ok(out.warnings.includes(SKILL_DROP_WARNING));
+});
+
+test("AGSK-03 / D-82-08 non-Skill drops stay silent in warnings", () => {
+  const out = convertSpecTree({ description: "d", tools: "Read,WebFetch" });
+  assert.deepEqual([...out.droppedTools], ["WebFetch"]);
+  assert.ok(!out.warnings.some((w) => w.startsWith("dropped tool")));
+});
+
+test("AGSK-03 / D-82-08 omitted tools: keeps only the implicit-default warning", () => {
+  // The read,bash,edit default contains no Skill, so only today's
+  // omitted-tools warning fires.
+  const out = convertSpecTree({ description: "d" });
+  assert.deepEqual(out.warnings, [
+    "source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
+  ]);
+});
+
+test("AGSK-03 Skill in disallowedTools only is ignored: no drop entry, no warning", () => {
+  // Disallowed tokens that are not in TOOL_MAP never reach the dropped
+  // list; Skill/disallowedTools semantics are out of scope here (AGSK-05).
+  const out = convertSpecTree({ description: "d", tools: "Read,Bash", disallowedTools: "Skill" });
+  assert.deepEqual([...out.droppedTools], []);
+  assert.match(frontmatterOf(out.fileContent), /^tools: read,bash$/m);
+  assert.ok(!out.warnings.some((w) => w.startsWith("dropped tool")));
+});
+
+test("AGSK-03 aggregate warnings order: tools slot strictly before skills slot", () => {
+  // Warnings order is provenance-visible bytes: description -> model ->
+  // tools -> thinking -> skills. The Skill-drop warning lands in the tools
+  // slot, the cross-plugin drop in the skills slot.
+  const out = convertSpecTree({
+    description: "d",
+    tools: "Bash, Read, Skill",
+    skills: "other-plugin:x",
+  });
+  assert.deepEqual(out.warnings, [SKILL_DROP_WARNING, crossPluginSkillWarning("other-plugin:x")]);
+});
