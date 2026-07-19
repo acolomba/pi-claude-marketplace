@@ -282,9 +282,9 @@ async function readOriginRemoteUrl(checkoutRoot: string): Promise<string | undef
       // and `(.+)` both matching spaces is the S8786 super-linear smell. The
       // capture is trimmed and returned only when non-empty, so a bare `url =`
       // still yields undefined -- behavior identical to the prior pattern.
-      const match = /^url\s*=(.*)$/.exec(line);
-      if (match !== null) {
-        const value = match[1].trim();
+      const captured = /^url\s*=(.*)$/.exec(line)?.[1];
+      if (captured !== undefined) {
+        const value = captured.trim();
         if (value !== "") {
           return value;
         }

@@ -32,9 +32,9 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 const REPO_URL = "https://example.com/repo";
 const OTHER_URL = "https://other.example.com/different";
