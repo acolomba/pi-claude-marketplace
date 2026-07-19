@@ -145,6 +145,36 @@ function mapModel(raw: string | undefined): {
   };
 }
 
+/**
+ * Map source tool tokens to Pi names via TOOL_MAP; unknown tokens land in
+ * `dropped`. AGSK-03 / D-82-08: ONLY the `Skill` drop is explained (exact
+ * match, like TOOL_MAP lookups) -- warning on every dropped tool would
+ * change output bytes for agents that must stay byte-identical. D-82-09
+ * wording; tests pin it byte-for-byte.
+ */
+function mapToolTokens(
+  tokens: readonly string[],
+  warnings: string[],
+): { mapped: string[]; dropped: string[] } {
+  const mapped: string[] = [];
+  const dropped: string[] = [];
+  for (const token of tokens) {
+    const piName = TOOL_MAP[token];
+    if (piName === undefined) {
+      dropped.push(token);
+      if (token === "Skill") {
+        warnings.push(
+          'dropped tool "Skill" -- generated agents run with skills discovery disabled (inheritSkills: false); only the skills listed in skills: are preloaded into the child\'s context',
+        );
+      }
+    } else {
+      mapped.push(piName);
+    }
+  }
+
+  return { mapped, dropped };
+}
+
 function mapTools(
   rawTools: string | undefined,
   rawDisallowed: string | undefined,
@@ -165,16 +195,7 @@ function mapTools(
         })()
       : splitCsv(rawTools);
 
-  const mapped: string[] = [];
-  const dropped: string[] = [];
-  for (const token of tokens) {
-    const piName = TOOL_MAP[token];
-    if (piName === undefined) {
-      dropped.push(token);
-    } else {
-      mapped.push(piName);
-    }
-  }
+  const { mapped, dropped } = mapToolTokens(tokens, warnings);
 
   // Apply disallowedTools after mapping. Disallowed values are Claude-side
   // names; map them to Pi names then filter the mapped list.
