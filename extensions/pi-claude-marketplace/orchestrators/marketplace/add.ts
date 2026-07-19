@@ -103,8 +103,7 @@ import type { Scope } from "../../shared/types.ts";
  *   itself.
  */
 export type AddMarketplaceNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
  * RECON-03: discriminated outcome returned by `addMarketplace` in

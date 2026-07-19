@@ -68,12 +68,7 @@ export interface UnknownSource {
 }
 
 export type ParsedSource =
-  | PathSource
-  | GitHubSource
-  | UrlSource
-  | GitSubdirSource
-  | NpmSource
-  | UnknownSource;
+  PathSource | GitHubSource | UrlSource | GitSubdirSource | NpmSource | UnknownSource;
 
 /**
  * The git-clonable source kinds (url / git-subdir / github): the sources that

@@ -56,10 +56,7 @@ export type InstalledClassification =
  * strictly three-way (NFR-7).
  */
 export type ManifestEntryClassification =
-  | "available"
-  | "partially-available"
-  | "unavailable"
-  | "remote";
+  "available" | "partially-available" | "unavailable" | "remote";
 
 /**
  * The minimal structural view of a persisted install record the classifier

@@ -110,14 +110,7 @@ const FETCH_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
 ]);
 
 type PluginRefCompletionMode =
-  | "install"
-  | "uninstall"
-  | "update"
-  | "fetch"
-  | "reinstall"
-  | "info"
-  | "enable"
-  | "disable";
+  "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
 // ---------------------------------------------------------------------------
 // LocationsResolver -- the edge/ -> persistence/ injection seam.

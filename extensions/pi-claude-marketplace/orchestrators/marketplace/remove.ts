@@ -93,8 +93,7 @@ type RecordedSourceKind = "github" | "url" | "path" | "unknown";
  *   typed `RemoveMarketplaceOutcome` for `applyReconcile` to aggregate (IL-2).
  */
 export type RemoveMarketplaceNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
  * RECON-03: discriminated outcome returned by `removeMarketplace` in
@@ -328,26 +327,22 @@ function emitPartialFailure(args: {
       // carry the granular reasons).
       severity: "error",
       plugins: [
-        ...successfullyUnstaged.map(
-          (name): PluginUninstalledMessage => ({
-            status: "uninstalled",
-            name,
-            // D-03/D-06: realized uninstall transition -> info, reloads.
-            severity: "info",
-            needsReload: true,
-          }),
-        ),
-        ...failedPlugins.map(
-          ({ name, cause }): PluginFailedMessage => ({
-            status: "failed",
-            name,
-            reasons: [narrowCascadeFailure(cause)],
-            cause,
-            // D-03/D-06: a per-plugin unstage failure -> error, no reload.
-            severity: "error",
-            needsReload: false,
-          }),
-        ),
+        ...successfullyUnstaged.map((name): PluginUninstalledMessage => ({
+          status: "uninstalled",
+          name,
+          // D-03/D-06: realized uninstall transition -> info, reloads.
+          severity: "info",
+          needsReload: true,
+        })),
+        ...failedPlugins.map(({ name, cause }): PluginFailedMessage => ({
+          status: "failed",
+          name,
+          reasons: [narrowCascadeFailure(cause)],
+          cause,
+          // D-03/D-06: a per-plugin unstage failure -> error, no reload.
+          severity: "error",
+          needsReload: false,
+        })),
       ],
     },
   ];
@@ -804,15 +799,13 @@ export async function removeMarketplace(
       name: opts.name,
       scope: resolved.scope,
       status: "removed",
-      plugins: successfullyUnstaged.map(
-        (name): PluginUninstalledMessage => ({
-          status: "uninstalled",
-          name,
-          // D-03/D-06: realized uninstall transition -> info, reloads.
-          severity: "info",
-          needsReload: true,
-        }),
-      ),
+      plugins: successfullyUnstaged.map((name): PluginUninstalledMessage => ({
+        status: "uninstalled",
+        name,
+        // D-03/D-06: realized uninstall transition -> info, reloads.
+        severity: "info",
+        needsReload: true,
+      })),
     },
   ];
   notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows);

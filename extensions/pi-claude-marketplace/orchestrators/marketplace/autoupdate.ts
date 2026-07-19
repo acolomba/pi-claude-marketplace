@@ -91,8 +91,7 @@ import type { Scope } from "../../shared/types.ts";
  * per-machine override (WR-09 / T-56-02-01).
  */
 export type AutoupdateNotifications =
-  | { readonly mode: "standalone" }
-  | { readonly mode: "orchestrated" };
+  { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 export interface AutoupdateOptions {
   readonly ctx: ExtensionContext;

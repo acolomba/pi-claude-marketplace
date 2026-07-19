@@ -52,10 +52,7 @@ export type ImportStatus = (typeof IMPORT_STATUSES)[number];
  * narrows each render arm to exactly the shape carrying status `K`.
  */
 export type ImportMsg =
-  | PluginInstalledMessage
-  | PluginSkippedMessage
-  | PluginFailedMessage
-  | PluginUnavailableMessage;
+  PluginInstalledMessage | PluginSkippedMessage | PluginFailedMessage | PluginUnavailableMessage;
 
 /**
  * `(installed)` -- cascade install row. Only the `installed` arm reads

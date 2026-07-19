@@ -168,14 +168,7 @@ function marketplaceNameWanted(positionals: readonly string[]): boolean {
 }
 
 type PluginRefMode =
-  | "install"
-  | "uninstall"
-  | "update"
-  | "fetch"
-  | "reinstall"
-  | "info"
-  | "enable"
-  | "disable";
+  "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
 interface PluginRefBranchConfig {
   readonly mode: PluginRefMode;
