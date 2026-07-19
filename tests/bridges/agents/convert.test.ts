@@ -9,7 +9,10 @@ import {
   TOOL_MAP,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 
-import type { DiscoveredAgent } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
+import type {
+  DiscoveredAgent,
+  RawAgentFrontmatter,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 // AG-7 mapping pipeline + AG-11 / AG-12 throws + MODEL_MAP / TOOL_MAP user
 // contract.
@@ -402,4 +405,128 @@ test("AG-7 convertAgent with mapModel: true preserves byte-for-byte AG-7 mapping
   });
   assert.match(out.fileContent, /model: anthropic\/claude-sonnet-4-6/);
   assert.equal(out.originalModel, "sonnet");
+});
+
+// ---------------------------------------------------------------------------
+// AGSK-02 (#86): plugin-qualified skill references in `skills:`
+// ---------------------------------------------------------------------------
+
+/** Exact cross-plugin drop wording (AGSK-02) -- pinned as a full sentence. */
+function crossPluginSkillWarning(token: string): string {
+  return `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`;
+}
+
+function convertSpecTree(
+  raw: RawAgentFrontmatter,
+  knownSkills: readonly string[] = ["spec-tree-review-changes"],
+): ReturnType<typeof convertAgent> {
+  return convertAgent({
+    pluginName: "spec-tree",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills,
+    discovered: makeDiscovered({ raw }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+}
+
+function frontmatterOf(fileContent: string): string {
+  return fileContent.slice(0, fileContent.indexOf("\n---\n", 4));
+}
+
+test("AGSK-02 (#86) same-plugin qualified skill maps identically to its bare form", () => {
+  const qualified = convertSpecTree({
+    description: "d",
+    tools: "Read",
+    skills: "spec-tree:review-changes",
+  });
+  const bare = convertSpecTree({ description: "d", tools: "Read", skills: "review-changes" });
+  assert.match(frontmatterOf(qualified.fileContent), /^skills: spec-tree-review-changes$/m);
+  assert.equal(qualified.fileContent, bare.fileContent);
+  assert.deepEqual(qualified.warnings, []);
+});
+
+test("AGSK-02 qualified redundant-prefix form converges on the same generated skill name", () => {
+  // generatedSkillName's prefix elision must survive qualifier stripping:
+  // spec-tree:spec-tree-review-changes -> spec-tree-review-changes.
+  const out = convertSpecTree({
+    description: "d",
+    tools: "Read",
+    skills: "spec-tree:spec-tree-review-changes",
+  });
+  assert.match(frontmatterOf(out.fileContent), /^skills: spec-tree-review-changes$/m);
+  assert.deepEqual(out.warnings, []);
+});
+
+test("AGSK-02 cross-plugin qualified skill warns-and-drops naming the full token", () => {
+  const out = convertSpecTree({
+    description: "d",
+    tools: "Read",
+    skills: "other-plugin:some-skill",
+  });
+  assert.ok(
+    out.warnings.includes(
+      `skill reference "other-plugin:some-skill" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+    ),
+  );
+  // The dropped token never reaches the emit list...
+  assert.doesNotMatch(frontmatterOf(out.fileContent), /^skills:/m);
+  // ...and does NOT double-warn through the unknown-skill path.
+  assert.ok(!out.warnings.some((w) => w.startsWith("unknown skill reference")));
+});
+
+test("AGSK-02 qualifier with empty remainder warn-drops instead of throwing", () => {
+  // assertSafeName throws on empty names; the stripped remainder guard must
+  // keep `spec-tree:` on the warn-drop path.
+  let out: ReturnType<typeof convertAgent> | undefined;
+  assert.doesNotThrow(() => {
+    out = convertSpecTree({ description: "d", tools: "Read", skills: "spec-tree:" });
+  });
+  assert.ok(out?.warnings.includes(`unknown skill reference "spec-tree:" -- dropped`));
+});
+
+test("AGSK-02 qualifier with '.' or '..' remainder warn-drops instead of throwing", () => {
+  for (const token of ["spec-tree:.", "spec-tree:.."]) {
+    let out: ReturnType<typeof convertAgent> | undefined;
+    assert.doesNotThrow(() => {
+      out = convertSpecTree({ description: "d", tools: "Read", skills: token });
+    });
+    assert.ok(
+      out?.warnings.includes(`unknown skill reference "${token}" -- dropped`),
+      `expected warn-drop naming the full token ${token}`,
+    );
+  }
+});
+
+test("AGSK-02 bare skill behavior is unchanged: unknown warns, known emits, duplicates kept", () => {
+  const unknown = convertSpecTree({ description: "d", tools: "Read", skills: "phantom" });
+  assert.ok(unknown.warnings.includes(`unknown skill reference "phantom" -- dropped`));
+
+  const known = convertSpecTree({ description: "d", tools: "Read", skills: "review-changes" });
+  assert.match(frontmatterOf(known.fileContent), /^skills: spec-tree-review-changes$/m);
+
+  // No dedupe: duplicate bare tokens still emit twice (pi-subagents dedupes
+  // downstream).
+  const dupes = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills: ["acme-knowledge"],
+    discovered: makeDiscovered({
+      raw: { description: "d", tools: "Read", skills: "knowledge,knowledge" },
+    }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  assert.match(frontmatterOf(dupes.fileContent), /^skills: acme-knowledge,acme-knowledge$/m);
+});
+
+test("AGSK-02 crafted cross-plugin token cannot terminate the provenance comment early", () => {
+  // The warning echoes the token; sanitizeProvenance must keep a crafted
+  // `-->` from closing the HTML comment. Exactly one `-->` may remain: the
+  // comment terminator itself.
+  const out = convertSpecTree({ description: "d", tools: "Read", skills: "evil-->qual:skill" });
+  assert.ok(out.warnings.includes(crossPluginSkillWarning("evil-->qual:skill")));
+  assert.equal(out.fileContent.split("-->").length - 1, 1);
 });
