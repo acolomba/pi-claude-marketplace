@@ -2,7 +2,8 @@
 milestone: agent-skill-preloads
 target_version: 0.10.0
 audited: 2026-07-19
-status: tech_debt
+status: passed
+resolved: 2026-07-19 — 83.1 nyquist item cleared via /gsd-validate-phase 83.1 (commit ae5b4143); SECURITY.md item accepted/waived (no security surface)
 scores:
   requirements: 5/5
   phases: 3/3
@@ -13,24 +14,24 @@ gaps:
   integration: []
   flows: []
 tech_debt:
-  - phase: 83.1-silent-skill-mapping
-    items:
-      - "VALIDATION.md frontmatter still status: draft / nyquist_compliant: false / wave_0_complete: false — stale flag, not a coverage gap: VERIFICATION.md passed 9/9 with exact-equality test pins and the byte-identity corpus untouched."
   - phase: all
     items:
-      - "No SECURITY.md exists for any phase (workflow.security_enforcement default-on). All three phases are pure agent-markdown conversion (no network, auth, or credential surface); /gsd-secure-phase can be run retroactively if a threat-model record is wanted."
+      - "ACCEPTED/WAIVED: No SECURITY.md exists for any phase (workflow.security_enforcement default-on). All three phases are pure agent-markdown conversion (no network, auth, or credential surface); /gsd-secure-phase can be run retroactively if a threat-model record is ever wanted."
+resolved_debt:
+  - phase: 83.1-silent-skill-mapping
+    item: "VALIDATION.md stale draft frontmatter — resolved by /gsd-validate-phase 83.1 (no coverage gap found; frontmatter flipped to nyquist_compliant: true, commit ae5b4143)."
 nyquist:
-  compliant_phases: [82, 83]
-  partial_phases: [83.1]
+  compliant_phases: [82, 83, 83.1]
+  partial_phases: []
   missing_phases: []
-  overall: partial
+  overall: compliant
 ---
 
 # Milestone Audit: agent-skill-preloads (target npm 0.10.0)
 
 **Audited:** 2026-07-19
 **Driver:** GitHub issue #86 — Generated Pi agents drop required Claude skill preloads
-**Status:** tech_debt (all requirements satisfied, no blockers, two minor deferred items)
+**Status:** passed (all requirements satisfied; the 83.1 nyquist item was resolved post-audit via /gsd-validate-phase 83.1; the SECURITY.md item is accepted/waived — no security surface)
 
 ## Definition of Done
 
@@ -91,7 +92,7 @@ broken flows.
 |-------|---------------|-----------|------|
 | 82 | exists | true | — |
 | 83 | exists | true | — |
-| 83.1 | exists | false (draft) | Frontmatter never flipped post-execution; actual coverage is complete (9/9 VERIFICATION + exact-equality pins). Flip via re-save or `/gsd-validate-phase 83.1`. |
+| 83.1 | exists | true | Resolved post-audit: `/gsd-validate-phase 83.1` confirmed no coverage gap and flipped the frontmatter (commit ae5b4143). |
 
 ## Tech Debt
 
