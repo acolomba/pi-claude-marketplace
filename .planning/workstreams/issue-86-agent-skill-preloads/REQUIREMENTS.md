@@ -13,12 +13,12 @@
 
 ### Child-Context Transparency
 
-- [ ] **AGSK-03** *(amended after phase 83 UAT)*: The `Skill` tool converts silently — no provenance warning and no `droppedTools` entry in any branch. Declared-and-allowed maps to `inheritSkills: true`; declared-and-disallowed suppresses it (disallowed wins, matching Claude Code); both outcomes reproduce Claude Code behavior, so there is nothing to warn about. Genuinely unmapped tools keep their `droppedTools` entries.
+- [x] **AGSK-03** *(amended after phase 83 UAT)*: The `Skill` tool converts silently — no provenance warning and no `droppedTools` entry in any branch. Declared-and-allowed maps to `inheritSkills: true`; declared-and-disallowed suppresses it (disallowed wins, matching Claude Code); both outcomes reproduce Claude Code behavior, so there is nothing to warn about. Genuinely unmapped tools keep their `droppedTools` entries.
 - [ ] **AGSK-04** *(amended after phase 83 UAT)*: A generated agent whose body references `<plugin>:<source-skill>` tokens carries a visible converter-authored note mapping each referenced Claude skill name to its Pi skill name — "(preloaded in your context)" when the skill is in the emitted `skills:` list, "(available on demand)" otherwise (extension-contributed skills survive `--no-skills`, so the catalog is present in child sessions regardless of `inheritSkills`); an agent body with no such references produces byte-identical output to today.
 
 ### Dynamic Skill Access
 
-- [ ] **AGSK-05** *(amended after phase 83 UAT)*: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. The mapping is silent: no warning and no `droppedTools` entry (AGSK-03). Agents not declaring `Skill` keep `inheritSkills: false`.
+- [x] **AGSK-05** *(amended after phase 83 UAT)*: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. The mapping is silent: no warning and no `droppedTools` entry (AGSK-03). Agents not declaring `Skill` keep `inheritSkills: false`.
 
 ## v2 Requirements
 
