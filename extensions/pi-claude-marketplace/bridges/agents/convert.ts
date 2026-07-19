@@ -267,10 +267,41 @@ function mapSkills(
   const emit: string[] = [];
   const warnings: string[] = [];
   for (const token of tokens) {
-    const generated = generatedSkillName(pluginName, token);
+    // AGSK-02 (#86): a token qualified with this plugin's own name
+    // (`spec-tree:review-changes`) maps like its bare form -- strip the
+    // qualifier and delegate to generatedSkillName, whose prefix elision
+    // makes both spellings converge. A cross-plugin qualifier is dropped
+    // with a warning naming the full token (installability of the other
+    // plugin is unknown at convert time).
+    let effective = token;
+    const colon = token.indexOf(":");
+    if (colon !== -1) {
+      const qualifier = token.slice(0, colon);
+      const rest = token.slice(colon + 1);
+      if (qualifier !== pluginName) {
+        warnings.push(
+          `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+        );
+        continue;
+      }
+
+      // assertSafeName throws on empty, "." and ".." -- remainders the
+      // full colon-bearing token used to smuggle past it. A warn-drop
+      // must never become a throw.
+      if (rest === "" || rest === "." || rest === "..") {
+        warnings.push(`unknown skill reference "${token}" -- dropped`);
+        continue;
+      }
+
+      effective = rest;
+    }
+
+    const generated = generatedSkillName(pluginName, effective);
     if (known.has(generated)) {
       emit.push(generated);
     } else {
+      // The warning names the FULL original token (qualifier included) so
+      // the user can find it verbatim in the source frontmatter.
       warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
   }
