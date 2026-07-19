@@ -435,7 +435,7 @@ Body content.
 });
 
 // ---------------------------------------------------------------------------
-// AGSK-05 inheritSkills emission (D-83-01) and on-demand legend state (D-83-05)
+// AGSK-05 inheritSkills emission (D-83-01) and on-demand legend state (D-83.1-03)
 // ---------------------------------------------------------------------------
 
 /**
@@ -486,7 +486,7 @@ test("AG-8 inheritSkills: true stays the last frontmatter line before the closin
   assert.ok(frontmatterBlock.endsWith("\ninheritSkills: true"));
 });
 
-test("AGSK-05 / D-83-05 legend annotates a not-preloaded entry as available on demand when inheritSkills is true", () => {
+test("AGSK-05 / D-83.1-03 legend annotates a not-preloaded entry as available on demand when inheritSkills is true", () => {
   const base = makeLegendEmitInput();
   const out = emitGeneratedAgentFile({
     ...base,
