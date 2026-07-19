@@ -435,7 +435,9 @@ function convertSpecTree(
     pluginRoot: "/root",
     pluginDataDir: "/data",
     knownSkills,
-    discovered: makeDiscovered({ raw }),
+    // Keep the fixture internally consistent: a spec-tree plugin generates
+    // spec-tree-prefixed agent names, not makeDiscovered's acme default.
+    discovered: makeDiscovered({ raw, generatedName: "pi-claude-marketplace-spec-tree-bot" }),
     sourceHash: "abc",
     mapModel: false,
   });
@@ -663,7 +665,7 @@ test("AGSK-03 Skill in disallowedTools only is ignored: no drop entry, no warnin
  * make a converter change pass.
  */
 const DISALLOWED_SKILL_EXPECTED = `---
-name: pi-claude-marketplace-acme-bot
+name: pi-claude-marketplace-spec-tree-bot
 description: d
 tools: bash,read
 systemPromptMode: replace
@@ -781,7 +783,12 @@ function convertSpecTreeWithBody(
     pluginRoot: "/root",
     pluginDataDir: "/data",
     knownSkills,
-    discovered: makeDiscovered({ raw, body }),
+    // Same fixture-consistency rule as convertSpecTree above.
+    discovered: makeDiscovered({
+      raw,
+      body,
+      generatedName: "pi-claude-marketplace-spec-tree-bot",
+    }),
     sourceHash: "abc",
     mapModel: false,
   });
@@ -982,7 +989,7 @@ test("AGSK-04 plugin-prefix-only body candidate never throws and gets no legend"
 test("AGSK-04 token-free body emits no legend and stays byte-identical to the pre-legend output", () => {
   // Constant captured from convertAgent BEFORE the legend wiring existed.
   const preLegendExpected = `---
-name: pi-claude-marketplace-acme-bot
+name: pi-claude-marketplace-spec-tree-bot
 description: d
 tools: read
 skills: spec-tree-review-changes
