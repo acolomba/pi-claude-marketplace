@@ -1,7 +1,8 @@
 ---
 phase: 83-skill-tool-inherit-mapping
 verified: 2026-07-19T18:20:00Z
-status: human_needed
+status: passed
+human_verification_resolved: 2026-07-19 — live pi-subagents round-trip executed (real install -> generated agents -> discoverAgents/buildPiArgs -> live child session): Skill agent spawned without --no-skills and loaded an on-demand skill by its Pi name; non-Skill agent spawned with --no-skills. Recorded in 83-HUMAN-UAT.md (status: complete). The UAT surfaced the --no-skills scope finding, dispositioned to Phase 83.1.
 score: 4/4 must-haves verified
 overrides_applied: 0
 human_verification:
@@ -14,7 +15,7 @@ human_verification:
 
 **Phase Goal:** A Claude plugin agent that declared the `Skill` tool converts to a Pi agent whose child can dynamically discover and load installed Pi skills (`inheritSkills: true`), with provenance and legend wording that accurately describe that capability -- while agents that do not declare `Skill` keep their Phase 82 output byte-identically.
 **Verified:** 2026-07-19T18:20:00Z
-**Status:** human_needed
+**Status:** passed (human verification resolved 2026-07-19 — see frontmatter and 83-HUMAN-UAT.md)
 **Re-verification:** No -- initial verification
 
 ## Goal Achievement
