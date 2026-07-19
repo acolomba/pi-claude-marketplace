@@ -5,13 +5,13 @@ milestone_name: milestone
 current_phase: 83
 current_plan: 1
 status: executing
-last_updated: "2026-07-19T16:41:51.075Z"
+last_updated: "2026-07-19T16:57:43.745Z"
 last_activity: 2026-07-19
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 6
   percent: 50
 ---
 
@@ -20,7 +20,7 @@ progress:
 ## Current Position
 
 Phase: 83 (skill-tool-inherit-mapping) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 **Status:** Ready to execute
 **Current Phase:** 83
 **Last Activity:** 2026-07-19
@@ -61,6 +61,7 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - [Phase 82]: No dedupe in mapSkills emit list — Byte-identity for duplicate-bearing bare-form agents; pi-subagents dedupes downstream
 - [Phase 82]: Skill legend annotations locked as ASCII parenthesized forms with the U+2192 arrow on both entry kinds, first-occurrence dedupe by token — AGSK-04 satisfied verbatim while surviving the fix-unicode-dashes hook; arrow written as an escape in all .ts literals
 - [Phase 82]: Legend scanner skips the plugin-prefix-only candidate that elides to an empty skill name — A body scan must never throw; assertSafeName throws on the empty elision remainder (T-82-12 completeness)
+- [Phase 83]: D-83-05 legend annotation locked as 'available on demand' — Legend entry line already renders the Pi name after the arrow; parallel to the two locked D-82-05 annotations
 
 ### Blockers
 
@@ -68,7 +69,7 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Completed 82-04-PLAN.md
+**Stopped At:** Completed 83-02-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -80,3 +81,4 @@ None.
 | Phase 82 P03 | 7 min | 2 tasks | 2 files |
 | Phase 82 P04 | 14 min | 3 tasks | 4 files |
 | Phase 83 P01 | 6 min | 2 tasks | 1 files |
+| Phase 83 P02 | 11 min | 2 tasks | 2 files |
