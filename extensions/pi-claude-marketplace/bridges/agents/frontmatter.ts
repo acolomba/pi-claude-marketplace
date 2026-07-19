@@ -311,13 +311,7 @@ export function emitGeneratedAgentFile(input: {
   // expression byte-identical to the pre-legend assembly. The body's leading
   // blank line (normalized above) supplies the blank line after the last
   // legend entry.
-  return (
-    generatedFrontmatter +
-    "\n" +
-    provenanceComment +
-    renderSkillLegend(legend, frontmatter.inheritSkills ?? false) +
-    bodyFinal
-  );
+  return generatedFrontmatter + "\n" + provenanceComment + renderSkillLegend(legend) + bodyFinal;
 }
 
 /**
@@ -327,23 +321,18 @@ export function emitGeneratedAgentFile(input: {
  * blank line after `-->`; the blank line after the last entry comes from
  * the body's normalized leading blank line.
  *
- * AGSK-05 / D-83-05: the not-preloaded annotation has a third state gated
- * on skill inheritance -- when inheritSkills is true the child session can
- * discover and load the skill on demand under its Pi name.
+ * AGSK-04 / D-83.1-03: the not-preloaded annotation is unconditionally
+ * "available on demand" -- extension-contributed skills survive --no-skills
+ * in child sessions, so the skill catalog is present regardless of
+ * inheritSkills.
  */
-function renderSkillLegend(
-  legend: readonly SkillLegendEntry[] | undefined,
-  inheritSkills: boolean,
-): string {
+function renderSkillLegend(legend: readonly SkillLegendEntry[] | undefined): string {
   if (legend === undefined || legend.length === 0) {
     return "";
   }
 
-  const notPreloadedAnnotation = inheritSkills
-    ? "available on demand"
-    : "not available in this session";
   const entryLines = legend.map((entry) => {
-    const annotation = entry.preloaded ? "preloaded in your context" : notPreloadedAnnotation;
+    const annotation = entry.preloaded ? "preloaded in your context" : "available on demand";
     return `- \`${entry.token}\` \u2192 skill \`${entry.generatedName}\` (${annotation})`;
   });
 

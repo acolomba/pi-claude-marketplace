@@ -427,7 +427,7 @@ warnings: (none)
 These instructions reference Claude skills by their original names. In this Pi session:
 
 - \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (preloaded in your context)
-- \`spec-tree:other-skill\` \u2192 skill \`spec-tree-other-skill\` (not available in this session)
+- \`spec-tree:other-skill\` \u2192 skill \`spec-tree-other-skill\` (available on demand)
 
 Body content.
 `;

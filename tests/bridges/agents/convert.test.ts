@@ -722,9 +722,8 @@ test("AGSK-05 / D-83-07 a preloaded skill also remains discoverable in the inher
 
 const LEGEND_HEADING = "## Pi coding agent skill legend";
 
-/** D-82-05 / D-83-05: the three exact annotation texts the emitter renders. */
-type LegendAnnotation =
-  "preloaded in your context" | "not available in this session" | "available on demand";
+/** D-82-05 / AGSK-04 / D-83.1-03: the two exact annotation texts the emitter renders. */
+type LegendAnnotation = "preloaded in your context" | "available on demand";
 
 /** Exact legend entry line as rendered by the emitter (arrow is U+2192). */
 function legendEntryLine(
@@ -768,7 +767,7 @@ test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a preloade
   );
 });
 
-test("AGSK-04 / D-82-06 known-but-not-emitted skill token annotates not available", () => {
+test("AGSK-04 / D-83.1-03 known-but-not-emitted skill token annotates available on demand", () => {
   // The skill is discovered in the plugin (knownSkills) but absent from the
   // source `skills:` list, so it is not preloaded into the child context.
   const out = convertSpecTreeWithBody(
@@ -781,13 +780,13 @@ test("AGSK-04 / D-82-06 known-but-not-emitted skill token annotates not availabl
       legendEntryLine(
         "spec-tree:review-changes",
         "spec-tree-review-changes",
-        "not available in this session",
+        "available on demand",
       ),
     ),
   );
 });
 
-test("AGSK-05 / D-83-05 Skill-declaring agent annotates a known-but-not-emitted skill as available on demand", () => {
+test("AGSK-05 / D-83.1-03 Skill-declaring agent annotates a known-but-not-emitted skill as available on demand", () => {
   // skills: is absent, so the known skill is not preloaded; with Skill
   // declared and allowed the child can still discover and load it from
   // its inherited catalog under the Pi name.
@@ -807,8 +806,10 @@ test("AGSK-05 / D-83-05 Skill-declaring agent annotates a known-but-not-emitted 
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: true$/m);
 });
 
-test("AGSK-05 / D-83-05 the on-demand annotation requires Skill declared AND allowed", () => {
-  // Without Skill in tools: the two-state legend applies...
+test("AGSK-04 / D-83.1-03 the on-demand annotation applies regardless of inheritSkills", () => {
+  // No Skill declared: inheritSkills stays false, yet the annotation is the
+  // same -- extension-contributed skills survive --no-skills in child
+  // sessions, so the catalog is present either way.
   const noSkill = convertSpecTreeWithBody(
     { description: "d", tools: "Read" },
     "Consult spec-tree:review-changes when needed.",
@@ -818,13 +819,13 @@ test("AGSK-05 / D-83-05 the on-demand annotation requires Skill declared AND all
       legendEntryLine(
         "spec-tree:review-changes",
         "spec-tree-review-changes",
-        "not available in this session",
+        "available on demand",
       ),
     ),
   );
 
-  // ...and a disallowed Skill turns inheritance off (D-83-01), so the same
-  // two-state legend applies even though Skill was declared.
+  // A disallowed Skill turns inheritance off (D-83-01), and the annotation
+  // is still the same unified state.
   const disallowed = convertSpecTreeWithBody(
     { description: "d", tools: "Read, Skill", disallowedTools: "Skill" },
     "Consult spec-tree:review-changes when needed.",
@@ -834,7 +835,7 @@ test("AGSK-05 / D-83-05 the on-demand annotation requires Skill declared AND all
       legendEntryLine(
         "spec-tree:review-changes",
         "spec-tree-review-changes",
-        "not available in this session",
+        "available on demand",
       ),
     ),
   );
@@ -900,13 +901,9 @@ test("AGSK-04 legend entries dedupe by token in first-occurrence body order", ()
   const reviewLine = legendEntryLine(
     "spec-tree:review-changes",
     "spec-tree-review-changes",
-    "not available in this session",
+    "available on demand",
   );
-  const otherLine = legendEntryLine(
-    "spec-tree:other",
-    "spec-tree-other",
-    "not available in this session",
-  );
+  const otherLine = legendEntryLine("spec-tree:other", "spec-tree-other", "available on demand");
   // Exactly two entries...
   assert.equal(out.fileContent.split("\u2192 skill").length - 1, 2);
   // ...in first-occurrence order.
