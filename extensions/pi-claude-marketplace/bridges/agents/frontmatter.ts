@@ -93,27 +93,69 @@ export function parseFrontmatter(text: string): ParsedFrontmatter {
   const body = afterOpen.slice(closeMatch.index + closeMatch[0].length);
 
   const raw: Record<string, string> = {};
+  const state: FoldState = { lastKey: null, lastKeyFoldable: false };
   for (const rawLine of fmText.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line === "") {
-      continue;
-    }
-
-    const colon = line.indexOf(":");
-    if (colon === -1) {
-      continue;
-    }
-
-    const key = line.slice(0, colon).trim();
-    const value = line.slice(colon + 1).trim();
-    if (key === "") {
-      continue;
-    }
-
-    raw[key] = value;
+    applyFrontmatterLine(raw, state, rawLine);
   }
 
   return { raw: raw, body: normalizeBody(body) };
+}
+
+/**
+ * AGSK-01 (#86) dash-list folding state: lastKey is the most recently
+ * parsed key; lastKeyFoldable is true only while that key's value is
+ * empty or built entirely from folded dash items, so an inline value
+ * wins and dash items beneath it are ignored (D-82-03).
+ */
+interface FoldState {
+  lastKey: string | null;
+  lastKeyFoldable: boolean;
+}
+
+/**
+ * Parse one trimmed frontmatter line into `raw`, updating the fold state.
+ *
+ * Dash continuation lines fold BEFORE the colon split so an item like
+ * `- spec-tree:review-changes` is taken verbatim, never colon-split (#86).
+ * Items are comma-joined for downstream CSV splitting; quotes stay intact
+ * (splitCsv strips per-item quotes). Known limitation: an item containing
+ * a literal comma would split into two tokens downstream (D-82-02 scan
+ * found none in the wild).
+ */
+function applyFrontmatterLine(
+  raw: Record<string, string>,
+  state: FoldState,
+  rawLine: string,
+): void {
+  const line = rawLine.trim();
+  if (line === "") {
+    return;
+  }
+
+  if (line.startsWith("- ") || line === "-") {
+    const item = line === "-" ? "" : line.slice(2).trim();
+    if (state.lastKey !== null && state.lastKeyFoldable && item !== "") {
+      const current = raw[state.lastKey] ?? "";
+      raw[state.lastKey] = current === "" ? item : `${current},${item}`;
+    }
+
+    return;
+  }
+
+  const colon = line.indexOf(":");
+  if (colon === -1) {
+    return;
+  }
+
+  const key = line.slice(0, colon).trim();
+  const value = line.slice(colon + 1).trim();
+  if (key === "") {
+    return;
+  }
+
+  raw[key] = value;
+  state.lastKey = key;
+  state.lastKeyFoldable = value === "";
 }
 
 /**
