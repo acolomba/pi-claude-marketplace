@@ -3,17 +3,16 @@ gsd_state_version: 1.0
 milestone: agent-skill-preloads
 milestone_name: milestone
 current_phase: 83
-current_plan: 1
-status: milestone_complete
-last_updated: 2026-07-19T17:51:36.705Z
+current_plan: Not started
+status: completed
+last_updated: "2026-07-19T18:53:41.910Z"
 last_activity: 2026-07-19
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
   total_plans: 7
   completed_plans: 7
-  percent: 100
-stopped_at: Milestone complete (Phase 83 was final phase)
+  percent: 67
 ---
 
 # Project State
@@ -50,6 +49,7 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 ### Roadmap Evolution
 
 - Phase 83 added: AGSK-05: map source Skill tool to inheritSkills: true; out-of-scope rationale found overstated after pi-subagents/pi source review
+- Phase 83.1 inserted after Phase 83: UAT finding: --no-skills does not gate extension-contributed skills; Skill warnings dropped as Claude-faithful, droppedTools excludes Skill, legend state unified
 
 ### Decisions
 

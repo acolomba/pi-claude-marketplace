@@ -13,12 +13,12 @@
 
 ### Child-Context Transparency
 
-- [x] **AGSK-03**: When the `Skill` tool is dropped during tools mapping, the generated provenance warnings state that dynamic skill invocation is unavailable in Pi and only preloaded skills are in the child's context.
-- [x] **AGSK-04**: A generated agent whose body references `<plugin>:<source-skill>` tokens carries a visible converter-authored note mapping each referenced Claude skill name to its Pi skill name — "(preloaded in your context)" when the skill is in the emitted `skills:` list, "(not available in this session)" otherwise; an agent body with no such references produces byte-identical output to today.
+- [ ] **AGSK-03** *(amended after phase 83 UAT)*: The `Skill` tool converts silently — no provenance warning and no `droppedTools` entry in any branch. Declared-and-allowed maps to `inheritSkills: true`; declared-and-disallowed suppresses it (disallowed wins, matching Claude Code); both outcomes reproduce Claude Code behavior, so there is nothing to warn about. Genuinely unmapped tools keep their `droppedTools` entries.
+- [ ] **AGSK-04** *(amended after phase 83 UAT)*: A generated agent whose body references `<plugin>:<source-skill>` tokens carries a visible converter-authored note mapping each referenced Claude skill name to its Pi skill name — "(preloaded in your context)" when the skill is in the emitted `skills:` list, "(available on demand)" otherwise (extension-contributed skills survive `--no-skills`, so the catalog is present in child sessions regardless of `inheritSkills`); an agent body with no such references produces byte-identical output to today.
 
 ### Dynamic Skill Access
 
-- [x] **AGSK-05**: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. Provenance warning for these agents states the mapping and that catalog names differ from Claude names (see body legend); the legend annotates known-but-not-preloaded skills as available on demand under their Pi name. Agents not declaring `Skill` keep `inheritSkills: false` byte-identically.
+- [ ] **AGSK-05** *(amended after phase 83 UAT)*: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. The mapping is silent: no warning and no `droppedTools` entry (AGSK-03). Agents not declaring `Skill` keep `inheritSkills: false`.
 
 ## v2 Requirements
 
@@ -39,17 +39,17 @@
 |-------------|-------|--------|
 | AGSK-01 | Phase 82 | Complete |
 | AGSK-02 | Phase 82 | Complete |
-| AGSK-03 | Phase 82 | Complete |
-| AGSK-04 | Phase 82 | Complete |
-| AGSK-05 | Phase 83 | Complete |
+| AGSK-03 | Phase 82, amended in Phase 83.1 | Pending (amended) |
+| AGSK-04 | Phase 82, amended in Phase 83.1 | Pending (amended) |
+| AGSK-05 | Phase 83, amended in Phase 83.1 | Pending (amended) |
 
 **Coverage:**
 
 - v1 requirements: 5 total
-- Mapped to phases: 5 (AGSK-01..04 Phase 82; AGSK-05 Phase 83)
+- Mapped to phases: 5 (AGSK-01..02 Phase 82; AGSK-03..05 amended forms close in Phase 83.1)
 - Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-07-19*
-*Last updated: 2026-07-19 after Phase 82 discussion (AGSK-05 registered for Phase 83; Skill-tool out-of-scope row removed — its rationale did not survive pi-subagents/pi source review)*
+*Last updated: 2026-07-19 after phase 83 UAT (AGSK-03/04/05 amended: Skill converts silently, legend non-preloaded state unified to "available on demand"; Phase 83.1 inserted to deliver the amendments)*

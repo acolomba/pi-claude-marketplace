@@ -97,3 +97,15 @@ Phase 82, then Phase 83.
 | AGSK-05 | Phase 83 |
 
 All 5 v1 requirements mapped. No orphans.
+
+### Phase 83.1: Silent Skill Mapping (INSERTED)
+
+**Goal**: The `Skill` tool converts silently in every branch — declared-and-allowed maps to `inheritSkills: true`, declared-and-disallowed suppresses it exactly as Claude Code does (disallowed wins) — with no provenance warning, no `droppedTools` entry, and a legend whose non-preloaded state says "(available on demand)" everywhere, because extension-contributed skills survive `--no-skills` in real child sessions (UAT finding).
+**Depends on**: Phase 83 (rewrites its warning/provenance behavior and Phase 82's legend state)
+**Requirements**: AGSK-03, AGSK-05 (as amended after the phase 83 UAT)
+**Success Criteria** (what must be TRUE):
+  1. A `Skill`-declaring agent converts with `warnings: (none)` and `droppedTools: (none)` in provenance (given no other dropped tools) while still emitting `inheritSkills: true`.
+  2. An agent with `Skill` both declared and disallowed converts with `inheritSkills: false`, no Skill-related warning, and no `Skill` entry in `droppedTools` — matching Claude Code's disallowed-wins semantics silently.
+  3. The legend's non-preloaded annotation reads "(available on demand)" for all agents regardless of `inheritSkills`; "(not available in this session)" no longer appears anywhere in generated output.
+  4. Genuinely unmapped tools (e.g. `WebFetch`) keep appearing in `droppedTools` exactly as before, and agents with no `Skill` declaration and no body skill tokens stay byte-identical to their Phase 83 output.
+**Plans**: TBD
