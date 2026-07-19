@@ -13,4 +13,4 @@
 // Consumed by the load-time backfill version gate: it is compared against the
 // persisted `lastReconciledExtensionVersion` stamp to decide whether the
 // supported-kind boundary may have moved since the last reconcile.
-export const EXTENSION_VERSION = "0.8.0";
+export const EXTENSION_VERSION = "0.9.0";
