@@ -116,4 +116,4 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 83.1-02-PLAN.md — Unified legend state "(available on demand)" + phase-gate sweep (AGSK-04; Wave 2)
+- [x] 83.1-02-PLAN.md — Unified legend state "(available on demand)" + phase-gate sweep (AGSK-04; Wave 2)
