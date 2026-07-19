@@ -15,6 +15,7 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
+import type { SkillLegendEntry } from "./frontmatter.ts";
 import type { ConvertedAgent, DiscoveredAgent } from "./types.ts";
 
 // Re-export so consumers can import the agent-name generator from the
@@ -105,6 +106,69 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
+}
+
+/**
+ * Escape regex metacharacters so a value can be interpolated into a RegExp
+ * source verbatim (the MDN escape pattern). Plugin names are
+ * assertSafeName-checked but may legally contain `.`; escaping neutralizes
+ * the whole metacharacter class.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * AGSK-04 / D-82-06 / D-82-07: detect `<pluginName>:<skill>` tokens in the
+ * emitted body and build the legend entries.
+ *
+ * The whole body is scanned verbatim, fenced code blocks included
+ * (D-82-07: the legend is aggregated at the top and nothing is rewritten
+ * inline, so code-block matches are safe and useful). The lookbehind
+ * rejects tokens embedded in a longer word (`other-spec-tree:x` is not a
+ * `spec-tree:` reference); the candidate class excludes `.` so sentence
+ * punctuation never joins a candidate (skill names containing dots would
+ * be missed -- none exist in the wild). Only candidates resolving into
+ * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
+ * none. Entries dedupe by full token, first occurrence wins; `preloaded`
+ * reflects membership in the emitted `skills:` list.
+ */
+function detectSkillTokens(
+  body: string,
+  pluginName: string,
+  knownSkills: readonly string[],
+  emittedSkills: readonly string[],
+): SkillLegendEntry[] {
+  const known = new Set(knownSkills);
+  const emitted = new Set(emittedSkills);
+  const tokenRe = new RegExp(
+    `(?<![A-Za-z0-9_:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
+    "g",
+  );
+  const seen = new Set<string>();
+  const entries: SkillLegendEntry[] = [];
+  for (const match of body.matchAll(tokenRe)) {
+    const token = match[0];
+    const candidate = match[1];
+    if (candidate === undefined || seen.has(token)) {
+      continue;
+    }
+
+    seen.add(token);
+    // generatedSkillName elides a `<plugin>-` prefix; a candidate of
+    // exactly `<plugin>-` would elide to "" and make assertSafeName throw.
+    // A body scan must never turn into a throw -- skip that candidate.
+    if (candidate === `${pluginName}-`) {
+      continue;
+    }
+
+    const generated = generatedSkillName(pluginName, candidate);
+    if (known.has(generated)) {
+      entries.push({ token, generatedName: generated, preloaded: emitted.has(generated) });
+    }
+  }
+
+  return entries;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -428,6 +492,12 @@ export function convertAgent(input: {
     pluginData: pluginDataDir,
   });
 
+  // 7.5 AGSK-04: detect same-plugin skill tokens in the emitted body and
+  //     build the legend. Empty when the body references none -- the
+  //     emitter then keeps the byte-identical no-legend layout
+  //     (reference-gated).
+  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills, skillsResult.emit);
+
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, HTML-comment escaping, field
   //    ordering) lives behind a single seam.
@@ -450,6 +520,7 @@ export function convertAgent(input: {
       warnings,
     },
     body: substitutedBody,
+    legend,
   });
 
   const result: ConvertedAgent = {
