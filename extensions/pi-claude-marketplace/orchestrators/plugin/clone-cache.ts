@@ -278,9 +278,16 @@ async function readOriginRemoteUrl(checkoutRoot: string): Promise<string | undef
     }
 
     if (inOrigin) {
-      const match = /^url\s*=\s*(.+)$/.exec(line);
-      if (match?.[1] !== undefined) {
-        return match[1].trim();
+      // `=(.*)` (not `=\s*(.+)`) keeps the match linear-time: overlapping `\s*`
+      // and `(.+)` both matching spaces is the S8786 super-linear smell. The
+      // capture is trimmed and returned only when non-empty, so a bare `url =`
+      // still yields undefined -- behavior identical to the prior pattern.
+      const match = /^url\s*=(.*)$/.exec(line);
+      if (match !== null) {
+        const value = match[1].trim();
+        if (value !== "") {
+          return value;
+        }
       }
     }
   }
