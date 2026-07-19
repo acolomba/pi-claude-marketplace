@@ -271,7 +271,7 @@ List plugins available for installation. Omit the marketplace name to list acros
 /claude:plugin list --available
 ```
 
-Filter the list by plugin status, installed, available for installation, partially available, remote (a git-source plugin not yet fetched), or unavailable to install.
+Filter the list by plugin status, installed, available for installation, partially available (not all features supported), remote (a git-source plugin not yet fetched), or unavailable to install.
 
 ```text
 /claude:plugin list --installed
