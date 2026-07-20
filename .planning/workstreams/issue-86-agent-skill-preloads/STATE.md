@@ -6,15 +6,15 @@ current_phase: 84
 current_phase_name: Agent skillPath resolution (end-to-end skill availability
 current_plan: 1
 status: executing
-stopped_at: Completed 84-01-PLAN.md
-last_updated: "2026-07-20T10:38:44.410Z"
+stopped_at: Completed 84-02-PLAN.md
+last_updated: "2026-07-20T10:49:29.862Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 84 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 75
 ---
 
@@ -23,7 +23,7 @@ progress:
 ## Current Position
 
 Phase: 84 (Agent skillPath resolution (end-to-end skill availability)) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 **Status:** Ready to execute
 **Current Phase:** 84
 **Last Activity:** 2026-07-20 — Phase 84 execution started
@@ -69,6 +69,7 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - [Phase 83]: D-83-05 legend annotation locked as 'available on demand' — Legend entry line already renders the Pi name after the arrow; parallel to the two locked D-82-05 annotations
 - [Phase 84]: D-84-04 skillPath is a hardcoded relative-path constant gated on the existing skills-non-empty check, never threaded through GeneratedFrontmatterFields/convertAgent as a new field
 - [Phase 84]: D-84-01/D-84-02 skill legend collapses to a single 'available on demand' annotation for every entry; SkillLegendEntry.preloaded and detectSkillTokens' emittedSkills plumbing deleted
+- [Phase 84]: D-84-03: pi-subagents is an ADDITION (not a bump) to peerDependencies, marked optional via peerDependenciesMeta so npm never installs or errors on its absence
 
 ### Blockers
 
@@ -76,9 +77,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-07-20T10:38:44.402Z
+**Last session:** 2026-07-20T10:49:29.853Z
 
-**Stopped At:** Completed 84-01-PLAN.md
+**Stopped At:** Completed 84-02-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -97,3 +98,4 @@ None.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 84 P01 | 25min | 2 tasks | 5 files |
+| Phase 84 P02 | 10min | 2 tasks | 3 files |

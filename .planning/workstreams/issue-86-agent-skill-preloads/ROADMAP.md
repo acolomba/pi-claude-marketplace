@@ -134,14 +134,14 @@ Plans:
   3. `package.json` raises the subagents-extension peer floor to `>=0.35.0`, and `npm run check` stays green.
   4. A live spawn of a skill-referencing bridged agent loads and uses the skill on demand (0.35.x lazy delivery), reproducing the verified A/B: with `skillPath` the subagent uses the skill; without it, it does not.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 
 **Wave 1**
 
 - [x] 84-01-PLAN.md — Emit skillPath + collapse legend to single state + unit-fixture corpus (SC-1, D-84-01/02/04/05; Wave 1)
-- [ ] 84-02-PLAN.md — pi-subagents optional peer floor >=0.35.0 + AGSK-06/AGSK-04 docs (SC-3, D-84-03; Wave 1)
+- [x] 84-02-PLAN.md — pi-subagents optional peer floor >=0.35.0 + AGSK-06/AGSK-04 docs (SC-3, D-84-03; Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
