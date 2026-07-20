@@ -106,10 +106,12 @@ All 5 v1 requirements mapped. No orphans.
 **Depends on**: Phase 83 (rewrites its warning/provenance behavior and Phase 82's legend state)
 **Requirements**: AGSK-03, AGSK-05 (as amended after the phase 83 UAT)
 **Success Criteria** (what must be TRUE):
+
   1. A `Skill`-declaring agent converts with `warnings: (none)` and `droppedTools: (none)` in provenance (given no other dropped tools) while still emitting `inheritSkills: true`.
   2. An agent with `Skill` both declared and disallowed converts with `inheritSkills: false`, no Skill-related warning, and no `Skill` entry in `droppedTools` — matching Claude Code's disallowed-wins semantics silently.
   3. The legend's non-preloaded annotation reads "(available on demand)" for all agents regardless of `inheritSkills`; "(not available in this session)" no longer appears anywhere in generated output.
   4. Genuinely unmapped tools (e.g. `WebFetch`) keep appearing in `droppedTools` exactly as before, and agents with no `Skill` declaration and no body skill tokens stay byte-identical to their Phase 83 output.
+
 **Plans**: 2 plans
 Plans:
 **Wave 1**
@@ -119,3 +121,21 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 83.1-02-PLAN.md — Unified legend state "(available on demand)" + phase-gate sweep (AGSK-04; Wave 2)
+
+### Phase 84: Agent skillPath resolution (end-to-end skill availability)
+
+**Goal**: Emit an agent-local `skillPath` field on every generated agent that references skills, pointing at the marketplace's own skills dir relative to the agent file (`skillPath: ../pi-claude-marketplace/resources/skills`), so pi-subagents resolves the agent's `skills:` names for the spawned subagent. Phases 82/83/83.1 made the conversion correct, but the emitted `skills:` references never resolved for the subagent -- the skill installs under `<scope>/pi-claude-marketplace/resources/skills/`, off pi-subagents' filesystem scan roots -- so issue #86 is not fixed end-to-end without this. Also raise the `pi-subagents` peer-dependency floor to `>=0.35.0`, where agent-local `skillPath` shipped (PR #470). Design, three-way evidence, and caveats are captured in `84-NOTES.md`.
+**Depends on**: Phase 83.1 (builds on the finalized conversion output)
+**Requirements**: AGSK-06 (new -- agent-local skillPath resolution; add to REQUIREMENTS.md during planning)
+**Success Criteria** (what must be TRUE):
+
+  1. A generated agent with a non-empty `skills:` list emits `skillPath: ../pi-claude-marketplace/resources/skills`; an agent with no skills emits no `skillPath` and stays byte-identical to its Phase 83.1 output.
+  2. Given that emitted `skillPath`, pi-subagents `resolveSkillsWithFallback` resolves the bridged skill by its generated name (no longer reported `missing`), and the skill does not enter the parent/global catalog.
+  3. `package.json` raises the subagents-extension peer floor to `>=0.35.0`, and `npm run check` stays green.
+  4. A live spawn of a skill-referencing bridged agent loads and uses the skill on demand (0.35.x lazy delivery), reproducing the verified A/B: with `skillPath` the subagent uses the skill; without it, it does not.
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 84 to break down)

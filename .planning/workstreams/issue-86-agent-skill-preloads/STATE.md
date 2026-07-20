@@ -3,17 +3,19 @@ gsd_state_version: 1.0
 milestone: agent-skill-preloads
 milestone_name: milestone
 current_phase: 83.1
-current_plan: 1
+current_phase_name: silent-skill-mapping
+current_plan: Not started
 status: milestone_complete
-last_updated: 2026-07-19T23:28:29.422Z
+stopped_at: Milestone complete (Phase 83.1 was final phase)
+last_updated: "2026-07-20T02:29:05.587Z"
 last_activity: 2026-07-19
+last_activity_desc: Phase 83.1 execution started
 progress:
-  total_phases: 3
-  completed_phases: 2
+  total_phases: 4
+  completed_phases: 3
   total_plans: 9
   completed_plans: 9
-  percent: 67
-stopped_at: Milestone complete (Phase 83.1 was final phase)
+  percent: 75
 ---
 
 # Project State
@@ -51,6 +53,7 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 
 - Phase 83 added: AGSK-05: map source Skill tool to inheritSkills: true; out-of-scope rationale found overstated after pi-subagents/pi source review
 - Phase 83.1 inserted after Phase 83: UAT finding: --no-skills does not gate extension-contributed skills; Skill warnings dropped as Claude-faithful, droppedTools excludes Skill, legend state unified
+- Phase 84 added: Agent skillPath resolution: emit skillPath on skill-referencing agents so pi-subagents resolves bridged skills for the spawned subagent (end-to-end fix for #86); raise pi-subagents floor to >=0.35.0
 
 ### Decisions
 
