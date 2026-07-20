@@ -194,13 +194,11 @@ export interface GeneratedFrontmatterFields {
 /**
  * AGSK-04: one skill legend entry. `token` is the `<plugin>:<skill>`
  * reference exactly as it appears in the body; `generatedName` is the Pi
- * skill name it maps to; `preloaded` is true when that name is in the
- * emitted `skills:` list (D-82-06).
+ * skill name it maps to.
  */
 export interface SkillLegendEntry {
   readonly token: string;
   readonly generatedName: string;
-  readonly preloaded: boolean;
 }
 
 /**
@@ -233,8 +231,9 @@ export interface GeneratedProvenanceFields {
  *   <skill legend>          (AGSK-04, only when legend entries exist)
  *   <body>
  *
- * AG-8 deterministic field order: name, description, model, tools,
- * thinking, skills, systemPromptMode, inheritProjectContext, inheritSkills.
+ * AG-8 / D-84-04 deterministic field order: name, description, model,
+ * tools, thinking, skills, skillPath (only when skills is non-empty),
+ * systemPromptMode, inheritProjectContext, inheritSkills.
  *
  * AGSK-04 / D-82-04: when `legend` is non-empty, the legend block renders
  * immediately after the provenance comment and before the body prose. When
@@ -269,6 +268,10 @@ export function emitGeneratedAgentFile(input: {
 
   if (frontmatter.skills.length > 0) {
     lines.push(`skills: ${frontmatter.skills.join(",")}`);
+    // D-84-04: a fixed, agent-local search root so pi-subagents resolves
+    // the emitted skill names against the bridged skills directory instead
+    // of only its own scan roots (pi-subagents 0.35.0, PR #428).
+    lines.push("skillPath: ../pi-claude-marketplace/resources/skills");
   }
 
   lines.push(
@@ -321,7 +324,7 @@ export function emitGeneratedAgentFile(input: {
  * blank line after `-->`; the blank line after the last entry comes from
  * the body's normalized leading blank line.
  *
- * AGSK-04 / D-83.1-03: the not-preloaded annotation is unconditionally
+ * AGSK-04 / D-83.1-03 / D-84-01: every entry renders the single annotation
  * "available on demand" -- extension-contributed skills survive --no-skills
  * in child sessions, so the skill catalog is present regardless of
  * inheritSkills.
@@ -331,10 +334,9 @@ function renderSkillLegend(legend: readonly SkillLegendEntry[] | undefined): str
     return "";
   }
 
-  const entryLines = legend.map((entry) => {
-    const annotation = entry.preloaded ? "preloaded in your context" : "available on demand";
-    return `- \`${entry.token}\` \u2192 skill \`${entry.generatedName}\` (${annotation})`;
-  });
+  const entryLines = legend.map(
+    (entry) => `- \`${entry.token}\` \u2192 skill \`${entry.generatedName}\` (available on demand)`,
+  );
 
   return (
     "\n## Pi coding agent skill legend\n\n" +

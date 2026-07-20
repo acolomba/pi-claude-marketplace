@@ -134,17 +134,14 @@ function escapeRegExp(value: string): string {
  * punctuation never joins a candidate (skill names containing dots would
  * be missed -- none exist in the wild). Only candidates resolving into
  * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
- * none. Entries dedupe by full token, first occurrence wins; `preloaded`
- * reflects membership in the emitted `skills:` list.
+ * none. Entries dedupe by full token, first occurrence wins.
  */
 function detectSkillTokens(
   body: string,
   pluginName: string,
   knownSkills: readonly string[],
-  emittedSkills: readonly string[],
 ): SkillLegendEntry[] {
   const known = new Set(knownSkills);
-  const emitted = new Set(emittedSkills);
   const tokenRe = new RegExp(
     `(?<![A-Za-z0-9_.:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
     "g",
@@ -168,7 +165,7 @@ function detectSkillTokens(
 
     const generated = generatedSkillName(pluginName, candidate);
     if (known.has(generated)) {
-      entries.push({ token, generatedName: generated, preloaded: emitted.has(generated) });
+      entries.push({ token, generatedName: generated });
     }
   }
 
@@ -527,7 +524,7 @@ export function convertAgent(input: {
   //     build the legend. Empty when the body references none -- the
   //     emitter then keeps the byte-identical no-legend layout
   //     (reference-gated).
-  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills, skillsResult.emit);
+  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills);
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, HTML-comment escaping, field

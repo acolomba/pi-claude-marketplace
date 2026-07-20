@@ -48,6 +48,7 @@ name: pi-claude-marketplace-acme-bot
 description: d
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -232,6 +233,7 @@ name: pi-claude-marketplace-acme-bot
 description: d
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false

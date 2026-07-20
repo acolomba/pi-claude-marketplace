@@ -761,16 +761,9 @@ test("AGSK-05 / D-83-07 a preloaded skill also remains discoverable in the inher
 
 const LEGEND_HEADING = "## Pi coding agent skill legend";
 
-/** D-82-05 / AGSK-04 / D-83.1-03: the two exact annotation texts the emitter renders. */
-type LegendAnnotation = "preloaded in your context" | "available on demand";
-
 /** Exact legend entry line as rendered by the emitter (arrow is U+2192). */
-function legendEntryLine(
-  token: string,
-  generatedName: string,
-  annotation: LegendAnnotation,
-): string {
-  return `- \`${token}\` \u2192 skill \`${generatedName}\` (${annotation})`;
+function legendEntryLine(token: string, generatedName: string): string {
+  return `- \`${token}\` \u2192 skill \`${generatedName}\` (available on demand)`;
 }
 
 function convertSpecTreeWithBody(
@@ -794,7 +787,7 @@ function convertSpecTreeWithBody(
   });
 }
 
-test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a preloaded legend entry", () => {
+test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a legend entry", () => {
   const out = convertSpecTreeWithBody(
     { description: "d", tools: "Read", skills: "spec-tree:review-changes" },
     "Invoke spec-tree:review-changes on the diff.",
@@ -802,11 +795,7 @@ test("AGSK-04 / D-82-06 same-plugin token whose skill is emitted gets a preloade
   assert.ok(out.fileContent.includes(LEGEND_HEADING));
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "preloaded in your context",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 });
@@ -821,11 +810,7 @@ test("AGSK-04 / D-83.1-03 known-but-not-emitted skill token annotates available 
   assert.ok(out.fileContent.includes(LEGEND_HEADING));
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "available on demand",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 });
@@ -840,11 +825,7 @@ test("AGSK-05 / D-83.1-03 Skill-declaring agent annotates a known-but-not-emitte
   );
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "available on demand",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
   assert.match(frontmatterOf(out.fileContent), /^inheritSkills: true$/m);
@@ -860,11 +841,7 @@ test("AGSK-04 / D-83.1-03 the on-demand annotation applies regardless of inherit
   );
   assert.ok(
     noSkill.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "available on demand",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 
@@ -876,11 +853,7 @@ test("AGSK-04 / D-83.1-03 the on-demand annotation applies regardless of inherit
   );
   assert.ok(
     disallowed.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "available on demand",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 });
@@ -927,11 +900,7 @@ test("AGSK-04 sentence-final punctuation does not poison the token candidate", (
   );
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "preloaded in your context",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 });
@@ -942,12 +911,8 @@ test("AGSK-04 legend entries dedupe by token in first-occurrence body order", ()
     "First spec-tree:review-changes then spec-tree:review-changes again, later spec-tree:other.",
     ["spec-tree-review-changes", "spec-tree-other"],
   );
-  const reviewLine = legendEntryLine(
-    "spec-tree:review-changes",
-    "spec-tree-review-changes",
-    "available on demand",
-  );
-  const otherLine = legendEntryLine("spec-tree:other", "spec-tree-other", "available on demand");
+  const reviewLine = legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes");
+  const otherLine = legendEntryLine("spec-tree:other", "spec-tree-other");
   // Exactly two entries...
   assert.equal(out.fileContent.split("\u2192 skill").length - 1, 2);
   // ...in first-occurrence order.
@@ -963,11 +928,7 @@ test("AGSK-04 / D-82-07 token appearing only inside a fenced code block still yi
   );
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "preloaded in your context",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 });
@@ -993,6 +954,7 @@ name: pi-claude-marketplace-spec-tree-bot
 description: d
 tools: read
 skills: spec-tree-review-changes
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -1077,11 +1039,7 @@ test("#86 canonical agent converts end to end with correct frontmatter, provenan
   // Legend: the body reference maps to the preloaded Pi skill.
   assert.ok(
     out.fileContent.includes(
-      legendEntryLine(
-        "spec-tree:review-changes",
-        "spec-tree-review-changes",
-        "preloaded in your context",
-      ),
+      legendEntryLine("spec-tree:review-changes", "spec-tree-review-changes"),
     ),
   );
 
@@ -1091,6 +1049,7 @@ name: pi-claude-marketplace-spec-tree-changes-reviewer
 description: Reviews changes
 tools: bash,read
 skills: spec-tree-review-changes
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1110,7 +1069,7 @@ warnings: (none)
 
 These instructions reference Claude skills by their original names. In this Pi session:
 
-- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (preloaded in your context)
+- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (available on demand)
 
 Invoke spec-tree:review-changes on the diff.
 `;

@@ -358,6 +358,7 @@ name: pi-claude-marketplace-acme-bot
 description: An agent.
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -393,12 +394,10 @@ test("D-82-04 / D-82-05 emitGeneratedAgentFile renders the legend block between 
       {
         token: "spec-tree:review-changes",
         generatedName: "spec-tree-review-changes",
-        preloaded: true,
       },
       {
         token: "spec-tree:other-skill",
         generatedName: "spec-tree-other-skill",
-        preloaded: false,
       },
     ],
   });
@@ -407,6 +406,7 @@ name: pi-claude-marketplace-acme-bot
 description: An agent.
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -426,7 +426,7 @@ warnings: (none)
 
 These instructions reference Claude skills by their original names. In this Pi session:
 
-- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (preloaded in your context)
+- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (available on demand)
 - \`spec-tree:other-skill\` \u2192 skill \`spec-tree-other-skill\` (available on demand)
 
 Body content.
@@ -448,6 +448,7 @@ name: pi-claude-marketplace-acme-bot
 description: An agent.
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -486,7 +487,7 @@ test("AG-8 inheritSkills: true stays the last frontmatter line before the closin
   assert.ok(frontmatterBlock.endsWith("\ninheritSkills: true"));
 });
 
-test("AGSK-05 / D-83.1-03 legend annotates a not-preloaded entry as available on demand when inheritSkills is true", () => {
+test("AGSK-05 / D-83.1-03 legend annotates a known-but-not-emitted entry as available on demand when inheritSkills is true", () => {
   const base = makeLegendEmitInput();
   const out = emitGeneratedAgentFile({
     ...base,
@@ -495,12 +496,10 @@ test("AGSK-05 / D-83.1-03 legend annotates a not-preloaded entry as available on
       {
         token: "spec-tree:review-changes",
         generatedName: "spec-tree-review-changes",
-        preloaded: true,
       },
       {
         token: "spec-tree:other-skill",
         generatedName: "spec-tree-other-skill",
-        preloaded: false,
       },
     ],
   });
@@ -509,6 +508,7 @@ name: pi-claude-marketplace-acme-bot
 description: An agent.
 tools: read,bash
 skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -528,7 +528,7 @@ warnings: (none)
 
 These instructions reference Claude skills by their original names. In this Pi session:
 
-- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (preloaded in your context)
+- \`spec-tree:review-changes\` \u2192 skill \`spec-tree-review-changes\` (available on demand)
 - \`spec-tree:other-skill\` \u2192 skill \`spec-tree-other-skill\` (available on demand)
 
 Body content.
