@@ -527,7 +527,7 @@ export function convertAgent(input: {
   const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills);
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
-  //    parser-safety (YAML quote-flipping, HTML-comment escaping, field
+  //    parser-safety (YAML quote-flipping, newline normalization, field
   //    ordering) lives behind a single seam.
   const fileContent = emitGeneratedAgentFile({
     frontmatter: {

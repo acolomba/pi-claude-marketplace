@@ -30,7 +30,7 @@ export {
   emitGeneratedAgentFile,
   parseFrontmatter,
   emitYamlScalar,
-  sanitizeProvenance,
+  sanitizeProvenanceValue,
 } from "./frontmatter.ts";
 export { GENERATED_AGENT_MARKER, GENERATED_AGENT_PREFIX, isOwnedAgentFile } from "./marker.ts";
 export { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";

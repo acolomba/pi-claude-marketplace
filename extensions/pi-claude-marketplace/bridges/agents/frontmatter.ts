@@ -7,8 +7,8 @@
 //
 // On the OUTPUT side, this module is the only place in the extension that
 // decides how generated agent files are assembled: which scalars get
-// quote-flipped, which strings get HTML-comment-escaped, and what the
-// deterministic field order looks like. convertAgent does the field
+// quote-flipped, which provenance values get newline-normalized, and what
+// the deterministic field order looks like. convertAgent does the field
 // mapping but delegates the final byte assembly here.
 //
 // On the INPUT side, parseFrontmatter mirrors pi-subagents' own line-based
@@ -22,8 +22,9 @@
 //
 // AG-6 contract: tolerates `:` in description values (line-based parser
 // splits on FIRST `:`, value side is taken verbatim).
-// AG-8 contract: emitYamlScalar quote-flip + sanitizeProvenance --> -> --&gt;
-// escape so a source path containing `-->` cannot terminate the comment.
+// AG-8 contract: emitYamlScalar quote-flip + sanitizeProvenanceValue newline
+// normalization so a multi-line provenance value cannot be misread as a new
+// frontmatter key by pi-subagents' line-based parser.
 
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
@@ -58,12 +59,13 @@ export function emitYamlScalar(value: string): string {
 }
 
 /**
- * Sanitize a provenance comment field so a literal `-->` cannot terminate
- * the surrounding HTML comment early. The provenance block is purely
- * informational; safe to mangle the rare token.
+ * Normalize a free-text provenance value to a single line so it cannot be
+ * misread as a new frontmatter key by pi-subagents' line-based parser.
+ * Provenance values are purely informational; collapsing an embedded
+ * newline to a space is safe.
  */
-export function sanitizeProvenance(value: string): string {
-  return value.replaceAll("-->", "--&gt;");
+export function sanitizeProvenanceValue(value: string): string {
+  return value.replace(/\r?\n/g, " ");
 }
 
 export interface ParsedFrontmatter {
@@ -202,9 +204,9 @@ export interface SkillLegendEntry {
 }
 
 /**
- * Provenance fields rendered into the HTML comment block. All free-text
- * fields are sanitized so a literal `-->` cannot terminate the comment
- * early.
+ * Provenance fields rendered as frontmatter keys; free-text values are
+ * newline-normalized so a multi-line value cannot inject a bogus
+ * frontmatter key into pi-subagents' line-based parser.
  */
 export interface GeneratedProvenanceFields {
   readonly pluginName: string;
@@ -220,25 +222,29 @@ export interface GeneratedProvenanceFields {
  * Assemble the generated agent file.
  *
  * The frontmatter MUST be the first thing in the file: pi-subagents'
- * parser only honors frontmatter when the file starts with `---`. The
- * provenance comment goes into the body so it remains human-visible (and
- * the GENERATED_AGENT_MARKER substring is still in the file for safety
- * checks before overwrite/delete).
+ * parser only honors frontmatter when the file starts with `---`.
+ * Provenance is rendered as flat frontmatter keys (T-d8i-01): pi-subagents
+ * stores every `key: value` line in a flat record and silently ignores
+ * keys it does not know, so the provenance keys are parsed-and-ignored and
+ * never reach the child subagent's system prompt (which is the file body,
+ * verbatim). The GENERATED_AGENT_MARKER substring still appears in the
+ * file -- as the `generator:` key's value -- for isOwnedAgentFile safety
+ * checks before overwrite/delete.
  *
- *   <generated frontmatter>\n   (already ends with "---\n")
- *   \n
- *   <provenance comment>\n
+ *   <generated frontmatter, including provenance keys>\n  (ends "---\n")
  *   <skill legend>          (AGSK-04, only when legend entries exist)
  *   <body>
  *
- * AG-8 / D-84-04 deterministic field order: name, description, model,
- * tools, thinking, skills, skillPath (only when skills is non-empty),
- * systemPromptMode, inheritProjectContext, inheritSkills.
+ * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
+ * model, tools, thinking, skills, skillPath (only when skills is
+ * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
+ * generator, sourcePlugin, sourceAgent, sourcePath, originalModel (only
+ * when defined), droppedFields, droppedTools, warnings.
  *
  * AGSK-04 / D-82-04: when `legend` is non-empty, the legend block renders
- * immediately after the provenance comment and before the body prose. When
+ * immediately after the frontmatter and before the body prose. When
  * `legend` is undefined or empty the assembly is byte-for-byte the
- * pre-legend layout (reference-gated byte identity).
+ * no-legend layout (reference-gated byte identity).
  */
 export function emitGeneratedAgentFile(input: {
   frontmatter: GeneratedFrontmatterFields;
@@ -279,50 +285,51 @@ export function emitGeneratedAgentFile(input: {
     "inheritProjectContext: true",
     `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
   );
-  const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
-  // Provenance HTML comment. Free-text fields are sanitized so a literal
-  // `-->` can't terminate the surrounding HTML comment early.
-  const provenanceLines: string[] = [
-    "<!--",
-    GENERATED_AGENT_MARKER,
-    `plugin: ${provenance.pluginName}`,
+  // T-d8i-01: provenance keys, appended after inheritSkills, inside the
+  // frontmatter -- so pi-subagents' parser stores-and-ignores them and the
+  // child subagent's system prompt (the body, verbatim) never sees them.
+  // Free-text values are newline-normalized (T-d8i-02) so a multi-line
+  // value can't inject a bogus key into the line-based parser.
+  lines.push(
+    `generator: ${GENERATED_AGENT_MARKER}`,
+    `sourcePlugin: ${provenance.pluginName}`,
     `sourceAgent: ${provenance.sourceName}`,
-    `sourcePath: ${sanitizeProvenance(provenance.sourcePath)}`,
-  ];
+    `sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
+  );
   if (provenance.originalModel !== undefined) {
-    provenanceLines.push(`originalModel: ${sanitizeProvenance(provenance.originalModel)}`);
+    lines.push(`originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
   }
 
-  provenanceLines.push(
+  lines.push(
     `droppedFields: ${formatOptionalProvenanceList(provenance.droppedFields)}`,
     `droppedTools: ${formatOptionalProvenanceList(provenance.droppedTools)}`,
     `warnings: ${formatOptionalProvenanceList(provenance.warnings)}`,
-    "-->",
   );
-  const provenanceComment = provenanceLines.join("\n") + "\n";
+  const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
   // Body: ensure exactly one leading blank line and a trailing newline so
-  // the generated file has deterministic separators around the comment.
+  // the generated file has deterministic separators around the frontmatter
+  // (and, when present, the skill legend).
   const bodyWithLeadingBlank = body.startsWith("\n") ? body : "\n" + body;
   const bodyFinal = bodyWithLeadingBlank.endsWith("\n")
     ? bodyWithLeadingBlank
     : bodyWithLeadingBlank + "\n";
 
-  // AGSK-04: legend renders between the provenance comment and the body.
+  // AGSK-04: legend renders between the frontmatter and the body.
   // renderSkillLegend returns "" when there are no entries, keeping this
-  // expression byte-identical to the pre-legend assembly. The body's leading
-  // blank line (normalized above) supplies the blank line after the last
-  // legend entry.
-  return generatedFrontmatter + "\n" + provenanceComment + renderSkillLegend(legend) + bodyFinal;
+  // expression byte-identical to the no-legend assembly. The body's leading
+  // blank line (normalized above) supplies the blank line after the closing
+  // frontmatter delimiter (no legend) or after the last legend entry.
+  return generatedFrontmatter + renderSkillLegend(legend) + bodyFinal;
 }
 
 /**
  * AGSK-04 / D-82-05 legend block: locked heading, one intro sentence, one
  * `- \`token\` \u2192 skill \`name\` (annotation)` line per entry. Leading
- * "\n" pairs with the provenance comment's trailing newline to give one
- * blank line after `-->`; the blank line after the last entry comes from
- * the body's normalized leading blank line.
+ * "\n" pairs with the frontmatter's closing `---\n` delimiter to give one
+ * blank line before the heading; the blank line after the last entry comes
+ * from the body's normalized leading blank line.
  *
  * AGSK-04 / D-83.1-03 / D-84-01: every entry renders the single annotation
  * "available on demand" -- extension-contributed skills survive --no-skills
@@ -347,5 +354,5 @@ function renderSkillLegend(legend: readonly SkillLegendEntry[] | undefined): str
 }
 
 function formatOptionalProvenanceList(values: readonly string[]): string {
-  return values.length === 0 ? "(none)" : sanitizeProvenance(values.join(", "));
+  return values.length === 0 ? "(none)" : sanitizeProvenanceValue(values.join(", "));
 }

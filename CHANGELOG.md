@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Generated agent provenance (source plugin, source agent, dropped fields/tools, warnings) now renders as frontmatter keys instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt.
+
 ## [0.9.0] - 2026-07-18
 
 - Git-source plugins. Marketplace manifests can now declare plugin sources as generic git URLs and `git-subdir` references in addition to `github`, with the full lifecycle supported: install, update, reinstall, uninstall, and garbage collection all work against a per-scope clone cache. A source pinned to a manifest `sha` uses an immutable per-sha cache entry; an unpinned source is backed by exactly one mutable mirror clone per canonical URL, refreshed in place, so fetched state always derives from a single well-known directory.
