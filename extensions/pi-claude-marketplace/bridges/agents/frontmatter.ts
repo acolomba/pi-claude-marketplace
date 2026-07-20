@@ -204,7 +204,7 @@ export interface SkillLegendEntry {
 }
 
 /**
- * Provenance fields rendered under a single `piSubagentMetadata` block-list;
+ * Provenance fields rendered under a single `provenance` block-list;
  * free-text values are newline-normalized so a multi-line value cannot
  * inject a bogus frontmatter key into pi-subagents' line-based parser.
  */
@@ -223,8 +223,8 @@ export interface GeneratedProvenanceFields {
  *
  * The frontmatter MUST be the first thing in the file: pi-subagents'
  * parser only honors frontmatter when the file starts with `---`.
- * Provenance is folded under a single `piSubagentMetadata` block-list
- * (T-d8i-01): `piSubagentMetadata:` parses as an unknown key with an empty
+ * Provenance is folded under a single `provenance` block-list
+ * (T-d8i-01): `provenance:` parses as an unknown key with an empty
  * value, and its indented `- ` items are skipped by pi-subagents'
  * `^([\w-]+):` key regex, so none of it reaches the child subagent's
  * system prompt (which is the file body, verbatim). The
@@ -232,14 +232,14 @@ export interface GeneratedProvenanceFields {
  * first bare list item -- for isOwnedAgentFile safety checks before
  * overwrite/delete.
  *
- *   <generated frontmatter, including piSubagentMetadata>\n  (ends "---\n")
+ *   <generated frontmatter, including provenance>\n  (ends "---\n")
  *   <skill legend>          (AGSK-04, only when legend entries exist)
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
  * model, tools, thinking, skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * then the `piSubagentMetadata` block-list (marker, sourcePlugin,
+ * then the `provenance` block-list (marker, sourcePlugin,
  * sourceAgent, sourcePath, originalModel [only when defined],
  * droppedFields, droppedTools, warnings).
  *
@@ -288,7 +288,7 @@ export function emitGeneratedAgentFile(input: {
     `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
   );
 
-  // T-d8i-01: provenance folded under a single `piSubagentMetadata` block-list,
+  // T-d8i-01: provenance folded under a single `provenance` block-list,
   // appended after inheritSkills, inside the frontmatter -- so pi-subagents'
   // parser stores-and-ignores it and the child subagent's system prompt (the
   // body, verbatim) never sees it. The indented `- ` items carry leading
@@ -298,7 +298,7 @@ export function emitGeneratedAgentFile(input: {
   // Free-text values are newline-normalized (T-d8i-02) so a multi-line value
   // can't inject a bogus key into the line-based parser.
   lines.push(
-    "piSubagentMetadata:",
+    "provenance:",
     `  - ${GENERATED_AGENT_MARKER}`,
     `  - sourcePlugin: ${provenance.pluginName}`,
     `  - sourceAgent: ${provenance.sourceName}`,

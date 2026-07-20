@@ -19,7 +19,7 @@ export const GENERATED_AGENT_PREFIX = "pi-claude-marketplace-";
 
 /**
  * AG-5 user contract: substring every staged agent body MUST contain.
- * Emitted by frontmatter.ts as the first item of the `piSubagentMetadata`
+ * Emitted by frontmatter.ts as the first item of the `provenance`
  * frontmatter block-list. DO NOT EDIT -- value is asserted by
  * markers-snapshot test.
  */
