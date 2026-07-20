@@ -80,7 +80,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260720-d8i | Move agent provenance from body comment into frontmatter | 2026-07-20 | b3bcc28e | [260720-d8i-move-agent-provenance-from-body-comment-](../../quick/260720-d8i-move-agent-provenance-from-body-comment-/) |
+| 260720-d8i | Move agent provenance into a `provenance` frontmatter mapping | 2026-07-20 | a5f9d926 | [260720-d8i-move-agent-provenance-from-body-comment-](../../quick/260720-d8i-move-agent-provenance-from-body-comment-/) |
 
 ## Session Continuity
 

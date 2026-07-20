@@ -7,8 +7,9 @@ status: complete
 dependency-graph:
   requires: []
   provides:
-    - generator/sourcePlugin/sourceAgent/sourcePath/originalModel/droppedFields/droppedTools/warnings frontmatter keys on emitGeneratedAgentFile output
+    - provenance frontmatter mapping on emitGeneratedAgentFile output (generatedBy + sourcePlugin/sourceAgent/sourcePath/originalModel/droppedFields/droppedTools/warnings, with dropped*/warnings as YAML lists)
     - sanitizeProvenanceValue newline-normalization helper (renamed from sanitizeProvenance)
+    - GENERATED_AGENT_MARKER_LEGACY back-compat marker; isOwnedAgentFile accepts either the current or legacy marker
   affects:
     - extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts
     - extensions/pi-claude-marketplace/bridges/agents/marker.ts
@@ -18,7 +19,8 @@ dependency-graph:
 tech-stack:
   added: []
   patterns:
-    - Provenance-as-frontmatter-keys instead of body HTML comment, relying on pi-subagents' line-based parser silently storing-and-ignoring unknown keys.
+    - Provenance folded under a single `provenance` frontmatter mapping instead of a body HTML comment, relying on pi-subagents' line-based parser storing-and-ignoring the unknown key and skipping every indented member line.
+    - Dual ownership marker (current `generatedBy: pi-claude-marketplace` line + legacy body-comment phrase) so already-installed agents stay recognized with no migration.
 key-files:
   created: []
   modified:
@@ -27,154 +29,162 @@ key-files:
     - extensions/pi-claude-marketplace/bridges/agents/types.ts
     - extensions/pi-claude-marketplace/bridges/agents/convert.ts
     - extensions/pi-claude-marketplace/bridges/agents/index.ts
+    - tests/architecture/markers-snapshot.test.ts
     - tests/bridges/agents/frontmatter.test.ts
     - tests/bridges/agents/convert.test.ts
     - tests/bridges/agents/convert-byte-identity.test.ts
+    - tests/bridges/agents/marker.test.ts
+    - tests/bridges/agents/stage.test.ts
+    - tests/bridges/integration.test.ts
+    - tests/bridges/integration-foreign-content.test.ts
     - CHANGELOG.md
 decisions:
-  - Combined Task 1 (emitter/source changes) and Task 2 (test regeneration + CHANGELOG) into a single commit rather than two atomic per-task commits, because this repo's pre-commit hook runs `npm run lint` and `npm run typecheck` on the whole project (not scoped to staged files), and Task 1 alone leaves the pre-existing test files referencing a renamed export (`sanitizeProvenance` -> `sanitizeProvenanceValue`), which fails those whole-project hooks. A Task-1-only commit was not achievable without violating the "never skip hooks" constraint.
+  - Combined the emitter/source changes and the test regeneration into a single commit per iteration, because this repo's pre-commit hook runs `npm run lint` and `npm run typecheck` on the whole project (not scoped to staged files), so a source-only commit that leaves tests referencing a renamed/removed export fails those whole-project hooks.
+  - Four design refinements from the coordinator arrived across the task (flat frontmatter keys; fold into a block-list dropping `generator`; rename the container key to `provenance`; then final shape as a YAML mapping with a `generatedBy` key and real YAML lists). Because history must not be rewritten (repo rule) and `--amend` is forbidden (task constraints), each landed as its own atomic commit.
+  - `generatedBy: pi-claude-marketplace` replaced the bare marker sentence, which removed the old literal from the file. Rather than weaken detection, a legacy marker constant was added and `isOwnedAgentFile` now accepts either marker, preserving recognition of pre-0.10 body-comment files.
 metrics:
-  duration: ~40m
+  duration: ~120m
   completed: 2026-07-20
 ---
 
-# Quick Task 260720-d8i: Move agent provenance from body comment to frontmatter keys Summary
+# Quick Task 260720-d8i: Move agent provenance into a `provenance` frontmatter mapping
 
-Moved generated-agent provenance (source plugin, source agent, dropped
-fields/tools, warnings) out of a body HTML comment and into flat
-frontmatter keys, so it no longer enters the bridged subagent's system
-prompt (pi-subagents sets `systemPrompt: body` verbatim).
+Moved generated-agent provenance (source plugin, source agent, source path,
+original model, dropped fields/tools, warnings) out of a body HTML comment and
+into a single `provenance` frontmatter mapping, so it no longer enters the
+bridged subagent's system prompt (pi-subagents sets `systemPrompt: body`
+verbatim, with no comment stripping).
+
+## Commits
+
+1. `b3bcc28e` — `fix(AG-5,AG-8): move generated-agent provenance to frontmatter
+   keys`. First cut: provenance moved from the body HTML comment to eight flat
+   frontmatter keys, plus the `sanitizeProvenance` -> `sanitizeProvenanceValue`
+   rename and doc updates across `frontmatter.ts`, `marker.ts`, `types.ts`,
+   `convert.ts`, `index.ts`.
+2. `331586f7` — `refactor(AG-5,AG-8): fold agent provenance under
+   piSubagentMetadata`. Replaced the eight flat keys with a single YAML
+   block-list and dropped the top-level `generator` key.
+3. `30cc87ed` — `refactor(AG-5,AG-8): rename agent provenance key to
+   provenance`. Renamed the container key to `provenance` for code<->artifact
+   consistency with `GeneratedProvenanceFields` / `sanitizeProvenanceValue`.
+4. `a5f9d926` — `refactor(AG-5,AG-8): provenance as YAML mapping with
+   generatedBy`. Final shape: `provenance` becomes a YAML mapping; the marker
+   sentence becomes a `generatedBy: pi-claude-marketplace` key; `droppedFields`
+   / `droppedTools` / `warnings` render as real YAML lists (`[]` when empty, a
+   `    - item` block when non-empty). Added `GENERATED_AGENT_MARKER_LEGACY`
+   and made `isOwnedAgentFile` accept either marker.
+
+The final on-disk state is described below.
 
 ## What Changed
 
-`emitGeneratedAgentFile` in `frontmatter.ts` now appends eight provenance
-keys (`generator`, `sourcePlugin`, `sourceAgent`, `sourcePath`,
-`originalModel` when defined, `droppedFields`, `droppedTools`, `warnings`)
-to the frontmatter `lines` array immediately after `inheritSkills`, and no
-longer builds a separate `<!-- ... -->` HTML comment block. The
-`GENERATED_AGENT_MARKER` constant itself is unchanged; it now rides as the
-value of the `generator:` key, so `isOwnedAgentFile`'s whole-file substring
-check still matches both newly-emitted and already-installed old-format
-files with no migration needed.
+`emitGeneratedAgentFile` in `frontmatter.ts` appends a single `provenance`
+mapping to the frontmatter `lines` array immediately after `inheritSkills`, and
+no longer builds a `<!-- ... -->` HTML comment. `GENERATED_AGENT_MARKER` is now
+`"generatedBy: pi-claude-marketplace"` — exactly the content of the emitted
+`generatedBy` line, which the emitter builds as `  ${GENERATED_AGENT_MARKER}`,
+keeping a single source of truth. `isOwnedAgentFile` matches a file that
+contains **either** `GENERATED_AGENT_MARKER` (current format) or
+`GENERATED_AGENT_MARKER_LEGACY` (`"generated by pi-claude-marketplace"`, the
+pre-0.10 body-comment phrase), so already-installed old-format agents stay
+recognized with no migration.
 
-The parser-safety helper `sanitizeProvenance` (which used to escape a
-literal `-->` to `--&gt;` so it couldn't terminate the HTML comment early)
-is renamed to `sanitizeProvenanceValue` and now collapses `\r?\n` runs to a
-single space instead -- the only remaining risk once the HTML comment is
-gone is a multi-line provenance value being misread as a new frontmatter
-key by pi-subagents' line-based parser.
+List fields render through a `pushProvenanceList` helper: an empty list emits
+`  <key>: []`; a non-empty list emits `  <key>:` followed by one
+`    - <item>` line per newline-normalized item. The old `(none)` sentinel and
+`formatOptionalProvenanceList` are gone.
 
-Doc comments across `frontmatter.ts`, `marker.ts`, `types.ts`, and
-`convert.ts` were updated to describe the new frontmatter placement and
-newline-normalization contract in place of the removed HTML-comment
-framing.
+The parser-safety helper `sanitizeProvenanceValue` (renamed earlier from
+`sanitizeProvenance`) collapses `\r?\n` runs to a single space, applied to
+`sourcePath`, `originalModel`, and each list item — so a multi-line value can't
+be misread as a new frontmatter key by pi-subagents' line-based parser.
+
+Doc comments across `frontmatter.ts`, `marker.ts`, `types.ts`, and `convert.ts`
+describe the mapping placement, the dual-marker contract, and the
+newline-normalization contract in place of the removed HTML-comment framing.
+
+## Why it is invisible to the child LLM
+
+`provenance:` parses as an unknown key with an empty value (stored-and-ignored
+by both pi-subagents and our own parser). Its member keys and list items all
+carry leading whitespace, so pi-subagents' `^([\w-]+):` top-level key regex
+skips them entirely. The body (which becomes the child system prompt) excludes
+every provenance byte.
 
 ## Byte layout
 
-Old layout:
-```
----
-<core frontmatter fields>
----
-
-<!--
-generated by pi-claude-marketplace
-plugin: acme
-sourceAgent: bot
-...
--->
-
-<optional skill legend>
-<body>
-```
+Old layout (removed): a `<!-- generated by pi-claude-marketplace ... -->` HTML
+comment in the body.
 
 New layout:
 ```
 ---
 <core frontmatter fields>
-generator: generated by pi-claude-marketplace
-sourcePlugin: acme
-sourceAgent: bot
-sourcePath: ...
-[originalModel: ...]
-droppedFields: ...
-droppedTools: ...
-warnings: ...
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: ...
+  originalModel: ...        # only when defined
+  droppedFields: []         # or a "    - item" block when non-empty
+  droppedTools: []
+  warnings: []
 ---
 
 <optional skill legend>
 <body>
 ```
 
-The body starts at the same relative offset (one blank line after the
-closing `---`, or after the skill legend when present) -- only the
-provenance's home moved from body to frontmatter.
+The body still starts at the same relative offset (one blank line after the
+closing `---`, or after the skill legend when present) — only the provenance's
+home moved from body to frontmatter.
 
 ## Tests
 
-- `tests/bridges/agents/frontmatter.test.ts`: regenerated `NO_LEGEND_EXPECTED`,
-  the legend-block expected constant, `INHERIT_TRUE_EXPECTED`, and the
-  inherit+legend expected constant to the new layout. Retargeted the two
-  `sanitizeProvenance` tests to `sanitizeProvenanceValue` (newline
-  collapsing). Replaced the `-->` escaping test with a newline-injection
-  test asserting a crafted multi-line `sourcePath` round-trips on one
-  frontmatter key with no bogus injected key. Fixed the frontmatter-order
-  test that previously asserted `inheritSkills: true` was the last
-  frontmatter line (no longer true -- provenance follows it); it now
-  asserts `generator:` immediately follows `inheritSkills:` and `warnings:`
-  is the last line before the closing delimiter. Added a new positive test
-  asserting `parseFrontmatter(...).body` excludes all provenance text and
-  `raw.generator === GENERATED_AGENT_MARKER`.
-- `tests/bridges/agents/convert.test.ts`: retargeted the crafted
-  cross-plugin-token injection test (previously asserting exactly one
-  `-->` survived) to assert the token stays confined to the parsed
-  frontmatter `warnings` value and is absent from the parsed body, with no
-  injected frontmatter key. Regenerated `DISALLOWED_SKILL_EXPECTED`,
-  `preLegendExpected`, and `canonicalExpected` to the new layout
-  (`sourcePlugin` replaces `plugin`).
+- `tests/architecture/markers-snapshot.test.ts`: asserts both marker constants
+  byte-for-byte (`generatedBy: pi-claude-marketplace` and the legacy phrase).
+- `tests/bridges/agents/marker.test.ts`: added a back-compat case proving
+  `isOwnedAgentFile` still recognizes a pre-0.10 file carrying only the legacy
+  body-comment phrase, plus a snapshot of the legacy constant.
+- `tests/bridges/agents/frontmatter.test.ts`: regenerated the full-file byte-pin
+  constants to the mapping layout; the marker test asserts the whole output
+  includes `GENERATED_AGENT_MARKER`; a positive test asserts the parsed body
+  excludes provenance.
+- `tests/bridges/agents/convert.test.ts`: regenerated byte-pins; retargeted the
+  cross-plugin-token injection test to the new shape.
 - `tests/bridges/agents/convert-byte-identity.test.ts`: regenerated all
-  seven `EXPECTED_N` constants to the new layout, preserving each
-  fixture's distinguishing content (phantom-skill warning, `droppedFields:
-  color, hooks`, omitted-tools warning, description-fallback warning,
-  trailing CR before final LF).
-- Candidate files the plan flagged as likely unaffected (`stage.test.ts`,
-  `tests/bridges/agents/marker.test.ts`, `markers-snapshot.test.ts`,
-  `integration.test.ts`, `integration-foreign-content.test.ts`,
-  `skill-path-resolution.test.ts`, foreign-agent fixtures) needed **no
-  edits** -- confirmed by `npm run check` passing with those files
-  untouched (verified via `git status --short` showing only the plan's
-  listed files as modified).
+  `EXPECTED_N` constants, covering empty lists (`[]`) and non-empty block lists
+  (phantom-skill warning, `droppedFields: color/hooks`, etc.).
+- `tests/bridges/agents/stage.test.ts`, `tests/bridges/integration.test.ts`,
+  `tests/bridges/integration-foreign-content.test.ts`: swapped hardcoded marker
+  strings for the `GENERATED_AGENT_MARKER` constant and retitled body-centric
+  assertions.
 
-`npm run check` (typecheck + eslint + prettier format:check + node:test
-unit [2977 passed, 2 skipped] + integration [17 passed]) is green.
+`npm run check` (typecheck + eslint + prettier format:check + node:test unit
+[2982 passed, 2 skipped, 0 failed] + integration [17 passed, 0 failed]) is
+green.
 
 ## Deviations from Plan
 
-### Auto-fixed Issues
+**1. Whole-project pre-commit hooks force combined code+test commits.** The
+pre-commit hook runs `npm run lint` / `npm run typecheck` on the whole project,
+not scoped to staged files, so each iteration's source and test changes had to
+land in one commit.
 
-**1. [Rule 3 - blocking issue] Combined Task 1 and Task 2 into a single commit**
-- **Found during:** Attempting to commit Task 1 (source-only changes) per
-  the plan's atomic-per-task-commit protocol.
-- **Issue:** This repo's pre-commit hook runs `npm run lint` and `npm run
-  typecheck` as whole-project checks (`eslint .`, `tsc --noEmit`), not
-  scoped to the files passed via `--files`. After Task 1's edits alone,
-  the pre-existing test files still imported the now-renamed
-  `sanitizeProvenance` export, so the whole-project typecheck/lint hooks
-  failed on `git commit` (pre-commit stashes unstaged changes before
-  running hooks, so even leaving Task 2's edits unstaged-but-present in
-  the working tree does not help -- the staged-only snapshot is what the
-  hooks see). A true Task-1-only commit that satisfies this repo's
-  pre-commit gate is not achievable without either violating "never skip
-  hooks" or leaving the codebase in a broken intermediate state at a
-  commit boundary.
-- **Fix:** Implemented all of Task 2's test regeneration and CHANGELOG
-  work before committing, then made a single combined commit covering both
-  tasks' file sets. Verified the combined commit passes `npm run check`
-  end-to-end and every `pre-commit run` hook.
-- **Files modified:** all nine files listed in `key-files.modified` above.
-- **Commit:** `b3bcc28e`
+**2. Four atomic refinement commits instead of one.** The coordinator's design
+refinements arrived after each prior commit; repo rules forbid history rewrite
+and `--amend`, so each landed as its own commit (b3bcc28e, 331586f7, 30cc87ed,
+a5f9d926).
 
-### Auth Gates
+**3. Executor stalled on the final iteration; orchestrator completed it.** The
+`a5f9d926` iteration made all source and test edits but its agent run hit the
+600s no-progress watchdog before committing (it stalled during the check). The
+orchestrator reviewed the uncommitted edits, fixed one `import-x/order` lint
+error in `stage.test.ts` via `eslint --fix`, confirmed `npm run check` green,
+and made the commit.
+
+## Auth Gates
 
 None.
 
@@ -184,20 +194,21 @@ None.
 
 ## Threat Flags
 
-None -- this plan's `<threat_model>` (T-d8i-01, T-d8i-02, T-d8i-03) already
-covers the only security-relevant surface touched (provenance rendering
-and the ownership-marker check), and no new trust boundary was
-introduced.
+None — the plan's `<threat_model>` (T-d8i-01, T-d8i-02, T-d8i-03) covers the
+only security-relevant surface (provenance rendering and the ownership-marker
+check). The dual-marker change keeps both ownership gates (basename prefix +
+marker substring) intact.
 
 ## Self-Check: PASSED
 
 - `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts`: FOUND
 - `extensions/pi-claude-marketplace/bridges/agents/marker.ts`: FOUND
-- `extensions/pi-claude-marketplace/bridges/agents/types.ts`: FOUND
-- `extensions/pi-claude-marketplace/bridges/agents/convert.ts`: FOUND
 - `extensions/pi-claude-marketplace/bridges/agents/index.ts`: FOUND
-- `tests/bridges/agents/frontmatter.test.ts`: FOUND
-- `tests/bridges/agents/convert.test.ts`: FOUND
+- `tests/architecture/markers-snapshot.test.ts`: FOUND
+- `tests/bridges/agents/marker.test.ts`: FOUND
 - `tests/bridges/agents/convert-byte-identity.test.ts`: FOUND
 - `CHANGELOG.md`: FOUND
 - Commit `b3bcc28e`: FOUND in `git log --oneline`
+- Commit `331586f7`: FOUND in `git log --oneline`
+- Commit `30cc87ed`: FOUND in `git log --oneline`
+- Commit `a5f9d926`: FOUND in `git log --oneline`
