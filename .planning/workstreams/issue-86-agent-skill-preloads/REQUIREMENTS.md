@@ -19,7 +19,7 @@
 ### Dynamic Skill Access
 
 - [x] **AGSK-05** *(amended after phase 83 UAT)*: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. The mapping is silent: no warning and no `droppedTools` entry (AGSK-03). Agents not declaring `Skill` keep `inheritSkills: false`.
-- [ ] **AGSK-06** *(added phase 84)*: A generated agent whose `skills:` frontmatter is non-empty carries an agent-local `skillPath` pointer so pi-subagents (>=0.35.0) resolves the emitted skill names against the bridge's own resources directory instead of only its own scan roots, end-to-end verified by a spawned subagent reading the referenced skill's `SKILL.md`. (Plan 84-01: skillPath emission and legend collapse landed. Plan 84-02: pi-subagents floor bump landed. Plans 84-03..04: live A/B verification pending.)
+- [ ] **AGSK-06** *(added phase 84)*: A generated agent whose `skills:` frontmatter is non-empty carries an agent-local `skillPath` pointer so pi-subagents (>=0.35.0) resolves the emitted skill names against the bridge's own resources directory instead of only its own scan roots, end-to-end verified by a spawned subagent reading the referenced skill's `SKILL.md`. (Plan 84-01: skillPath emission and legend collapse landed. Plan 84-02: pi-subagents floor bump landed. Plan 84-03: SC-2 resolver-contract integration test landed. Plan 84-04: live A/B verification pending.)
 
 ## v2 Requirements
 
@@ -43,7 +43,7 @@
 | AGSK-03 | Phase 82, amended in Phase 83.1 | Pending (amended) |
 | AGSK-04 | Phase 82, amended in Phase 83.1 and Phase 84 | Pending (amended) |
 | AGSK-05 | Phase 83, amended in Phase 83.1 | Pending (amended) |
-| AGSK-06 | Phase 84 | In progress (Plans 84-01..02 of 4 complete) |
+| AGSK-06 | Phase 84 | In progress (Plans 84-01..03 of 4 complete) |
 
 **Coverage:**
 
@@ -54,4 +54,4 @@
 ---
 
 *Requirements defined: 2026-07-19*
-*Last updated: 2026-07-20 after phase 84 plan 02 (package.json declares pi-subagents >=0.35.0 as an optional peer; AGSK-06 remains in progress pending Plans 84-03..04's live A/B verification)*
+*Last updated: 2026-07-20 after phase 84 plan 03 (SC-2 resolver-contract integration test landed; AGSK-06 remains in progress pending Plan 84-04's live A/B verification)*

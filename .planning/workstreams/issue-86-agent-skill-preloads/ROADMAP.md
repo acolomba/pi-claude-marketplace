@@ -134,7 +134,7 @@ Plans:
   3. `package.json` raises the subagents-extension peer floor to `>=0.35.0`, and `npm run check` stays green.
   4. A live spawn of a skill-referencing bridged agent loads and uses the skill on demand (0.35.x lazy delivery), reproducing the verified A/B: with `skillPath` the subagent uses the skill; without it, it does not.
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
@@ -145,5 +145,5 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 84-03-PLAN.md — SC-2 resolver-contract integration test (graceful-skip; Wave 2)
+- [x] 84-03-PLAN.md — SC-2 resolver-contract integration test (graceful-skip; Wave 2)
 - [ ] 84-04-PLAN.md — SC-4 live foreground A/B spawn manual UAT checkpoint (Wave 2)

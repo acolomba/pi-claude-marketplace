@@ -6,15 +6,15 @@ current_phase: 84
 current_phase_name: Agent skillPath resolution (end-to-end skill availability
 current_plan: 1
 status: executing
-stopped_at: Completed 84-02-PLAN.md
-last_updated: "2026-07-20T10:49:29.862Z"
+stopped_at: Completed 84-03-PLAN.md
+last_updated: "2026-07-20T11:06:37.754Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 84 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 75
 ---
 
@@ -23,7 +23,7 @@ progress:
 ## Current Position
 
 Phase: 84 (Agent skillPath resolution (end-to-end skill availability)) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 **Status:** Ready to execute
 **Current Phase:** 84
 **Last Activity:** 2026-07-20 — Phase 84 execution started
@@ -70,6 +70,7 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - [Phase 84]: D-84-04 skillPath is a hardcoded relative-path constant gated on the existing skills-non-empty check, never threaded through GeneratedFrontmatterFields/convertAgent as a new field
 - [Phase 84]: D-84-01/D-84-02 skill legend collapses to a single 'available on demand' annotation for every entry; SkillLegendEntry.preloaded and detectSkillTokens' emittedSkills plumbing deleted
 - [Phase 84]: D-84-03: pi-subagents is an ADDITION (not a bump) to peerDependencies, marked optional via peerDependenciesMeta so npm never installs or errors on its absence
+- [Phase 84]: Copy the installed pi-subagents package's real src/ tree into a scratch dir outside node_modules before dynamically importing its internal skills module -- Node 26 refuses native TypeScript type-stripping for any file under a node_modules segment (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING)
 
 ### Blockers
 
@@ -77,9 +78,9 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-07-20T10:49:29.853Z
+**Last session:** 2026-07-20T11:06:37.746Z
 
-**Stopped At:** Completed 84-02-PLAN.md
+**Stopped At:** Completed 84-03-PLAN.md
 **Resume File:** None
 
 ## Performance Metrics
@@ -99,3 +100,4 @@ None.
 |------|----------|-------|-------|
 | Phase 84 P01 | 25min | 2 tasks | 5 files |
 | Phase 84 P02 | 10min | 2 tasks | 3 files |
+| Phase 84 P03 | 20min | 1 tasks | 1 files |
