@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: agent-skill-preloads
 milestone_name: milestone
-current_phase: 83.1
-current_phase_name: silent-skill-mapping
-current_plan: Not started
-status: milestone_complete
-stopped_at: Phase 84 context gathered
-last_updated: "2026-07-20T03:56:16.463Z"
-last_activity: 2026-07-19
-last_activity_desc: Phase 84 planning complete — 4 plans ready
+current_phase: 84
+current_phase_name: Agent skillPath resolution (end-to-end skill availability
+current_plan: 1
+status: executing
+stopped_at: Completed 84-01-PLAN.md
+last_updated: "2026-07-20T10:38:44.410Z"
+last_activity: 2026-07-20
+last_activity_desc: Phase 84 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 10
   percent: 75
 ---
 
@@ -22,24 +22,24 @@ progress:
 
 ## Current Position
 
-Phase: 83.1 (silent-skill-mapping) — EXECUTING
-Plan: 1 of 2
-**Status:** Milestone complete
-**Current Phase:** 83.1
-**Last Activity:** 2026-07-19 — Phase 84 planning complete
-**Last Activity Description:** Phase 84 planning complete — 4 plans ready
+Phase: 84 (Agent skillPath resolution (end-to-end skill availability)) — EXECUTING
+Plan: 2 of 4
+**Status:** Ready to execute
+**Current Phase:** 84
+**Last Activity:** 2026-07-20 — Phase 84 execution started
+**Last Activity Description:** Phase 84 execution started
 
 ## Progress
 
 **Phases Complete:** 0 of 1
-**Current Plan:** Not started
+**Current Plan:** 1
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-07-19)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
-**Current focus:** Milestone complete
+**Current focus:** Phase 84 — Agent skillPath resolution (end-to-end skill availability)
 
 ## Working Context
 
@@ -67,6 +67,8 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 - [Phase 82]: Skill legend annotations locked as ASCII parenthesized forms with the U+2192 arrow on both entry kinds, first-occurrence dedupe by token — AGSK-04 satisfied verbatim while surviving the fix-unicode-dashes hook; arrow written as an escape in all .ts literals
 - [Phase 82]: Legend scanner skips the plugin-prefix-only candidate that elides to an empty skill name — A body scan must never throw; assertSafeName throws on the empty elision remainder (T-82-12 completeness)
 - [Phase 83]: D-83-05 legend annotation locked as 'available on demand' — Legend entry line already renders the Pi name after the arrow; parallel to the two locked D-82-05 annotations
+- [Phase 84]: D-84-04 skillPath is a hardcoded relative-path constant gated on the existing skills-non-empty check, never threaded through GeneratedFrontmatterFields/convertAgent as a new field
+- [Phase 84]: D-84-01/D-84-02 skill legend collapses to a single 'available on demand' annotation for every entry; SkillLegendEntry.preloaded and detectSkillTokens' emittedSkills plumbing deleted
 
 ### Blockers
 
@@ -74,10 +76,10 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-07-20T03:11:20.362Z
+**Last session:** 2026-07-20T10:38:44.402Z
 
-**Stopped At:** Phase 84 context gathered
-**Resume File:** .planning/workstreams/issue-86-agent-skill-preloads/phases/84-emit-an-agent-local-skillpath-field-on-every-generated-agent/84-CONTEXT.md
+**Stopped At:** Completed 84-01-PLAN.md
+**Resume File:** None
 
 ## Performance Metrics
 
@@ -90,3 +92,8 @@ None.
 | Phase 83 P01 | 6 min | 2 tasks | 1 files |
 | Phase 83 P02 | 11 min | 2 tasks | 2 files |
 | Phase 83 P03 | 33min | 2 tasks | 2 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 84 P01 | 25min | 2 tasks | 5 files |
