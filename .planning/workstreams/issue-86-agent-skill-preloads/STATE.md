@@ -7,9 +7,9 @@ current_phase_name: Agent skillPath resolution (end-to-end skill availability
 current_plan: Not started
 status: completed
 stopped_at: Completed 84-03-PLAN.md
-last_updated: "2026-07-20T13:03:12.553Z"
+last_updated: "2026-07-20T13:31:49.315Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 84 complete
+last_activity_desc: "Quick task 260720-d8i: provenance moved to frontmatter"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -75,6 +75,12 @@ See: .planning/PROJECT.md (updated 2026-07-19)
 ### Blockers
 
 None.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260720-d8i | Move agent provenance from body comment into frontmatter | 2026-07-20 | b3bcc28e | [260720-d8i-move-agent-provenance-from-body-comment-](../../quick/260720-d8i-move-agent-provenance-from-body-comment-/) |
 
 ## Session Continuity
 
