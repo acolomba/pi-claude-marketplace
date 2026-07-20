@@ -521,17 +521,19 @@ skillPath: skillPath && skillPath.length > 0 ? skillPath : undefined,
 | A1 | The exact PR number that shipped agent-local `skillPath` is #428 (per the installed pi-subagents CHANGELOG.md, crediting @kylegl), not #470 as stated in `84-CONTEXT.md`/`84-NOTES.md`/ROADMAP.md. This is a citation correction, not a design-affecting claim — the version floor (`>=0.35.0`) and the resolution mechanics were independently verified by reading the installed 0.35.1 source directly. | State of the Art table; Summary point 1 area | Low — if a commit message or code comment cites "PR #470" it would be a harmless but incorrect provenance note. Worth a quick GitHub check before finalizing commit/PR text, but does not affect any implementation decision. |
 | A2 | `pi-subagents` should be added to `package.json` as an **optional** peer dependency (`peerDependenciesMeta.optional: true`) rather than a required peer or a plain `dependencies` entry. No test in this repo currently pins the expected shape of a soft-dependency's `package.json` representation (this is the first such entry), so this is a design recommendation grounded in npm semantics, not a locked convention from prior phases. | Anti-Patterns / Pitfall: "Adding pi-subagents to dependencies instead of peerDependencies" | Medium — if the planner instead makes it a required peer, `npm install` in environments without pi-subagents installed globally would emit an `ERESOLVE`/peer-warning noise that doesn't reflect the true optional nature of the integration. Easy to fix later (single-line package.json edit) if this recommendation is wrong. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the README Prerequisites bullet gain the `>=0.35.0` floor text, and is that in scope for "package.json raises the ... peer floor" (SC-3)?**
    - What we know: SC-3's literal text only names `package.json`. The existing Prerequisites bullet (`- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)`) does not currently state any version.
    - What's unclear: Whether the planner should treat the README update as in-scope (for user-facing accuracy) or defer it as out-of-phase-scope since SC-3 doesn't name it.
    - Recommendation: Include it — it's a one-line edit, keeps the two floor-statements (package.json, README) from drifting, and CONTEXT.md's discretion note leaves "exact refactor" details to the planner. Low risk either way.
+   - **RESOLVED:** In scope. Implemented in Plan 84-02 Task 1 (README Prerequisites floor text alongside the `package.json` optional-peer addition).
 
 2. **Does D-84-05's "byte-identity fixture corpus" also include the `#86 canonical agent without a body token converts with no legend (reference-gated)` test at `convert.test.ts:1120`?**
    - What we know: That test (lines 1120-1133, truncated in this research's reads but confirmed to reuse `convertCanonical(makeCanonicalSource(...))` with a token-free body) asserts frontmatter facts via `assert.match` on substrings, not a whole-file template-literal pin — so it likely doesn't need a byte-for-byte fixture update, only implicit correctness (the `skills:` line it matches on is unaffected by the `skillPath` addition).
    - What's unclear: Whether it has additional un-read assertions further down that assume no `skillPath:` line is present.
    - Recommendation: Planner/implementer should read the full test body (lines 1120-1140ish) before editing, but this is a low-risk, mechanical check — flagging so it isn't missed in the sweep for `"preloaded in your context"` and whole-file pins.
+   - **RESOLVED:** Flagged in Plan 84-01 Task 2's `<read_first>` — the token-free companion test at `convert.test.ts:1120` needs no change (asserts on the unaffected `skills:` line, not a whole-file pin).
 
 ## Environment Availability
 
