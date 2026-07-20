@@ -204,9 +204,9 @@ export interface SkillLegendEntry {
 }
 
 /**
- * Provenance fields rendered as frontmatter keys; free-text values are
- * newline-normalized so a multi-line value cannot inject a bogus
- * frontmatter key into pi-subagents' line-based parser.
+ * Provenance fields rendered under a single `piSubagentMetadata` block-list;
+ * free-text values are newline-normalized so a multi-line value cannot
+ * inject a bogus frontmatter key into pi-subagents' line-based parser.
  */
 export interface GeneratedProvenanceFields {
   readonly pluginName: string;
@@ -223,23 +223,25 @@ export interface GeneratedProvenanceFields {
  *
  * The frontmatter MUST be the first thing in the file: pi-subagents'
  * parser only honors frontmatter when the file starts with `---`.
- * Provenance is rendered as flat frontmatter keys (T-d8i-01): pi-subagents
- * stores every `key: value` line in a flat record and silently ignores
- * keys it does not know, so the provenance keys are parsed-and-ignored and
- * never reach the child subagent's system prompt (which is the file body,
- * verbatim). The GENERATED_AGENT_MARKER substring still appears in the
- * file -- as the `generator:` key's value -- for isOwnedAgentFile safety
- * checks before overwrite/delete.
+ * Provenance is folded under a single `piSubagentMetadata` block-list
+ * (T-d8i-01): `piSubagentMetadata:` parses as an unknown key with an empty
+ * value, and its indented `- ` items are skipped by pi-subagents'
+ * `^([\w-]+):` key regex, so none of it reaches the child subagent's
+ * system prompt (which is the file body, verbatim). The
+ * GENERATED_AGENT_MARKER substring still appears in the file -- as the
+ * first bare list item -- for isOwnedAgentFile safety checks before
+ * overwrite/delete.
  *
- *   <generated frontmatter, including provenance keys>\n  (ends "---\n")
+ *   <generated frontmatter, including piSubagentMetadata>\n  (ends "---\n")
  *   <skill legend>          (AGSK-04, only when legend entries exist)
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
  * model, tools, thinking, skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * generator, sourcePlugin, sourceAgent, sourcePath, originalModel (only
- * when defined), droppedFields, droppedTools, warnings.
+ * then the `piSubagentMetadata` block-list (marker, sourcePlugin,
+ * sourceAgent, sourcePath, originalModel [only when defined],
+ * droppedFields, droppedTools, warnings).
  *
  * AGSK-04 / D-82-04: when `legend` is non-empty, the legend block renders
  * immediately after the frontmatter and before the body prose. When
@@ -286,25 +288,30 @@ export function emitGeneratedAgentFile(input: {
     `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
   );
 
-  // T-d8i-01: provenance keys, appended after inheritSkills, inside the
-  // frontmatter -- so pi-subagents' parser stores-and-ignores them and the
-  // child subagent's system prompt (the body, verbatim) never sees them.
-  // Free-text values are newline-normalized (T-d8i-02) so a multi-line
-  // value can't inject a bogus key into the line-based parser.
+  // T-d8i-01: provenance folded under a single `piSubagentMetadata` block-list,
+  // appended after inheritSkills, inside the frontmatter -- so pi-subagents'
+  // parser stores-and-ignores it and the child subagent's system prompt (the
+  // body, verbatim) never sees it. The indented `- ` items carry leading
+  // whitespace, so pi-subagents' `^([\w-]+):` key regex skips them entirely.
+  // The GENERATED_AGENT_MARKER literal rides as the first bare list item (no
+  // label) so isOwnedAgentFile's whole-file substring check still matches.
+  // Free-text values are newline-normalized (T-d8i-02) so a multi-line value
+  // can't inject a bogus key into the line-based parser.
   lines.push(
-    `generator: ${GENERATED_AGENT_MARKER}`,
-    `sourcePlugin: ${provenance.pluginName}`,
-    `sourceAgent: ${provenance.sourceName}`,
-    `sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
+    "piSubagentMetadata:",
+    `  - ${GENERATED_AGENT_MARKER}`,
+    `  - sourcePlugin: ${provenance.pluginName}`,
+    `  - sourceAgent: ${provenance.sourceName}`,
+    `  - sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
   );
   if (provenance.originalModel !== undefined) {
-    lines.push(`originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
+    lines.push(`  - originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
   }
 
   lines.push(
-    `droppedFields: ${formatOptionalProvenanceList(provenance.droppedFields)}`,
-    `droppedTools: ${formatOptionalProvenanceList(provenance.droppedTools)}`,
-    `warnings: ${formatOptionalProvenanceList(provenance.warnings)}`,
+    `  - droppedFields: ${formatOptionalProvenanceList(provenance.droppedFields)}`,
+    `  - droppedTools: ${formatOptionalProvenanceList(provenance.droppedTools)}`,
+    `  - warnings: ${formatOptionalProvenanceList(provenance.warnings)}`,
   );
   const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 

@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Generated agent provenance (source plugin, source agent, dropped fields/tools, warnings) now renders as frontmatter keys instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt.
+- Generated agent provenance (source plugin, source agent, dropped fields/tools, warnings) now renders under a single `piSubagentMetadata` frontmatter block instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt.
 
 ## [0.9.0] - 2026-07-18
 
