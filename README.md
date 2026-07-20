@@ -35,7 +35,7 @@ Claude marketplaces and plugins are managed via a `/claude:plugin` command simil
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) `>=0.35.0` (optional but recommended, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
 
 ## Usage
