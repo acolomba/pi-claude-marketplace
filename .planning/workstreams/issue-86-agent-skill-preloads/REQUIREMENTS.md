@@ -19,7 +19,7 @@
 ### Dynamic Skill Access
 
 - [x] **AGSK-05** *(amended after phase 83 UAT)*: A source agent declaring the `Skill` tool (and not disallowing it via `disallowedTools`) converts with `inheritSkills: true` in generated frontmatter — Pi's lazy skill catalog (name+description listing, read on demand) is the faithful analog of Claude's environment-dependent Skill tool. The mapping is silent: no warning and no `droppedTools` entry (AGSK-03). Agents not declaring `Skill` keep `inheritSkills: false`.
-- [ ] **AGSK-06** *(added phase 84)*: A generated agent whose `skills:` frontmatter is non-empty carries an agent-local `skillPath` pointer so pi-subagents (>=0.35.0) resolves the emitted skill names against the bridge's own resources directory instead of only its own scan roots, end-to-end verified by a spawned subagent reading the referenced skill's `SKILL.md`. (Plan 84-01: skillPath emission and legend collapse landed. Plan 84-02: pi-subagents floor bump landed. Plan 84-03: SC-2 resolver-contract integration test landed. Plan 84-04: live A/B verification pending.)
+- [x] **AGSK-06** *(added phase 84)*: A generated agent whose `skills:` frontmatter is non-empty carries an agent-local `skillPath` pointer so pi-subagents (>=0.35.0) resolves the emitted skill names against the bridge's own resources directory instead of only its own scan roots, end-to-end verified by a spawned subagent reading the referenced skill's `SKILL.md`. (Plans 84-01..04 complete: skillPath emission + legend collapse, pi-subagents >=0.35.0 optional peer, SC-2 resolver-contract test, and SC-4 live foreground A/B all landed and verified.)
 
 ## v2 Requirements
 
@@ -43,15 +43,15 @@
 | AGSK-03 | Phase 82, amended in Phase 83.1 | Pending (amended) |
 | AGSK-04 | Phase 82, amended in Phase 83.1 and Phase 84 | Pending (amended) |
 | AGSK-05 | Phase 83, amended in Phase 83.1 | Pending (amended) |
-| AGSK-06 | Phase 84 | In progress (Plans 84-01..03 of 4 complete) |
+| AGSK-06 | Phase 84 | Complete |
 
 **Coverage:**
 
 - v1 requirements: 6 total
-- Mapped to phases: 6 (AGSK-01..02 Phase 82; AGSK-03..05 amended forms close in Phase 83.1; AGSK-06 in progress across Phase 84's 4 plans)
+- Mapped to phases: 6 (AGSK-01..02 Phase 82; AGSK-03..05 amended forms close in Phase 83.1; AGSK-06 complete across Phase 84's 4 plans)
 - Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-07-19*
-*Last updated: 2026-07-20 after phase 84 plan 03 (SC-2 resolver-contract integration test landed; AGSK-06 remains in progress pending Plan 84-04's live A/B verification)*
+*Last updated: 2026-07-20 after phase 84 completion (all 4 plans landed; SC-1..SC-4 verified, AGSK-06 complete)*

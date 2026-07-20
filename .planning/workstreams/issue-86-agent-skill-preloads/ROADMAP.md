@@ -134,7 +134,7 @@ Plans:
   3. `package.json` raises the subagents-extension peer floor to `>=0.35.0`, and `npm run check` stays green.
   4. A live spawn of a skill-referencing bridged agent loads and uses the skill on demand (0.35.x lazy delivery), reproducing the verified A/B: with `skillPath` the subagent uses the skill; without it, it does not.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
