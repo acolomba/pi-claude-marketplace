@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Generated agent provenance (source plugin, source agent, dropped fields/tools, warnings) now renders under a single `provenance` frontmatter block instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt.
+- Generated agent provenance now renders under a `provenance:` frontmatter mapping (source plugin/agent/path, and dropped fields/tools plus warnings as YAML lists) instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt. Already-installed agents in the pre-existing body-comment format stay recognized, so no reinstall is required.
 
 ## [0.9.0] - 2026-07-18
 

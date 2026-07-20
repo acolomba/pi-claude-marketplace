@@ -204,9 +204,10 @@ export interface SkillLegendEntry {
 }
 
 /**
- * Provenance fields rendered under a single `provenance` block-list;
- * free-text values are newline-normalized so a multi-line value cannot
- * inject a bogus frontmatter key into pi-subagents' line-based parser.
+ * Provenance fields rendered under a single `provenance` frontmatter
+ * mapping; free-text values are newline-normalized so a multi-line value
+ * cannot inject a bogus frontmatter key into pi-subagents' line-based
+ * parser.
  */
 export interface GeneratedProvenanceFields {
   readonly pluginName: string;
@@ -223,14 +224,14 @@ export interface GeneratedProvenanceFields {
  *
  * The frontmatter MUST be the first thing in the file: pi-subagents'
  * parser only honors frontmatter when the file starts with `---`.
- * Provenance is folded under a single `provenance` block-list
- * (T-d8i-01): `provenance:` parses as an unknown key with an empty
- * value, and its indented `- ` items are skipped by pi-subagents'
+ * Provenance is folded under a single `provenance` mapping (T-d8i-01):
+ * `provenance:` parses as an unknown key with an empty value, and its
+ * indented member keys and list items are skipped by pi-subagents'
  * `^([\w-]+):` key regex, so none of it reaches the child subagent's
  * system prompt (which is the file body, verbatim). The
  * GENERATED_AGENT_MARKER substring still appears in the file -- as the
- * first bare list item -- for isOwnedAgentFile safety checks before
- * overwrite/delete.
+ * `generatedBy` line's content -- for isOwnedAgentFile safety checks
+ * before overwrite/delete.
  *
  *   <generated frontmatter, including provenance>\n  (ends "---\n")
  *   <skill legend>          (AGSK-04, only when legend entries exist)
@@ -239,9 +240,10 @@ export interface GeneratedProvenanceFields {
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
  * model, tools, thinking, skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
- * then the `provenance` block-list (marker, sourcePlugin,
- * sourceAgent, sourcePath, originalModel [only when defined],
- * droppedFields, droppedTools, warnings).
+ * then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
+ * sourcePath, originalModel [only when defined], droppedFields,
+ * droppedTools, warnings -- each list field inline `[]` when empty or a
+ * `    - item` block when non-empty).
  *
  * AGSK-04 / D-82-04: when `legend` is non-empty, the legend block renders
  * immediately after the frontmatter and before the body prose. When
@@ -288,31 +290,29 @@ export function emitGeneratedAgentFile(input: {
     `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
   );
 
-  // T-d8i-01: provenance folded under a single `provenance` block-list,
+  // T-d8i-01: provenance folded under a single `provenance` mapping,
   // appended after inheritSkills, inside the frontmatter -- so pi-subagents'
   // parser stores-and-ignores it and the child subagent's system prompt (the
-  // body, verbatim) never sees it. The indented `- ` items carry leading
-  // whitespace, so pi-subagents' `^([\w-]+):` key regex skips them entirely.
-  // The GENERATED_AGENT_MARKER literal rides as the first bare list item (no
-  // label) so isOwnedAgentFile's whole-file substring check still matches.
-  // Free-text values are newline-normalized (T-d8i-02) so a multi-line value
-  // can't inject a bogus key into the line-based parser.
+  // body, verbatim) never sees it. The nested keys and list items carry
+  // leading whitespace, so pi-subagents' `^([\w-]+):` key regex skips them
+  // entirely. GENERATED_AGENT_MARKER is exactly the emitted `generatedBy`
+  // line's content, so isOwnedAgentFile's whole-file substring check still
+  // matches. Free-text values are newline-normalized (T-d8i-02) so a
+  // multi-line value can't inject a bogus key into the line-based parser.
   lines.push(
     "provenance:",
-    `  - ${GENERATED_AGENT_MARKER}`,
-    `  - sourcePlugin: ${provenance.pluginName}`,
-    `  - sourceAgent: ${provenance.sourceName}`,
-    `  - sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
+    `  ${GENERATED_AGENT_MARKER}`,
+    `  sourcePlugin: ${provenance.pluginName}`,
+    `  sourceAgent: ${provenance.sourceName}`,
+    `  sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
   );
   if (provenance.originalModel !== undefined) {
-    lines.push(`  - originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
+    lines.push(`  originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
   }
 
-  lines.push(
-    `  - droppedFields: ${formatOptionalProvenanceList(provenance.droppedFields)}`,
-    `  - droppedTools: ${formatOptionalProvenanceList(provenance.droppedTools)}`,
-    `  - warnings: ${formatOptionalProvenanceList(provenance.warnings)}`,
-  );
+  pushProvenanceList(lines, "droppedFields", provenance.droppedFields);
+  pushProvenanceList(lines, "droppedTools", provenance.droppedTools);
+  pushProvenanceList(lines, "warnings", provenance.warnings);
   const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
   // Body: ensure exactly one leading blank line and a trailing newline so
@@ -360,6 +360,21 @@ function renderSkillLegend(legend: readonly SkillLegendEntry[] | undefined): str
   );
 }
 
-function formatOptionalProvenanceList(values: readonly string[]): string {
-  return values.length === 0 ? "(none)" : sanitizeProvenanceValue(values.join(", "));
+/**
+ * Append a provenance list field to the `provenance` mapping. An empty list
+ * renders inline as `  <key>: []`; a non-empty list renders as a YAML block
+ * list -- `  <key>:` then one `    - <item>` line per newline-normalized
+ * item. The nested indentation keeps every line out of pi-subagents'
+ * top-level `^([\w-]+):` key match, so none of it reaches the child prompt.
+ */
+function pushProvenanceList(lines: string[], key: string, values: readonly string[]): void {
+  if (values.length === 0) {
+    lines.push(`  ${key}: []`);
+    return;
+  }
+
+  lines.push(`  ${key}:`);
+  for (const value of values) {
+    lines.push(`    - ${sanitizeProvenanceValue(value)}`);
+  }
 }
