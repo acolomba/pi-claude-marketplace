@@ -6,8 +6,8 @@ current_phase: 83.1
 current_phase_name: silent-skill-mapping
 current_plan: Not started
 status: milestone_complete
-stopped_at: Milestone complete (Phase 83.1 was final phase)
-last_updated: "2026-07-20T02:29:05.587Z"
+stopped_at: Phase 84 context gathered
+last_updated: "2026-07-20T03:11:20.371Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 83.1 execution started
 progress:
@@ -74,8 +74,10 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Completed 83-03-PLAN.md
-**Resume File:** None
+**Last session:** 2026-07-20T03:11:20.362Z
+
+**Stopped At:** Phase 84 context gathered
+**Resume File:** .planning/workstreams/issue-86-agent-skill-preloads/phases/84-emit-an-agent-local-skillpath-field-on-every-generated-agent/84-CONTEXT.md
 
 ## Performance Metrics
 
