@@ -15,6 +15,7 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
+import type { SkillLegendEntry } from "./frontmatter.ts";
 import type { ConvertedAgent, DiscoveredAgent } from "./types.ts";
 
 // Re-export so consumers can import the agent-name generator from the
@@ -74,6 +75,8 @@ interface ToolMappingResult {
   readonly mapped: string[];
   readonly dropped: string[];
   readonly warnings: string[];
+  /** AGSK-05 / D-83-01: Skill declared in tools: AND not disallowed. */
+  readonly inheritSkills: boolean;
 }
 
 function splitCsv(value: string | undefined): string[] {
@@ -105,6 +108,71 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
+}
+
+/**
+ * Escape regex metacharacters so a value can be interpolated into a RegExp
+ * source verbatim (the MDN escape pattern). Plugin names are
+ * assertSafeName-checked but may legally contain `.`; escaping neutralizes
+ * the whole metacharacter class.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
+/**
+ * AGSK-04 / D-82-06 / D-82-07: detect `<pluginName>:<skill>` tokens in the
+ * emitted body and build the legend entries.
+ *
+ * The whole body is scanned verbatim, fenced code blocks included
+ * (D-82-07: the legend is aggregated at the top and nothing is rewritten
+ * inline, so code-block matches are safe and useful). The lookbehind
+ * rejects tokens embedded in a longer word (`other-spec-tree:x` is not a
+ * `spec-tree:` reference, and `.` sits in the boundary class so a dotted
+ * plugin-name prefix `other.spec-tree:x` is not one either); the
+ * candidate class excludes `.` so sentence
+ * punctuation never joins a candidate (skill names containing dots would
+ * be missed -- none exist in the wild). Only candidates resolving into
+ * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
+ * none. Entries dedupe by full token, first occurrence wins.
+ */
+function detectSkillTokens(
+  body: string,
+  pluginName: string,
+  knownSkills: readonly string[],
+): SkillLegendEntry[] {
+  const known = new Set(knownSkills);
+  const tokenRe = new RegExp(
+    `(?<![A-Za-z0-9_.:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
+    "g",
+  );
+  const seen = new Set<string>();
+  const entries: SkillLegendEntry[] = [];
+  for (const match of body.matchAll(tokenRe)) {
+    const token = match[0];
+    const candidate = match[1];
+    if (candidate === undefined || seen.has(token)) {
+      continue;
+    }
+
+    seen.add(token);
+    // generatedSkillName elides a `<plugin>-` prefix; a candidate of
+    // exactly `<plugin>-` would elide to "" and make assertSafeName throw.
+    // A body scan must never turn into a throw -- catch the validator (as
+    // mapSkills does) and skip the candidate instead of aborting the install.
+    let generated: string | null;
+    try {
+      generated = generatedSkillName(pluginName, candidate);
+    } catch {
+      generated = null;
+    }
+
+    if (generated !== null && known.has(generated)) {
+      entries.push({ token, generatedName: generated });
+    }
+  }
+
+  return entries;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -145,6 +213,38 @@ function mapModel(raw: string | undefined): {
   };
 }
 
+/**
+ * Map source tool tokens to Pi names via TOOL_MAP; unknown tokens land in
+ * `dropped`. Pure mapping/dropping -- no warnings here. AGSK-03 / AGSK-05 /
+ * D-83.1-01 / D-83.1-02: `Skill` is excluded from classification entirely
+ * (neither mapped nor dropped) because it translates to the `inheritSkills`
+ * flag computed in mapTools from the raw tokens -- both branches operate
+ * exactly as Claude Code does, so there is no droppedTools entry and no
+ * warning in any branch. Every other TOOL_MAP miss still records a
+ * `droppedTools` entry.
+ */
+function mapToolTokens(tokens: readonly string[]): { mapped: string[]; dropped: string[] } {
+  const mapped: string[] = [];
+  const dropped: string[] = [];
+  for (const token of tokens) {
+    // AGSK-03 / D-83.1-02: Skill is translated to inheritSkills (computed
+    // in mapTools from raw tokens), never dropped -- no droppedTools entry
+    // and no warning in any branch. Exact match, like TOOL_MAP lookups.
+    if (token === "Skill") {
+      continue;
+    }
+
+    const piName = TOOL_MAP[token];
+    if (piName === undefined) {
+      dropped.push(token);
+    } else {
+      mapped.push(piName);
+    }
+  }
+
+  return { mapped, dropped };
+}
+
 function mapTools(
   rawTools: string | undefined,
   rawDisallowed: string | undefined,
@@ -165,20 +265,20 @@ function mapTools(
         })()
       : splitCsv(rawTools);
 
-  const mapped: string[] = [];
-  const dropped: string[] = [];
-  for (const token of tokens) {
-    const piName = TOOL_MAP[token];
-    if (piName === undefined) {
-      dropped.push(token);
-    } else {
-      mapped.push(piName);
-    }
-  }
+  // AGSK-05 / D-83-01: the inherit flag is computed ONCE from RAW
+  // Claude-side tokens -- exact match, case-sensitive "Skill", like
+  // TOOL_MAP lookups. The disallow check must read raw tokens because
+  // Skill has no TOOL_MAP entry, so the Pi-name filter below can never
+  // see it. The omitted-tools default (Read/Bash/Edit) contains no Skill,
+  // so it never flips the flag.
+  const disallowedTokens = splitCsv(rawDisallowed);
+  const skillDeclared = tokens.includes("Skill");
+  const inheritSkills = skillDeclared && !disallowedTokens.includes("Skill");
+
+  const { mapped, dropped } = mapToolTokens(tokens);
 
   // Apply disallowedTools after mapping. Disallowed values are Claude-side
   // names; map them to Pi names then filter the mapped list.
-  const disallowedTokens = splitCsv(rawDisallowed);
   if (disallowedTokens.length > 0) {
     const disallowedPi = new Set<string>();
     for (const token of disallowedTokens) {
@@ -193,6 +293,7 @@ function mapTools(
         mapped: dedupePreservingOrder(mapped.filter((name) => !disallowedPi.has(name))),
         dropped,
         warnings,
+        inheritSkills,
       };
     }
   }
@@ -201,6 +302,7 @@ function mapTools(
     mapped: dedupePreservingOrder(mapped),
     dropped,
     warnings,
+    inheritSkills,
   };
 }
 
@@ -267,15 +369,56 @@ function mapSkills(
   const emit: string[] = [];
   const warnings: string[] = [];
   for (const token of tokens) {
-    const generated = generatedSkillName(pluginName, token);
-    if (known.has(generated)) {
+    // AGSK-02 (#86): a token qualified with this plugin's own name
+    // (`spec-tree:review-changes`) maps like its bare form -- strip the
+    // qualifier and delegate to generatedSkillName, whose prefix elision
+    // makes both spellings converge. A cross-plugin qualifier is dropped
+    // with a warning naming the full token (installability of the other
+    // plugin is unknown at convert time).
+    let effective = token;
+    const colon = token.indexOf(":");
+    if (colon !== -1) {
+      // Tolerate conventional YAML `key: value` spacing around the colon:
+      // `spec-tree: review-changes` and `spec-tree :review-changes`
+      // resolve like the tight form instead of silently dropping the
+      // preload the user obviously intended.
+      const qualifier = token.slice(0, colon).trim();
+      const rest = token.slice(colon + 1).trim();
+      if (qualifier !== pluginName) {
+        warnings.push(
+          `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+        );
+        continue;
+      }
+
+      effective = rest;
+    }
+
+    // AGSK-02 (#86): assertSafeName rejects empty, "." / "..", path
+    // separators, and control characters. A warn-drop must never become a
+    // throw -- catch the validator instead of enumerating its conditions,
+    // so every unsafe token (qualified remainder or bare) falls through to
+    // the unknown-reference drop below.
+    let generated: string | null;
+    try {
+      generated = generatedSkillName(pluginName, effective);
+    } catch {
+      generated = null;
+    }
+
+    if (generated !== null && known.has(generated)) {
       emit.push(generated);
     } else {
+      // The warning names the FULL original token (qualifier included) so
+      // the user can find it verbatim in the source frontmatter.
       warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
   }
 
-  return { emit, warnings };
+  // Mirror mapTools: collapse duplicate generated skill names so the emitter
+  // never renders a repeated `skills:` entry. A bare token and its same-plugin
+  // self-qualified form (AGSK-02) converge on one generated name.
+  return { emit: dedupePreservingOrder(emit), warnings };
 }
 
 /**
@@ -341,14 +484,27 @@ export function convertAgent(input: {
   warnings.push(...toolsResult.warnings);
   if (toolsResult.mapped.length === 0) {
     // AG-11: empty mapped tool list. Include source values so the user can
-    // correct upstream.
+    // correct upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently
+    // excluded from classification (it maps to inheritSkills, not a Pi
+    // tool), so a `tools: Skill`-only agent would otherwise see one
+    // declared tool produce zero mapped tools with no explanation --
+    // append the note whenever Skill was among the raw source tokens.
+    const skillNote = splitCsv(raw.tools).includes("Skill")
+      ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
+      : "";
     throw new Error(
       `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
         `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
         `Source tools: ${raw.tools ?? "(default read,bash,edit)"}; ` +
-        `disallowedTools: ${raw.disallowedTools ?? "(none)"}.`,
+        `disallowedTools: ${raw.disallowedTools ?? "(none)"}.${skillNote}`,
     );
   }
+
+  // AG-11: the preceding throw guarantees the mapped list is non-empty. The
+  // compiler cannot prove that from the length check, so assert the non-empty
+  // tuple the frontmatter emitter requires (through `unknown` because a
+  // string[] does not structurally overlap the tuple).
+  const tools = toolsResult.mapped as unknown as readonly [string, ...string[]];
 
   // 4. Thinking / effort mapping
   const thinkingResult = mapThinking(raw.thinking, raw.effort);
@@ -376,17 +532,24 @@ export function convertAgent(input: {
     pluginData: pluginDataDir,
   });
 
+  // 7.5 AGSK-04: detect same-plugin skill tokens in the emitted body and
+  //     build the legend. Empty when the body references none -- the
+  //     emitter then keeps the byte-identical no-legend layout
+  //     (reference-gated).
+  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills);
+
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
-  //    parser-safety (YAML quote-flipping, HTML-comment escaping, field
+  //    parser-safety (YAML quote-flipping, newline normalization, field
   //    ordering) lives behind a single seam.
   const fileContent = emitGeneratedAgentFile({
     frontmatter: {
       name: generatedName,
       description,
       ...optionalModel(modelResult.emit),
-      tools: toolsResult.mapped,
+      tools,
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
+      inheritSkills: toolsResult.inheritSkills,
     },
     provenance: {
       pluginName,
@@ -398,6 +561,7 @@ export function convertAgent(input: {
       warnings,
     },
     body: substitutedBody,
+    legend,
   });
 
   const result: ConvertedAgent = {

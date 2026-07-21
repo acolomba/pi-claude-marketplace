@@ -51,9 +51,9 @@ export interface ConvertedAgent {
   readonly sourceName: string;
   readonly sourcePath: string;
   readonly sourceHash: string;
-  /** Ready-to-write file content (frontmatter + provenance comment + body). */
+  /** Ready-to-write file content (frontmatter, including provenance keys, + body). */
   readonly fileContent: string;
-  /** Original `model:` field from source if present (for index/comment). */
+  /** Original `model:` field from source if present (for index/provenance). */
   readonly originalModel?: string;
   /** Frontmatter fields dropped because unsupported. */
   readonly droppedFields: readonly string[];

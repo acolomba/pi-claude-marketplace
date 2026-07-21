@@ -1,0 +1,260 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { convertAgent } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+
+import type { DiscoveredAgent } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
+
+// Byte-identity regression corpus for the #86 fix (AGSK-01, AGSK-04).
+//
+// The EXPECTED_N constants below hold the FULL generated fileContent for
+// seven input classes. None of these inputs contains a fix trigger: no
+// dash block lists, no plugin-qualified skills tokens, no Skill tool, no
+// skill tokens in the body. The #86 work (AGSK-01 CSV/inline-array
+// byte-identity clause; AGSK-04 token-free-body byte-identity clause) MUST
+// leave every one of these outputs byte-identical to each other's shape --
+// these constants must never be edited to make a converter change pass.
+//
+// T-d8i-01 re-pin: provenance now renders under a single `provenance`
+// frontmatter mapping after inheritSkills instead of a body HTML comment.
+// Empty list fields render inline as `[]`; non-empty ones render as a YAML
+// block list. Every constant below was regenerated to that layout; each
+// fixture's distinguishing content (warnings, droppedFields, CRLF trailing
+// byte) is preserved unchanged.
+
+function makeDiscovered(overrides: Partial<DiscoveredAgent> = {}): DiscoveredAgent {
+  const sourceName = overrides.sourceName ?? "bot";
+  const generatedName = overrides.generatedName ?? `pi-claude-marketplace-acme-${sourceName}`;
+  return {
+    sourceName,
+    generatedName,
+    sourcePath: overrides.sourcePath ?? "/abs/path/source.md",
+    sourceHash: overrides.sourceHash ?? "abc123",
+    raw: overrides.raw ?? {},
+    body: overrides.body ?? "Body content.",
+  };
+}
+
+function convertFixture(discovered: DiscoveredAgent, knownSkills: readonly string[]): string {
+  return convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills,
+    discovered,
+    sourceHash: "abc",
+    mapModel: false,
+  }).fileContent;
+}
+
+// Class 1: full pipeline, CSV tools + bare CSV skills (known + unknown mix).
+const EXPECTED_1 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read,bash
+skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - unknown skill reference "phantom" -- dropped
+---
+
+Body.
+`;
+
+test("AGSK-01 byte-identity: CSV tools + bare skills fileContent is pinned at pre-fix bytes", () => {
+  const parsed = parseFrontmatter(
+    "---\nname: bot\ndescription: d\ntools: Read,Bash\nskills: knowledge,phantom\n---\n\nBody.\n",
+  );
+  const out = convertFixture(makeDiscovered({ raw: parsed.raw, body: parsed.body }), [
+    "acme-knowledge",
+  ]);
+  assert.equal(out, EXPECTED_1);
+});
+
+// Class 2: full pipeline, inline-array tools.
+const EXPECTED_2 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read,bash
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body.
+`;
+
+test("AGSK-01 byte-identity: inline-array tools fileContent is pinned at pre-fix bytes", () => {
+  const parsed = parseFrontmatter(
+    '---\nname: bot\ndescription: d\ntools: ["Read", "Bash"]\n---\n\nBody.\n',
+  );
+  const out = convertFixture(makeDiscovered({ raw: parsed.raw, body: parsed.body }), []);
+  assert.equal(out, EXPECTED_2);
+});
+
+// Class 3: extra frontmatter keys land in droppedFields.
+const EXPECTED_3 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields:
+    - color
+    - hooks
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+`;
+
+test("AGSK-01 byte-identity: extra frontmatter keys fileContent is pinned at pre-fix bytes", () => {
+  const out = convertFixture(
+    makeDiscovered({ raw: { description: "d", tools: "Read", color: "blue", hooks: "x" } }),
+    [],
+  );
+  assert.equal(out, EXPECTED_3);
+});
+
+// Class 4: missing tools -> read,bash,edit default plus existing warning.
+const EXPECTED_4 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read,bash,edit
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - source agent omitted \`tools:\` -- defaulted to read,bash,edit. Add \`tools: read,bash,edit\` (or your intended subset) to the source agent to silence this warning.
+---
+
+Body content.
+`;
+
+test("AGSK-01 byte-identity: omitted tools default fileContent is pinned at pre-fix bytes", () => {
+  const out = convertFixture(makeDiscovered({ raw: { description: "d" } }), []);
+  assert.equal(out, EXPECTED_4);
+});
+
+// Class 5: disallowedTools filtering.
+const EXPECTED_5 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read,bash
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+`;
+
+test("AGSK-01 byte-identity: disallowedTools filtering fileContent is pinned at pre-fix bytes", () => {
+  const out = convertFixture(
+    makeDiscovered({ raw: { description: "d", tools: "Read,Bash,Edit", disallowedTools: "Edit" } }),
+    [],
+  );
+  assert.equal(out, EXPECTED_5);
+});
+
+// Class 6: description fallback.
+const EXPECTED_6 = `---
+name: pi-claude-marketplace-acme-bot
+description: Imported Claude Code plugin agent bot from plugin acme.
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - source description was missing or empty -- using fallback
+---
+
+Body content.
+`;
+
+test("AGSK-01 byte-identity: description fallback fileContent is pinned at pre-fix bytes", () => {
+  const out = convertFixture(makeDiscovered({ raw: { tools: "Read" } }), []);
+  assert.equal(out, EXPECTED_6);
+});
+
+// Class 7: full pipeline, CRLF source. The parser keeps the body's trailing
+// CRLF, so the pinned output ends with a literal CR before the final LF.
+const EXPECTED_7 = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+tools: read,bash
+skills: acme-knowledge
+skillPath: ../pi-claude-marketplace/resources/skills
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body.\r
+`;
+
+test("AGSK-04 byte-identity: CRLF source with token-free body fileContent is pinned at pre-fix bytes", () => {
+  const parsed = parseFrontmatter(
+    "---\r\nname: bot\r\ndescription: d\r\ntools: Read,Bash\r\nskills: knowledge\r\n---\r\n\r\nBody.\r\n",
+  );
+  const out = convertFixture(makeDiscovered({ raw: parsed.raw, body: parsed.body }), [
+    "acme-knowledge",
+  ]);
+  assert.equal(out, EXPECTED_7);
+});

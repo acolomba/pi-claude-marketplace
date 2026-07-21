@@ -55,7 +55,13 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.74.0",
     "@earendil-works/pi-tui": "*",
+    "pi-subagents": ">=0.35.0",
     "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "pi-subagents": {
+      "optional": true
+    }
   },
   "pi": {
     "extensions": [
@@ -84,5 +90,5 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.9.0"
+  "version": "0.10.0"
 }
