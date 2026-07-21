@@ -175,6 +175,7 @@ test("AG-8 emitGeneratedAgentFile emits fields in deterministic order: name, des
       tools: ["read", "bash"],
       thinking: "high",
       skills: ["acme-knowledge"],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -213,6 +214,7 @@ test("AG-8 emitGeneratedAgentFile omits model when undefined", () => {
       description: "An agent.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -237,6 +239,7 @@ test("AG-8 emitGeneratedAgentFile omits skills line when skills array is empty",
       description: "An agent.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -260,6 +263,7 @@ test("AG-5 emitGeneratedAgentFile provenance carries the GENERATED_AGENT_MARKER 
       description: "A.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -282,6 +286,7 @@ test("T-d8i-02 emitGeneratedAgentFile keeps a newline-bearing sourcePath on one 
       description: "A.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -307,6 +312,7 @@ test("AG-8 emitGeneratedAgentFile renders empty provenance lists as inline []", 
       description: "A.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -330,6 +336,7 @@ test("AG-8 emitGeneratedAgentFile renders non-empty provenance lists as YAML blo
       description: "A.",
       tools: ["read"],
       skills: [],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",
@@ -362,6 +369,7 @@ function makeLegendEmitInput(): Parameters<typeof emitGeneratedAgentFile>[0] {
       description: "An agent.",
       tools: ["read", "bash"],
       skills: ["acme-knowledge"],
+      inheritSkills: false,
     },
     provenance: {
       pluginName: "acme",

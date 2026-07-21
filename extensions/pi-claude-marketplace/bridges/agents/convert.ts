@@ -158,13 +158,16 @@ function detectSkillTokens(
     seen.add(token);
     // generatedSkillName elides a `<plugin>-` prefix; a candidate of
     // exactly `<plugin>-` would elide to "" and make assertSafeName throw.
-    // A body scan must never turn into a throw -- skip that candidate.
-    if (candidate === `${pluginName}-`) {
-      continue;
+    // A body scan must never turn into a throw -- catch the validator (as
+    // mapSkills does) and skip the candidate instead of aborting the install.
+    let generated: string | null;
+    try {
+      generated = generatedSkillName(pluginName, candidate);
+    } catch {
+      generated = null;
     }
 
-    const generated = generatedSkillName(pluginName, candidate);
-    if (known.has(generated)) {
+    if (generated !== null && known.has(generated)) {
       entries.push({ token, generatedName: generated });
     }
   }
@@ -412,7 +415,10 @@ function mapSkills(
     }
   }
 
-  return { emit, warnings };
+  // Mirror mapTools: collapse duplicate generated skill names so the emitter
+  // never renders a repeated `skills:` entry. A bare token and its same-plugin
+  // self-qualified form (AGSK-02) converge on one generated name.
+  return { emit: dedupePreservingOrder(emit), warnings };
 }
 
 /**
@@ -494,6 +500,12 @@ export function convertAgent(input: {
     );
   }
 
+  // AG-11: the preceding throw guarantees the mapped list is non-empty. The
+  // compiler cannot prove that from the length check, so assert the non-empty
+  // tuple the frontmatter emitter requires (through `unknown` because a
+  // string[] does not structurally overlap the tuple).
+  const tools = toolsResult.mapped as unknown as readonly [string, ...string[]];
+
   // 4. Thinking / effort mapping
   const thinkingResult = mapThinking(raw.thinking, raw.effort);
   if (thinkingResult.warning !== undefined) {
@@ -534,7 +546,7 @@ export function convertAgent(input: {
       name: generatedName,
       description,
       ...optionalModel(modelResult.emit),
-      tools: toolsResult.mapped,
+      tools,
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,

@@ -187,10 +187,15 @@ export interface GeneratedFrontmatterFields {
   readonly name: string;
   readonly description: string;
   readonly model?: string;
-  readonly tools: readonly string[];
+  /**
+   * AG-11: a generated agent always has at least one tool -- pi-subagents has
+   * no safe representation of "no tools". The non-empty tuple encodes that
+   * invariant in the type (convertAgent throws before reaching here on empty).
+   */
+  readonly tools: readonly [string, ...string[]];
   readonly thinking?: string;
   readonly skills: readonly string[];
-  readonly inheritSkills?: boolean;
+  readonly inheritSkills: boolean;
 }
 
 /**
@@ -262,7 +267,7 @@ export function emitGeneratedAgentFile(input: {
   // inheritProjectContext are extension-side defaults and intentionally
   // hardcoded -- they describe how this bridge interacts with pi-subagents.
   // inheritSkills is derived from the source agent's Skill tool declaration
-  // (AGSK-05, D-83-01) and defaults to false when the field is absent.
+  // (AGSK-05, D-83-01).
   const lines: string[] = [
     `name: ${frontmatter.name}`,
     `description: ${emitYamlScalar(frontmatter.description)}`,
@@ -287,7 +292,7 @@ export function emitGeneratedAgentFile(input: {
   lines.push(
     "systemPromptMode: replace",
     "inheritProjectContext: true",
-    `inheritSkills: ${(frontmatter.inheritSkills ?? false) ? "true" : "false"}`,
+    `inheritSkills: ${frontmatter.inheritSkills ? "true" : "false"}`,
   );
 
   // T-d8i-01: provenance folded under a single `provenance` mapping,

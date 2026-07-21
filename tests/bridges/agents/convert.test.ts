@@ -557,15 +557,16 @@ test("AGSK-02 conventional spacing around the qualifier colon still preloads the
   }
 });
 
-test("AGSK-02 bare skill behavior is unchanged: unknown warns, known emits, duplicates kept", () => {
+test("AGSK-02 bare skill behavior: unknown warns, known emits, duplicates deduped", () => {
   const unknown = convertSpecTree({ description: "d", tools: "Read", skills: "phantom" });
   assert.ok(unknown.warnings.includes(`unknown skill reference "phantom" -- dropped`));
 
   const known = convertSpecTree({ description: "d", tools: "Read", skills: "review-changes" });
   assert.match(frontmatterOf(known.fileContent), /^skills: spec-tree-review-changes$/m);
 
-  // No dedupe: duplicate bare tokens still emit twice (pi-subagents dedupes
-  // downstream).
+  // Duplicate bare tokens collapse to a single emitted skill
+  // (dedupePreservingOrder, mirroring mapTools) so the emitter never renders a
+  // repeated skills: entry.
   const dupes = convertAgent({
     pluginName: "acme",
     pluginRoot: "/root",
@@ -577,7 +578,20 @@ test("AGSK-02 bare skill behavior is unchanged: unknown warns, known emits, dupl
     sourceHash: "abc",
     mapModel: false,
   });
-  assert.match(frontmatterOf(dupes.fileContent), /^skills: acme-knowledge,acme-knowledge$/m);
+  assert.match(frontmatterOf(dupes.fileContent), /^skills: acme-knowledge$/m);
+});
+
+test("AGSK-02 (#86) a bare token and its same-plugin self-qualified form dedupe to one emitted skill", () => {
+  // Both spellings converge on spec-tree-review-changes via prefix elision;
+  // dedupePreservingOrder keeps a single skills: entry (mirroring mapTools)
+  // instead of emitting spec-tree-review-changes,spec-tree-review-changes.
+  const out = convertSpecTree({
+    description: "d",
+    tools: "Read",
+    skills: "review-changes,spec-tree:review-changes",
+  });
+  assert.match(frontmatterOf(out.fileContent), /^skills: spec-tree-review-changes$/m);
+  assert.deepEqual(out.warnings, []);
 });
 
 test("AGSK-02 / T-d8i-01 crafted cross-plugin token stays confined to provenance, never reaching the body", () => {
@@ -894,6 +908,36 @@ test("AGSK-04 dotted plugin-name prefix is not a reference (lookbehind boundary)
     "Use other.spec-tree:review-changes.",
   );
   assert.ok(!out.fileContent.includes(LEGEND_HEADING));
+});
+
+test("AGSK-04 escapeRegExp pins literal-dot plugin names: only the exact spec.tree: token matches", () => {
+  // Plugin names may legally contain `.` (assertSafeName allows it), so the
+  // body-scan regex must treat the dot literally. `spec.tree:review-changes`
+  // yields a legend entry; a near-miss like `specXtree:review-changes` (any
+  // char in the dot position) must NOT match -- which only holds because
+  // escapeRegExp neutralizes the `.` metacharacter.
+  const out = convertAgent({
+    pluginName: "spec.tree",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills: ["spec.tree-review-changes"],
+    discovered: makeDiscovered({
+      raw: { description: "d", tools: "Read" },
+      body: "Use spec.tree:review-changes but not specXtree:review-changes.",
+      generatedName: "pi-claude-marketplace-spec.tree-bot",
+    }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  assert.ok(out.fileContent.includes(LEGEND_HEADING));
+  assert.ok(
+    out.fileContent.includes(
+      legendEntryLine("spec.tree:review-changes", "spec.tree-review-changes"),
+    ),
+  );
+  // Exactly one legend entry: the near-miss produced none. Without escapeRegExp
+  // the `.`-as-wildcard would also match `specXtree:`, yielding two entries.
+  assert.equal(out.fileContent.split("(available on demand)").length - 1, 1);
 });
 
 test("AGSK-04 sentence-final punctuation does not poison the token candidate", () => {
