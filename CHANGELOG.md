@@ -1,7 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] - 2026-07-20
 
+- Claude plugin agents now preserve their skill preloads through conversion (#86). An agent that declares the `Skill` tool maps to `inheritSkills: true` on the generated Pi subagent -- so the subagent can invoke skills on demand -- instead of dropping the tool and recording it as unsupported. Skills the agent preloads via its frontmatter `skills:` field resolve against the plugin's installed skills and are emitted with an agent-local `skillPath` that points the subagent at them, and skills an agent references without preloading are annotated in an `(available on demand)` legend. Previously these agents were bridged with their skill access stripped.
 - Generated agent provenance now renders under a `provenance:` frontmatter mapping (source plugin/agent/path, and dropped fields/tools plus warnings as YAML lists) instead of a body HTML comment, so it no longer enters the bridged subagent's system prompt. Already-installed agents in the pre-existing body-comment format stay recognized, so no reinstall is required.
 
 ## [0.9.0] - 2026-07-18
