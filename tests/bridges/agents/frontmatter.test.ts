@@ -110,6 +110,25 @@ test("AGSK-01 parseFrontmatter ignores orphan dash items and bare dash lines", (
   assert.deepEqual(Object.keys(raw), ["name"]);
 });
 
+test("D-82-02 parseFrontmatter skips blank, colonless, and empty-key lines", () => {
+  // A blank line inside the block, a line with no colon, and a line whose key
+  // is empty (starts with `:`) are each skipped -- none becomes a raw key.
+  const text =
+    "---\n" +
+    "name: bot\n" +
+    "\n" +
+    "colonless\n" +
+    ": orphanvalue\n" +
+    "description: d\n" +
+    "---\n" +
+    "\n" +
+    "Body.\n";
+  const { raw } = parseFrontmatter(text);
+  assert.equal(raw.name, "bot");
+  assert.equal(raw.description, "d");
+  assert.deepEqual(Object.keys(raw), ["name", "description"]);
+});
+
 test("D-82-01 parseFrontmatter folds dash items with CRLF line endings", () => {
   const text =
     "---\r\n" +

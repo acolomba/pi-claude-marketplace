@@ -117,7 +117,7 @@ function splitCsv(value: string | undefined): string[] {
  * the whole metacharacter class.
  */
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**

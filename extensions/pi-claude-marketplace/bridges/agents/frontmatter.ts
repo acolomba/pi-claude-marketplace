@@ -282,11 +282,13 @@ export function emitGeneratedAgentFile(input: {
   }
 
   if (frontmatter.skills.length > 0) {
-    lines.push(`skills: ${frontmatter.skills.join(",")}`);
-    // D-84-04: a fixed, agent-local search root so pi-subagents resolves
-    // the emitted skill names against the bridged skills directory instead
-    // of only its own scan roots (pi-subagents 0.35.0, PR #428).
-    lines.push("skillPath: ../pi-claude-marketplace/resources/skills");
+    // D-84-04: skillPath is a fixed, agent-local search root so pi-subagents
+    // resolves the emitted skill names against the bridged skills directory
+    // instead of only its own scan roots (pi-subagents 0.35.0, PR #428).
+    lines.push(
+      `skills: ${frontmatter.skills.join(",")}`,
+      "skillPath: ../pi-claude-marketplace/resources/skills",
+    );
   }
 
   lines.push(
@@ -304,20 +306,21 @@ export function emitGeneratedAgentFile(input: {
   // line's content, so isOwnedAgentFile's whole-file substring check still
   // matches. Free-text values are newline-normalized (T-d8i-02) so a
   // multi-line value can't inject a bogus key into the line-based parser.
-  lines.push(
+  const provenanceLines: string[] = [
     "provenance:",
     `  ${GENERATED_AGENT_MARKER}`,
     `  sourcePlugin: ${provenance.pluginName}`,
     `  sourceAgent: ${provenance.sourceName}`,
     `  sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
-  );
+  ];
   if (provenance.originalModel !== undefined) {
-    lines.push(`  originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
+    provenanceLines.push(`  originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
   }
 
-  pushProvenanceList(lines, "droppedFields", provenance.droppedFields);
-  pushProvenanceList(lines, "droppedTools", provenance.droppedTools);
-  pushProvenanceList(lines, "warnings", provenance.warnings);
+  pushProvenanceList(provenanceLines, "droppedFields", provenance.droppedFields);
+  pushProvenanceList(provenanceLines, "droppedTools", provenance.droppedTools);
+  pushProvenanceList(provenanceLines, "warnings", provenance.warnings);
+  lines.push(...provenanceLines);
   const generatedFrontmatter = "---\n" + lines.join("\n") + "\n---\n";
 
   // Body: ensure exactly one leading blank line and a trailing newline so
