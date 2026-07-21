@@ -11,6 +11,8 @@
 
 # gsd
 /.agent/
+/.planning/active-workstream
+/.planning/workstreams/*/config.json
 
 # build output
 /dist/
