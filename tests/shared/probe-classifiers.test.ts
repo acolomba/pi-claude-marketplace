@@ -138,6 +138,18 @@ test("MCPR-03 / D-02 / WR-01: two `malformed mcp reference:` notes dedupe to a s
   assert.deepEqual([...reasons], ["malformed mcp"]);
 });
 
+test("WR-01: a `malformed mcp reference:` note whose raw path contains `lspServers` narrows to `malformed mcp` (not `lsp`)", () => {
+  // The specific `malformed mcp reference` prefix arm MUST run before the
+  // broad `lspServers` substring arm. The author-controlled raw path is
+  // embedded verbatim in the note, so a reference like
+  // `config/lspServers/servers.mcp.json` would otherwise misclassify as
+  // `{lsp}` instead of `{malformed mcp}`.
+  const reasons = narrowResolverNotes([
+    'malformed mcp reference: file not found: "config/lspServers/servers.mcp.json"',
+  ]);
+  assert.deepEqual([...reasons], ["malformed mcp"]);
+});
+
 test("PHOOK-05 / D-71-04: narrowUnsupportedKinds maps the `hooks` kind to the existing `unsupported hooks` member", () => {
   assert.deepEqual([...narrowUnsupportedKinds(["hooks"])], ["unsupported hooks"]);
 });

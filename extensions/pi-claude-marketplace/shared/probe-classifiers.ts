@@ -136,12 +136,18 @@ function classifyResolverNote(note: string): ResolverNoteReason {
     return "unsupported hooks";
   }
 
-  if (note.includes("lspServers")) {
-    return "lsp";
-  }
-
+  // WR-01: the specific `malformed mcp reference` prefix arm MUST run before
+  // the broad `lspServers` substring arm. A broken reference embeds the
+  // author-controlled raw path verbatim, so a note like
+  // `malformed mcp reference: file not found: "config/lspServers/x.mcp.json"`
+  // contains the `lspServers` substring and would otherwise misclassify as
+  // `{lsp}` instead of `{malformed mcp}`.
   if (note.startsWith("malformed mcp reference")) {
     return "malformed mcp";
+  }
+
+  if (note.includes("lspServers")) {
+    return "lsp";
   }
 
   return "unsupported source";
