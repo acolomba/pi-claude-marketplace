@@ -48,16 +48,16 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MCPR-01 | Phase [N] | Pending |
-| MCPR-02 | Phase [N] | Pending |
-| MCPR-03 | Phase [N] | Pending |
-| MCPR-04 | Phase [N] | Pending |
+| MCPR-01 | Phase 85 | Pending |
+| MCPR-02 | Phase 85 | Pending |
+| MCPR-03 | Phase 85 | Pending |
+| MCPR-04 | Phase 85 | Pending |
 
 **Coverage:**
 - v1 requirements: 4 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 4 ⚠️
+- Mapped to phases: 4 (100% — all mapped to Phase 85) ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-22*
-*Last updated: 2026-07-22 after milestone v1.14 start*
+*Last updated: 2026-07-22 after roadmap creation (Phase 85 maps MCPR-01..04)*
