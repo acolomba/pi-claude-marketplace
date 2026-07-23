@@ -622,10 +622,7 @@ test("MCPR-02 plugin.json string mcpServers reference resolves at parity (via re
 
 test("MCPR-03 missing reference file -> unavailable + malformed mcp reference note", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
-  const r = await resolveStrict(
-    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
-    ctx,
-  );
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed mcp reference")),
@@ -639,10 +636,7 @@ test("MCPR-03 malformed-JSON reference file -> unavailable + malformed mcp refer
     [localRoot]: "dir",
     [path.join(localRoot, "x.mcp.json")]: { contents: "{ not json" },
   });
-  const r = await resolveStrict(
-    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
-    ctx,
-  );
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed mcp reference")),
@@ -659,10 +653,7 @@ test("MCPR-03 wrapper-less reference file (bare map) -> unavailable + malformed 
       contents: JSON.stringify({ srv: { command: "node" } }),
     },
   });
-  const r = await resolveStrict(
-    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
-    ctx,
-  );
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
   assert.equal(r.state, "unavailable");
   assert.ok(
     r.notes.some((n) => n.includes("malformed mcp reference")),
@@ -704,7 +695,10 @@ test(
       await symlink(path.join(externalDir, "secret.mcp.json"), path.join(pluginRoot, "x.mcp.json"));
 
       const ctx: ResolveContext = { marketplaceRoot: mpRoot };
-      const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+      const r = await resolveStrict(
+        basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
+        ctx,
+      );
       assert.equal(r.state, "unavailable");
       assert.ok(
         r.notes.some((n) => n.includes("malformed mcp reference")),
@@ -749,10 +743,7 @@ test("MCPR-01 backstop: string entry.mcpServers shadows an object manifest.mcpSe
     },
     [path.join(localRoot, "x.mcp.json")]: { contents: WRAPPED_MCP },
   });
-  const r = await resolveStrict(
-    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
-    ctx,
-  );
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
   assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
   if (r.state === "installable") {
     // Entry string wins; the manifest object is shadowed.
