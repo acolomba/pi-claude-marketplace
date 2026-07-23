@@ -1296,6 +1296,8 @@ async function applyLooseMcp(
     return true;
   }
 
+  // D-03: string `mcpServers` references are intentionally unhandled in loose
+  // mode (loose mode has no wired production caller); scoped to strict mode only.
   return applyMcpValue(partial, entryMcp, false);
 }
 
