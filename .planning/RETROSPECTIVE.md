@@ -2,6 +2,37 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.14 -- mcp-string-refs
+
+**Shipped:** 2026-07-23
+**Phases:** 1 (Phase 85) | **Plans:** 2 | **Tasks:** 4 | **Requirements:** 4/4 (MCPR-01..04) | **Tests:** unit suite green + new resolver / probe-classifier / cross-surface-parity cases
+
+### What Was Built
+- The resolver accepts a `./`-relative string `mcpServers` reference (marketplace entry OR `plugin.json`) to a **wrapped** `.mcp.json`, installing at byte-for-byte parity with the inline-object form; resolution lives in `applyStrictMcp` before `applyMcpValue`, reusing the `validateComponentPath` reject-absolute + `assertPathInside` containment pattern (NFR-10 + D-14 symlink refusal).
+- The `mcpServers` field schema widened to `Type.Union([Type.String(), MCP_SERVERS_SCHEMA])` in both the entry and manifest schemas — the whole-manifest-throw fix (a string entry otherwise fails `MARKETPLACE_VALIDATOR.Check` on the entire plugins array, PR #99's exact defect).
+- A new failure-class `{malformed mcp}` reason (REASONS 34→35, filed in `FAILURE_REASONS`) for a missing / malformed-JSON / wrapper-less / out-of-root reference, rendered at cross-surface parity across list / info AND install.
+
+### What Worked
+- **Discuss-phase surfaced the reason-family semantic decision.** Probing "what happens to a malformed lsp definition?" exposed that the `unsupported` tokens denote well-formed-but-unsupported KINDS (content never parsed), so a malformation of a *supported* feature belongs in the failure family — a truthful `{malformed mcp}` instead of the opaque `{unsupported source}` catch-all.
+- **Research caught the prerequisite that scouting missed.** The object-only input schemas would throw the whole marketplace load on a string entry — one layer up from the `applyStrictMcp` seam, and the very PR #99 defect the milestone set out to avoid.
+- **A live real-fs UAT proved parity end-to-end.** A resolver sanity script + a scratch Pi session (`scripts/pi.sh --home`) showed the string-sourced server stage byte-identically to the inline one in `mcp.json`.
+
+### What Was Inefficient
+- **"Parity by construction" nearly shipped a real gap.** The string ref feeds the same `applyMcpValue`, so downstream *seemed* free — but the install surface uses a HAND-MIRRORED reason classifier (`install.ts::narrowResolverReasons`) with a JSDoc lockstep contract that the plan, executor, and verifier all missed. Only code review caught it (CR-01 BLOCKER); a cross-surface parity test now locks it.
+
+### Patterns Established
+- **Failure-class vs unsupported-class reasons:** a parse/structural defect in a supported feature belongs with `{invalid manifest}` / `{unparseable}` in `FAILURE_REASONS`; `unsupported` is reserved for KINDS the resolver never parses. Filed backlog **REASON-01** to reroute the still-mislabeled inline-mcp and hooks cases.
+- **Collision-proof note prefixes:** a new `startsWith`-narrowed note (`malformed mcp reference:`) must not prefix-collide with an existing one (`malformed mcpServers:`) — locked with a bidirectional guard test.
+
+### Key Lessons
+1. **"Parity by construction" is a hypothesis, not a proof — enumerate the mirrors.** A feature reusing an existing downstream path still needs every hand-mirrored consumer checked. Grep for duplicate/mirrored classifiers when adding a reason token.
+2. **Research the input contract, not just the seam.** Scouting found the edit site but missed that the input schema rejects the new shape one layer up. Trace a value from its schema boundary to the seam.
+3. **A live-fs sanity script de-risks the human UAT.** Driving `resolveStrict` against a real scratch marketplace before handing steps to the operator made the live run a confirmation, not a debug session.
+
+### Cost Observations
+- 1 phase, 2 plans, ~13 commits; opus for planner / researcher / executors / reviewer / fixer, sonnet for plan-checker / verifier.
+- Code review was the highest-leverage gate this milestone: it alone caught the cross-surface BLOCKER after plan-check and verification both passed.
+
 ## Milestone: url-source -- URL Sources
 
 **Shipped:** 2026-07-13
