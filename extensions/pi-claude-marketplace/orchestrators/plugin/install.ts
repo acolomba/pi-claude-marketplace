@@ -2210,6 +2210,17 @@ function narrowResolverReasons(
       continue;
     }
 
+    // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
+    // `mcpServers` string reference renders `{malformed mcp}` on the install
+    // surface, matching `list`/`info` (SURF-01). Placed BEFORE the
+    // `Unexpected token` arm so a JSON-parse-error reference maps to
+    // `malformed mcp`, not `{unparseable}`, and before the `includes("source")`
+    // catch-all. Byte-consistent with `shared/probe-classifiers.ts`.
+    if (reason.startsWith("malformed mcp reference")) {
+      out.push("malformed mcp");
+      continue;
+    }
+
     if (reason.includes("source")) {
       out.push("unsupported source");
       continue;
