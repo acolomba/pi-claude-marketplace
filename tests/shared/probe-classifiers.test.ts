@@ -111,6 +111,33 @@ test("WR-01: a second `malformed hooks.json:` note does NOT leak an unrelated `u
   assert.deepEqual([...reasons], ["unsupported hooks"]);
 });
 
+test("MCPR-03 / D-02: narrowResolverNotes emits `malformed mcp` for a `malformed mcp reference:` note", () => {
+  // A broken mcpServers STRING reference (missing file / malformed JSON /
+  // wrapper-less / out-of-root) is emitted by the resolver's reference
+  // helpers with the collision-proof `malformed mcp reference:` prefix. It
+  // narrows to the failure-class `{malformed mcp}` token.
+  const reasons = narrowResolverNotes(['malformed mcp reference: file not found: "x.mcp.json"']);
+  assert.deepEqual([...reasons], ["malformed mcp"]);
+});
+
+test("MCPR-03 / D-02: an inline `malformed mcpServers:` note STILL narrows to `unsupported source` (collision guard)", () => {
+  // Note-prefix collision guard: the reference branch matches the FULL
+  // `malformed mcp reference` prefix, so the inline `malformed mcpServers`
+  // note (a distinct, out-of-scope case) does NOT reclassify to
+  // `{malformed mcp}` and keeps its permissive `{unsupported source}`
+  // fallback classification.
+  const reasons = narrowResolverNotes(["malformed mcpServers: shape mismatch"]);
+  assert.deepEqual([...reasons], ["unsupported source"]);
+});
+
+test("MCPR-03 / D-02 / WR-01: two `malformed mcp reference:` notes dedupe to a single `malformed mcp`", () => {
+  const reasons = narrowResolverNotes([
+    'malformed mcp reference: file not found: "x.mcp.json"',
+    "malformed mcp reference: missing top-level mcpServers wrapper",
+  ]);
+  assert.deepEqual([...reasons], ["malformed mcp"]);
+});
+
 test("PHOOK-05 / D-71-04: narrowUnsupportedKinds maps the `hooks` kind to the existing `unsupported hooks` member", () => {
   assert.deepEqual([...narrowUnsupportedKinds(["hooks"])], ["unsupported hooks"]);
 });
