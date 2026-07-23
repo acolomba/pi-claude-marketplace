@@ -1,0 +1,63 @@
+# Requirements: pi-claude-marketplace — v1.14 mcp-string-refs
+
+**Defined:** 2026-07-22
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+## v1 Requirements
+
+Requirements for milestone v1.14 (target npm 0.11.0). Each maps to a roadmap phase.
+
+Reimplements the intent of external PR #99 (@lucatume) — string `mcpServers` file
+references — in the resolver layer rather than the cached manifest loader, so a
+broken reference isolates to a single `unavailable` plugin instead of failing the
+whole marketplace read. Claude spec verified against code.claude.com/docs on 2026-07-22:
+marketplace-entry `mcpServers` is `string | object`; plugin.json `mcpServers` is
+`string | array | object`; a string is a `./`-relative path to a `.mcp.json`-shaped
+file that must resolve inside the plugin root.
+
+### MCP Server References
+
+- [ ] **MCPR-01**: A `marketplace.json` plugin entry that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
+- [ ] **MCPR-02**: A `plugin.json` that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
+- [ ] **MCPR-03**: The referenced file is a wrapped `.mcp.json` (`{ "mcpServers": {...} }`) — Claude's documented format. A reference that is missing, malformed JSON, or lacks a top-level `mcpServers` object resolves the plugin **`unavailable`** with a note — a structural defect, matching the resolver's existing treatment of malformed `mcpServers` / `.mcp.json` / `plugin.json` (`applyStrictMcp` → `dirty` → `unavailable`). The failure is per-plugin: the marketplace manifest load succeeds and every other plugin resolves normally — never PR #99's whole-manifest throw, and never its silent drop-to-`undefined`.
+- [ ] **MCPR-04**: An `mcpServers` reference that resolves outside the plugin root makes the plugin **`unavailable`** with a note (a structural / NFR-10 defect) — per-plugin, never a whole-manifest failure and never a read outside the plugin root. Path-traversal (`../`) refusal matches Claude's containment rule; symbolic links are refused as existing house policy (D-14), stricter than Claude's marketplace-root symlink model — a documented divergence.
+
+## Future Requirements
+
+Deferred beyond this milestone. Tracked, not in the current roadmap.
+
+### MCP Server References
+
+- **MCPR-F1**: `plugin.json` `mcpServers` as an **array** of string paths / inline configs (`string | array | object`). Claude allows the array form for plugin.json only (not marketplace entries); it is rare in practice and can extend the same resolver seam later.
+
+## Out of Scope
+
+Explicitly excluded from v1.14. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Manifest-loader inlining of the reference (PR #99's approach) | Loader-level inlining fails the whole marketplace load on one broken reference (should be a single `unavailable` plugin), breaks the manifest cache's `(mtimeMs, size)` coherence, and distorts the WR-01 change-detection key in `marketplace/update.ts`. Resolved in the resolver layer instead. |
+| Marketplace-entry `mcpServers` **array** form | Not in the Claude spec for marketplace entries (`string \| object` only). |
+| Unwrapped referenced files (bare server map, no `mcpServers` wrapper) | The declared string reference expects a wrapped `.mcp.json` per Claude's format and PR #99; a wrapper-less file degrades as malformed (MCPR-03). The conventional plugin-root `.mcp.json` keeps its existing unwrapped tolerance, unchanged. |
+| `${CLAUDE_PLUGIN_ROOT}` / `${user_config.*}` substitution inside the referenced servers | The MCP bridge already owns per-server field handling at stage time; this milestone only changes how the `mcpServers` map is *sourced*, not how individual server entries are interpreted. |
+| Non-local plugin sources (github / url / npm) resolving the reference at marketplace-add time | The referenced file lives inside the plugin's own materialized source; it resolves through the same resolver path once the plugin root exists on disk (git-source clone / path source). No new fetch behaviour. |
+
+## Traceability
+
+Which phases cover which requirements. Populated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| MCPR-01 | Phase [N] | Pending |
+| MCPR-02 | Phase [N] | Pending |
+| MCPR-03 | Phase [N] | Pending |
+| MCPR-04 | Phase [N] | Pending |
+
+**Coverage:**
+- v1 requirements: 4 total
+- Mapped to phases: 0 (roadmap pending)
+- Unmapped: 4 ⚠️
+
+---
+*Requirements defined: 2026-07-22*
+*Last updated: 2026-07-22 after milestone v1.14 start*

@@ -10,7 +10,20 @@ Fifteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: agent-skill-preloads Agent Skill Preloads (workstream: issue-86-agent-skill-preloads, started 2026-07-19, target npm 0.10.0)
+## Current Milestone: mcp-string-refs MCP Server String References (branch: features/mcp-string-refs, started 2026-07-22, target npm 0.11.0)
+
+**Goal:** A Claude plugin that declares `mcpServers` as a string file-path reference (a path to a `.mcp.json`-shaped file inside the plugin's source dir) resolves and installs its MCP servers at parity with the inline-object form — resolved in the resolver layer so a broken reference isolates to a single `unavailable` plugin, never failing the whole marketplace read.
+
+**Target features:**
+
+- **Marketplace-entry string reference** — a `marketplace.json` plugin entry may set `mcpServers` to a `./`-relative path (Claude spec: marketplace-entry `mcpServers` is `string | object`); the resolver reads the referenced file adjacent to `readStandaloneMcp`, resolves it against the plugin root, and enforces NFR-10 containment via `assertPathInside`.
+- **plugin.json string reference** — a `plugin.json` may likewise set `mcpServers` to a `./`-relative path (Claude spec: plugin.json `mcpServers` is `string | array | object`); same resolver seam, same containment. String parity across both declaration sites.
+- **Wrapped `.mcp.json` referenced file** — the referenced file is a wrapped `{ "mcpServers": {...} }` document (Claude's documented format, matching PR #99); a malformed or wrapper-less file degrades per-plugin rather than inlining `undefined` (PR #99's silent-drop bug). No unwrapped-superset tolerance for the declared reference — the conventional plugin-root `.mcp.json` keeps its own existing leniency, unchanged.
+- **Per-plugin isolation on failure** — a missing, malformed, or out-of-bounds reference resolves that plugin **`unavailable`** with a note (the resolver's existing structural-defect path via `applyStrictMcp` → `applyMcpValue`); it never throws and never fails the marketplace manifest load for other plugins. Malformed constructs yield an `unavailable` plugin, not a soft-degrade — soft-degrade is reserved for *unsupported* component kinds.
+
+**Key context:** Reimplements the intent of external PR #99 by @lucatume (credited in our PR), which placed the inlining in the cached manifest loader (`domain/manifest.ts`). We deliberately resolve in `domain/resolver.ts` instead, because loader-level inlining (a) fails the ENTIRE marketplace load on one broken reference — when it should resolve a single plugin `unavailable`; (b) breaks the manifest cache's `(mtimeMs, size)` coherence by making the cached value depend on unkeyed external files; and (c) distorts the WR-01 raw-parse change-detection key in `marketplace/update.ts::manifestContentKey`. Claude spec verified against code.claude.com/docs on 2026-07-22. The plugin.json array form (`string | array | object`) is deferred to a future milestone.
+
+## Previous Milestone: agent-skill-preloads Agent Skill Preloads (workstream: issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0)
 
 **Goal:** A converted Claude plugin agent that declares skill preloads works self-sufficiently in a fresh Pi subagent session (GitHub issue #86) — the preload reaches the generated pi-subagents frontmatter, and free-text Claude skill references in the body are explained to the child LLM.
 
@@ -238,12 +251,20 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ### Active
 
-<!-- Milestone agent-skill-preloads (workstream issue-86-agent-skill-preloads, started 2026-07-19, target npm 0.10.0). Fixes GitHub issue #86. -->
+<!-- Milestone mcp-string-refs (branch features/mcp-string-refs, started 2026-07-22, target npm 0.11.0). Reimplements the intent of PR #99 (@lucatume) in the resolver layer. -->
 
-- [ ] Source agents using the documented YAML block-list form for `skills:`/`tools:` convert with preloads intact (AGSK-01)
-- [ ] Skill references qualified with the plugin's own name (`<plugin>:<skill>`) map to the converted Pi skill name; cross-plugin qualifiers warn-and-drop (AGSK-02)
-- [ ] Dropping the `Skill` tool emits a provenance warning naming the lost dynamic-invocation capability (AGSK-03)
-- [ ] Generated agent bodies referencing Claude skill names carry a converter-authored mapping note; reference-free agents stay byte-identical (AGSK-04)
+- [ ] A `marketplace.json` plugin entry with `mcpServers` as a `./`-relative string path resolves and installs the MCP servers from the referenced file (MCPR-01)
+- [ ] A `plugin.json` with `mcpServers` as a `./`-relative string path resolves and installs the MCP servers from the referenced file (MCPR-02)
+- [ ] The referenced MCP file is accepted both wrapped (`{ "mcpServers": {...} }`) and unwrapped (`{...}`), matching `readStandaloneMcp` tolerance (MCPR-03)
+- [ ] A missing or malformed `mcpServers` reference disqualifies only that plugin's MCP with a closed-set note; the marketplace manifest load and other plugins are unaffected (MCPR-04)
+- [ ] An `mcpServers` reference that escapes the plugin root (traversal or symlink) is refused and disqualifies only that plugin's MCP with a note, never a whole-manifest failure (MCPR-05)
+
+<!-- Milestone agent-skill-preloads (workstream issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0). Fixed GitHub issue #86. -->
+
+- [x] Source agents using the documented YAML block-list form for `skills:`/`tools:` convert with preloads intact (AGSK-01) — shipped npm 0.10.0
+- [x] Skill references qualified with the plugin's own name (`<plugin>:<skill>`) map to the converted Pi skill name; cross-plugin qualifiers warn-and-drop (AGSK-02) — shipped npm 0.10.0
+- [x] Dropping the `Skill` tool emits a provenance warning naming the lost dynamic-invocation capability (AGSK-03) — shipped npm 0.10.0
+- [x] Generated agent bodies referencing Claude skill names carry a converter-authored mapping note; reference-free agents stay byte-identical (AGSK-04) — shipped npm 0.10.0
 
 <!-- Milestone fetch-plugin (workstream url-source, started 2026-07-13, shipped 2026-07-18 as npm 0.9.0). Scope adopted from SEED-001. url-source shipped 2026-07-13 (its three items moved to Validated). force-install shipped 2026-07-02; its closeout pends in workstream `milestone`. -->
 
@@ -373,7 +394,9 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-07-19 after starting milestone agent-skill-preloads (workstream: issue-86-agent-skill-preloads, target npm 0.10.0) — GitHub issue #86 fix: block-list frontmatter parsing, plugin-qualified skill mapping, `Skill`-tool drop warning, body advisory note (AGSK-01..04). Prior updates below.*
+*Last updated: 2026-07-22 after starting milestone v1.14 mcp-string-refs (branch: features/mcp-string-refs, target npm 0.11.0) — `mcpServers` string file-path references resolved in the resolver layer with per-plugin soft-degrade, reimplementing the intent of PR #99 (@lucatume) without the manifest-loader defects (MCPR-01..05). Prior updates below.*
+
+*Prior update: 2026-07-19 after starting milestone agent-skill-preloads (workstream: issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0) — GitHub issue #86 fix: block-list frontmatter parsing, plugin-qualified skill mapping, `Skill`-tool drop warning, body advisory note (AGSK-01..04).*
 
 *Prior update: 2026-07-15 after Phase 81 (pi-only `fetch` verb in all three shapes + `info --fetch` probe-swap, once-per-host auth at install parity, GC-sweepable fetched clones self-healing to `(remote)`; FTCH-01..07 complete, live-fetch UAT passed 1/1 — fetch-plugin milestone phase work done, lifecycle close pending).*
 
