@@ -17,10 +17,10 @@ file that must resolve inside the plugin root.
 
 ### MCP Server References
 
-- [ ] **MCPR-01**: A `marketplace.json` plugin entry that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
-- [ ] **MCPR-02**: A `plugin.json` that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
-- [ ] **MCPR-03**: The referenced file is a wrapped `.mcp.json` (`{ "mcpServers": {...} }`) — Claude's documented format. A reference that is missing, malformed JSON, or lacks a top-level `mcpServers` object resolves the plugin **`unavailable`** with a note — a structural defect, matching the resolver's existing treatment of malformed `mcpServers` / `.mcp.json` / `plugin.json` (`applyStrictMcp` → `dirty` → `unavailable`). The failure is per-plugin: the marketplace manifest load succeeds and every other plugin resolves normally — never PR #99's whole-manifest throw, and never its silent drop-to-`undefined`.
-- [ ] **MCPR-04**: An `mcpServers` reference that resolves outside the plugin root makes the plugin **`unavailable`** with a note (a structural / NFR-10 defect) — per-plugin, never a whole-manifest failure and never a read outside the plugin root. Path-traversal (`../`) refusal matches Claude's containment rule; symbolic links are refused as existing house policy (D-14), stricter than Claude's marketplace-root symlink model — a documented divergence.
+- [x] **MCPR-01**: A `marketplace.json` plugin entry that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
+- [x] **MCPR-02**: A `plugin.json` that sets `mcpServers` to a `./`-relative string path resolves and installs the MCP servers declared in the referenced file, at parity with the inline-object form.
+- [x] **MCPR-03**: The referenced file is a wrapped `.mcp.json` (`{ "mcpServers": {...} }`) — Claude's documented format. A reference that is missing, malformed JSON, or lacks a top-level `mcpServers` object resolves the plugin **`unavailable`** with a note — a structural defect, matching the resolver's existing treatment of malformed `mcpServers` / `.mcp.json` / `plugin.json` (`applyStrictMcp` → `dirty` → `unavailable`). The failure is per-plugin: the marketplace manifest load succeeds and every other plugin resolves normally — never PR #99's whole-manifest throw, and never its silent drop-to-`undefined`.
+- [x] **MCPR-04**: An `mcpServers` reference that resolves outside the plugin root makes the plugin **`unavailable`** with a note (a structural / NFR-10 defect) — per-plugin, never a whole-manifest failure and never a read outside the plugin root. Path-traversal (`../`) refusal matches Claude's containment rule; symbolic links are refused as existing house policy (D-14), stricter than Claude's marketplace-root symlink model — a documented divergence.
 
 ## Future Requirements
 
@@ -48,12 +48,13 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MCPR-01 | Phase 85 | Pending |
-| MCPR-02 | Phase 85 | Pending |
-| MCPR-03 | Phase 85 | Pending |
-| MCPR-04 | Phase 85 | Pending |
+| MCPR-01 | Phase 85 | Complete |
+| MCPR-02 | Phase 85 | Complete |
+| MCPR-03 | Phase 85 | Complete |
+| MCPR-04 | Phase 85 | Complete |
 
 **Coverage:**
+
 - v1 requirements: 4 total
 - Mapped to phases: 4 (100% — all mapped to Phase 85) ✓
 - Unmapped: 0

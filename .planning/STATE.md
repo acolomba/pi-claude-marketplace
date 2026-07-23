@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.14
 milestone_name: mcp-string-refs
 current_phase: 85
-current_phase_name: ready to plan
-status: planned
-stopped_at: Phase 85 context gathered
-last_updated: "2026-07-23T01:58:53.946Z"
+current_phase_name: mcpservers-string-file-path-references
+status: executing
+stopped_at: Completed 85-01-PLAN.md
+last_updated: "2026-07-23T03:03:24.279Z"
 last_activity: 2026-07-22
-last_activity_desc: Roadmap created for milestone v1.14 (mcp-string-refs); 4/4 requirements (MCPR-01..04) mapped to Phase 85
+last_activity_desc: Phase 85 execution started
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 85 — `mcpServers` string file-path references (ready to plan)
-Plan: —
-Status: Roadmap complete — awaiting `/gsd-plan-phase 85`
-Last activity: 2026-07-22 — Roadmap created for milestone v1.14 (mcp-string-refs); 4/4 requirements (MCPR-01..04) mapped to Phase 85
+Phase: 85 (mcpservers-string-file-path-references) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-07-22 — Phase 85 execution started
 
 ## Roadmap Summary
 
@@ -39,6 +39,16 @@ Last activity: 2026-07-22 — Roadmap created for milestone v1.14 (mcp-string-re
 
 ## Session
 
-**Last session:** 2026-07-23T01:58:53.925Z
-**Stopped at:** Phase 85 context gathered
-**Resume file:** .planning/phases/85-mcpservers-string-file-path-references/85-CONTEXT.md
+**Last session:** 2026-07-23T03:03:16.204Z
+**Stopped at:** Completed 85-01-PLAN.md
+**Resume file:** None
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 85 P01 | 45min | 2 tasks | 4 files |
+
+## Decisions
+
+- [Phase ?]: MCPR: string mcpServers reference resolved in applyStrictMcp string branch; field union widened, server-map validator untouched (D-01/D-04)
