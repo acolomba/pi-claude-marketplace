@@ -4,16 +4,16 @@ milestone: v1.14
 milestone_name: mcp-string-refs
 current_phase: 85
 current_phase_name: mcpservers-string-file-path-references
-status: executing
-stopped_at: Completed 85-01-PLAN.md
-last_updated: "2026-07-23T03:03:24.279Z"
+status: verifying
+stopped_at: Completed 85-02-PLAN.md
+last_updated: "2026-07-23T03:34:01.060Z"
 last_activity: 2026-07-22
 last_activity_desc: Phase 85 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -22,7 +22,7 @@ progress:
 
 Phase: 85 (mcpservers-string-file-path-references) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-22 — Phase 85 execution started
 
 ## Roadmap Summary
@@ -39,8 +39,8 @@ Last activity: 2026-07-22 — Phase 85 execution started
 
 ## Session
 
-**Last session:** 2026-07-23T03:03:16.204Z
-**Stopped at:** Completed 85-01-PLAN.md
+**Last session:** 2026-07-23T03:33:50.290Z
+**Stopped at:** Completed 85-02-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -48,7 +48,10 @@ Last activity: 2026-07-22 — Phase 85 execution started
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 85 P01 | 45min | 2 tasks | 4 files |
+| Phase 85 P02 | 35m | 2 tasks | 6 files |
 
 ## Decisions
 
 - [Phase ?]: MCPR: string mcpServers reference resolved in applyStrictMcp string branch; field union widened, server-map validator untouched (D-01/D-04)
+- [Phase ?]: D-02: {malformed mcp} filed failure-class (FAILURE_REASONS), not unsupported; REASONS 34 -> 35
+- [Phase ?]: narrowResolverNotes matches full 'malformed mcp reference' prefix before catch-all; inline 'malformed mcpServers' stays {unsupported source}

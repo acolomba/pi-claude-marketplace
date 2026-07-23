@@ -55,10 +55,10 @@ capability.
   4. A plugin whose `mcpServers` reference resolves outside the plugin root — via `../` traversal or a symlink (refused under D-14 house policy) — resolves `(unavailable)` with a note, per-plugin, and the resolver never reads a file outside the plugin root (MCPR-04).
   5. The conventional plugin-root `.mcp.json` keeps its existing unwrapped-superset tolerance unchanged: a plugin relying on the conventional standalone `.mcp.json` (no declared string reference) still installs exactly as before — the wrapped-only rule applies to the declared string reference only (locked design boundary; regression guard).
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 - [x] 85-01-PLAN.md — Widen the `mcpServers` schemas (`string | object`) and resolve a `./`-relative string reference to a wrapped `.mcp.json` in `applyStrictMcp` at inline parity; missing / malformed / wrapper-less / traversal / symlink references degrade one plugin to `(unavailable)` (MCPR-01..04, criterion 5).
-- [ ] 85-02-PLAN.md — Land the `{malformed mcp}` closed-set failure-class reason token and route `malformed mcp reference:` notes to it without reclassifying inline `malformed mcpServers` (MCPR-03 / D-02).
+- [x] 85-02-PLAN.md — Land the `{malformed mcp}` closed-set failure-class reason token and route `malformed mcp reference:` notes to it without reclassifying inline `malformed mcpServers` (MCPR-03 / D-02).
 
 ## Progress
 
@@ -67,4 +67,4 @@ Single phase: 85
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 85. `mcpServers` string file-path references | 1/2 | In Progress|  |
+| 85. `mcpServers` string file-path references | 2/2 | In Progress|  |
