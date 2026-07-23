@@ -711,6 +711,45 @@ test(
   },
 );
 
+test("MCPR-04 absolute-path reference -> unavailable + malformed mcp reference note (no read)", async () => {
+  // `validateReferencePath` rejects an absolute path BEFORE any read: the
+  // absolute target is never registered in the mock, proving no read occurs.
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: "/etc/x.mcp.json" }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("MCPR-03 wrapped reference with malformed INNER map -> unavailable (inline parity)", async () => {
+  // Valid JSON with a present `mcpServers` wrapper but an inner map that fails
+  // the server-map schema: `readReferencedMcp` succeeds (wrapper present) and
+  // delegates to the inline `applyMcpValue`, which emits `malformed mcpServers`
+  // (NOT `malformed mcp reference`) -- the intended inline-parity boundary.
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "x.mcp.json")]: {
+      contents: JSON.stringify({ mcpServers: [1, 2, 3] }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+  assert.ok(
+    !r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
 // Criterion 5 regression: an UNDECLARED conventional <pluginRoot>/.mcp.json in
 // the UNWRAPPED bare-server-map form still resolves installable. The
 // wrapped-only rule applies ONLY to the declared string reference;
