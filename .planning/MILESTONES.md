@@ -11,6 +11,20 @@
 
 ---
 
+## agent-skill-preloads Agent Skill Preload Fidelity (0.10.0, Shipped: 2026-07-19)
+
+**Phases completed:** 4 phases (82, 83, 83.1, 84), 13 plans
+
+**Driver:** GitHub issue #86 — generated Pi agents dropped required Claude skill preloads.
+
+**Key accomplishments:**
+
+- A converted Claude plugin agent that declares `skills:` preloads now works self-sufficiently in a fresh Pi subagent session: the block-list `skills:` form parses, plugin-qualified names map, the `Skill` tool converts faithfully, and the child LLM is told which referenced skills are already in its context — while agents the fix does not touch stay byte-identical (AGSK-01..05).
+- After the phase-83 live UAT surfaced that Pi's `--no-skills` does not gate extension-contributed skills, AGSK-03/04/05 were amended and Phase 83.1 delivered the corrected behavior (silent `Skill` conversion, unified legend state).
+- Every generated agent now emits an agent-local `skillPath` field and moves conversion provenance out of a body comment into frontmatter (#92), completing end-to-end skill availability.
+
+---
+
 ## url-source URL Sources & Git-Source Fetch (Shipped: 2026-07-18)
 
 **Phases completed:** 4 phases, 20 plans, 49 tasks (url-source archives), plus the fetch-plugin milestone folded into this entry (phases 79.1, 80, 81 -- recovered from the pre-squash development history and archived under `fetch-plugin-*`); scope is summarized in the accomplishments below. Both milestones shipped together as npm 0.9.0.
@@ -79,6 +93,18 @@
 - De-collapsed the resolver `unsupported` arm at the list/info render points so a not-installed, force-installable plugin renders a distinct `⊖ (unsupported)` row (new `ICON_UNSUPPORTED` glyph + `PluginUnsupportedMessage` variant), while structural failures keep `⊘ (unavailable)` — closing the D-64-01 deferral with filter buckets untouched.
 - Extended the Phase-72 resolver-state-driven render token to the install-failure (⊖ unsupported) and manual update-decline (● force-upgradable) surfaces, repaired the info.ts non-resolvable latent divergence, and replaced the misleading `{no longer installable}` update-decline reason with a list-consistent degrade reason pointing at `--force`.
 - Bulk `update` now suppresses per-plugin `(skipped) {up-to-date}` rows, counts realized transitions only (`Plugin update: N updated`), and never goes silent (`Plugin update: nothing to update`) — delivered via an opt-in `tally` envelope override so every other op's summary stays byte-identical.
+
+---
+
+## notification-refactor Notification Subsystem Refactor (Shipped: 2026-06-24)
+
+**Phases completed:** 4 phases, 14 plans
+
+**Key accomplishments:**
+
+- Established the milestone through-line that later SEV work wires onto: the caller owns outcome intent (severity, `needsReload`, status, reasons, cause) while `notify()` is a dumb reducer that owns only presentation and environment (soft-dep probe, formatting, reduction), reading solely `row.severity` (MAX) and `row.needsReload` (OR) with no reasons/status inference (27 requirements, PR #70).
+- Made severity caller-stamped with a desired-state tri-state model and removed the content-based `BENIGN_REASONS`/`allBenign`/`cascadeSeverity` ladder; reload hints likewise derive from caller-stamped `row.needsReload`.
+- Reshaped command output to desired-state form (leading sentence + tally + always-rendered headers) with catalog and byte fixtures superseded atomically, and proved the open-closed boundary: adding a rendered state touches ≤3 central files with 0 `notify.ts` edits (concerns extracted to `shared/concerns/`).
 
 ---
 

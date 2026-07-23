@@ -77,7 +77,7 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 - **Desired-state severity** -- wire SEV-01..09 onto the caller-stamped/desired-state notification model; the unavailable-install error splits (`unsupported` → error pointing at `--force`; `unavailable` → error with no `--force` suggestion).
 - **Spec/doc reconcile** -- PRD §11, `docs/output-catalog.md`, `docs/messaging-style-guide.md` updated for the reconciled token set, derived-state severity, and the force-upgradable rules.
 
-**Key context:** Clean-room rebuild. The earlier sticky-flag attempts (a persisted `forceInstalled` flag) were built and removed -- do **not** rebuild them; force-state is derived. The notification subsystem refactor (caller-stamped severity, desired-state output; workstream `ws-notification-refactor-2026-06-25`) is the SEV foundation this milestone wires onto. **Dropped from scope:** a global always-force config default and a manual `complete` command.
+**Key context:** Clean-room rebuild. The earlier sticky-flag attempts (a persisted `forceInstalled` flag) were built and removed -- do **not** rebuild them; force-state is derived. The notification subsystem refactor (caller-stamped severity, desired-state output; archived under `.planning/milestones/notification-refactor-*`) is the SEV foundation this milestone wires onto. **Dropped from scope:** a global always-force config default and a manual `complete` command.
 
 ## Just Shipped: v1.13 Claude Hook Bridge
 
