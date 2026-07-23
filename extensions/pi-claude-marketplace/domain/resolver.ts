@@ -981,8 +981,16 @@ async function readReferencedMcp(
     return { ok: false, reason: `malformed mcp reference: file not found: "${raw}"` };
   }
 
+  // WR-03: read the file OUTSIDE the try so a real I/O failure on an
+  // existing-but-unreadable file (EACCES / EPERM) propagates to the outer
+  // probe classifier, which keys on `.code` -> `{permission denied}` /
+  // `{unreadable}`. Only JSON.parse + the wrapper-shape check stay inside the
+  // try labeled with the malformed-reference reason. Mirrors the
+  // `readStandaloneHooks` house pattern; the stat guard above already ruled
+  // out ENOENT, so the malformed-reference file-not-found reason is unchanged.
+  const text = await readFileTextOf(ctx)(v.absPath);
   try {
-    const parsed = JSON.parse(await readFileTextOf(ctx)(v.absPath)) as Record<string, unknown>;
+    const parsed = JSON.parse(text) as Record<string, unknown>;
     if (!("mcpServers" in parsed)) {
       return {
         ok: false,
