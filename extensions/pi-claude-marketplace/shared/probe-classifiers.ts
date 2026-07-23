@@ -74,6 +74,16 @@ export function narrowProbeError(
 type UnsupportedReason = "unsupported hooks" | "lsp" | "unsupported source";
 
 /**
+ * MCPR-03 / D-02: the closed-set members `narrowResolverNotes` can emit. It is
+ * the `UnsupportedReason` union widened by the failure-class `malformed mcp`
+ * token (a broken `mcpServers` string reference). Only `narrowResolverNotes`
+ * carries this member; the sibling `narrowUnsupportedKinds` / `kindToReason`
+ * stay on the narrow `UnsupportedReason` alias (they classify per-kind markers,
+ * never resolver notes).
+ */
+type ResolverNoteReason = UnsupportedReason | "malformed mcp";
+
+/**
  * Narrow resolver `notes` strings to closed-set REASONS members.
  *
  * HOOK-04 detection is anchored on the three reason-prefix tokens emitted
@@ -92,40 +102,49 @@ type UnsupportedReason = "unsupported hooks" | "lsp" | "unsupported source";
  * pushed, repeated notes for the same bucket are no-ops (and crucially do
  * NOT fall through to the catch-all `unsupported source` arm -- WR-01).
  */
-export function narrowResolverNotes(notes: readonly string[]): readonly UnsupportedReason[] {
-  const out: UnsupportedReason[] = [];
+export function narrowResolverNotes(notes: readonly string[]): readonly ResolverNoteReason[] {
+  const out: ResolverNoteReason[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
-    const isHooksNote =
-      note.startsWith("hooks.json is not valid JSON:") ||
-      note.startsWith("hooks.json failed schema validation:") ||
-      note.startsWith("unsupported hooks:") ||
-      note.startsWith("malformed hooks.json:");
-    if (isHooksNote) {
-      if (!seen.has("unsupported hooks")) {
-        out.push("unsupported hooks");
-        seen.add("unsupported hooks");
-      }
-
-      continue;
-    }
-
-    if (note.includes("lspServers")) {
-      if (!seen.has("lsp")) {
-        out.push("lsp");
-        seen.add("lsp");
-      }
-
-      continue;
-    }
-
-    if (!seen.has("unsupported source")) {
-      out.push("unsupported source");
-      seen.add("unsupported source");
+    // First-wins dedup (WR-01): once a bucket is pushed, a repeated note for
+    // the same bucket is a no-op and MUST NOT fall through to another arm.
+    const reason = classifyResolverNote(note);
+    if (!seen.has(reason)) {
+      out.push(reason);
+      seen.add(reason);
     }
   }
 
   return out;
+}
+
+/**
+ * Classify a single resolver note into exactly one closed-set bucket. The arm
+ * order is significant -- the `malformed mcp reference` arm matches its FULL
+ * prefix BEFORE the permissive catch-all (MCPR-03 / D-02): a bare
+ * `malformed mcp` match would also match the inline `malformed mcpServers` note
+ * and silently reroute it away from `unsupported source`. Any note matching no
+ * specific arm falls through to the permissive `unsupported source` bucket.
+ */
+function classifyResolverNote(note: string): ResolverNoteReason {
+  const isHooksNote =
+    note.startsWith("hooks.json is not valid JSON:") ||
+    note.startsWith("hooks.json failed schema validation:") ||
+    note.startsWith("unsupported hooks:") ||
+    note.startsWith("malformed hooks.json:");
+  if (isHooksNote) {
+    return "unsupported hooks";
+  }
+
+  if (note.includes("lspServers")) {
+    return "lsp";
+  }
+
+  if (note.startsWith("malformed mcp reference")) {
+    return "malformed mcp";
+  }
+
+  return "unsupported source";
 }
 
 /**
