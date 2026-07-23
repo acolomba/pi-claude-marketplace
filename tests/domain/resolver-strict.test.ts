@@ -571,6 +571,38 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
   );
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// MCPR-01..04: string mcpServers references (wrapped .mcp.json, D-01/D-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+const WRAPPED_MCP = JSON.stringify({ mcpServers: { srv: { command: "node" } } });
+
+test("MCPR-01 marketplace-entry string mcpServers reference resolves at inline parity", async () => {
+  const localRoot = ROOT("./local");
+  const refCtx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "x.mcp.json")]: { contents: WRAPPED_MCP },
+  });
+  const referenced = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
+    refCtx,
+  );
+
+  const inlineCtx = mockCtx(MP, { [localRoot]: "dir" });
+  const inline = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: { srv: { command: "node" } } }),
+    inlineCtx,
+  );
+
+  assert.equal(referenced.state, "installable", `notes: ${referenced.notes.join(" / ")}`);
+  assert.equal(inline.state, "installable", `notes: ${inline.notes.join(" / ")}`);
+  if (referenced.state === "installable" && inline.state === "installable") {
+    // Byte-for-byte parity with the inline-object form.
+    assert.deepEqual(referenced.mcpServers, inline.mcpServers);
+    assert.deepEqual(referenced.mcpServers, { srv: { command: "node" } });
+  }
+});
+
 test("PR-2(7) non-string component path (skills: 42) -> notInstallable", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(basicEntry({ source: "./local", skills: 42 }), ctx);

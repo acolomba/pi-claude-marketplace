@@ -924,6 +924,82 @@ async function readStandaloneMcp(
 }
 
 /**
+ * MCPR-01 / MCPR-04 / D-01: validate a string `mcpServers` reference path.
+ * Mirrors the `validateComponentPath` reject-absolute + resolve +
+ * `assertPathInside` pattern, but returns the ABSOLUTE candidate (needed to
+ * read the file) and carries no `SupportedPathKind`. `assertPathInside` runs
+ * BEFORE any read, so "never reads outside pluginRoot" holds by construction;
+ * the D-14 all-symlink refusal lives inside it. All failure reasons use the
+ * collision-proof `malformed mcp reference:` prefix so they do not overlap the
+ * inline `malformed mcpServers` note.
+ */
+async function validateReferencePath(
+  raw: string,
+  pluginRoot: string,
+): Promise<{ ok: true; absPath: string } | { ok: false; reason: string }> {
+  if (path.isAbsolute(raw)) {
+    return {
+      ok: false,
+      reason: `malformed mcp reference: must be relative (got absolute "${raw}")`,
+    };
+  }
+
+  const candidate = path.resolve(pluginRoot, raw);
+
+  try {
+    await assertPathInside(pluginRoot, candidate, "mcpServers reference");
+  } catch (err) {
+    if (err instanceof PathContainmentError) {
+      return { ok: false, reason: `malformed mcp reference: escapes plugin root: "${raw}"` };
+    }
+
+    throw err;
+  }
+
+  return { ok: true, absPath: candidate };
+}
+
+/**
+ * MCPR-01 / MCPR-03 / D-04: WRAPPED-ONLY reader for a string `mcpServers`
+ * reference. Distinct from the tolerant `readStandaloneMcp` (which accepts an
+ * unwrapped superset for the conventional `<pluginRoot>/.mcp.json`): a string
+ * reference MUST point at a wrapped `{ "mcpServers": {...} }` file. A missing
+ * file / invalid JSON / missing top-level `mcpServers` wrapper / out-of-root
+ * escape each degrades the plugin with a `malformed mcp reference:` note.
+ */
+async function readReferencedMcp(
+  ctx: ResolveContext,
+  pluginRoot: string,
+  raw: string,
+): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
+  const v = await validateReferencePath(raw, pluginRoot);
+  if (!v.ok) {
+    return v;
+  }
+
+  if ((await statKindOf(ctx)(v.absPath)) !== "file") {
+    return { ok: false, reason: `malformed mcp reference: file not found: "${raw}"` };
+  }
+
+  try {
+    const parsed = JSON.parse(await readFileTextOf(ctx)(v.absPath)) as Record<string, unknown>;
+    if (!("mcpServers" in parsed)) {
+      return {
+        ok: false,
+        reason: `malformed mcp reference: missing top-level "mcpServers": "${raw}"`,
+      };
+    }
+
+    return { ok: true, value: parsed.mcpServers };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
  * HOOK-01 / D-57-04: discover + parse the per-plugin hooks config file.
  *
  * Returns:
@@ -1129,6 +1205,21 @@ async function applyStrictMcp(
   ctx: ResolveContext,
 ): Promise<boolean> {
   const declaredMcp = (entry as Record<string, unknown>).mcpServers ?? manifest?.mcpServers;
+
+  // MCPR-01 / MCPR-02 / MCPR-04: a string mcpServers is a `./`-relative
+  // reference to a wrapped .mcp.json. Read + unwrap it, then hand the map to
+  // the unchanged `applyMcpValue` for inline parity; any failure degrades this
+  // one plugin with a `malformed mcp reference:` note (dirty-accumulator route).
+  if (typeof declaredMcp === "string") {
+    const ref = await readReferencedMcp(ctx, pluginRoot, declaredMcp);
+    if (!ref.ok) {
+      partial.notes.push(ref.reason);
+      return true;
+    }
+
+    return applyMcpValue(partial, ref.value);
+  }
+
   const mcpResult =
     declaredMcp === undefined ? await readStandaloneMcp(ctx, pluginRoot) : undefined;
 

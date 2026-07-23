@@ -38,6 +38,13 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   settings: Type.Optional(Type.Unknown()),
 };
 
+// MCPR-01 / MCPR-02: mcpServers may be a `./`-relative string reference to a
+// wrapped .mcp.json OR an inline server map. Only the FIELD type in the
+// entry/manifest schemas widens; the server-map validator
+// (MCP_SERVERS_SCHEMA / MCP_SERVERS_VALIDATOR) stays object-only so the
+// resolver still validates an unwrapped map identically for both forms.
+const McpServersField = Type.Union([Type.String(), MCP_SERVERS_SCHEMA]);
+
 /**
  * MM-2: plugin entry inside `marketplace.json` `plugins[]`. Required
  * fields are `name` (safe-name validation runs separately at the resolver
@@ -61,8 +68,8 @@ export const PLUGIN_ENTRY_SCHEMA = Type.Object({
   // optional opaque "unsupported component" declarations (MM-2 / PR-3)
   ...UNSUPPORTED_COMPONENT_FIELDS,
 
-  // optional mcpServers map (MM-2 / MC-1)
-  mcpServers: Type.Optional(MCP_SERVERS_SCHEMA),
+  // optional mcpServers: string reference OR inline map (MM-2 / MC-1 / MCPR-01)
+  mcpServers: Type.Optional(McpServersField),
 
   // optional dependencies (MM-2 / PI-13: opaque, surfaces as warning)
   dependencies: Type.Optional(Type.Unknown()),
@@ -85,7 +92,7 @@ export const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   ...SUPPORTED_COMPONENT_PATH_FIELDS,
   ...UNSUPPORTED_COMPONENT_FIELDS,
 
-  mcpServers: Type.Optional(MCP_SERVERS_SCHEMA),
+  mcpServers: Type.Optional(McpServersField), // MCPR-02: string reference OR inline map
   dependencies: Type.Optional(Type.Unknown()),
 });
 
