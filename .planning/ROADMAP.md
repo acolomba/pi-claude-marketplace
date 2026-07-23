@@ -38,7 +38,7 @@ capability.
 
 - Decimal phases (85.1, 85.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 85: `mcpServers` string file-path references** - The resolver resolves a `./`-relative string `mcpServers` (marketplace entry OR `plugin.json`) to a wrapped `.mcp.json` inside the plugin root and installs its servers at parity with the inline form; a missing / malformed / out-of-root reference isolates that one plugin to `(unavailable)` with a note, never failing the marketplace load
+- [x] **Phase 85: `mcpServers` string file-path references** - The resolver resolves a `./`-relative string `mcpServers` (marketplace entry OR `plugin.json`) to a wrapped `.mcp.json` inside the plugin root and installs its servers at parity with the inline form; a missing / malformed / out-of-root reference isolates that one plugin to `(unavailable)` with a note, never failing the marketplace load (completed 2026-07-23)
 
 ## Phase Details
 
@@ -67,4 +67,4 @@ Single phase: 85
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 85. `mcpServers` string file-path references | 2/2 | In Progress|  |
+| 85. `mcpServers` string file-path references | 2/2 | Complete    | 2026-07-23 |
