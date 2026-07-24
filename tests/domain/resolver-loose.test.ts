@@ -177,6 +177,16 @@ test("D-03 entry.mcpServers string reference in loose mode -> unavailable (not r
   );
 });
 
+test("MM-7 entry.mcpServers malformed (non-object) in loose mode -> unavailable + malformed mcpServers note", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveLoose(basicEntry({ source: "./local", mcpServers: 42 }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PR-3 + PR-5 in loose mode (same semantics as strict)
 // ──────────────────────────────────────────────────────────────────────────

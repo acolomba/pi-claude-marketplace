@@ -753,6 +753,48 @@ test(
   },
 );
 
+test(
+  "MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out of resolveStrict",
+  { skip: process.platform === "win32" },
+  async () => {
+    const mpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-cm-mcpref-notdir-"));
+    try {
+      const pluginRoot = path.join(mpRoot, "local");
+      await mkdir(pluginRoot, { recursive: true });
+      // A regular file sits where the reference path expects a directory, so the
+      // per-segment lstat in assertPathInside throws ENOTDIR (not a
+      // PathContainmentError). validateReferencePath re-throws it, and it must
+      // propagate for the outer probe classifier to key on `.code`.
+      await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
+      const ctx: ResolveContext = { marketplaceRoot: mpRoot };
+      await assert.rejects(
+        () => resolveStrict(basicEntry({ source: "./local", mcpServers: "afile/x.mcp.json" }), ctx),
+        (err: unknown) => {
+          assert.ok(err instanceof Error, "rejection must be an Error");
+          assert.equal((err as NodeJS.ErrnoException).code, "ENOTDIR");
+          return true;
+        },
+      );
+    } finally {
+      await rm(mpRoot, { recursive: true, force: true });
+    }
+  },
+);
+
+test("MCPR malformed standalone .mcp.json (no entry mcpServers) -> unavailable + malformed mcpServers note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".mcp.json")]: { contents: "{ not json" },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
 test("MCPR-04 absolute-path reference -> unavailable + malformed mcp reference note (no read)", async () => {
   // `validateReferencePath` rejects an absolute path BEFORE any read: the
   // absolute target is never registered in the mock, proving no read occurs.
