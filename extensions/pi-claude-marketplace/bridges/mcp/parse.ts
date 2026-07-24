@@ -33,7 +33,7 @@ export function parseMcpServers(value: unknown, label: string): Record<string, u
   // wired past the resolver -- fail clearly instead of mislabeling it as a
   // malformed shape ("must be an object").
   if (typeof value === "string") {
-    throw new Error(
+    throw new TypeError(
       `${label} is a string reference ("${value}"); string mcpServers references are resolved by the domain resolver before reaching the mcp bridge.`,
     );
   }
