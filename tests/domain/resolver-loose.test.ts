@@ -165,6 +165,18 @@ test("MM-7 entry.mcpServers present + valid -> installable with mcpServers popul
   }
 });
 
+test("D-03 entry.mcpServers string reference in loose mode -> unavailable (not resolved, not malformed)", async () => {
+  // Loose mode does not resolve the strict-mode string-reference feature; it
+  // degrades honestly rather than mislabeling the string as a malformed map.
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveLoose(basicEntry({ source: "./local", mcpServers: "./x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("string reference") && n.includes("loose mode")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PR-3 + PR-5 in loose mode (same semantics as strict)
 // ──────────────────────────────────────────────────────────────────────────

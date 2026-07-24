@@ -29,9 +29,15 @@ test("MC-3 parseMcpServers throws when value is not an object", () => {
   assert.throws(() => {
     parseMcpServers(42, "lbl");
   }, /must be an object/);
+});
+
+test("MCPR-01 parseMcpServers rejects a string as an unresolved reference (not a malformed shape)", () => {
+  // A string mcpServers is a reference resolved upstream by the domain
+  // resolver; reaching the bridge with one is a wiring error, so the message
+  // must point at the resolver, not read as a generic "must be an object".
   assert.throws(() => {
-    parseMcpServers("oops", "lbl");
-  }, /must be an object/);
+    parseMcpServers("./config/x.mcp.json", "marketplace-entry mcpServers");
+  }, /string reference.*resolved by the domain resolver/);
 });
 
 test("MC-3 parseMcpServers throws when value is array", () => {
@@ -130,7 +136,7 @@ test("MC-1 resolvePluginMcpServers throws when entry.mcpServers is malformed (no
   await withTmpPluginRoot(async (pluginRoot) => {
     await assert.rejects(
       resolvePluginMcpServers({
-        entry: { mcpServers: "not-object" },
+        entry: { mcpServers: ["not-object"] },
         manifest: { mcpServers: { b: {} } },
         pluginRoot,
       }),

@@ -661,6 +661,48 @@ test("MCPR-03 wrapper-less reference file (bare map) -> unavailable + malformed 
   );
 });
 
+test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict (not swallowed as malformed mcp)", async () => {
+  const localRoot = ROOT("./local");
+  const refPath = path.join(localRoot, "x.mcp.json");
+  // statKind reports the reference file exists, but readFileText throws EACCES
+  // (readable to stat, not to read). The read sits OUTSIDE the malformed-note
+  // try, so the I/O error must propagate for narrowProbeError to classify it as
+  // {permission denied} -- NOT be conflated into a `malformed mcp reference` note.
+  const ctx: ResolveContext = {
+    marketplaceRoot: MP,
+    statKind(p: string): Promise<"file" | "dir" | null> {
+      if (p === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (p === refPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText(p: string): Promise<string> {
+      if (p === refPath) {
+        return Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+      }
+
+      return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    },
+  };
+  await assert.rejects(
+    () => resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "rejection must be an Error");
+      assert.equal(
+        (err as NodeJS.ErrnoException).code,
+        "EACCES",
+        "EACCES must propagate unchanged for narrowProbeError to classify",
+      );
+      return true;
+    },
+  );
+});
+
 test("MCPR-04 ../ traversal reference -> unavailable + escape note (no read outside pluginRoot)", async () => {
   // The string-level containment check fires BEFORE any read: the escape
   // target is never registered in the mock, proving no out-of-root read.

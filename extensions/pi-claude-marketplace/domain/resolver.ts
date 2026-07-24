@@ -1300,8 +1300,17 @@ async function applyLooseMcp(
     return true;
   }
 
-  // D-03: string `mcpServers` references are intentionally unhandled in loose
-  // mode (loose mode has no wired production caller); scoped to strict mode only.
+  // D-03: string `mcpServers` references are a strict-mode feature (MCPR-01);
+  // loose mode does not resolve them (it has no wired production caller). Degrade
+  // this plugin honestly rather than fall through to `applyMcpValue`, which would
+  // mislabel the string as a `malformed mcpServers` inline map. The note carries
+  // no `malformed mcp reference` prefix, so it classifies to `{unsupported
+  // source}` exactly as the pre-existing fall-through did.
+  if (typeof entryMcp === "string") {
+    partial.notes.push(`unsupported mcpServers string reference in loose mode: "${entryMcp}"`);
+    return true;
+  }
+
   return applyMcpValue(partial, entryMcp, false);
 }
 
