@@ -26,7 +26,7 @@
     "memfs": "^4.57.2",
     "prettier": "^3.8.3",
     "typebox": "^1.1.38",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.59.4",
     "yaml": "^2.9.0"
   },
