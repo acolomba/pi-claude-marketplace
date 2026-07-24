@@ -4,14 +4,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 34-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 35-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 34-entry set.
+ * 35-entry set.
  *
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
@@ -108,6 +108,11 @@ export const FAILURE_REASONS = [
   "unparseable",
   "unreadable manifest",
   "invalid manifest",
+  // MCPR-03 / D-02: a broken `mcpServers` STRING reference (missing file /
+  // malformed JSON / wrapper-less / out-of-root). Failure-class, NOT
+  // unsupported -- it is a malformation of a SUPPORTED feature the resolver
+  // parses, so it lives here and NOT in UNSUPPORTED_REASONS.
+  "malformed mcp",
   "not in manifest",
   "rollback partial",
   "lock held",

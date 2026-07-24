@@ -77,7 +77,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 34-entry membership AND order are catalog-stable and MUST NOT change. The
+ * 35-entry membership AND order are catalog-stable and MUST NOT change. The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
  * lives in `shared/notify-reasons.ts` as typed VIEWS over this set; that module
@@ -140,6 +140,15 @@ export const REASONS = [
   // the operator sees the real problem (an undeclared marketplace) rather than a
   // source-comparison failure that does not exist.
   "dangling reference",
+  // MCPR-03 / D-02: a broken `mcpServers` STRING reference (a malformation of
+  // a SUPPORTED feature the resolver actively parses) -- missing file /
+  // malformed JSON / wrapper-less / out-of-root escape. A failure-class member
+  // (sibling to `invalid manifest` / `unparseable`), NOT an unsupported KIND;
+  // the umbrella token rides the `(unavailable)` row and the specific cause
+  // rides `notes[]` / `info`. Sourced via `probe-classifiers.ts`'s
+  // `narrowResolverNotes` against the resolver's `malformed mcp reference:`
+  // note prefix.
+  "malformed mcp",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];

@@ -197,6 +197,84 @@ test("MM-2 PLUGIN_ENTRY accepts mcpServers map", () => {
   );
 });
 
+test("MCPR-01 PLUGIN_ENTRY accepts mcpServers as a string reference", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({
+      name: "p",
+      source: "./local",
+      mcpServers: "./x.mcp.json",
+    }),
+    true,
+  );
+});
+
+test("MCPR-01 MARKETPLACE accepts an entry with a string mcpServers (no whole-manifest throw)", async () => {
+  assert.equal(
+    MARKETPLACE_VALIDATOR.Check({
+      name: "mp",
+      plugins: [{ name: "p1", source: "./local", mcpServers: "./x.mcp.json" }],
+    }),
+    true,
+  );
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-mcpref-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [{ name: "p1", source: "./p1", mcpServers: "./x.mcp.json" }],
+      }),
+      "utf8",
+    );
+
+    // Must NOT throw InvalidMarketplaceManifestError -- the string is legal input.
+    const manifest = await loadMarketplaceManifest(manifestPath);
+    assert.equal(manifest.plugins[0]?.mcpServers, "./x.mcp.json");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("MCPR-03 marketplace with a broken string-ref plugin + valid sibling loads without throwing", async () => {
+  // A broken reference is a RESOLUTION-time defect isolated to one plugin; the
+  // schema still accepts the string, so the whole-manifest load never throws
+  // and the sibling entry survives intact.
+  assert.equal(
+    MARKETPLACE_VALIDATOR.Check({
+      name: "mp",
+      plugins: [
+        { name: "broken", source: "./broken", mcpServers: "./does-not-exist.mcp.json" },
+        { name: "sibling", source: "./sibling", mcpServers: { srv: { command: "node" } } },
+      ],
+    }),
+    true,
+  );
+
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-sibling-"));
+  try {
+    const manifestPath = path.join(tmp, "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "broken", source: "./broken", mcpServers: "./does-not-exist.mcp.json" },
+          { name: "sibling", source: "./sibling" },
+        ],
+      }),
+      "utf8",
+    );
+
+    const manifest = await loadMarketplaceManifest(manifestPath);
+    assert.equal(manifest.plugins.length, 2);
+    assert.equal(manifest.plugins[1]?.name, "sibling");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("MM-2 PLUGIN_ENTRY rejects missing name", () => {
   assert.equal(PLUGIN_ENTRY_VALIDATOR.Check({ source: "./local" }), false);
 });
@@ -229,6 +307,10 @@ test("PLUGIN_MANIFEST accepts full shape", () => {
     }),
     true,
   );
+});
+
+test("MCPR-02 PLUGIN_MANIFEST accepts mcpServers as a string reference", () => {
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ mcpServers: "./x.mcp.json" }), true);
 });
 
 test("PLUGIN_MANIFEST rejects name as number", () => {

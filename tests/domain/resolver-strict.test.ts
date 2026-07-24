@@ -4,7 +4,8 @@
 // narrowing/throwing, and one MM-5 happy path.
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -569,6 +570,308 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
     r.notes.some((n) => n.includes("malformed mcpServers")),
     `notes: ${r.notes.join(" / ")}`,
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// MCPR-01..04: string mcpServers references (wrapped .mcp.json, D-01/D-04)
+// ──────────────────────────────────────────────────────────────────────────
+
+const WRAPPED_MCP = JSON.stringify({ mcpServers: { srv: { command: "node" } } });
+
+test("MCPR-01 marketplace-entry string mcpServers reference resolves at inline parity", async () => {
+  const localRoot = ROOT("./local");
+  const refCtx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "x.mcp.json")]: { contents: WRAPPED_MCP },
+  });
+  const referenced = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
+    refCtx,
+  );
+
+  const inlineCtx = mockCtx(MP, { [localRoot]: "dir" });
+  const inline = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: { srv: { command: "node" } } }),
+    inlineCtx,
+  );
+
+  assert.equal(referenced.state, "installable", `notes: ${referenced.notes.join(" / ")}`);
+  assert.equal(inline.state, "installable", `notes: ${inline.notes.join(" / ")}`);
+  if (referenced.state === "installable" && inline.state === "installable") {
+    // Byte-for-byte parity with the inline-object form.
+    assert.deepEqual(referenced.mcpServers, inline.mcpServers);
+    assert.deepEqual(referenced.mcpServers, { srv: { command: "node" } });
+  }
+});
+
+test("MCPR-02 plugin.json string mcpServers reference resolves at parity (via readManifest)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", mcpServers: "x.mcp.json" }),
+    },
+    [path.join(localRoot, "x.mcp.json")]: { contents: WRAPPED_MCP },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.deepEqual(r.mcpServers, { srv: { command: "node" } });
+  }
+});
+
+test("MCPR-03 missing reference file -> unavailable + malformed mcp reference note", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("MCPR-03 malformed-JSON reference file -> unavailable + malformed mcp reference note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "x.mcp.json")]: { contents: "{ not json" },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("MCPR-03 wrapper-less reference file (bare map) -> unavailable + malformed mcp reference note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    // D-04: a string reference MUST be wrapped; a bare server map degrades.
+    [path.join(localRoot, "x.mcp.json")]: {
+      contents: JSON.stringify({ srv: { command: "node" } }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict (not swallowed as malformed mcp)", async () => {
+  const localRoot = ROOT("./local");
+  const refPath = path.join(localRoot, "x.mcp.json");
+  // statKind reports the reference file exists, but readFileText throws EACCES
+  // (readable to stat, not to read). The read sits OUTSIDE the malformed-note
+  // try, so the I/O error must propagate for narrowProbeError to classify it as
+  // {permission denied} -- NOT be conflated into a `malformed mcp reference` note.
+  const ctx: ResolveContext = {
+    marketplaceRoot: MP,
+    statKind(p: string): Promise<"file" | "dir" | null> {
+      if (p === localRoot) {
+        return Promise.resolve("dir");
+      }
+
+      if (p === refPath) {
+        return Promise.resolve("file");
+      }
+
+      return Promise.resolve(null);
+    },
+    readFileText(p: string): Promise<string> {
+      if (p === refPath) {
+        return Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+      }
+
+      return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    },
+  };
+  await assert.rejects(
+    () => resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "rejection must be an Error");
+      assert.equal(
+        (err as NodeJS.ErrnoException).code,
+        "EACCES",
+        "EACCES must propagate unchanged for narrowProbeError to classify",
+      );
+      return true;
+    },
+  );
+});
+
+test("MCPR-04 ../ traversal reference -> unavailable + escape note (no read outside pluginRoot)", async () => {
+  // The string-level containment check fires BEFORE any read: the escape
+  // target is never registered in the mock, proving no out-of-root read.
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: "../escape.mcp.json" }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+// MCPR-04 / D-14: assertPathInside does a real per-segment lstat, so the
+// symlink case needs a real filesystem fixture (mockCtx cannot fake a link).
+// A real-fs ResolveContext (no injected readers) uses the default fs helpers.
+const canSymlink = process.platform !== "win32";
+test(
+  "MCPR-04 symlink reference (D-14) -> unavailable + note; never reads outside pluginRoot",
+  { skip: !canSymlink },
+  async () => {
+    const mpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-cm-mcpref-"));
+    const externalDir = await mkdtemp(path.join(os.tmpdir(), "pi-cm-external-"));
+    try {
+      const pluginRoot = path.join(mpRoot, "local");
+      await mkdir(pluginRoot, { recursive: true });
+      // A wrapped file lives OUTSIDE the plugin root; the in-root reference is
+      // a symlink pointing at it. D-14 refuses the link before any read.
+      await writeFile(path.join(externalDir, "secret.mcp.json"), WRAPPED_MCP, "utf8");
+      await symlink(path.join(externalDir, "secret.mcp.json"), path.join(pluginRoot, "x.mcp.json"));
+
+      const ctx: ResolveContext = { marketplaceRoot: mpRoot };
+      const r = await resolveStrict(
+        basicEntry({ source: "./local", mcpServers: "x.mcp.json" }),
+        ctx,
+      );
+      assert.equal(r.state, "unavailable");
+      assert.ok(
+        r.notes.some((n) => n.includes("malformed mcp reference")),
+        `notes: ${r.notes.join(" / ")}`,
+      );
+    } finally {
+      await rm(mpRoot, { recursive: true, force: true });
+      await rm(externalDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out of resolveStrict",
+  { skip: process.platform === "win32" },
+  async () => {
+    const mpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-cm-mcpref-notdir-"));
+    try {
+      const pluginRoot = path.join(mpRoot, "local");
+      await mkdir(pluginRoot, { recursive: true });
+      // A regular file sits where the reference path expects a directory, so the
+      // per-segment lstat in assertPathInside throws ENOTDIR (not a
+      // PathContainmentError). validateReferencePath re-throws it, and it must
+      // propagate for the outer probe classifier to key on `.code`.
+      await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
+      const ctx: ResolveContext = { marketplaceRoot: mpRoot };
+      await assert.rejects(
+        () => resolveStrict(basicEntry({ source: "./local", mcpServers: "afile/x.mcp.json" }), ctx),
+        (err: unknown) => {
+          assert.ok(err instanceof Error, "rejection must be an Error");
+          assert.equal((err as NodeJS.ErrnoException).code, "ENOTDIR");
+          return true;
+        },
+      );
+    } finally {
+      await rm(mpRoot, { recursive: true, force: true });
+    }
+  },
+);
+
+test("MCPR malformed standalone .mcp.json (no entry mcpServers) -> unavailable + malformed mcpServers note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".mcp.json")]: { contents: "{ not json" },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("MCPR-04 absolute-path reference -> unavailable + malformed mcp reference note (no read)", async () => {
+  // `validateReferencePath` rejects an absolute path BEFORE any read: the
+  // absolute target is never registered in the mock, proving no read occurs.
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", mcpServers: "/etc/x.mcp.json" }),
+    ctx,
+  );
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+test("MCPR-03 wrapped reference with malformed INNER map -> unavailable (inline parity)", async () => {
+  // Valid JSON with a present `mcpServers` wrapper but an inner map that fails
+  // the server-map schema: `readReferencedMcp` succeeds (wrapper present) and
+  // delegates to the inline `applyMcpValue`, which emits `malformed mcpServers`
+  // (NOT `malformed mcp reference`) -- the intended inline-parity boundary.
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "x.mcp.json")]: {
+      contents: JSON.stringify({ mcpServers: [1, 2, 3] }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed mcpServers")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+  assert.ok(
+    !r.notes.some((n) => n.includes("malformed mcp reference")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+// Criterion 5 regression: an UNDECLARED conventional <pluginRoot>/.mcp.json in
+// the UNWRAPPED bare-server-map form still resolves installable. The
+// wrapped-only rule applies ONLY to the declared string reference;
+// readStandaloneMcp's unwrapped tolerance is unchanged.
+test("criterion 5: undeclared unwrapped standalone .mcp.json still resolves installable", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".mcp.json")]: {
+      contents: JSON.stringify({ srv: { command: "node" } }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    assert.deepEqual(r.mcpServers, { srv: { command: "node" } });
+    assert.ok(!r.notes.some((n) => n.includes("malformed mcp reference")));
+  }
+});
+
+// Backstop: entry-string vs manifest-object precedence follows the existing
+// entry.mcpServers ?? manifest.mcpServers rule -- a string entry wins over an
+// object manifest declaration.
+test("MCPR-01 backstop: string entry.mcpServers shadows an object manifest.mcpServers (entry wins)", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", mcpServers: { other: { command: "python" } } }),
+    },
+    [path.join(localRoot, "x.mcp.json")]: { contents: WRAPPED_MCP },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", mcpServers: "x.mcp.json" }), ctx);
+  assert.equal(r.state, "installable", `notes: ${r.notes.join(" / ")}`);
+  if (r.state === "installable") {
+    // Entry string wins; the manifest object is shadowed.
+    assert.deepEqual(r.mcpServers, { srv: { command: "node" } });
+  }
 });
 
 test("PR-2(7) non-string component path (skills: 42) -> notInstallable", async () => {

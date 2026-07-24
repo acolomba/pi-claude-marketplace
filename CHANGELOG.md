@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.11.0] - 2026-07-24
+
+- Marketplace and plugin manifests can now declare `mcpServers` as a string reference to a wrapped `.mcp.json` file (relative to the plugin root), not only as an inline server map. The referenced file is read, unwrapped, and its servers install at byte-for-byte parity with the inline form. A reference that is missing, malformed, not wrapped, or escapes the plugin root (including via a symlink) degrades just that one plugin to `(unavailable)` with a `{malformed mcp}` reason -- it never fails the rest of the marketplace load, and an unreadable reference file surfaces its own permission/unreadable reason instead of being reported as malformed.
+
 ## [0.10.0] - 2026-07-20
 
 - Claude plugin agents now preserve their skill preloads through conversion (#86). An agent that declares the `Skill` tool maps to `inheritSkills: true` on the generated Pi subagent -- so the subagent can invoke skills on demand -- instead of dropping the tool and recording it as unsupported. Skills the agent preloads via its frontmatter `skills:` field resolve against the plugin's installed skills and are emitted with an agent-local `skillPath` that points the subagent at them, and skills an agent references without preloading are annotated in an `(available on demand)` legend. Previously these agents were bridged with their skill access stripped.

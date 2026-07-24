@@ -21,6 +21,29 @@ Candidate directions for later brainstorming:
 
 Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
+## REASON-01: unify malformed-input failures under a "malformed X" reason family
+
+Surfaced during v1.14 Phase 85 discuss (2026-07-22). The `UNSUPPORTED_REASONS`
+tokens (`unsupported hooks`, `lsp`, `unsupported source`) semantically mean a
+*well-formed but unsupported component KIND* -- lsp / monitors / themes / etc.,
+whose content the resolver never parses. Malformed input to a *supported*
+feature is a different axis (a parse / structural defect) and belongs with the
+failure family, parallel to `{invalid manifest}` and `{unparseable}`.
+
+Two existing cases mislabel that axis:
+- inline malformed `mcpServers` -> `{unsupported source}` (the `narrowResolverNotes` catch-all)
+- malformed `hooks.json` (invalid JSON / schema) -> `{unsupported hooks}`
+
+Phase 85 introduces the correct token `{malformed mcp}` for a broken/malformed
+mcpServers *string reference*, but deliberately leaves the two cases above
+unchanged (existing behavior, out of scope for this milestone).
+
+Direction for later: introduce a consistent `{malformed <feature>}` failure-class
+family and reroute the mislabeled supported-feature parse failures to it. Requires
+re-auditing `narrowResolverNotes`, which currently forces every resolver note into
+the unsupported family -- parse / structural notes need to reach failure-class
+tokens (the `narrowProbeError` path already does this for I/O errors).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10

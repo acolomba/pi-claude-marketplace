@@ -27,6 +27,17 @@ import type { ResolvedMcpServers, ResolvePluginMcpServersInput } from "./types.t
  * the "is an object" check).
  */
 export function parseMcpServers(value: unknown, label: string): Record<string, unknown> {
+  // MCPR-01: a string `mcpServers` is a reference to a wrapped .mcp.json,
+  // resolved upstream by domain/resolver.ts::applyStrictMcp. The mcp bridge only
+  // ever receives an already-resolved map; a string here means the raw field was
+  // wired past the resolver -- fail clearly instead of mislabeling it as a
+  // malformed shape ("must be an object").
+  if (typeof value === "string") {
+    throw new TypeError(
+      `${label} is a string reference ("${value}"); string mcpServers references are resolved by the domain resolver before reaching the mcp bridge.`,
+    );
+  }
+
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object mapping server names to entries.`);
   }

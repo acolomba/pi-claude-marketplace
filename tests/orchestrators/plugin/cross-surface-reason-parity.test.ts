@@ -39,6 +39,19 @@ const PARITY_CASES = [
     expected: "unsupported hooks",
   },
   { note: "contains lspServers", expected: "lsp" },
+  // CR-01 / MCPR-03 / D-02: a broken `mcpServers` string reference must render
+  // `{malformed mcp}` on BOTH the read-only probe surface and the install
+  // failure surface. Locks the install-side mirror arm against drift.
+  {
+    note: 'malformed mcp reference: file not found: "x.mcp.json"',
+    expected: "malformed mcp",
+  },
+  // The JSON-parse variant must map to `malformed mcp`, not be pre-empted by
+  // the install classifier's `Unexpected token` -> `{unparseable}` arm.
+  {
+    note: 'malformed mcp reference: invalid JSON in "x.mcp.json": Unexpected token n',
+    expected: "malformed mcp",
+  },
   { note: "some other unsupported source detail", expected: "unsupported source" },
 ] as const;
 
