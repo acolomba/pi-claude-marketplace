@@ -1214,10 +1214,14 @@ async function applyStrictMcp(
 ): Promise<boolean> {
   const declaredMcp = (entry as Record<string, unknown>).mcpServers ?? manifest?.mcpServers;
 
-  // MCPR-01 / MCPR-02 / MCPR-04: a string mcpServers is a `./`-relative
-  // reference to a wrapped .mcp.json. Read + unwrap it, then hand the map to
-  // the unchanged `applyMcpValue` for inline parity; any failure degrades this
-  // one plugin with a `malformed mcp reference:` note (dirty-accumulator route).
+  // MCPR-01 / MCPR-02 / MCPR-04: a string mcpServers is a relative reference
+  // (to pluginRoot) to a wrapped .mcp.json. Read + unwrap it, then hand the map
+  // to the unchanged `applyMcpValue` for inline parity. A reference-resolution
+  // failure (missing / bad JSON / no wrapper / escapes root / absolute) degrades
+  // this plugin with a `malformed mcp reference:` note -> `{malformed mcp}`; a
+  // valid wrapper whose inner map is shape-invalid degrades via applyMcpValue's
+  // `malformed mcpServers` note exactly as an inline map would -> `{unsupported
+  // source}` (dirty-accumulator route either way).
   if (typeof declaredMcp === "string") {
     const ref = await readReferencedMcp(ctx, pluginRoot, declaredMcp);
     if (!ref.ok) {

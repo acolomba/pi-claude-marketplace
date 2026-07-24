@@ -11,7 +11,7 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 34-entry set.
+ * 35-entry set.
  *
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
