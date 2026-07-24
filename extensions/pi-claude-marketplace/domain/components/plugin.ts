@@ -38,9 +38,9 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   settings: Type.Optional(Type.Unknown()),
 };
 
-// MCPR-01 / MCPR-02: mcpServers may be a `./`-relative string reference to a
-// wrapped .mcp.json OR an inline server map. Only the FIELD type in the
-// entry/manifest schemas widens; the server-map validator
+// MCPR-01 / MCPR-02: mcpServers may be a relative (to pluginRoot) string
+// reference to a wrapped .mcp.json OR an inline server map. Only the FIELD
+// type in the entry/manifest schemas widens; the server-map validator
 // (MCP_SERVERS_SCHEMA / MCP_SERVERS_VALIDATOR) stays object-only so the
 // resolver still validates an unwrapped map identically for both forms.
 const McpServersField = Type.Union([Type.String(), MCP_SERVERS_SCHEMA]);
