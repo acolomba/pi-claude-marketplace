@@ -15,6 +15,7 @@ import {
   rollbackSkillsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { cleanupStaging } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { DiscoveredSkill } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
@@ -619,5 +620,46 @@ test("TR-06 replacePreparedSkills tolerates owned orphan dir from prior partial 
       null,
       "orphan leftover.txt must be gone (helper rm -r the whole owned orphan dir)",
     );
+  });
+});
+
+test("SKILL-01 / PARSE-01 unparseable source frontmatter -> synthesized disable-model-invocation block, body verbatim, degrade record", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "unparseable-skill-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+      resolved,
+    });
+    assert.equal(prepared.kind, "staged");
+
+    // Degrade record: exactly one, carrying the generated name + a non-empty
+    // parse error (the actionable detail the install warning surfaces).
+    assert.equal(prepared.result.degraded.length, 1);
+    const record = prepared.result.degraded[0]!;
+    assert.ok(record.generatedName.length > 0);
+    assert.ok(record.parseError.length > 0, "parse error must be non-empty");
+
+    await commitPreparedSkills(prepared);
+
+    const staged = await readFile(
+      path.join(locations.skillsTargetDir, record.generatedName, "SKILL.md"),
+      "utf8",
+    );
+    // Synthesized frontmatter: generated name, disable-model-invocation, and the
+    // fixed placeholder description.
+    assert.match(staged, new RegExp(`^name: ${record.generatedName}$`, "m"));
+    assert.match(staged, /^disable-model-invocation: true$/m);
+    assert.match(staged, /^description: /m);
+    // Body preserved verbatim (the malformed frontmatter is discarded, not the body).
+    assert.ok(staged.includes("# Bad Skill\n\nThis body must survive verbatim."));
+    // Gate-2 parity: the staged bytes re-parse (do NOT throw) -- Pi accepts them.
+    assert.doesNotThrow(() => parseFrontmatter(staged));
   });
 });

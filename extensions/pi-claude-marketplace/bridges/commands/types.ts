@@ -56,6 +56,13 @@ export interface StageCommandsCommitResult {
   /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedCommandRecord[];
   readonly warnings: readonly string[];
+  /**
+   * CMD-01 / PARSE-01: one record per command whose SOURCE frontmatter could
+   * not be parsed and was neutralized. The orchestrator maps these to the
+   * `{malformed command}` reason token and the per-component detail line.
+   * Always empty until the command neutralize arm lands.
+   */
+  readonly degraded: readonly { generatedName: string; parseError: string }[];
 }
 
 /** Discriminated union -- `kind: "noop" | "staged"`. */

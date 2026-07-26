@@ -175,7 +175,7 @@ test("SKILL-03 (AG-8 class): setDescriptionScalar emits an author value as a saf
   // sibling key. The safe emitter must collapse the newline and quote it.
   const hostile = "evil: value\nmalicious-key: injected";
   const out = setDescriptionScalar(source, hostile);
-  const { frontmatter } = parseFrontmatter<Record<string, unknown>>(out);
+  const { frontmatter } = parseFrontmatter(out);
   assert.equal(frontmatter.description, "evil: value malicious-key: injected");
   assert.equal(frontmatter["malicious-key"], undefined, "no injected sibling key");
   assert.equal(frontmatter.name, "safe");

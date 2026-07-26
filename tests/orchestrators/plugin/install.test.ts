@@ -999,6 +999,55 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// SKILL-01 / WARN-01 -- unparseable skill degrades but installs
+// ───────────────────────────────────────────────────────────────────────────
+
+test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable skill -> (installed) {malformed skill} at warning severity, no hard-fail", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-malformed-skill-"));
+    try {
+      // `name: [unterminated` is a closed `---` block whose inner YAML is
+      // malformed -> parseFrontmatter throws at gate 1 -> the skill is
+      // synthesized into a disable-model-invocation block and still installs.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\nBody.\n" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // Not a hard fail: the degraded skill still installs.
+      assert.equal(outcome.status, "installed");
+      // D-86-03: the degrade surfaces the `{malformed skill}` reason token on
+      // the `(installed)` row (NOT partially-installed -- the component is
+      // installed in degraded form, not dropped) at warning severity.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "warning");
+      assert.match(notifications[0]?.message ?? "", /\(installed\)/);
+      assert.match(notifications[0]?.message ?? "", /\{malformed skill\}/);
+      // The installed outcome carries the `degradedKinds` seam the orchestrated
+      // reconcile composer consumes.
+      assert.ok(outcome.status === "installed");
+      assert.deepEqual([...(outcome.degradedKinds ?? [])], ["skill"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // PI-13 -- dependencies declaration -> manual-install note
 // ───────────────────────────────────────────────────────────────────────────
 

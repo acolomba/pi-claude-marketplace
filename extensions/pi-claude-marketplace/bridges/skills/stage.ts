@@ -21,6 +21,7 @@ import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promis
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -32,6 +33,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
+import { synthesizeUnparseableSkill } from "./frontmatter-degrade.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 
 import type {
@@ -83,6 +85,32 @@ export function assertNoSkillCollisions(discovered: readonly DiscoveredSkill[]):
 }
 
 /**
+ * SKILL-01: extract the markdown body from a skill source whose frontmatter
+ * block failed to parse, reproducing `parseFrontmatter`'s body normalization
+ * (CRLF->LF, then trimmed) so the synthesized block preserves the body
+ * byte-for-byte identically to the parseable path (PARSE-01 encoding parity).
+ * Called ONLY on the gate-1 throw arm, where a closed `---` block is present by
+ * construction -- the body is everything after the closing delimiter. Falls
+ * back to the whole normalized+trimmed content if no closing delimiter is found.
+ */
+function extractBodyAfterFrontmatter(content: string): string {
+  const normalized = content.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  if (lines[0]?.trim() === "---") {
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i]?.trim() === "---") {
+        return lines
+          .slice(i + 1)
+          .join("\n")
+          .trim();
+      }
+    }
+  }
+
+  return normalized.trim();
+}
+
+/**
  * Phase-1 of the skills bridge two-phase commit:
  *   1. Discover skills in the source plugin (SK-5).
  *   2. Refuse on RN-6 collisions.
@@ -122,6 +150,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
         stagedNames: Object.freeze([]),
         recorded: Object.freeze([]),
         warnings: Object.freeze([...discoverWarnings]),
+        degraded: Object.freeze([]),
       },
     };
   }
@@ -133,6 +162,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
   const renamePairs: { from: string; to: string }[] = [];
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
+  const degraded: { generatedName: string; parseError: string }[] = [];
 
   try {
     for (const skill of discovered) {
@@ -156,12 +186,50 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
         force: false,
       });
 
-      // SK-3 rewrite + SK-4 substitute on the SKILL.md only.
       const skillMdPath = path.join(stagedDir, "SKILL.md");
       let content = await readFile(skillMdPath, "utf8");
-      content = rewriteFrontmatterName(content, skill.generatedName);
+
+      // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
+      // to establish attribution ground truth and the degrade trigger. A THROW
+      // means a closed `---` block whose inner YAML is malformed (an author
+      // defect); a RETURN (including absent/empty frontmatter) is the happy
+      // arm. The parse is READ-ONLY -- validate, never eval (preserves T-03-17).
+      let sourceUnparseable = false;
+      try {
+        parseFrontmatter(content);
+      } catch (parseErr) {
+        // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
+        // `disable-model-invocation` block (body preserved verbatim) so the
+        // skill still installs (no hard-fail), stays invocable by `/name`, and
+        // is never auto-invoked. The actionable detail (plugin, component,
+        // parse error) rides the install-time warning channel instead.
+        sourceUnparseable = true;
+        content = synthesizeUnparseableSkill(
+          extractBodyAfterFrontmatter(content),
+          skill.generatedName,
+        );
+        degraded.push({
+          generatedName: skill.generatedName,
+          parseError: errorMessage(parseErr),
+        });
+      }
+
+      // NREG-01: the parseable arm keeps today's SK-3 name rewrite byte-for-byte
+      // (the augment arm is layered on separately); the synthesized arm already
+      // emits the generated `name`, so it skips the rewrite. SK-4 substitution
+      // runs on both arms.
+      if (!sourceUnparseable) {
+        content = rewriteFrontmatterName(content, skill.generatedName);
+      }
+
       content = substituteClaudeVars(content, { pluginRoot, pluginData: pluginDataDir });
       await writeFile(skillMdPath, content, "utf8");
+
+      // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
+      // backstop. A THROW here means our OWN rewrite/substitution produced
+      // bytes Pi would reject -- our defect, not the author's. Throw loudly so
+      // it rides the cleanup catch below; never mask it as author degradation.
+      parseFrontmatter(content);
 
       renamePairs.push({ from: stagedDir, to: targetDir });
       stagedNames.push(skill.generatedName);
@@ -183,6 +251,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
       warnings: Object.freeze([...discoverWarnings]),
+      degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze(previousNames),
     _renamePairs: Object.freeze(renamePairs),

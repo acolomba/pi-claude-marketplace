@@ -134,6 +134,9 @@ export async function prepareStageCommands(
         stagedNames: Object.freeze<string[]>([]),
         recorded: Object.freeze<StagedCommandRecord[]>([]),
         warnings: Object.freeze([...discoverWarnings]),
+        // CMD-01: no source-parse gate on the command seam yet; the neutralize
+        // arm that populates this lands with the command gates.
+        degraded: Object.freeze<{ generatedName: string; parseError: string }[]>([]),
       },
     };
   }
@@ -180,6 +183,8 @@ export async function prepareStageCommands(
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
       warnings: Object.freeze([...discoverWarnings]),
+      // CMD-01: inert until the command neutralize arm lands.
+      degraded: Object.freeze<{ generatedName: string; parseError: string }[]>([]),
     },
     _previousNames: Object.freeze([...previousNames]),
     _renamePairs: Object.freeze(renamePairs),

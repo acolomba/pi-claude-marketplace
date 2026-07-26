@@ -54,6 +54,32 @@ export function synthesizeUnparseableSkill(body: string, generatedName: string):
   );
 }
 
+/** A fenced-code-block delimiter line (```` ``` ```` or `~~~`), leading-trimmed. */
+const FENCE = /^(```|~~~)/;
+
+/**
+ * Advance past a fenced code block whose opener is at `start`, returning the
+ * index just after the closing fence (or the end of input if unterminated).
+ */
+function skipFencedBlock(lines: readonly string[], start: number): number {
+  let i = start + 1;
+  while (i < lines.length && !FENCE.test((lines[i] ?? "").trim())) {
+    i++;
+  }
+
+  return i < lines.length ? i + 1 : i;
+}
+
+/** Collect the contiguous non-blank paragraph starting at `start` (joined by `\n`). */
+function collectParagraph(lines: readonly string[], start: number): string {
+  const paragraph: string[] = [];
+  for (let i = start; i < lines.length && (lines[i] ?? "").trim() !== ""; i++) {
+    paragraph.push(lines[i] ?? "");
+  }
+
+  return paragraph.join("\n");
+}
+
 /**
  * SKILL-02 / D-86-06: derive a `description` from the first GENUINE body line.
  * Skips blank lines, ATX `#` heading lines, and fenced code blocks (```` ``` ````
@@ -66,42 +92,22 @@ export function firstBodyParagraph(body: string): string {
   const lines = body.split("\n");
   let i = 0;
   while (i < lines.length) {
-    const trimmed = lines[i]!.trim();
+    const trimmed = (lines[i] ?? "").trim();
 
-    if (trimmed === "") {
-      i++;
-      continue;
-    }
-
-    // ATX heading line (`#` .. `######`, optionally bare).
-    if (/^#{1,6}(\s|$)/.test(trimmed)) {
+    // Blank line or ATX heading (`#` .. `######`, optionally bare): skip.
+    if (trimmed === "" || /^#{1,6}(\s|$)/.test(trimmed)) {
       i++;
       continue;
     }
 
     // Fenced code block: skip the opener, its contents, and the closing fence.
-    if (/^(```|~~~)/.test(trimmed)) {
-      i++;
-      while (i < lines.length && !/^(```|~~~)/.test(lines[i]!.trim())) {
-        i++;
-      }
-
-      // Consume the closing fence line if present.
-      if (i < lines.length) {
-        i++;
-      }
-
+    if (FENCE.test(trimmed)) {
+      i = skipFencedBlock(lines, i);
       continue;
     }
 
-    // First prose line: collect the contiguous paragraph to the next blank line.
-    const paragraph: string[] = [];
-    while (i < lines.length && lines[i]!.trim() !== "") {
-      paragraph.push(lines[i]!);
-      i++;
-    }
-
-    return paragraph.join("\n");
+    // First prose line: return the contiguous paragraph to the next blank line.
+    return collectParagraph(lines, i);
   }
 
   return "";
@@ -143,6 +149,51 @@ function emitSafeDoubleQuotedScalar(value: string): string {
   return `"${escaped}"`;
 }
 
+/** The top-level frontmatter `description` key token (including its colon). */
+const DESCRIPTION_KEY = "description:";
+
+/** Index of the closing `---` fence (frontmatter block end), or `lines.length`. */
+function frontmatterBlockEnd(lines: readonly string[]): number {
+  for (let i = 1; i < lines.length; i++) {
+    if ((lines[i] ?? "").trim() === "---") {
+      return i;
+    }
+  }
+
+  return lines.length;
+}
+
+/**
+ * Given the `description` key line at `keyIndex`, return the index of the LAST
+ * line its value spans: the key line itself for an inline scalar, or -- when the
+ * inline value is a block-scalar indicator (`>` / `|`, optionally with a chomp /
+ * indent modifier) -- the last indented continuation line. Trailing blank lines
+ * are NOT absorbed so inter-key blank spacing is preserved byte-for-byte.
+ */
+function descriptionValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
+  const inlineValue = (lines[keyIndex] ?? "").slice(DESCRIPTION_KEY.length).trim();
+  if (!/^[>|]/.test(inlineValue)) {
+    return keyIndex;
+  }
+
+  let lastReplaced = keyIndex;
+  for (let i = keyIndex + 1; i < blockEnd; i++) {
+    const line = lines[i] ?? "";
+    if (line.trim() === "") {
+      continue;
+    }
+
+    if (/^\s/.test(line)) {
+      lastReplaced = i;
+      continue;
+    }
+
+    break;
+  }
+
+  return lastReplaced;
+}
+
 /**
  * SKILL-03 class: set the frontmatter `description` to `value` by replacing the
  * FULL `description` node span -- including a `>-` / `|` block scalar spanning
@@ -152,37 +203,20 @@ function emitSafeDoubleQuotedScalar(value: string): string {
  * SKILL-03 corruption class). `content` is the full source file (with `---`
  * fences); the returned string is the same file with the description node
  * rewritten. If no top-level `description:` key is present the content is
- * returned unchanged.
- *
- * Node-span scan: locate the top-level (zero-indent) `description:` line. If its
- * inline value is a block-scalar indicator (`>` / `|`, optionally with a chomp /
- * indent modifier), consume the following continuation lines -- blank lines and
- * lines indented under the key -- up to the last indented content line (trailing
- * blank lines are left intact so inter-key spacing survives). The key line
- * through that last continuation line are replaced by a single
- * `description: "<escaped>"` line.
+ * returned unchanged. Only the frontmatter block (opening `---` through the next
+ * `---`) is scanned, so a body line starting with `description:` is never matched.
  */
 export function setDescriptionScalar(content: string, value: string): string {
   const lines = content.split("\n");
-
-  // The frontmatter block is between the opening `---` (line 0) and the next
-  // `---` line. Only scan for the key inside that block so a body line that
-  // happens to start with `description:` is never matched.
   if (lines[0]?.trim() !== "---") {
     return content;
   }
 
-  let blockEnd = lines.length;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i]!.trim() === "---") {
-      blockEnd = i;
-      break;
-    }
-  }
+  const blockEnd = frontmatterBlockEnd(lines);
 
   let keyIndex = -1;
   for (let i = 1; i < blockEnd; i++) {
-    if (/^description:/.test(lines[i]!)) {
+    if ((lines[i] ?? "").startsWith(DESCRIPTION_KEY)) {
       keyIndex = i;
       break;
     }
@@ -192,31 +226,8 @@ export function setDescriptionScalar(content: string, value: string): string {
     return content;
   }
 
-  const inlineValue = lines[keyIndex]!.slice("description:".length).trim();
-  const isBlockScalar = /^[>|]/.test(inlineValue);
-
-  let lastReplaced = keyIndex;
-  if (isBlockScalar) {
-    // Consume block-scalar continuation lines: blank or indented, up to (but not
-    // including) the next zero-indent key or the closing delimiter. Trailing
-    // blank lines are NOT absorbed -- lastReplaced tracks the last indented
-    // content line so inter-key blank spacing is preserved byte-for-byte.
-    for (let i = keyIndex + 1; i < blockEnd; i++) {
-      const line = lines[i]!;
-      if (line.trim() === "") {
-        continue;
-      }
-
-      if (/^\s/.test(line)) {
-        lastReplaced = i;
-        continue;
-      }
-
-      break;
-    }
-  }
-
-  const replacement = `description: ${emitSafeDoubleQuotedScalar(value)}`;
+  const lastReplaced = descriptionValueEnd(lines, keyIndex, blockEnd);
+  const replacement = `${DESCRIPTION_KEY} ${emitSafeDoubleQuotedScalar(value)}`;
   const rebuilt = [...lines.slice(0, keyIndex), replacement, ...lines.slice(lastReplaced + 1)];
   return rebuilt.join("\n");
 }

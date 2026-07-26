@@ -57,6 +57,13 @@ export interface StageSkillsCommitResult {
   /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedSkillRecord[];
   readonly warnings: readonly string[];
+  /**
+   * SKILL-01 / PARSE-01: one record per skill whose SOURCE frontmatter could
+   * not be parsed and was synthesized into a `disable-model-invocation` block.
+   * The orchestrator maps these to the `{malformed skill}` reason token and the
+   * per-component parse-error detail line. Empty on the all-valid path (NREG-01).
+   */
+  readonly degraded: readonly { generatedName: string; parseError: string }[];
 }
 
 /** `prepareStageSkills` returns a discriminated union; orchestrators MUST narrow on `kind`. */
