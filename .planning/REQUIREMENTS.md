@@ -25,7 +25,7 @@
 
 ### Command degradation (CMD)
 
-- [ ] **CMD-01**: A command whose source frontmatter cannot be parsed installs with the unparseable frontmatter neutralized, so Pi loads it with name-from-filename and description-from-first-body-line — the literal Claude Code malformed-frontmatter behavior (no synthesized placeholder and no disable flag, because Pi's command loader has no non-empty-description gate).
+- [x] **CMD-01**: A command whose source frontmatter cannot be parsed installs with the unparseable frontmatter neutralized, so Pi loads it with name-from-filename and description-from-first-body-line — the literal Claude Code malformed-frontmatter behavior (no synthesized placeholder and no disable flag, because Pi's command loader has no non-empty-description gate).
 
 ### Diagnostics (WARN)
 
@@ -72,7 +72,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SKILL-03 | Phase 86 | Complete |
 | WTU-01 | Phase 86 | Complete |
 | WTU-02 | Phase 86 | Complete |
-| CMD-01 | Phase 86 | Pending |
+| CMD-01 | Phase 86 | Complete |
 | WARN-01 | Phase 86 | Complete |
 | CLASS-01 | Phase 86 | Complete |
 | NREG-01 | Phase 86 | Complete |
