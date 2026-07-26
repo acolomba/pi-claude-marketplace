@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.15
 milestone_name: frontmatter-compliance
 status: planning
-last_updated: "2026-07-26T03:01:59.228Z"
+last_updated: "2026-07-26T03:10:56.000Z"
 last_activity: 2026-07-25
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,41 +17,73 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 86 — Skill and command frontmatter compliance (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-25 — Milestone v1.15 started
+Status: Roadmap created; ready to plan Phase 86
+Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 requirements mapped)
 
 ## Roadmap Summary
 
-- 1 phase (Phase 85), continuing the global counter from Phase 84 (agent-skill-preloads).
-- All four requirements resolve in one seam: `domain/resolver.ts::applyStrictMcp`
-  string-reference resolution (before `applyMcpValue`) + `assertPathInside` containment.
+- 1 phase (Phase 86), continuing the global counter from Phase 85 (v1.14
+  mcp-string-refs).
+- All 11 requirements (PARSE-01/02, SKILL-01/02/03, WTU-01/02, CMD-01, WARN-01,
+  CLASS-01, NREG-01) land in one cohesive phase. Rationale: the two-gate parse model
+  spans BOTH the skills and commands staging seams (PARSE-01), and the new
+  failure-class REASONS token (CLASS-01), the install-time warning surface (WARN-01),
+  and the verbatim-write guarantee (NREG-01) are shared machinery both bridges consume.
+  The only bridge-specific work is skill *synthesize* (SKILL-01/02/03 + WTU folding) vs
+  command *neutralize* (CMD-01). Splitting skills-from-commands would strand a
+  single-requirement commands phase or leave a parse gate wired but degradation
+  deferred — both anti-patterns. One phase delivers the whole capability.
 
-- Locked design decisions carried into the phase: resolve in the resolver layer (not
-  the cached manifest loader); referenced file is a WRAPPED `.mcp.json` only; malformed
-  / missing / out-of-root reference → single `(unavailable)` plugin, never a
-  whole-manifest throw and never a soft-degrade; D-14 symlink refusal stays strict;
-  `plugin.json` `mcpServers` array form deferred (MCPR-F1).
+- Locked design decisions carried into the phase (from
+  `docs/research/issue-101-skill-frontmatter-diagnosis.md`):
+  - Mirror Claude Code's *observable* behavior via Pi's own machinery — literal
+    empty-metadata parity is impossible (Pi returns `skill: null` on empty
+    description). Unparseable skill → synthesized `disable-model-invocation: true`
+    block + short fixed placeholder description, body verbatim, install never
+    hard-fails. Unparseable command → neutralize (Pi's command loader has no
+    non-empty-description gate).
+  - Parse with Pi's own `parseFrontmatter` (public root export since peer floor
+    `>=0.74.0`; import via the `platform/pi-api.ts` boundary for byte-identical
+    accept/reject). Verify it was already exported at the declared floor.
+  - Two gates: source frontmatter parsed BEFORE rewrite/substitution (attribution +
+    trigger); staged bytes re-parsed AFTER as a Pi-acceptability backstop (a valid
+    source whose staged output fails is self-inflicted — loud/test-guarded, never
+    attributed to the author).
+  - `when_to_use` appended to the Pi `description`, combined text truncated at 1,536
+    chars (Claude Code's skill-listing cap).
+  - Written skill `name` verified against the parsed value (catches folded-scalar
+    corruption), not a blind line regex.
+  - Classification: failure-class, not soft-degrade — a malformation of a *supported*
+    component. New token parallels `malformed mcp` in `FAILURE_REASONS`; `REASONS`
+    tuple amendment stays byte-stable (OUT-08).
+  - Rejected approaches (do NOT rebuild): quote-repair heuristic; whole-block re-emit
+    (agents-bridge style) — skills' target format is real structured YAML.
+  - The diagnosis doc's Prevalence section is STALE: its two example skills were fixed
+    upstream in `acolomba/claude-plugins` PR #17 (`>-` block scalars). The code gap
+    remains real for third-party plugins (issue #101 is against another plugin). The
+    bridge does NOT corrupt a valid source; the fix is a robustness/compliance gate.
 
 ## Session
 
-**Last session:** 2026-07-25T02:13:21.956Z
-**Stopped at:** context exhaustion at 75% (2026-07-25)
+**Last session:** 2026-07-25
+**Stopped at:** Roadmap created for v1.15; Phase 86 ready to plan
 **Resume file:** None
 
 ## Performance Metrics
 
+No plans executed yet for v1.15.
+
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
-| Phase 85 P01 | 45min | 2 tasks | 4 files |
-| Phase 85 P02 | 35m | 2 tasks | 6 files |
+| —    | —        | —     | —     |
 
 ## Decisions
 
-- [Phase ?]: MCPR: string mcpServers reference resolved in applyStrictMcp string branch; field union widened, server-map validator untouched (D-01/D-04)
-- [Phase ?]: D-02: {malformed mcp} filed failure-class (FAILURE_REASONS), not unsupported; REASONS 34 -> 35
-- [Phase ?]: narrowResolverNotes matches full 'malformed mcp reference' prefix before catch-all; inline 'malformed mcpServers' stays {unsupported source}
+None recorded yet for v1.15 (design decisions are pre-captured in the Roadmap Summary
+above and in `docs/research/issue-101-skill-frontmatter-diagnosis.md`). Plan-phase and
+execution will record per-plan decisions here.
 
 ## Deferred Items
 
@@ -60,6 +92,7 @@ pre-existing (none from v1.14 mcp-string-refs).
 
 | Category | Item | Status |
 |----------|------|--------|
+| backlog | REASON-01 — unify all parse-error reasons under a `{malformed <feature>}` family | deferred (v1.15 adds one more failure-class member; broad unification stays out of scope) |
 | debug | knowledge-base | unknown |
 | quick_task | 260621-kmm-add-explicit-enabled-boolean-field-to-pl | unknown |
 | quick_task | 260718-tli-fix-pr-88-external-contribution-to-pass- | unknown |
@@ -68,4 +101,4 @@ pre-existing (none from v1.14 mcp-string-refs).
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 86 with `/gsd-plan-phase 86`

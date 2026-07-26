@@ -65,23 +65,23 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARSE-01 | — | Pending |
-| PARSE-02 | — | Pending |
-| SKILL-01 | — | Pending |
-| SKILL-02 | — | Pending |
-| SKILL-03 | — | Pending |
-| WTU-01 | — | Pending |
-| WTU-02 | — | Pending |
-| CMD-01 | — | Pending |
-| WARN-01 | — | Pending |
-| CLASS-01 | — | Pending |
-| NREG-01 | — | Pending |
+| PARSE-01 | Phase 86 | Pending |
+| PARSE-02 | Phase 86 | Pending |
+| SKILL-01 | Phase 86 | Pending |
+| SKILL-02 | Phase 86 | Pending |
+| SKILL-03 | Phase 86 | Pending |
+| WTU-01 | Phase 86 | Pending |
+| WTU-02 | Phase 86 | Pending |
+| CMD-01 | Phase 86 | Pending |
+| WARN-01 | Phase 86 | Pending |
+| CLASS-01 | Phase 86 | Pending |
+| NREG-01 | Phase 86 | Pending |
 
 **Coverage:**
 - v1 requirements: 11 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 11 ⚠️
+- Mapped to phases: 11 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-25*
-*Last updated: 2026-07-25 after milestone v1.15 requirements definition*
+*Last updated: 2026-07-26 after milestone v1.15 roadmap creation (all 11 requirements mapped to Phase 86)*
