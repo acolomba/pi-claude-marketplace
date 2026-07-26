@@ -2,9 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.15
 milestone_name: frontmatter-compliance
+current_phase: 86
 status: planning
-last_updated: "2026-07-26T03:10:56.000Z"
+stopped_at: Phase 86 context gathered
+last_updated: "2026-07-26T10:46:58.166Z"
 last_activity: 2026-07-25
+last_activity_desc: Milestone v1.15 roadmap created (1 phase, 11/11 requirements mapped)
 progress:
   total_phases: 1
   completed_phases: 0
@@ -26,6 +29,7 @@ Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 re
 
 - 1 phase (Phase 86), continuing the global counter from Phase 85 (v1.14
   mcp-string-refs).
+
 - All 11 requirements (PARSE-01/02, SKILL-01/02/03, WTU-01/02, CMD-01, WARN-01,
   CLASS-01, NREG-01) land in one cohesive phase. Rationale: the two-gate parse model
   spans BOTH the skills and commands staging seams (PARSE-01), and the new
@@ -38,28 +42,36 @@ Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 re
 
 - Locked design decisions carried into the phase (from
   `docs/research/issue-101-skill-frontmatter-diagnosis.md`):
+
   - Mirror Claude Code's *observable* behavior via Pi's own machinery — literal
     empty-metadata parity is impossible (Pi returns `skill: null` on empty
     description). Unparseable skill → synthesized `disable-model-invocation: true`
     block + short fixed placeholder description, body verbatim, install never
     hard-fails. Unparseable command → neutralize (Pi's command loader has no
     non-empty-description gate).
+
   - Parse with Pi's own `parseFrontmatter` (public root export since peer floor
     `>=0.74.0`; import via the `platform/pi-api.ts` boundary for byte-identical
     accept/reject). Verify it was already exported at the declared floor.
+
   - Two gates: source frontmatter parsed BEFORE rewrite/substitution (attribution +
     trigger); staged bytes re-parsed AFTER as a Pi-acceptability backstop (a valid
     source whose staged output fails is self-inflicted — loud/test-guarded, never
     attributed to the author).
+
   - `when_to_use` appended to the Pi `description`, combined text truncated at 1,536
     chars (Claude Code's skill-listing cap).
+
   - Written skill `name` verified against the parsed value (catches folded-scalar
     corruption), not a blind line regex.
+
   - Classification: failure-class, not soft-degrade — a malformation of a *supported*
     component. New token parallels `malformed mcp` in `FAILURE_REASONS`; `REASONS`
     tuple amendment stays byte-stable (OUT-08).
+
   - Rejected approaches (do NOT rebuild): quote-repair heuristic; whole-block re-emit
     (agents-bridge style) — skills' target format is real structured YAML.
+
   - The diagnosis doc's Prevalence section is STALE: its two example skills were fixed
     upstream in `acolomba/claude-plugins` PR #17 (`>-` block scalars). The code gap
     remains real for third-party plugins (issue #101 is against another plugin). The
@@ -67,9 +79,9 @@ Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 re
 
 ## Session
 
-**Last session:** 2026-07-25
-**Stopped at:** Roadmap created for v1.15; Phase 86 ready to plan
-**Resume file:** None
+**Last session:** 2026-07-26T10:46:58.135Z
+**Stopped at:** Phase 86 context gathered
+**Resume file:** .planning/phases/86-skill-and-command-frontmatter-compliance/86-CONTEXT.md
 
 ## Performance Metrics
 
