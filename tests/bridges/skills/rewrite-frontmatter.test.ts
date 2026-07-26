@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { rewriteFrontmatterName } from "../../../extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // SK-3: rewriteFrontmatterName.
 
@@ -52,4 +53,40 @@ test("SK-3 rewriteFrontmatterName handles malformed frontmatter (--- with no clo
   const out = rewriteFrontmatterName(input, "rescued");
   // Behavior: treat as malformed and prepend a fresh frontmatter block.
   assert.match(out, /^---\nname: rescued\n---\n\n/);
+});
+
+test("SKILL-03 folded multi-line source name is rewritten to the generated name (no orphaned continuation lines)", () => {
+  // A `>` folded `name:` scalar spanning several source lines. A blind
+  // `^name:` line replace would leave the continuation lines orphaned and
+  // corrupt the parsed name (e.g. `renamed folded name`).
+  const input = "---\nname: >\n  folded\n  name\ndescription: kept\nversion: 9\n---\n\nbody text";
+  const out = rewriteFrontmatterName(input, "acme-folded");
+
+  const { frontmatter } = parseFrontmatter<{
+    name: string;
+    description: string;
+    version: number;
+  }>(out);
+  // The re-parsed name is EXACTLY the generated name -- no `acme-folded folded name`.
+  assert.equal(frontmatter.name, "acme-folded");
+  // Sibling keys survive the full-node-span replacement.
+  assert.equal(frontmatter.description, "kept");
+  assert.equal(frontmatter.version, 9);
+  // The orphaned continuation prose is gone.
+  assert.ok(!out.includes("  folded"), "folded continuation line must be removed");
+  assert.ok(out.includes("body text"));
+});
+
+test("SKILL-03 absent source name is inserted as the generated name", () => {
+  const input = "---\ndescription: only a description\nlicense: MIT\n---\n\nbody";
+  const out = rewriteFrontmatterName(input, "acme-added");
+
+  const { frontmatter } = parseFrontmatter<{
+    name: string;
+    description: string;
+    license: string;
+  }>(out);
+  assert.equal(frontmatter.name, "acme-added");
+  assert.equal(frontmatter.description, "only a description");
+  assert.equal(frontmatter.license, "MIT");
 });
