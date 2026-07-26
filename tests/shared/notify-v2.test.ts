@@ -5015,3 +5015,44 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
     `● official [user]\n  ● helper v1.0.0 (installed) {orphan rewake}\n\n/reload to pick up changes`,
   ]);
 });
+
+test("CLASS-01 / D-86-01: REASONS tuple carries 'malformed skill' and 'malformed command' as its last two members", () => {
+  // Byte-stability of the tail append (OUT-08): the two new per-kind tokens sit
+  // immediately after `malformed mcp`, and `malformed mcp` keeps its position.
+  const last3 = (REASONS as readonly string[]).slice(-3);
+  assert.deepEqual(last3, ["malformed mcp", "malformed skill", "malformed command"]);
+});
+
+test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` at warning severity", () => {
+  // A degraded-but-installed skill surfaces its failure-class token on the
+  // otherwise-successful `(installed)` row via the existing reasons brace, one
+  // per plugin -- mirroring the `orphan rewake` component-defect precedent. The
+  // caller stamps `warning` (carried out but short of ideal).
+  const ctx = makeCtx();
+  const pi = piWithBothLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            severity: "warning",
+            needsReload: true,
+            name: "helper",
+            version: "1.0.0",
+            dependencies: [],
+            reasons: ["malformed skill"],
+          },
+        ],
+      },
+    ],
+  };
+  notify(ctx as never, pi as never, msg);
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    `A plugin operation needs attention.\n\n● official [user]\n  ● helper v1.0.0 (installed) {malformed skill}\n\n/reload to pick up changes`,
+    "warning",
+  ]);
+});

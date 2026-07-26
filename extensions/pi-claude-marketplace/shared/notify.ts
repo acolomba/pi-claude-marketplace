@@ -77,7 +77,8 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 35-entry membership AND order are catalog-stable and MUST NOT change. The
+ * 37-entry membership AND order are catalog-stable and MUST NOT change (new
+ * tokens append at the tail; existing entries never reorder). The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
  * lives in `shared/notify-reasons.ts` as typed VIEWS over this set; that module
@@ -149,6 +150,21 @@ export const REASONS = [
   // `narrowResolverNotes` against the resolver's `malformed mcp reference:`
   // note prefix.
   "malformed mcp",
+  // CLASS-01 / D-86-01: a SKILL whose source frontmatter could not be parsed by
+  // Pi's own `parseFrontmatter` (a malformation of a SUPPORTED component the
+  // skills bridge actively stages). A failure-class member (sibling to
+  // `malformed mcp`), NOT an unsupported KIND; a dedicated per-kind token so the
+  // operator sees WHICH component kind malformed. The token rides the plugin's
+  // `(installed)` row (the skill still installs in degraded form) at `warning`
+  // severity, one per plugin; the per-component parse detail rides the
+  // post-cascade `notifyDiagnostic` channel.
+  "malformed skill",
+  // CLASS-01 / D-86-01: a COMMAND whose source frontmatter could not be parsed
+  // by Pi's own `parseFrontmatter`. The command-kind sibling of `malformed
+  // skill` -- same failure-class classification and `(installed)`-row / one-per-
+  // plugin surfacing; a dedicated token rather than a shared bucket so the reason
+  // row names the malformed component kind truthfully.
+  "malformed command",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];

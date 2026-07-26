@@ -113,6 +113,13 @@ export const FAILURE_REASONS = [
   // unsupported -- it is a malformation of a SUPPORTED feature the resolver
   // parses, so it lives here and NOT in UNSUPPORTED_REASONS.
   "malformed mcp",
+  // CLASS-01 / D-86-01: a skill / command whose source frontmatter could not be
+  // parsed by Pi's own `parseFrontmatter`. Failure-class (a malformation of a
+  // SUPPORTED component the skills/commands bridges stage), NOT unsupported --
+  // the exact `malformed mcp` classification precedent, split per-kind for
+  // truthful attribution.
+  "malformed skill",
+  "malformed command",
   "not in manifest",
   "rollback partial",
   "lock held",
