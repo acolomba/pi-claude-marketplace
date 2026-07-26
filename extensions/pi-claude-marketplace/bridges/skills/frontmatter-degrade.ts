@@ -202,9 +202,11 @@ function descriptionValueEnd(lines: readonly string[], keyIndex: number, blockEn
  * corrupts a multi-line block scalar by orphaning its continuation lines -- the
  * SKILL-03 corruption class). `content` is the full source file (with `---`
  * fences); the returned string is the same file with the description node
- * rewritten. If no top-level `description:` key is present the content is
- * returned unchanged. Only the frontmatter block (opening `---` through the next
- * `---`) is scanned, so a body line starting with `description:` is never matched.
+ * rewritten. When no top-level `description:` key is present the scalar is
+ * INSERTED as the last frontmatter line (SKILL-02 fill for a description-less
+ * source). Only the frontmatter block (opening `---` through the next `---`) is
+ * scanned, so a body line starting with `description:` is never matched. Content
+ * without an opening `---` fence is returned unchanged.
  */
 export function setDescriptionScalar(content: string, value: string): string {
   const lines = content.split("\n");
@@ -222,12 +224,19 @@ export function setDescriptionScalar(content: string, value: string): string {
     }
   }
 
+  const replacement = `${DESCRIPTION_KEY} ${emitSafeDoubleQuotedScalar(value)}`;
+
+  // SKILL-02: a description-less source has no `description:` key to replace.
+  // Insert one as the last frontmatter line (just before the closing `---`),
+  // preserving sibling key order. Only reached when the augment arm has a
+  // non-empty value to fill; NREG-01 keeps a present-and-unchanged description
+  // out of this function entirely.
   if (keyIndex === -1) {
-    return content;
+    const rebuilt = [...lines.slice(0, blockEnd), replacement, ...lines.slice(blockEnd)];
+    return rebuilt.join("\n");
   }
 
   const lastReplaced = descriptionValueEnd(lines, keyIndex, blockEnd);
-  const replacement = `${DESCRIPTION_KEY} ${emitSafeDoubleQuotedScalar(value)}`;
   const rebuilt = [...lines.slice(0, keyIndex), replacement, ...lines.slice(lastReplaced + 1)];
   return rebuilt.join("\n");
 }

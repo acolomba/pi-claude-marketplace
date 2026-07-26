@@ -704,3 +704,181 @@ test("NREG-01 valid skill is staged byte-for-byte identical to a name-rewrite + 
     assert.equal(staged, expected);
   });
 });
+
+// SKILL-02 / WTU-01 / WTU-02 augment arm (gate-1 RETURN branch) ------------
+
+/**
+ * Stage a single dynamically-authored source skill and return the staged
+ * SKILL.md bytes. The source `name` is `s`, so the generated name is `acme-s`.
+ */
+async function stageAugmentSource(
+  locations: ReturnType<typeof locationsFor>,
+  dataRoot: string,
+  sourceSkillMd: string,
+): Promise<string> {
+  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "augment-src-"));
+  try {
+    const skillsDir = path.join(srcRoot, "skills");
+    await mkdir(path.join(skillsDir, "s"), { recursive: true });
+    await writeFile(path.join(skillsDir, "s", "SKILL.md"), sourceSkillMd);
+
+    const resolved = makeResolved("acme", srcRoot, skillsDir);
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot: srcRoot,
+      pluginDataDir: dataRoot,
+      resolved,
+    });
+    await commitPreparedSkills(prepared);
+
+    return await readFile(path.join(locations.skillsTargetDir, "acme-s", "SKILL.md"), "utf8");
+  } finally {
+    await cleanupStaging(srcRoot, "test-cleanup");
+  }
+}
+
+test("SKILL-02 description-less skill stages a first-body-paragraph description and stays model-invocable", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const source =
+      "---\nname: no-desc\nversion: 1.0.0\n---\n\n" +
+      "# A Heading\n\n" +
+      "The first genuine prose paragraph.\nSecond line of that paragraph.\n\n" +
+      "A later paragraph that must not be captured.\n";
+
+    const staged = await stageAugmentSource(
+      locations,
+      path.join(locations.dataRoot, "mp", "acme"),
+      source,
+    );
+
+    const { frontmatter } = parseFrontmatter<{
+      name: string;
+      description: string;
+      "disable-model-invocation"?: boolean;
+    }>(staged);
+    assert.equal(frontmatter.name, "acme-s");
+    // The first-body paragraph spans two source lines; the safe single-line
+    // double-quoted scalar emitter collapses its internal newline to a space.
+    assert.equal(
+      frontmatter.description,
+      "The first genuine prose paragraph. Second line of that paragraph.",
+    );
+    // SKILL-02: filled skills stay model-invocable (no disable flag inserted).
+    assert.equal(frontmatter["disable-model-invocation"], undefined);
+    assert.ok(!staged.includes("disable-model-invocation"));
+    // The later paragraph is not part of the description.
+    assert.ok(!(frontmatter.description ?? "").includes("later paragraph"));
+  });
+});
+
+test("SKILL-02 empty probe: a description-less skill with no prose body still stages a non-empty description", async () => {
+  await withTmpScope(async ({ locations }) => {
+    // Frontmatter parses cleanly; there is no description and no prose body.
+    const source = "---\nname: empty-body\n---\n";
+
+    const staged = await stageAugmentSource(
+      locations,
+      path.join(locations.dataRoot, "mp", "acme"),
+      source,
+    );
+
+    const { frontmatter } = parseFrontmatter<{ description: string }>(staged);
+    assert.ok(
+      typeof frontmatter.description === "string" && frontmatter.description.trim().length > 0,
+      "empty-body skill must still carry a non-empty description (Pi drops empty-desc skills)",
+    );
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+  });
+});
+
+test("WTU-01 / WTU-02 when_to_use is folded into the description and hard-cut at 1,536", async () => {
+  await withTmpScope(async ({ locations }) => {
+    // Source combined length = 1000 + 1 (\n) + 536 = 1537 -> hard cut to 1536.
+    const description = "a".repeat(1000);
+    const whenToUse = "b".repeat(536);
+    const source = `---\nname: wtu\ndescription: ${description}\nwhen_to_use: ${whenToUse}\n---\n\nBody.\n`;
+
+    const staged = await stageAugmentSource(
+      locations,
+      path.join(locations.dataRoot, "mp", "acme"),
+      source,
+    );
+
+    const { frontmatter } = parseFrontmatter<{ description: string }>(staged);
+    // Hard cut to exactly 1,536 UTF-16 code units (no ellipsis).
+    assert.equal(frontmatter.description.length, 1536);
+    // The description carries the source description and the folded when_to_use
+    // tail (the single `\n` fold separator collapses to a space in the emitted
+    // double-quoted scalar).
+    assert.ok(frontmatter.description.startsWith("a".repeat(1000)));
+    assert.ok(frontmatter.description.includes("b"), "folded when_to_use tail present");
+    assert.ok(frontmatter.description.endsWith("b"), "tail is the when_to_use text");
+  });
+});
+
+test("WTU-02 / D-86-05 a >1024 combined description still parses to a non-empty description (Pi loads it)", async () => {
+  await withTmpScope(async ({ locations }) => {
+    // Combined length = 1000 + 1 + 200 = 1201 (in the 1025..1536 range): no cut.
+    const description = "a".repeat(1000);
+    const whenToUse = "b".repeat(200);
+    const source = `---\nname: long\ndescription: ${description}\nwhen_to_use: ${whenToUse}\n---\n\nBody.\n`;
+
+    const staged = await stageAugmentSource(
+      locations,
+      path.join(locations.dataRoot, "mp", "acme"),
+      source,
+    );
+
+    // The staged bytes re-parse (do NOT throw) to a non-empty, >1024 description
+    // -- NOT secretly truncated to Pi's 1,024 warning threshold (D-86-05).
+    let parsed: { frontmatter: { description?: unknown } } | undefined;
+    assert.doesNotThrow(() => {
+      parsed = parseFrontmatter(staged);
+    });
+    const description2 = parsed?.frontmatter.description;
+    assert.ok(typeof description2 === "string" && description2.length > 1024);
+  });
+});
+
+test("SKILL-03 / WTU-01 a `>-` block-scalar description is replaced as a full node span, siblings byte-identical", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const source =
+      "---\n" +
+      "name: block\n" +
+      "description: >-\n" +
+      "  A folded block scalar description\n" +
+      "  spanning several source lines.\n" +
+      "version: 2.3.1\n" +
+      "tags: alpha, beta\n" +
+      "when_to_use: Use it when triggered.\n" +
+      "---\n\n" +
+      "Body prose.\n";
+
+    const staged = await stageAugmentSource(
+      locations,
+      path.join(locations.dataRoot, "mp", "acme"),
+      source,
+    );
+
+    // Gate-2 parity: the staged bytes re-parse (do NOT throw).
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+    const { frontmatter } = parseFrontmatter<{
+      description: string;
+      version: string;
+      tags: string;
+    }>(staged);
+    // The folded scalar was folded WITH when_to_use into a single scalar.
+    assert.ok(frontmatter.description.includes("A folded block scalar description"));
+    assert.ok(frontmatter.description.endsWith("Use it when triggered."));
+    // Sibling keys survive byte-identically (still their exact source lines).
+    assert.ok(staged.includes("version: 2.3.1"), "version sibling byte-identical");
+    assert.ok(staged.includes("tags: alpha, beta"), "tags sibling byte-identical");
+    // The multi-line continuation lines are gone (collapsed into one scalar).
+    assert.ok(
+      !staged.includes("  spanning several source lines."),
+      "block-scalar continuation lines removed",
+    );
+  });
+});

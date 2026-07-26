@@ -33,7 +33,13 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
-import { synthesizeUnparseableSkill } from "./frontmatter-degrade.ts";
+import {
+  firstBodyParagraph,
+  foldWhenToUse,
+  setDescriptionScalar,
+  synthesizeUnparseableSkill,
+  truncate1536,
+} from "./frontmatter-degrade.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 
 import type {
@@ -108,6 +114,55 @@ function extractBodyAfterFrontmatter(content: string): string {
   }
 
   return normalized.trim();
+}
+
+/**
+ * SKILL-02 empty probe: a well-formed skill with neither a `description` nor any
+ * prose body yields an empty first-paragraph candidate, and Pi drops a skill
+ * whose `description` is empty (`skill: null`). Emit a short fixed non-empty
+ * scalar so the skill still loads. Distinct from the unparseable-source
+ * placeholder (D-86-02): the frontmatter parsed cleanly here; only the
+ * description is absent.
+ */
+const MISSING_DESCRIPTION_PLACEHOLDER = "No description provided.";
+
+/**
+ * SKILL-02 / WTU-01 / WTU-02: augment the `description` on the well-formed
+ * (gate-1 RETURN) arm. Reads the PARSED `description` / `when_to_use` values and
+ * the parsed `body`:
+ *   - SKILL-02 / D-86-06: an absent or empty `description` is filled from the
+ *     first body paragraph (`firstBodyParagraph`); an empty candidate falls back
+ *     to a fixed non-empty placeholder so Pi still loads the skill.
+ *   - WTU-01 / A1: a non-empty `when_to_use` is folded in after a single `\n`.
+ *   - WTU-02 / D-86-05 / A2: the combined text is hard-cut at 1,536 code units
+ *     (never Pi's 1,024 warning threshold).
+ * The value is written back through `setDescriptionScalar` (full node-span
+ * replace + safe double-quoted scalar), so a `>-`/`|` block-scalar source
+ * `description` cannot be corrupted (the SKILL-03 class). NREG-01: when the
+ * effective value equals the source `description` AND no `when_to_use` was
+ * folded, the frontmatter is left byte-identical (no re-emit).
+ */
+function augmentSkillDescription(
+  content: string,
+  frontmatter: Record<string, unknown>,
+  body: string,
+): string {
+  const rawDescription = frontmatter.description;
+  const sourceDescription = typeof rawDescription === "string" ? rawDescription : "";
+  const rawWhenToUse = frontmatter.when_to_use;
+  const whenToUse = typeof rawWhenToUse === "string" ? rawWhenToUse : "";
+
+  const base = sourceDescription === "" ? firstBodyParagraph(body) : sourceDescription;
+  const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
+  const effective = truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded);
+
+  // NREG-01: a present, in-cap `description` with no `when_to_use` is unchanged
+  // -- do NOT re-emit it as a double-quoted scalar (byte-for-byte invariant).
+  if (effective === sourceDescription) {
+    return content;
+  }
+
+  return setDescriptionScalar(content, effective);
 }
 
 /**
@@ -194,16 +249,15 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       // means a closed `---` block whose inner YAML is malformed (an author
       // defect); a RETURN (including absent/empty frontmatter) is the happy
       // arm. The parse is READ-ONLY -- validate, never eval (preserves T-03-17).
-      let sourceUnparseable = false;
+      let parsed: { frontmatter: Record<string, unknown>; body: string } | undefined;
       try {
-        parseFrontmatter(content);
+        parsed = parseFrontmatter(content);
       } catch (parseErr) {
         // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
         // `disable-model-invocation` block (body preserved verbatim) so the
         // skill still installs (no hard-fail), stays invocable by `/name`, and
         // is never auto-invoked. The actionable detail (plugin, component,
         // parse error) rides the install-time warning channel instead.
-        sourceUnparseable = true;
         content = synthesizeUnparseableSkill(
           extractBodyAfterFrontmatter(content),
           skill.generatedName,
@@ -214,12 +268,13 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
         });
       }
 
-      // NREG-01: the parseable arm keeps today's SK-3 name rewrite byte-for-byte
-      // (the augment arm is layered on separately); the synthesized arm already
-      // emits the generated `name`, so it skips the rewrite. SK-4 substitution
-      // runs on both arms.
-      if (!sourceUnparseable) {
+      // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then
+      // layers the SKILL-02 / WTU-01 / WTU-02 augment arm on the parsed values;
+      // the synthesized arm already emits the generated `name` + a placeholder
+      // `description`, so it skips both. SK-4 substitution runs on both arms.
+      if (parsed !== undefined) {
         content = rewriteFrontmatterName(content, skill.generatedName);
+        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body);
       }
 
       content = substituteClaudeVars(content, { pluginRoot, pluginData: pluginDataDir });
