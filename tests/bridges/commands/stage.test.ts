@@ -14,6 +14,7 @@ import {
   rollbackCommandsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "../../../extensions/pi-claude-marketplace/bridges/commands/types.ts";
@@ -24,6 +25,12 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 
 const FIXTURE_PLUGIN_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures", "test-plugin");
 const FIXTURE_EMPTY_MCP_ROOT = path.resolve(import.meta.dirname, "..", "_fixtures", "empty-mcp");
+const FIXTURE_UNPARSEABLE_COMMAND_ROOT = path.resolve(
+  import.meta.dirname,
+  "..",
+  "_fixtures",
+  "unparseable-command-plugin",
+);
 
 interface TmpScope {
   loc: ScopedLocations;
@@ -798,6 +805,100 @@ test("TR-06 replacePreparedCommands tolerates owned orphan file from prior parti
       replacedBody.length > 0 && !replacedBody.includes("orphan-prompt"),
       "replacement body must not contain the orphan bytes",
     );
+  } finally {
+    await scope.cleanup();
+  }
+});
+
+// CMD-01 / PARSE-01 / PARSE-02 neutralize arm --------------------------
+
+test("CMD-01 / PARSE-01 unparseable command source -> neutralized (whole frontmatter block stripped), degrade record", async () => {
+  const scope = await tmpScope();
+
+  try {
+    const pluginRoot = FIXTURE_UNPARSEABLE_COMMAND_ROOT;
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(pluginRoot, "commands"),
+    });
+    assert.equal(prepared.kind, "staged");
+
+    // Degrade record: exactly one, carrying the generated name + a non-empty
+    // parse error (the actionable detail the install warning surfaces).
+    assert.equal(prepared.result.degraded.length, 1);
+    const record = prepared.result.degraded[0];
+    assert.ok(record, "expected one degrade record");
+    assert.equal(record.generatedName, "acme:bad-command");
+    assert.ok(record.parseError.length > 0, "parse error must be non-empty");
+
+    await commitPreparedCommands(prepared);
+
+    // name-from-filename: the target basename (minus .md) is what Pi's command
+    // loader uses as the command name.
+    const target = path.join(scope.loc.promptsTargetDir, "acme:bad-command.md");
+    assert.equal(await pathExists(target), true);
+    const staged = await readFile(target, "utf8");
+
+    // The entire malformed `---`...`---` block is gone -- no frontmatter, and
+    // none of the ex-frontmatter text survives as a poor first-body-line.
+    assert.ok(!staged.startsWith("---"), "staged output must not open a frontmatter block");
+    assert.ok(!staged.includes("title: Deploy"), "ex-frontmatter junk must not survive");
+    assert.ok(!staged.includes("never reached"), "ex-frontmatter junk must not survive");
+
+    // The real body is intact and is what Pi reads for its first-body-line
+    // description (name-from-filename + description-from-first-body-line).
+    const firstBodyLine = staged.split("\n").find((line) => line.trim());
+    assert.equal(firstBodyLine, `Run the deployment for ${pluginRoot}.`);
+
+    // No synthesized placeholder description and no disable flag -- that is the
+    // skills degrade shape, not the command one (Pi's command loader has no
+    // non-empty-description gate).
+    assert.ok(!/^description:/m.test(staged), "commands get no synthesized description");
+    assert.ok(!staged.includes("disable-model-invocation"), "commands get no disable flag");
+
+    // Substitution ran on the neutralized body.
+    assert.ok(!staged.includes("${CLAUDE_PLUGIN_ROOT}"), "substitution must run on the body");
+    assert.ok(staged.includes(pluginRoot), "substituted pluginRoot must appear in the body");
+
+    // PARSE-02 gate-2 parity: the neutralized staged bytes re-parse (do NOT
+    // throw) and return empty frontmatter -- Pi accepts them.
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
+  } finally {
+    await scope.cleanup();
+  }
+});
+
+test("NREG-01 valid command is staged byte-for-byte identical except variable substitution (gates mutate nothing)", async () => {
+  const scope = await tmpScope();
+
+  try {
+    const pluginRoot = FIXTURE_PLUGIN_ROOT;
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(pluginRoot, "commands"),
+    });
+    // The all-valid path degrades nothing.
+    assert.equal(prepared.result.degraded.length, 0);
+
+    await commitPreparedCommands(prepared);
+
+    // Build the expected bytes with an INDEPENDENT literal string replacement
+    // -- NOT the production substitute helper -- so the assertion proves the
+    // read-only gates introduced no reformatting or re-quoting.
+    const source = await readFile(path.join(pluginRoot, "commands", "acme-deploy.md"), "utf8");
+    const expected = source.replaceAll("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
+
+    const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:deploy.md"), "utf8");
+    assert.equal(staged, expected);
   } finally {
     await scope.cleanup();
   }
