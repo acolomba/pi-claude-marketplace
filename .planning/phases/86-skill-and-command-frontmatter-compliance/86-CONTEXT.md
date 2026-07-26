@@ -94,23 +94,65 @@ WARN-01, CLASS-01, NREG-01.
   synthesize/neutralize degrade path (D-86-01..03), which fires only on an
   unparseable **source**.
 
-### Claude's Discretion
+### Research-confirmed decisions (post-RESEARCH.md, operator-confirmed 2026-07-26)
 
-- **Upstream-parity mechanics — research MUST verify before planning, do not
-  invent** (operator norm: verify upstream first; upstream absence/answer is
-  decisive):
-  - `when_to_use` fold separator and exact combination format (WTU-01).
-  - The 1,536-char truncation style (hard cut vs ellipsis) and which side
-    truncates when `description` + `when_to_use` overflow (WTU-02).
-  - Claude Code's precise "first paragraph of markdown content" extraction for
-    the description-less fallback (SKILL-02) — heading handling, blank-line
-    boundary.
-  - Source of truth to fetch: `code.claude.com/docs/en/skills.md` (field
-    contract + failure policy), cross-checked against the diagnosis doc.
-- Exact placeholder-description string (within D-86-02's "short fixed constant").
-- Whether `parseFrontmatter` needs re-export plumbing in `platform/pi-api.ts` or
-  is already surfaced there — **verify it was exported at the declared peer floor
-  `>=0.74.0`** (dev dep is 0.79.10); the diagnosis flags this as a must-verify.
+Research (`86-RESEARCH.md`) resolved the upstream-parity unknowns and surfaced a
+Pi divergence; the operator confirmed the following:
+
+- **D-86-05:** Truncation cap stays **1,536** (WTU-02 / Claude Code parity), even
+  though Pi's skill loader emits a **non-fatal** startup warning when
+  `description` exceeds 1,024 chars. A combined `description`+`when_to_use` of
+  1025–1536 loads in Pi and stays model-invocable — do NOT secretly truncate to
+  1,024 (that would silently drop trigger keywords and diverge from Claude Code).
+  Treat the Pi >1024 warning as a documented, known divergence; add a test that a
+  >1024-combined skill still loads (Pi returns a `Skill`, not `null`). — **Reversibility:** reversible.
+- **D-86-06:** First-paragraph fallback (SKILL-02) = derive the description from
+  the **first genuine body line** — skip blank lines, ATX `#` headings, and fenced
+  code blocks (` ``` ` / `~~~` and their contents) and similar non-prose
+  constructs; land on the first plain body line. (Operator's words: "the first
+  line that's a body — not header, not code block, … just a body.") Take the
+  paragraph starting at that first body line (contiguous body text to the next
+  blank line), consistent with Claude Code's "first paragraph of markdown
+  content." Lead the implementation with a robust body-line detector, not a naive
+  "skip one heading." — **Reversibility:** reversible.
+- **D-86-07:** CMD-01 neutralize = **strip the entire malformed frontmatter block**
+  (opening `---` through the closing `---`), leaving the real body, so
+  `parseFrontmatter` returns empty and Pi takes name-from-filename + the real
+  body's first non-empty line — matching Claude Code's "loads the body with empty
+  metadata." NOT "strip only the delimiter lines" (that would leave ex-frontmatter
+  junk as the first body line and produce a poor description). — **Reversibility:** reversible.
+
+**Scope confirmations (research Open Questions Q2/Q3 — sensible defaults, no real
+tradeoff):**
+- The **orchestrated** (reconcile) install path is the primary/required wiring
+  surface for the reason token AND the free-text `notifyDiagnostic` detail — that
+  is where reconcile-driven installs and imports run. The reconcile
+  `plugin-installed` arm carries no `reasons` today, so wiring the token there is
+  new work (add a degrade flag to `InstallPluginOutcome` → `PluginInstalledOutcome`
+  and push the token in the reconcile notify composer). Standalone reason-token
+  parity is a smaller add (rides `PluginInstalledMessage.reasons?` like `orphan
+  rewake`); standalone drops the free-text detail per D-19-01.
+- Scope is **write-path-only** (aligns with NREG-01): fix the staging write path;
+  do NOT re-materialize or migrate already-installed malformed components. They
+  are corrected on next re-install.
+
+**`parseFrontmatter` (VERIFIED by research):** public root export of
+`@earendil-works/pi-coding-agent` at the peer floor `>=0.74.0` (confirmed in the
+0.74.0 tarball, `dist/index.d.ts`). It **throws** on malformed YAML inside `---`
+delimiters but **returns empty (no throw)** when delimiters are absent — this
+split is the SKILL-01 (throw → synthesize) vs SKILL-02 (empty → first-paragraph)
+branch trigger. Not yet surfaced in `platform/pi-api.ts` → new re-export plumbing.
+
+### Claude's Discretion (low-stakes planner defaults — research A1/A2/A4)
+
+- **A1 — `when_to_use` fold separator:** append with a single `\n` separator
+  (Claude Code documents only that it is "appended"; it pins no separator, so this
+  is a source-side detail).
+- **A2 — truncation style:** a **hard cut** at 1,536 (no ellipsis); since
+  `when_to_use` is appended after `description`, the tail overflows and is dropped.
+- **A4 — placeholder-description string** (within D-86-02's "short fixed
+  constant"): a short YAML-safe constant, e.g. `Source frontmatter could not be
+  parsed.`
 
 </decisions>
 
