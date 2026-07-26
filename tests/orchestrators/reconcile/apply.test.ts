@@ -32,7 +32,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { mock } from "node:test";
 
-import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  applyReconcile,
+  surfacePostCommitWarnings,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
@@ -823,6 +826,58 @@ test("S2 / PR #51: reconcile cascade surfaces InstallPluginOutcome.postCommitWar
   assert.ok(outcome.postCommitWarnings);
   assert.equal(outcome.postCommitWarnings.length, 1);
   assert.match(outcome.postCommitWarnings[0]!, /data dir/);
+});
+
+test("WARN-01 / D-86-03 / T-86-03: a degraded plugin-installed outcome carries degradedKinds onto the rendered cascade row AND surfaces its per-component detail through notifyDiagnostic with the absolute source path redacted to its basename", async () => {
+  // The apply pass propagates `InstallPluginOutcome.degradedKinds` verbatim
+  // onto the `PluginInstalledOutcome` (mirroring the postCommitWarnings spread);
+  // this test pins the shape apply.ts produces and asserts the two consumer
+  // surfaces: (1) the projection renders `(installed) {malformed skill}` at
+  // warning severity, and (2) `surfacePostCommitWarnings` routes the
+  // `<plugin>/<component>: <parse error>` detail through `redactAbsolutePaths`
+  // before `notifyDiagnostic` so an absolute source path never leaks (NFR-9).
+  const { buildReconcileAppliedCascade } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts");
+  const outcome: import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts").PluginInstalledOutcome =
+    {
+      kind: "plugin-installed",
+      scope: "project",
+      marketplace: "mp-a",
+      plugin: "plugin-a",
+      dependencies: [],
+      degradedKinds: ["skill"],
+      postCommitWarnings: [
+        "plugin-a/bad-skill: could not parse frontmatter of /home/user/plugins/plugin-a/skills/bad-skill/SKILL.md",
+      ],
+    };
+
+  // (1) The projection consumes degradedKinds -> warning row + reason token.
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "warning");
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "malformed skill",
+  ]);
+
+  // (2) The detail surfaces via notifyDiagnostic (warning) with the absolute
+  // path collapsed to its basename.
+  const ctx = makeCtx();
+  surfacePostCommitWarnings(
+    { ctx: ctx as unknown as ExtensionContext } as Parameters<typeof surfacePostCommitWarnings>[0],
+    [outcome],
+  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.equal(args[1], "warning");
+  assert.ok(args[0].includes("SKILL.md"), `expected the basename to survive; got:\n${args[0]}`);
+  assert.ok(
+    !args[0].includes("/home/user/plugins/plugin-a/skills/bad-skill/SKILL.md"),
+    `T-86-03: the absolute source path must be redacted; got:\n${args[0]}`,
+  );
 });
 
 test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) attributes the failed row to claude-plugins.json basename, not state.json", async () => {

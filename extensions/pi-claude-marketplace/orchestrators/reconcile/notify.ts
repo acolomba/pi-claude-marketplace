@@ -47,7 +47,7 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { PerEntryOutcome, PluginInstalledOutcome } from "./apply-outcomes.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
@@ -56,6 +56,7 @@ import type {
   ContentReason,
   MarketplaceNotificationMessage,
   MarketplaceStatus,
+  PluginInstalledMessage,
   PluginNotificationMessage,
   Reason,
   ReconcileAppliedCascadeMessage,
@@ -471,6 +472,58 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * declaresMcp). The reverse asymmetry (a successful disable maps to
  * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
  */
+/**
+ * WARN-01 / CLASS-01 / D-86-03: map the degraded-component kinds onto the
+ * closed-set `(installed)`-row reason tokens -- one `malformed skill` /
+ * `malformed command` per kind regardless of how many components of that kind
+ * degraded (one-token-per-kind-per-plugin, mirroring the orphan-rewake
+ * one-per-plugin row token). Empty in / empty out so a clean install carries
+ * no reasons brace (NREG-01).
+ */
+function degradedKindReasons(
+  degradedKinds: readonly ("skill" | "command")[] | undefined,
+): readonly ContentReason[] {
+  if (degradedKinds === undefined || degradedKinds.length === 0) {
+    return [];
+  }
+
+  const reasons: ContentReason[] = [];
+  if (degradedKinds.includes("skill")) {
+    reasons.push("malformed skill");
+  }
+
+  if (degradedKinds.includes("command")) {
+    reasons.push("malformed command");
+  }
+
+  return reasons;
+}
+
+/**
+ * Build the `(installed)` row for a realized reconcile install.
+ *
+ * WARN-01 / CLASS-01 / D-86-03: a skill/command whose source frontmatter could
+ * not be parsed installs in DEGRADED form -- the row keeps status `installed`
+ * (NOT `(partially-installed)`, which is for DROPPED supported components) but
+ * raises to `warning` and carries one `malformed skill` / `malformed command`
+ * token per kind. A clean install (no degradedKinds) is byte-identical to
+ * today: `info`, no reasons brace (NREG-01). The reconcile-applied cascade
+ * suppresses the /reload trailer at the kind level (RECON-04), so `needsReload`
+ * never surfaces a hint.
+ */
+function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
+  const degradedReasons = degradedKindReasons(outcome.degradedKinds);
+  return {
+    status: "installed",
+    name: outcome.plugin,
+    ...(outcome.version !== undefined && { version: outcome.version }),
+    dependencies: outcome.dependencies,
+    ...(degradedReasons.length > 0 && { reasons: degradedReasons }),
+    severity: degradedReasons.length > 0 ? "warning" : "info",
+    needsReload: true,
+  };
+}
+
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
@@ -495,17 +548,9 @@ function applyOutcomeToBlock(
       block.status = "failed";
       return;
     case "plugin-installed":
-      block.plugins.push({
-        status: "installed",
-        name: outcome.plugin,
-        ...(outcome.version !== undefined && { version: outcome.version }),
-        dependencies: outcome.dependencies,
-        // D-03/D-06: realized install transition -> info, reloads. (The
-        // reconcile-applied cascade still suppresses the /reload trailer at the
-        // kind level -- RECON-04 -- so this needsReload never surfaces a hint.)
-        severity: "info",
-        needsReload: true,
-      });
+      // D-03/D-06 realized install row; WARN-01 / D-86-03 raises it to warning
+      // with the failure-class token when the outcome carries degradedKinds.
+      block.plugins.push(installedRowFromOutcome(outcome));
       return;
     case "plugin-backfilled":
       // BFILL-01 / D-68-04: a load-time backfill re-materialized the plugin in

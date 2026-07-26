@@ -92,6 +92,19 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
    * surfacing channel.
    */
   readonly postCommitWarnings?: readonly string[];
+  /**
+   * WARN-01 / CLASS-01 / D-86-03: the degraded-component kinds whose SOURCE
+   * frontmatter could not be parsed by Pi's own `parseFrontmatter` but which
+   * still installed in degraded form. Propagated verbatim from
+   * `InstallPluginOutcome.degradedKinds`. The reconcile `plugin-installed`
+   * arm reads this to push one `malformed skill` / `malformed command` token
+   * per kind onto the `(installed)` row and raise that row from `info` to
+   * `warning` severity. A degraded-but-installed component keeps the
+   * `(installed)` row -- NOT `(partially-installed)`, which is for DROPPED
+   * supported components. Omitted when empty so a clean install renders
+   * byte-identically (NREG-01).
+   */
+  readonly degradedKinds?: readonly ("skill" | "command")[];
 }
 
 /**

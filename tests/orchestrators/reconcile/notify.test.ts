@@ -523,6 +523,84 @@ test("RECON-04: a cascade with an install row + a backfill row yields ONE messag
   );
 });
 
+test("WARN-01 / D-86-03: a plugin-installed outcome with degradedKinds=[skill] renders an (installed) row carrying {malformed skill} at warning severity (NOT partially-installed)", () => {
+  // A skill whose SOURCE frontmatter could not be parsed installs in degraded
+  // form. The orchestrated reconcile row keeps status `installed` (the skill
+  // still installed) but raises to `warning` and carries the failure-class
+  // token -- it is NOT a `partially-installed` row (that is for DROPPED
+  // supported components).
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    dependencies: [],
+    degradedKinds: ["skill"],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  assert.equal(msg.marketplaces.length, 1);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.name, "cr");
+  assert.equal(row.severity, "warning");
+  assert.equal(row.needsReload, true);
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "malformed skill",
+  ]);
+});
+
+test("WARN-01 / D-86-03: degradedKinds=[skill,command] rides ONE row with BOTH tokens (one per kind)", () => {
+  // One `malformed skill` + one `malformed command` token share the single
+  // installed row regardless of how many components of each kind degraded.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    dependencies: [],
+    degradedKinds: ["skill", "command"],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "warning");
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "malformed skill",
+    "malformed command",
+  ]);
+});
+
+test("WARN-01 / NREG-01: a plugin-installed outcome with no degradedKinds is unchanged -- info severity, no reasons brace", () => {
+  // A clean install must render byte-identically to today: no empty brace, no
+  // stray warning.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    dependencies: [],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "info");
+  assert.equal(
+    row.status === "installed" ? "reasons" in row && row.reasons !== undefined : "wrong-status",
+    false,
+  );
+});
+
 test("dangling-reference mismatch (plugin attributed) -> child (failed) {dangling reference} plugin row (WR-03 / PURL-06)", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),

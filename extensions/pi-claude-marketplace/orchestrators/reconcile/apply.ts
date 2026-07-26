@@ -599,6 +599,15 @@ async function applyPluginInstalls(
             result.postCommitWarnings.length > 0 && {
               postCommitWarnings: result.postCommitWarnings,
             }),
+          // WARN-01 / D-86-03: propagate the degraded-component kinds so the
+          // reconcile composer can raise the `(installed)` row to `warning`
+          // and push the `malformed skill` / `malformed command` token.
+          // Omitted when empty (NREG-01), mirroring the postCommitWarnings
+          // conditional spread above.
+          ...(result.degradedKinds !== undefined &&
+            result.degradedKinds.length > 0 && {
+              degradedKinds: result.degradedKinds,
+            }),
         });
       } else {
         outcomes.push({
@@ -1368,7 +1377,7 @@ async function rebuildScopeRoutingTableIsolated(
   }
 }
 
-function surfacePostCommitWarnings(
+export function surfacePostCommitWarnings(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
@@ -1379,7 +1388,11 @@ function surfacePostCommitWarnings(
     }
 
     for (const w of o.postCommitWarnings) {
-      lines.push(w);
+      // T-86-03 / NFR-9: collapse any absolute source path embedded in a
+      // frontmatter parse-error detail (or any other post-commit warning) to
+      // its basename before it reaches the operator-facing notifyDiagnostic
+      // surface -- surface message text only, never a leaked filesystem path.
+      lines.push(redactAbsolutePaths(w));
     }
   }
 
