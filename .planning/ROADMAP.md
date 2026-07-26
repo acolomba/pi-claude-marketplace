@@ -13,6 +13,7 @@
 
 - Integer phases (86): Planned milestone work (continues the global counter from
   Phase 85, the v1.14 mcp-string-refs phase).
+
 - Decimal phases (86.1, 86.2): Urgent insertions (marked with INSERTED).
 
 - [ ] **Phase 86: Skill and command frontmatter compliance** — The skills and commands bridges parse source frontmatter with Pi's own `parseFrontmatter` before rewriting, never stage bytes Pi rejects, degrade a broken skill (synthesized `disable-model-invocation` block, body verbatim) or command (neutralized, name-from-filename) at Claude-Code parity, fold a skill's `when_to_use` into the description Pi actually reads, and surface + classify each failure as a warning — while the ~99% of already-valid components stay byte-for-byte unchanged (GitHub issue #101).
@@ -46,8 +47,16 @@
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 86-01-PLAN.md — Foundation: `parseFrontmatter` re-export, `malformed skill`/`malformed command` catalog tokens, and the skills degrade-helper module (SKILL-02/WTU helpers)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 86-02-PLAN.md — Tracer: end-to-end unparseable-skill degrade (source+staged gates, synth block, degrade-record wire, standalone `(installed) {malformed skill}`) + NREG byte-equality
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 86-03-PLAN.md — Skill augment arms: first-paragraph description, `when_to_use` fold + 1,536 truncation, SKILL-03 name verification
 - [ ] 86-04-PLAN.md — Command neutralize: parse gates + strip-malformed-block so Pi loads name-from-filename + first-body-line (CMD-01)
 - [ ] 86-05-PLAN.md — Orchestrated reason-token wire: `PluginInstalledOutcome.degradedKinds` -> reconcile row token at warning severity + redacted detail (WARN-01)
