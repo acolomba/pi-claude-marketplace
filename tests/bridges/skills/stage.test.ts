@@ -663,3 +663,44 @@ test("SKILL-01 / PARSE-01 unparseable source frontmatter -> synthesized disable-
     assert.doesNotThrow(() => parseFrontmatter(staged));
   });
 });
+
+test("NREG-01 valid skill is staged byte-for-byte identical to a name-rewrite + var-substitution of the source (gates mutate nothing)", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const pluginRoot = path.join(FIXTURES, "test-plugin");
+    const skillsDir = path.join(pluginRoot, "skills");
+    const resolved = makeResolved("acme", pluginRoot, skillsDir);
+
+    const pluginDataDir = path.join(locations.dataRoot, "mp", "acme");
+    const prepared = await prepareStageSkills({
+      locations,
+      marketplaceName: "mp",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    // The all-valid path degrades nothing.
+    assert.equal(prepared.result.degraded.length, 0);
+
+    await commitPreparedSkills(prepared);
+
+    // The `helper` source has `name: helper` (rewritten to `acme-helper`) and a
+    // `${CLAUDE_PLUGIN_DATA}` body reference. Build the expected bytes with
+    // INDEPENDENT literal string replacements -- NOT the production rewrite /
+    // substitute helpers -- so the assertion proves the read-only gates
+    // introduced no reformatting, re-quoting, or field reordering.
+    const source = await readFile(path.join(skillsDir, "helper", "SKILL.md"), "utf8");
+    const expected = source
+      .replace("name: helper", "name: acme-helper")
+      .replaceAll("${CLAUDE_PLUGIN_ROOT}", pluginRoot)
+      .replaceAll("${CLAUDE_PLUGIN_DATA}", pluginDataDir);
+
+    const staged = await readFile(
+      path.join(locations.skillsTargetDir, "acme-helper", "SKILL.md"),
+      "utf8",
+    );
+    // Byte-for-byte: the only differences from source are the name rewrite and
+    // the two variable substitutions.
+    assert.equal(staged, expected);
+  });
+});
