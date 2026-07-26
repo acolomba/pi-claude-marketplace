@@ -30,18 +30,18 @@ function frontmatterBlockEnd(lines: readonly string[]): number {
 
 /**
  * Given the `name` key line at `keyIndex`, return the index of the LAST line its
- * value spans: the key line itself for an inline scalar, or -- when the inline
- * value is a block-scalar indicator (`>` / `|`, optionally with a chomp / indent
- * modifier) -- the last indented continuation line. Absorbing the continuation
- * lines is what prevents a folded source `name:` from leaving orphaned prose
- * (the SKILL-03 corruption class, e.g. `<gen> a b`).
+ * value spans. A scalar value continues onto later lines for EVERY multi-line
+ * form -- block (`>` / `|`, optionally with a chomp / indent modifier),
+ * multi-line plain, and multi-line single/double-quoted -- and in all of them
+ * the continuation lines are indented deeper than the column-0 key. Absorb every
+ * indented (non-blank) continuation line up to `blockEnd`, stopping at the first
+ * line that returns to column 0. An inline scalar has no continuation, so the
+ * key line itself is returned. Absorbing the full node span for all multi-line
+ * forms -- not just block scalars (WR-01) -- prevents a multi-line source `name:`
+ * from leaving orphaned prose that folds into the parsed name and trips the
+ * SKILL-03 verify (the corruption class, e.g. `<gen> a b`).
  */
 function nameValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
-  const inlineValue = (lines[keyIndex] ?? "").slice(NAME_KEY.length).trim();
-  if (!/^[>|]/.test(inlineValue)) {
-    return keyIndex;
-  }
-
   let lastReplaced = keyIndex;
   for (let i = keyIndex + 1; i < blockEnd; i++) {
     const line = lines[i] ?? "";
@@ -63,8 +63,9 @@ function nameValueEnd(lines: readonly string[], keyIndex: number, blockEnd: numb
 /**
  * Replace (or insert) the `name` field inside a frontmatter block that opens on
  * `lines[0]` and closes at the next `---`. Replaces the FULL `name` node span --
- * including a folded (`>`) / literal (`|`) block scalar spanning several lines --
- * with a single inline `name: <newName>`, leaving every sibling key untouched.
+ * including any multi-line scalar (block `>` / `|`, multi-line plain, or
+ * multi-line quoted) spanning several lines -- with a single inline
+ * `name: <newName>`, leaving every sibling key untouched.
  * When no `name:` key exists it is inserted as the first frontmatter line.
  */
 function rewriteNameNode(content: string, newName: string): string {

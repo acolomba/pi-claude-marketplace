@@ -77,6 +77,36 @@ test("SKILL-03 folded multi-line source name is rewritten to the generated name 
   assert.ok(out.includes("body text"));
 });
 
+test("WR-01: multi-line PLAIN source name is rewritten to the generated name (no orphaned continuation lines)", () => {
+  // A valid multi-line PLAIN `name:` scalar (indented continuation). The inline
+  // value does not start with `>`/`|`, so a block-scalar-only span detector
+  // would orphan `  continued`, folding it into the parsed name and tripping the
+  // SKILL-03 verify -- hard-failing an otherwise-valid skill install.
+  const input = "---\nname: my\n  continued\ndescription: kept\nversion: 7\n---\n\nbody text";
+  const out = rewriteFrontmatterName(input, "acme-plain");
+
+  const { frontmatter } = parseFrontmatter<{
+    name: string;
+    description: string;
+    version: number;
+  }>(out);
+  assert.equal(frontmatter.name, "acme-plain");
+  assert.equal(frontmatter.description, "kept");
+  assert.equal(frontmatter.version, 7);
+  assert.ok(!out.includes("  continued"), "plain continuation line must be removed");
+  assert.ok(out.includes("body text"));
+});
+
+test("WR-01: multi-line DOUBLE-QUOTED source name is rewritten to the generated name", () => {
+  const input = '---\nname: "my\n  quoted name"\ndescription: kept\n---\n\nbody text';
+  const out = rewriteFrontmatterName(input, "acme-quoted");
+
+  const { frontmatter } = parseFrontmatter<{ name: string; description: string }>(out);
+  assert.equal(frontmatter.name, "acme-quoted");
+  assert.equal(frontmatter.description, "kept");
+  assert.ok(!out.includes("  quoted name"), "quoted continuation line must be removed");
+});
+
 test("SKILL-03 absent source name is inserted as the generated name", () => {
   const input = "---\ndescription: only a description\nlicense: MIT\n---\n\nbody";
   const out = rewriteFrontmatterName(input, "acme-added");
