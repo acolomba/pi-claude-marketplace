@@ -1,0 +1,87 @@
+# Requirements: frontmatter-compliance (v1.15)
+
+**Defined:** 2026-07-25
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+
+**Milestone goal:** The skills and commands bridges reach full compliance with Claude Code's *observable* frontmatter-loading behavior — they never write bytes Pi rejects, they degrade a component the same way Claude Code does, they fold `when_to_use` into the description Pi reads, and they attribute failures to the right component (GitHub issue #101). "Full compliance" is observable-behavior parity: literal empty-metadata parity is impossible because Pi's skill loader returns `skill: null` on an empty description.
+
+## v1 Requirements
+
+### Parse gate (PARSE)
+
+- [ ] **PARSE-01**: The source frontmatter is parsed with Pi's own `parseFrontmatter` **before** name-rewrite and variable substitution, at both the skills and commands staging seams — establishing source validity and the true field values as the attribution ground truth and the degrade trigger.
+- [ ] **PARSE-02**: The staged (post-rewrite, post-substitution) bytes are re-parsed as the Pi-acceptability backstop. A source that parsed but whose staged output does not is surfaced as a self-inflicted defect (loud failure / test-guarded), never attributed to the plugin author.
+
+### Skill degradation (SKILL)
+
+- [ ] **SKILL-01**: A skill whose source frontmatter cannot be parsed installs with a synthesized frontmatter block (generated `name`, short fixed placeholder `description`, `disable-model-invocation: true`); the markdown body is preserved verbatim and the plugin install does not hard-fail. Result matches Claude Code observably: invocable by `/skill:<name>`, never auto-invoked.
+- [ ] **SKILL-02**: A skill with an absent or empty `description` (well-formed frontmatter) gets a first-paragraph-of-body fallback description and remains model-invocable — Claude Code's documented "if omitted, uses the first paragraph of markdown content" behavior.
+- [ ] **SKILL-03**: The written skill `name` always equals the generated name; a folded or multi-line source `name` scalar cannot silently corrupt it (the rewrite is verified against the parsed value, not a blind line regex).
+
+### `when_to_use` folding (WTU)
+
+- [ ] **WTU-01**: A skill's `when_to_use` text is folded into the Pi `description` (appended, as Claude Code combines them in its skill listing), so a converted skill retains its auto-invocation triggers even though Pi's skill loader reads only `description`.
+- [ ] **WTU-02**: The combined `description` + `when_to_use` text is truncated at 1,536 characters, matching Claude Code's skill-listing cap.
+
+### Command degradation (CMD)
+
+- [ ] **CMD-01**: A command whose source frontmatter cannot be parsed installs with the unparseable frontmatter neutralized, so Pi loads it with name-from-filename and description-from-first-body-line — the literal Claude Code malformed-frontmatter behavior (no synthesized placeholder and no disable flag, because Pi's command loader has no non-empty-description gate).
+
+### Diagnostics (WARN)
+
+- [ ] **WARN-01**: Each degraded or neutralized component (skill or command) produces an install-time warning row naming the source component and the parse error — the surfaced analog of Claude Code's `--debug`-only parse message. Satisfies issue #101's core ask that the failure stop being silent.
+
+### Classification (CLASS)
+
+- [ ] **CLASS-01**: A frontmatter-parse failure is classified failure-class (a new reason token paralleling `malformed mcp`, filed under `FAILURE_REASONS`, not the unsupported family), not soft-degrade — it is a malformation of a *supported* component, not an unsupported kind. The `REASONS` tuple amendment is byte-stable (OUT-08).
+
+### Non-regression (NREG)
+
+- [ ] **NREG-01**: A component that already parses, has a non-empty `description`, and has no `when_to_use` to fold is written byte-for-byte as it is today — no behavior change for the ~99% of components that already work.
+
+## Future Requirements
+
+Deferred to a later milestone. Tracked but not in this roadmap.
+
+### Reason taxonomy
+
+- **REASON-01**: Unify all parse-error reasons under a single `{malformed <feature>}` reason family (carried from v1.14 backlog). This milestone adds one more failure-class member paralleling `malformed mcp`; the broader unification stays deferred.
+
+## Out of Scope
+
+Explicitly excluded. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Non-`description` skill frontmatter fields (`allowed-tools`, `disallowed-tools`, `model`, `context: fork`) | Pi's skill loader reads none of them; they are silently dropped today and are not a frontmatter-*validity* concern. No Pi analog to comply against. |
+| Quote-repair heuristic (parse-leniently, re-quote offending plain scalars) | Rejected in the diagnosis: it rewrites third-party content the issue author flagged as undesirable and adds an unbounded heuristic to maintain. |
+| Whole-block frontmatter re-emit (agents-bridge style) | Rejected: skills' target format is real structured YAML; flattening would damage ~13% of real skills (nested maps, block scalars, flow collections). Only the specific fields we compute (`name`, `description`) are re-emitted safely. |
+| Exhaustive `yaml` ≡ `js-yaml` parser equivalence | Safe-divergence accepted: the failure policy makes either-direction divergence safe (a skill Pi rejects but Claude accepts degrades to `disable-model-invocation`; the reverse loads normally). Chasing rare parser-corner equivalence adds no user-visible value. |
+| Fixing the maintainer's own example skills | Already fixed upstream in `acolomba/claude-plugins` PR #17 (`>-` block scalars). The code gap remains the target, not those specific files. |
+
+## Traceability
+
+Which phases cover which requirements. Populated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PARSE-01 | — | Pending |
+| PARSE-02 | — | Pending |
+| SKILL-01 | — | Pending |
+| SKILL-02 | — | Pending |
+| SKILL-03 | — | Pending |
+| WTU-01 | — | Pending |
+| WTU-02 | — | Pending |
+| CMD-01 | — | Pending |
+| WARN-01 | — | Pending |
+| CLASS-01 | — | Pending |
+| NREG-01 | — | Pending |
+
+**Coverage:**
+- v1 requirements: 11 total
+- Mapped to phases: 0 (roadmap pending)
+- Unmapped: 11 ⚠️
+
+---
+*Requirements defined: 2026-07-25*
+*Last updated: 2026-07-25 after milestone v1.15 requirements definition*
