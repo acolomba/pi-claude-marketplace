@@ -15,13 +15,13 @@
 ### Skill degradation (SKILL)
 
 - [ ] **SKILL-01**: A skill whose source frontmatter cannot be parsed installs with a synthesized frontmatter block (generated `name`, short fixed placeholder `description`, `disable-model-invocation: true`); the markdown body is preserved verbatim and the plugin install does not hard-fail. Result matches Claude Code observably: invocable by `/skill:<name>`, never auto-invoked.
-- [ ] **SKILL-02**: A skill with an absent or empty `description` (well-formed frontmatter) gets a first-paragraph-of-body fallback description and remains model-invocable — Claude Code's documented "if omitted, uses the first paragraph of markdown content" behavior.
+- [x] **SKILL-02**: A skill with an absent or empty `description` (well-formed frontmatter) gets a first-paragraph-of-body fallback description and remains model-invocable — Claude Code's documented "if omitted, uses the first paragraph of markdown content" behavior.
 - [ ] **SKILL-03**: The written skill `name` always equals the generated name; a folded or multi-line source `name` scalar cannot silently corrupt it (the rewrite is verified against the parsed value, not a blind line regex).
 
 ### `when_to_use` folding (WTU)
 
-- [ ] **WTU-01**: A skill's `when_to_use` text is folded into the Pi `description` (appended, as Claude Code combines them in its skill listing), so a converted skill retains its auto-invocation triggers even though Pi's skill loader reads only `description`.
-- [ ] **WTU-02**: The combined `description` + `when_to_use` text is truncated at 1,536 characters, matching Claude Code's skill-listing cap.
+- [x] **WTU-01**: A skill's `when_to_use` text is folded into the Pi `description` (appended, as Claude Code combines them in its skill listing), so a converted skill retains its auto-invocation triggers even though Pi's skill loader reads only `description`.
+- [x] **WTU-02**: The combined `description` + `when_to_use` text is truncated at 1,536 characters, matching Claude Code's skill-listing cap.
 
 ### Command degradation (CMD)
 
@@ -33,7 +33,7 @@
 
 ### Classification (CLASS)
 
-- [ ] **CLASS-01**: A frontmatter-parse failure is classified failure-class (a new reason token paralleling `malformed mcp`, filed under `FAILURE_REASONS`, not the unsupported family), not soft-degrade — it is a malformation of a *supported* component, not an unsupported kind. The `REASONS` tuple amendment is byte-stable (OUT-08).
+- [x] **CLASS-01**: A frontmatter-parse failure is classified failure-class (a new reason token paralleling `malformed mcp`, filed under `FAILURE_REASONS`, not the unsupported family), not soft-degrade — it is a malformation of a *supported* component, not an unsupported kind. The `REASONS` tuple amendment is byte-stable (OUT-08).
 
 ### Non-regression (NREG)
 
@@ -68,16 +68,17 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PARSE-01 | Phase 86 | Pending |
 | PARSE-02 | Phase 86 | Pending |
 | SKILL-01 | Phase 86 | Pending |
-| SKILL-02 | Phase 86 | Pending |
+| SKILL-02 | Phase 86 | Complete |
 | SKILL-03 | Phase 86 | Pending |
-| WTU-01 | Phase 86 | Pending |
-| WTU-02 | Phase 86 | Pending |
+| WTU-01 | Phase 86 | Complete |
+| WTU-02 | Phase 86 | Complete |
 | CMD-01 | Phase 86 | Pending |
 | WARN-01 | Phase 86 | Pending |
-| CLASS-01 | Phase 86 | Pending |
+| CLASS-01 | Phase 86 | Complete |
 | NREG-01 | Phase 86 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 11 total
 - Mapped to phases: 11 ✓
 - Unmapped: 0

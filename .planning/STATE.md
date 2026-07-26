@@ -3,16 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.15
 milestone_name: frontmatter-compliance
 current_phase: 86
-status: planning
-stopped_at: Phase 86 context gathered
-last_updated: "2026-07-26T10:46:58.166Z"
-last_activity: 2026-07-25
-last_activity_desc: Milestone v1.15 roadmap created (1 phase, 11/11 requirements mapped)
+current_phase_name: Skill and command frontmatter compliance
+status: executing
+stopped_at: Completed 86-01-PLAN.md
+last_updated: "2026-07-26T12:31:11.786Z"
+last_activity: 2026-07-26
+last_activity_desc: Phase 86 execution started
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 5
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 86 — Skill and command frontmatter compliance (not started)
-Plan: —
-Status: Roadmap created; ready to plan Phase 86
-Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 requirements mapped)
+Phase: 86 (Skill and command frontmatter compliance) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-07-26 — Phase 86 execution started
 
 ## Roadmap Summary
 
@@ -79,9 +80,9 @@ Last activity: 2026-07-25 — Milestone v1.15 roadmap created (1 phase, 11/11 re
 
 ## Session
 
-**Last session:** 2026-07-26T10:46:58.135Z
-**Stopped at:** Phase 86 context gathered
-**Resume file:** .planning/phases/86-skill-and-command-frontmatter-compliance/86-CONTEXT.md
+**Last session:** 2026-07-26T12:31:11.760Z
+**Stopped at:** Completed 86-01-PLAN.md
+**Resume file:** None
 
 ## Performance Metrics
 
@@ -90,12 +91,17 @@ No plans executed yet for v1.15.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+| Phase 86 P01 | 35min | 3 tasks | 11 files |
 
 ## Decisions
 
 None recorded yet for v1.15 (design decisions are pre-captured in the Roadmap Summary
 above and in `docs/research/issue-101-skill-frontmatter-diagnosis.md`). Plan-phase and
 execution will record per-plan decisions here.
+
+- [Phase 86]: parseFrontmatter re-exported through platform/pi-api.ts as the sole sanctioned import site (PARSE-01)
+- [Phase 86]: REASONS catalog amended 35->37 with per-kind malformed skill / malformed command under FAILURE_REASONS (D-86-01 / CLASS-01)
+- [Phase 86]: setDescriptionScalar replaces the full description node span incl. block scalars, never a lone description: line (SKILL-03 corruption class)
 
 ## Deferred Items
 
