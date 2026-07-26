@@ -165,17 +165,20 @@ function frontmatterBlockEnd(lines: readonly string[]): number {
 
 /**
  * Given the `description` key line at `keyIndex`, return the index of the LAST
- * line its value spans: the key line itself for an inline scalar, or -- when the
- * inline value is a block-scalar indicator (`>` / `|`, optionally with a chomp /
- * indent modifier) -- the last indented continuation line. Trailing blank lines
- * are NOT absorbed so inter-key blank spacing is preserved byte-for-byte.
+ * line its value spans. A scalar value continues onto later lines for EVERY
+ * multi-line form -- block (`>` / `|`, optionally with a chomp / indent
+ * modifier), multi-line plain, and multi-line single/double-quoted -- and in all
+ * of them the continuation lines are indented deeper than the column-0 key.
+ * Absorb every indented (non-blank) continuation line up to `blockEnd`, stopping
+ * at the first line that returns to column 0 (the next top-level key or the
+ * closing fence). An inline scalar has no continuation, so the first following
+ * line is already at column 0 and the key line itself is returned. Detecting the
+ * FULL node span for all multi-line forms -- not just block scalars (CR-01) --
+ * prevents orphaned continuation lines that would make gate-2 reject the staged
+ * bytes. Trailing blank lines are NOT absorbed so inter-key blank spacing is
+ * preserved byte-for-byte.
  */
 function descriptionValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
-  const inlineValue = (lines[keyIndex] ?? "").slice(DESCRIPTION_KEY.length).trim();
-  if (!/^[>|]/.test(inlineValue)) {
-    return keyIndex;
-  }
-
   let lastReplaced = keyIndex;
   for (let i = keyIndex + 1; i < blockEnd; i++) {
     const line = lines[i] ?? "";
@@ -196,11 +199,12 @@ function descriptionValueEnd(lines: readonly string[], keyIndex: number, blockEn
 
 /**
  * SKILL-03 class: set the frontmatter `description` to `value` by replacing the
- * FULL `description` node span -- including a `>-` / `|` block scalar spanning
- * several lines -- with a single safe double-quoted scalar, leaving every
- * sibling key byte-identical. NEVER a lone `^description:.*$` line replace (that
- * corrupts a multi-line block scalar by orphaning its continuation lines -- the
- * SKILL-03 corruption class). `content` is the full source file (with `---`
+ * FULL `description` node span -- including any multi-line scalar (block `>-` /
+ * `|`, multi-line plain, or multi-line quoted) spanning several lines -- with a
+ * single safe double-quoted scalar, leaving every sibling key byte-identical.
+ * NEVER a lone `^description:.*$` line replace (that corrupts a multi-line
+ * scalar by orphaning its continuation lines -- the SKILL-03 / CR-01 corruption
+ * class). `content` is the full source file (with `---`
  * fences); the returned string is the same file with the description node
  * rewritten. When no top-level `description:` key is present the scalar is
  * INSERTED as the last frontmatter line (SKILL-02 fill for a description-less

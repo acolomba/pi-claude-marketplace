@@ -180,3 +180,56 @@ test("SKILL-03 (AG-8 class): setDescriptionScalar emits an author value as a saf
   assert.equal(frontmatter["malicious-key"], undefined, "no injected sibling key");
   assert.equal(frontmatter.name, "safe");
 });
+
+test("CR-01: setDescriptionScalar replaces a multi-line PLAIN scalar description spanning its full node (no orphaned continuation lines)", () => {
+  // A valid, gate-1-parseable source whose `description` is a multi-line PLAIN
+  // scalar (indented continuation). Augmentation fires (folded when_to_use), so
+  // the description value changes. A lone `description:` line replace would
+  // orphan `  plain scalar that wraps`, producing invalid YAML that gate-2
+  // rejects and that hard-fails an otherwise-valid install.
+  const source =
+    "---\nname: my-skill\ndescription: This is a fairly long\n  plain scalar that wraps\n" +
+    "when_to_use: Use for X\n---\n\nBody.\n";
+  const out = setDescriptionScalar(
+    source,
+    "This is a fairly long plain scalar that wraps\nUse for X",
+  );
+
+  // Gate-2: the staged bytes re-parse cleanly (no throw on orphaned lines).
+  assert.doesNotThrow(() => parseFrontmatter(out));
+
+  const { frontmatter } = parseFrontmatter<{
+    name: string;
+    description: string;
+    when_to_use: string;
+  }>(out);
+  // The folded description is emitted as a single safe scalar (newline collapsed).
+  assert.equal(frontmatter.description, "This is a fairly long plain scalar that wraps Use for X");
+  // Sibling keys survive intact.
+  assert.equal(frontmatter.name, "my-skill");
+  assert.equal(frontmatter.when_to_use, "Use for X");
+  // The plain-scalar continuation line is gone (no orphaned prose).
+  assert.ok(!out.includes("  plain scalar that wraps"), "continuation line must be removed");
+});
+
+test("CR-01: setDescriptionScalar replaces a multi-line DOUBLE-QUOTED scalar description spanning its full node", () => {
+  // A multi-line double-quoted `description` scalar. Same defect class as the
+  // plain-scalar case: the inline value starts with `"` (not `>`/`|`), so a
+  // block-scalar-only span detector would orphan the continuation line.
+  const source =
+    '---\nname: quoted-skill\ndescription: "This is a fairly long\n  quoted scalar that wraps"\n' +
+    "version: 1.2.3\n---\n\nBody.\n";
+  const out = setDescriptionScalar(source, "A single-line replacement.");
+
+  assert.doesNotThrow(() => parseFrontmatter(out));
+
+  const { frontmatter } = parseFrontmatter<{
+    name: string;
+    description: string;
+    version: string;
+  }>(out);
+  assert.equal(frontmatter.description, "A single-line replacement.");
+  assert.equal(frontmatter.name, "quoted-skill");
+  assert.equal(frontmatter.version, "1.2.3");
+  assert.ok(!out.includes("  quoted scalar that wraps"), "continuation line must be removed");
+});
