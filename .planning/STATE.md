@@ -4,17 +4,17 @@ milestone: v1.15
 milestone_name: frontmatter-compliance
 current_phase: 86
 current_phase_name: Skill and command frontmatter compliance
-status: executing
-stopped_at: Completed 86-04-PLAN.md
-last_updated: "2026-07-26T14:05:46.457Z"
+status: verifying
+stopped_at: Completed 86-05-PLAN.md
+last_updated: "2026-07-26T14:28:09.078Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 86 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 0
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -23,7 +23,7 @@ progress:
 
 Phase: 86 (Skill and command frontmatter compliance) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-26 — Phase 86 execution started
 
 ## Roadmap Summary
@@ -80,8 +80,8 @@ Last activity: 2026-07-26 — Phase 86 execution started
 
 ## Session
 
-**Last session:** 2026-07-26T14:05:46.432Z
-**Stopped at:** Completed 86-04-PLAN.md
+**Last session:** 2026-07-26T14:27:52.840Z
+**Stopped at:** Completed 86-05-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -95,6 +95,7 @@ No plans executed yet for v1.15.
 | Phase 86 P02 | 36min | 2 tasks | 10 files |
 | Phase 86 P03 | 45min | 2 tasks | 5 files |
 | Phase 86 P04 | 22min | 1 tasks | 3 files |
+| Phase 86 P05 | 30min | 1 tasks | 5 files |
 
 ## Decisions
 
@@ -110,6 +111,8 @@ execution will record per-plan decisions here.
 - [Phase ?]: 86-03: augment arm runs only on the gate-1 RETURN branch; NREG-01 keeps a present in-cap description with no when_to_use byte-identical
 - [Phase ?]: 86-03: description-less+bodyless skills fall back to a fixed non-empty placeholder so Pi does not drop them (skill:null on empty description)
 - [Phase ?]: 86-03: SKILL-03 name safety = full name-node-span replacement + re-parse assertion that written name equals generated name
+- [Phase ?]: WARN-01 orchestrated surface: reconcile (installed) row raised to warning with one malformed skill/command token per kind; degraded-but-installed keeps (installed), not (partially-installed) (D-86-03)
+- [Phase ?]: redactAbsolutePaths applied at the surfacePostCommitWarnings emission seam so all post-commit warnings are redacted before notifyDiagnostic (T-86-03/NFR-9)
 
 ## Deferred Items
 

@@ -44,7 +44,7 @@
   4. Each degraded skill or neutralized command emits an install-time warning row naming the source component and its parse error — the surfaced analog of Claude Code's `--debug`-only message — classified as a new failure-class reason token paralleling `malformed mcp` (filed under `FAILURE_REASONS`, not the unsupported family); the `REASONS` tuple amendment is byte-stable (OUT-08) (WARN-01, CLASS-01).
   5. A skill or command that already parses, has a non-empty `description`, and has no `when_to_use` to fold is written byte-for-byte as it is today: the source is parsed as attribution ground truth, the written skill `name` is verified to equal the generated name (a folded or multi-line source scalar cannot silently corrupt it), and the staged bytes are re-parsed as a self-inflicted-defect backstop — all with no behavior change for the ~99% that already work (NREG-01, SKILL-03, PARSE-02).
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -59,7 +59,7 @@ Plans:
 
 - [x] 86-03-PLAN.md — Skill augment arms: first-paragraph description, `when_to_use` fold + 1,536 truncation, SKILL-03 name verification
 - [x] 86-04-PLAN.md — Command neutralize: parse gates + strip-malformed-block so Pi loads name-from-filename + first-body-line (CMD-01)
-- [ ] 86-05-PLAN.md — Orchestrated reason-token wire: `PluginInstalledOutcome.degradedKinds` -> reconcile row token at warning severity + redacted detail (WARN-01)
+- [x] 86-05-PLAN.md — Orchestrated reason-token wire: `PluginInstalledOutcome.degradedKinds` -> reconcile row token at warning severity + redacted detail (WARN-01)
 
 ## Progress
 
@@ -68,5 +68,5 @@ Single phase: 86
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 86. Skill and command frontmatter compliance | v1.15 | 4/5 | In Progress|  |
+| 86. Skill and command frontmatter compliance | v1.15 | 5/5 | In Progress|  |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |
