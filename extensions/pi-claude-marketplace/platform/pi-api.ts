@@ -14,6 +14,29 @@
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
+/**
+ * PARSE-01: Pi's own frontmatter parser, surfaced here as the ONLY sanctioned
+ * import site so the skills/commands staging gates accept/reject bytes with
+ * byte-identical semantics to Pi's skill and command loaders. Signature:
+ * `<T extends Record<string, unknown>>(content: string) => { frontmatter: T;
+ * body: string }`.
+ *
+ * Verified throw/return semantics (drive the gate branch logic):
+ *  - content NOT starting with the `---` delimiter -> `{ frontmatter: {}, body }`
+ *    (NO throw) -- the SKILL-02 empty-metadata / first-paragraph-fallback branch.
+ *  - an opening `---` with NO closing `\n---` -> `{ frontmatter: {}, body }`
+ *    (NO throw) -- also an empty-metadata result, never a degrade trigger.
+ *  - a CLOSED `---` block whose inner YAML is malformed -> THROWS (via
+ *    `yaml.parse`) -- the SKILL-01 synthesize / CMD-01 neutralize degrade trigger.
+ *  - the returned `body` is CRLF->LF normalized; on the frontmatter-present
+ *    path it is additionally `.trim()`ed (the no-delimiter path leaves the body
+ *    normalized-but-untrimmed).
+ *
+ * READ-ONLY use only: extract field values, never `eval`/execute (preserves the
+ * T-03-17 injection-safety property -- reading-to-validate is not evaluating).
+ */
+export { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+
 export type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,

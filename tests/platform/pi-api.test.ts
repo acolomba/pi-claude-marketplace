@@ -10,6 +10,7 @@ import test from "node:test";
 import {
   hasLoadedPiMcpAdapter,
   hasLoadedPiSubagents,
+  parseFrontmatter,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -172,4 +173,40 @@ test("platform pi-api: probes do not crash on tool.name === undefined; fall thro
   // Mcp adapter probe: undefined name, but sourceInfo.source contains the
   // substring -- the fallback fires and the probe returns true.
   assert.equal(hasLoadedPiMcpAdapter(makePi([{ sourceInfo: { source: "pi-mcp-adapter" } }])), true);
+});
+
+// -----------------------------------------------------------------------------
+// PARSE-01: the `parseFrontmatter` re-export pins the throw/return semantics the
+// skills/commands staging gates branch on. A CLOSED, malformed `---` block is
+// the degrade trigger (throws); a missing/unclosed delimiter is the empty-
+// metadata branch (returns without throwing).
+// -----------------------------------------------------------------------------
+
+test("PARSE-01: parseFrontmatter reads a valid closed block and normalizes the body", () => {
+  const { frontmatter, body } = parseFrontmatter<{ name: string; description: string }>(
+    "---\r\nname: helper\r\ndescription: does a thing\r\n---\r\nBody line one\r\n\r\n",
+  );
+  assert.equal(frontmatter.name, "helper");
+  assert.equal(frontmatter.description, "does a thing");
+  // CRLF -> LF normalized and trailing whitespace trimmed.
+  assert.equal(body, "Body line one");
+});
+
+test("PARSE-01: parseFrontmatter returns empty frontmatter (no throw) when the `---` delimiter is absent", () => {
+  const { frontmatter, body } = parseFrontmatter("# Just a heading\n\nSome prose.\n");
+  assert.deepEqual(frontmatter, {});
+  // No-delimiter path: body is CRLF->LF normalized but NOT trimmed (only the
+  // frontmatter-present path trims the post-block body).
+  assert.equal(body, "# Just a heading\n\nSome prose.\n");
+});
+
+test("PARSE-01: parseFrontmatter returns empty frontmatter (no throw) when the opening `---` is never closed", () => {
+  const { frontmatter } = parseFrontmatter("---\nname: helper\nno closing delimiter here\n");
+  assert.deepEqual(frontmatter, {});
+});
+
+test("PARSE-01: parseFrontmatter THROWS on a closed block whose inner YAML is malformed", () => {
+  // An unquoted `: ` mid-scalar is the js-yaml/`yaml` strict-parse rejection the
+  // degrade path (SKILL-01 / CMD-01) triggers on.
+  assert.throws(() => parseFrontmatter("---\ndescription: a: b: c value\n---\nbody\n"));
 });
