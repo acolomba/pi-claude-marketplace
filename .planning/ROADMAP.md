@@ -44,7 +44,7 @@
   4. Each degraded skill or neutralized command emits an install-time warning row naming the source component and its parse error — the surfaced analog of Claude Code's `--debug`-only message — classified as a new failure-class reason token paralleling `malformed mcp` (filed under `FAILURE_REASONS`, not the unsupported family); the `REASONS` tuple amendment is byte-stable (OUT-08) (WARN-01, CLASS-01).
   5. A skill or command that already parses, has a non-empty `description`, and has no `when_to_use` to fold is written byte-for-byte as it is today: the source is parsed as attribution ground truth, the written skill `name` is verified to equal the generated name (a folded or multi-line source scalar cannot silently corrupt it), and the staged bytes are re-parsed as a self-inflicted-defect backstop — all with no behavior change for the ~99% that already work (NREG-01, SKILL-03, PARSE-02).
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -53,7 +53,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 86-02-PLAN.md — Tracer: end-to-end unparseable-skill degrade (source+staged gates, synth block, degrade-record wire, standalone `(installed) {malformed skill}`) + NREG byte-equality
+- [x] 86-02-PLAN.md — Tracer: end-to-end unparseable-skill degrade (source+staged gates, synth block, degrade-record wire, standalone `(installed) {malformed skill}`) + NREG byte-equality
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -68,5 +68,5 @@ Single phase: 86
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 86. Skill and command frontmatter compliance | v1.15 | 1/5 | In Progress|  |
+| 86. Skill and command frontmatter compliance | v1.15 | 2/5 | In Progress|  |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |

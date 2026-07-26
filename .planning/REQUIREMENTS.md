@@ -9,12 +9,12 @@
 
 ### Parse gate (PARSE)
 
-- [ ] **PARSE-01**: The source frontmatter is parsed with Pi's own `parseFrontmatter` **before** name-rewrite and variable substitution, at both the skills and commands staging seams — establishing source validity and the true field values as the attribution ground truth and the degrade trigger.
-- [ ] **PARSE-02**: The staged (post-rewrite, post-substitution) bytes are re-parsed as the Pi-acceptability backstop. A source that parsed but whose staged output does not is surfaced as a self-inflicted defect (loud failure / test-guarded), never attributed to the plugin author.
+- [x] **PARSE-01**: The source frontmatter is parsed with Pi's own `parseFrontmatter` **before** name-rewrite and variable substitution, at both the skills and commands staging seams — establishing source validity and the true field values as the attribution ground truth and the degrade trigger.
+- [x] **PARSE-02**: The staged (post-rewrite, post-substitution) bytes are re-parsed as the Pi-acceptability backstop. A source that parsed but whose staged output does not is surfaced as a self-inflicted defect (loud failure / test-guarded), never attributed to the plugin author.
 
 ### Skill degradation (SKILL)
 
-- [ ] **SKILL-01**: A skill whose source frontmatter cannot be parsed installs with a synthesized frontmatter block (generated `name`, short fixed placeholder `description`, `disable-model-invocation: true`); the markdown body is preserved verbatim and the plugin install does not hard-fail. Result matches Claude Code observably: invocable by `/skill:<name>`, never auto-invoked.
+- [x] **SKILL-01**: A skill whose source frontmatter cannot be parsed installs with a synthesized frontmatter block (generated `name`, short fixed placeholder `description`, `disable-model-invocation: true`); the markdown body is preserved verbatim and the plugin install does not hard-fail. Result matches Claude Code observably: invocable by `/skill:<name>`, never auto-invoked.
 - [x] **SKILL-02**: A skill with an absent or empty `description` (well-formed frontmatter) gets a first-paragraph-of-body fallback description and remains model-invocable — Claude Code's documented "if omitted, uses the first paragraph of markdown content" behavior.
 - [ ] **SKILL-03**: The written skill `name` always equals the generated name; a folded or multi-line source `name` scalar cannot silently corrupt it (the rewrite is verified against the parsed value, not a blind line regex).
 
@@ -29,7 +29,7 @@
 
 ### Diagnostics (WARN)
 
-- [ ] **WARN-01**: Each degraded or neutralized component (skill or command) produces an install-time warning row naming the source component and the parse error — the surfaced analog of Claude Code's `--debug`-only parse message. Satisfies issue #101's core ask that the failure stop being silent.
+- [x] **WARN-01**: Each degraded or neutralized component (skill or command) produces an install-time warning row naming the source component and the parse error — the surfaced analog of Claude Code's `--debug`-only parse message. Satisfies issue #101's core ask that the failure stop being silent.
 
 ### Classification (CLASS)
 
@@ -37,7 +37,7 @@
 
 ### Non-regression (NREG)
 
-- [ ] **NREG-01**: A component that already parses, has a non-empty `description`, and has no `when_to_use` to fold is written byte-for-byte as it is today — no behavior change for the ~99% of components that already work.
+- [x] **NREG-01**: A component that already parses, has a non-empty `description`, and has no `when_to_use` to fold is written byte-for-byte as it is today — no behavior change for the ~99% of components that already work.
 
 ## Future Requirements
 
@@ -65,17 +65,17 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARSE-01 | Phase 86 | Pending |
-| PARSE-02 | Phase 86 | Pending |
-| SKILL-01 | Phase 86 | Pending |
+| PARSE-01 | Phase 86 | Complete |
+| PARSE-02 | Phase 86 | Complete |
+| SKILL-01 | Phase 86 | Complete |
 | SKILL-02 | Phase 86 | Complete |
 | SKILL-03 | Phase 86 | Pending |
 | WTU-01 | Phase 86 | Complete |
 | WTU-02 | Phase 86 | Complete |
 | CMD-01 | Phase 86 | Pending |
-| WARN-01 | Phase 86 | Pending |
+| WARN-01 | Phase 86 | Complete |
 | CLASS-01 | Phase 86 | Complete |
-| NREG-01 | Phase 86 | Pending |
+| NREG-01 | Phase 86 | Complete |
 
 **Coverage:**
 

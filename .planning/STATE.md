@@ -5,15 +5,15 @@ milestone_name: frontmatter-compliance
 current_phase: 86
 current_phase_name: Skill and command frontmatter compliance
 status: executing
-stopped_at: Completed 86-01-PLAN.md
-last_updated: "2026-07-26T12:31:11.786Z"
+stopped_at: Completed 86-02-PLAN.md
+last_updated: "2026-07-26T13:17:46.479Z"
 last_activity: 2026-07-26
 last_activity_desc: Phase 86 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 86 (Skill and command frontmatter compliance) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-26 — Phase 86 execution started
 
@@ -80,8 +80,8 @@ Last activity: 2026-07-26 — Phase 86 execution started
 
 ## Session
 
-**Last session:** 2026-07-26T12:31:11.760Z
-**Stopped at:** Completed 86-01-PLAN.md
+**Last session:** 2026-07-26T13:17:33.614Z
+**Stopped at:** Completed 86-02-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -92,6 +92,7 @@ No plans executed yet for v1.15.
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
 | Phase 86 P01 | 35min | 3 tasks | 11 files |
+| Phase 86 P02 | 36min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -102,6 +103,8 @@ execution will record per-plan decisions here.
 - [Phase 86]: parseFrontmatter re-exported through platform/pi-api.ts as the sole sanctioned import site (PARSE-01)
 - [Phase 86]: REASONS catalog amended 35->37 with per-kind malformed skill / malformed command under FAILURE_REASONS (D-86-01 / CLASS-01)
 - [Phase 86]: setDescriptionScalar replaces the full description node span incl. block scalars, never a lone description: line (SKILL-03 corruption class)
+- [Phase ?]: 86-02: two read-only parseFrontmatter gates wrap the skills staging seam; gate-1 throw synthesizes disable-model-invocation (body verbatim), gate-2 throw is our defect (loud)
+- [Phase ?]: 86-02: degrade record threads bridge -> installCtx.frontmatterDegradations -> standalone {malformed skill} warning row + degradedKinds outcome seam
 
 ## Deferred Items
 
