@@ -16,7 +16,7 @@
 
 - [x] **SKILL-01**: A skill whose source frontmatter cannot be parsed installs with a synthesized frontmatter block (generated `name`, short fixed placeholder `description`, `disable-model-invocation: true`); the markdown body is preserved verbatim and the plugin install does not hard-fail. Result matches Claude Code observably: invocable by `/skill:<name>`, never auto-invoked.
 - [x] **SKILL-02**: A skill with an absent or empty `description` (well-formed frontmatter) gets a first-paragraph-of-body fallback description and remains model-invocable — Claude Code's documented "if omitted, uses the first paragraph of markdown content" behavior.
-- [ ] **SKILL-03**: The written skill `name` always equals the generated name; a folded or multi-line source `name` scalar cannot silently corrupt it (the rewrite is verified against the parsed value, not a blind line regex).
+- [x] **SKILL-03**: The written skill `name` always equals the generated name; a folded or multi-line source `name` scalar cannot silently corrupt it (the rewrite is verified against the parsed value, not a blind line regex).
 
 ### `when_to_use` folding (WTU)
 
@@ -69,7 +69,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PARSE-02 | Phase 86 | Complete |
 | SKILL-01 | Phase 86 | Complete |
 | SKILL-02 | Phase 86 | Complete |
-| SKILL-03 | Phase 86 | Pending |
+| SKILL-03 | Phase 86 | Complete |
 | WTU-01 | Phase 86 | Complete |
 | WTU-02 | Phase 86 | Complete |
 | CMD-01 | Phase 86 | Pending |
