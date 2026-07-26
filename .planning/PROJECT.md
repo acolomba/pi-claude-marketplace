@@ -10,7 +10,21 @@ Fifteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: mcp-string-refs MCP Server String References (branch: features/mcp-string-refs, started 2026-07-22, target npm 0.11.0)
+## Current Milestone: v1.15 frontmatter-compliance — Skill and Command Frontmatter Compliance (branch: features/frontmatter-compliance, started 2026-07-25, target npm 0.12.0)
+
+**Goal:** The skills and commands bridges reach full compliance with Claude Code's observable frontmatter-loading behavior: they never write bytes Pi rejects, they degrade a component the same way Claude Code does (a skill stays invocable by name but is never auto-invoked; a command stays invocable by its filename), they fold `when_to_use` into the description Pi actually reads, and they tell the user which component failed and why (GitHub issue #101).
+
+**Target features:**
+
+- **Two-gate parse model** — source frontmatter is parsed with Pi's own `parseFrontmatter` *before* name-rewrite and variable substitution (attribution + degrade trigger), and the staged bytes are re-parsed afterwards as a Pi-acceptability backstop; a valid source whose staged output fails is a self-inflicted defect, surfaced loudly, never attributed to the author.
+- **Claude-parity skill degradation** — unparseable skill frontmatter → synthesized block (`disable-model-invocation: true` + short fixed placeholder description, body verbatim, install never hard-fails); absent/empty description → first-paragraph-of-body fallback (stays model-invocable); the written `name` always equals the generated name (folded-scalar corruption caught).
+- **`when_to_use` folding** — a skill's `when_to_use` is appended to the Pi `description` (Pi's skill loader reads only `name`/`description`/`disable-model-invocation`), truncated at Claude Code's 1,536-char listing cap, so converted skills keep their auto-invocation triggers.
+- **Literal command degradation** — unparseable command frontmatter is neutralized so Pi loads the command with name-from-filename + description-from-first-body-line, matching Claude Code's malformed-frontmatter behavior exactly (no placeholder, no disable flag; Pi's command loader has no non-empty-description gate).
+- **Surfaced diagnostics + classification** — each degraded/neutralized component emits an install-time warning row naming the source component and the parse error (the surfaced analog of Claude Code's `--debug`-only message); the failure is failure-class (a new reason token paralleling `malformed mcp`, filed under `FAILURE_REASONS`), not soft-degrade; the `REASONS` amendment stays byte-stable (OUT-08).
+
+**Key context:** Design diagnosed in `docs/research/issue-101-skill-frontmatter-diagnosis.md`. The doc's Prevalence section is now stale — the two example skills (`stocks-murphy-technical-analysis`, `llm-wiki-scaffold`) were fixed upstream in `acolomba/claude-plugins` PR #17 (`eac8606`, folding descriptions to `>-` block scalars); the code gap remains real for any third-party plugin that ships a plain-scalar `: ` description (issue #101 is reported against another plugin). Verified inline: `parseFrontmatter` is a Pi root export since the `>=0.74.0` peer floor with byte-identical throw-on-malformed semantics; the bridge does NOT corrupt a valid `>-` source (name-rewrite touches only the `name:` line, substitution only `${…}` literals). Pi's skill loader (`core/skills.js`) reads only `name`/`description`/`disable-model-invocation` and returns `skill: null` on empty description, while the command loader (`core/prompt-templates.js`) derives name-from-filename + first-body-line description with no empty gate — the asymmetry driving the skill-synthesize-vs-command-neutralize split. "Full compliance" = observable-behavior parity (literal empty-metadata parity is impossible in Pi); `yaml` ≡ `js-yaml` failure policy treated as safe-divergent.
+
+## Previous Milestone: mcp-string-refs MCP Server String References (branch: features/mcp-string-refs, started 2026-07-22, target npm 0.11.0)
 
 **Goal:** A Claude plugin that declares `mcpServers` as a string file-path reference (a path to a `.mcp.json`-shaped file inside the plugin's source dir) resolves and installs its MCP servers at parity with the inline-object form — resolved in the resolver layer so a broken reference isolates to a single `unavailable` plugin, never failing the whole marketplace read.
 
@@ -252,6 +266,18 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ### Active
 
+<!-- Milestone v1.15 frontmatter-compliance (branch features/frontmatter-compliance, started 2026-07-25). GitHub issue #101. Full REQ set in .planning/REQUIREMENTS.md. -->
+
+- [ ] Two-gate parse model: source parsed before rewrite/substitution (attribution + degrade trigger); staged bytes re-parsed as Pi-acceptability backstop (PARSE-01/02)
+- [ ] Unparseable skill → synthesized `disable-model-invocation` block + placeholder description, body verbatim, install never hard-fails (SKILL-01)
+- [ ] Absent/empty skill description → first-paragraph fallback, stays model-invocable (SKILL-02)
+- [ ] Written skill `name` always equals the generated name; folded-scalar corruption caught (SKILL-03)
+- [ ] Skill `when_to_use` folded into the Pi description, truncated at 1,536 chars (WTU-01/02)
+- [ ] Unparseable command frontmatter neutralized → name-from-filename + first-body-line description (CMD-01)
+- [ ] Each degraded component emits an install-time warning row naming the source + parse error (WARN-01)
+- [ ] Frontmatter-parse failure is failure-class (new reason paralleling `malformed mcp`), byte-stable REASONS (CLASS-01)
+- [ ] Components that already parse cleanly (non-empty description, no `when_to_use`) are written unchanged (NREG-01)
+
 <!-- Milestone agent-skill-preloads (workstream issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0). Fixed GitHub issue #86. -->
 
 - [x] Source agents using the documented YAML block-list form for `skills:`/`tools:` convert with preloads intact (AGSK-01) — shipped npm 0.10.0
@@ -387,7 +413,9 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-07-23 after completing Phase 85 (milestone v1.14 mcp-string-refs) — `mcpServers` string file-path references shipped in the resolver layer with per-plugin soft-degrade and a new `{malformed mcp}` failure-class reason (MCPR-01..04 validated; provisional MCPR-03 refined to wrapped-only per D-04, provisional MCPR-05 shipped as MCPR-04). Prior updates below.*
+*Last updated: 2026-07-25 after starting milestone v1.15 frontmatter-compliance (branch features/frontmatter-compliance, GitHub issue #101) — full Claude Code frontmatter-loading compliance for the skills and commands bridges: two-gate parse model (source parsed pre-substitution for attribution, staged bytes re-parsed for Pi-acceptability), Claude-parity skill degradation (`disable-model-invocation` synthesized block, first-paragraph fallback, name-integrity assert), `when_to_use` folding at the 1,536-char cap, literal command neutralize, surfaced warning rows, and a `malformed mcp`-parallel failure-class reason. 11 requirements across PARSE/SKILL/WTU/CMD/WARN/CLASS/NREG. Prior updates below.*
+
+*Prior update: 2026-07-23 after completing Phase 85 (milestone v1.14 mcp-string-refs) — `mcpServers` string file-path references shipped in the resolver layer with per-plugin soft-degrade and a new `{malformed mcp}` failure-class reason (MCPR-01..04 validated; provisional MCPR-03 refined to wrapped-only per D-04, provisional MCPR-05 shipped as MCPR-04). Prior updates below.*
 
 *Prior update: 2026-07-19 after starting milestone agent-skill-preloads (workstream: issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0) — GitHub issue #86 fix: block-list frontmatter parsing, plugin-qualified skill mapping, `Skill`-tool drop warning, body advisory note (AGSK-01..04).*
 

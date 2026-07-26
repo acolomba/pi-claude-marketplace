@@ -1,29 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.14
-milestone_name: mcp-string-refs
-status: Awaiting next milestone
-stopped_at: Completed 85-02-PLAN.md
-last_updated: "2026-07-23T20:47:48.549Z"
-last_activity: 2026-07-23
-last_activity_desc: Milestone v1.14 completed and archived
+milestone: v1.15
+milestone_name: frontmatter-compliance
+status: planning
+last_updated: "2026-07-26T03:01:59.228Z"
+last_activity: 2026-07-25
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-current_phase: 85
-current_phase_name: mcpservers-string-file-path-references
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: Milestone v1.14 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-23 — Milestone v1.14 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-25 — Milestone v1.15 started
 
 ## Roadmap Summary
 
@@ -39,8 +36,8 @@ Last activity: 2026-07-23 — Milestone v1.14 completed and archived
 
 ## Session
 
-**Last session:** 2026-07-23T03:33:50.290Z
-**Stopped at:** Completed 85-02-PLAN.md
+**Last session:** 2026-07-25T02:13:21.956Z
+**Stopped at:** context exhaustion at 75% (2026-07-25)
 **Resume file:** None
 
 ## Performance Metrics
