@@ -24,6 +24,7 @@
 // field the renderer reads.
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -104,7 +105,7 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
    * supported components. Omitted when empty so a clean install renders
    * byte-identically (NREG-01).
    */
-  readonly degradedKinds?: readonly ("skill" | "command")[];
+  readonly degradedKinds?: readonly DegradeKind[];
 }
 
 /**

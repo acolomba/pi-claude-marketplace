@@ -41,6 +41,7 @@
 
 import { resolveStrict } from "../../domain/resolver.ts";
 import { assertNever } from "../../shared/errors.ts";
+import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
@@ -473,33 +474,6 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
  */
 /**
- * WARN-01 / CLASS-01 / D-86-03: map the degraded-component kinds onto the
- * closed-set `(installed)`-row reason tokens -- one `malformed skill` /
- * `malformed command` per kind regardless of how many components of that kind
- * degraded (one-token-per-kind-per-plugin, mirroring the orphan-rewake
- * one-per-plugin row token). Empty in / empty out so a clean install carries
- * no reasons brace (NREG-01).
- */
-function degradedKindReasons(
-  degradedKinds: readonly ("skill" | "command")[] | undefined,
-): readonly ContentReason[] {
-  if (degradedKinds === undefined || degradedKinds.length === 0) {
-    return [];
-  }
-
-  const reasons: ContentReason[] = [];
-  if (degradedKinds.includes("skill")) {
-    reasons.push("malformed skill");
-  }
-
-  if (degradedKinds.includes("command")) {
-    reasons.push("malformed command");
-  }
-
-  return reasons;
-}
-
-/**
  * Build the `(installed)` row for a realized reconcile install.
  *
  * WARN-01 / CLASS-01 / D-86-03: a skill/command whose source frontmatter could
@@ -512,7 +486,7 @@ function degradedKindReasons(
  * never surfaces a hint.
  */
 function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
-  const degradedReasons = degradedKindReasons(outcome.degradedKinds);
+  const degradedReasons = malformedReasonsForKinds(outcome.degradedKinds);
   return {
     status: "installed",
     name: outcome.plugin,

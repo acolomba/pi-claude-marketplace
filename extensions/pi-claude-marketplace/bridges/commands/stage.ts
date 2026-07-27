@@ -44,6 +44,7 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { discoverPluginCommands } from "./discover.ts";
 
 import type {
+  CommandDegradeRecord,
   CommandsReplacement,
   DiscoveredCommand,
   PreparedCommandsStaging,
@@ -102,27 +103,55 @@ export function assertNoCommandCollisions(discovered: readonly DiscoveredCommand
 /**
  * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
  * ENTIRE malformed frontmatter block -- the opening `---` line through the
- * matching closing `---` line -- leaving the real body verbatim. A re-parse of
- * the result RETURNS empty, so Pi's command loader falls back to
- * name-from-filename + description-from-first-body-line (NOT delimiter-only
- * stripping, which would leave ex-frontmatter junk as the first body line).
- * Called ONLY on the gate-1 throw arm, where a closed `---`...`---` block is
- * present by construction.
+ * matching closing `---` line -- leaving the real body. A re-parse of the
+ * result RETURNS empty, so Pi's command loader falls back to name-from-filename
+ * + description-from-first-body-line (NOT delimiter-only stripping, which would
+ * leave ex-frontmatter junk as the first body line). Called ONLY on the gate-1
+ * throw arm, where a closed `---`...`---` block is present by construction.
  *
- * Delimiters are located by index on the source as-is -- via the `\n---` search
- * `parseFrontmatter` itself uses (line-ending agnostic) -- never by a fixed
- * byte offset, so the surviving body bytes are untouched (no CRLF re-encoding).
+ * Newlines are first normalized (CR/CRLF -> LF) with the SAME two-step replace
+ * `parseFrontmatter` applies before its own `\n---` close search, so this scan
+ * agrees with the parser for every line-ending style -- including lone-CR
+ * sources, which would otherwise hide the close from a raw `\n---` search and
+ * turn a graceful degrade into a gate-2 hard-fail. The body is emitted with LF
+ * line endings (what Pi's loader normalizes the staged file to on read anyway).
+ *
+ * Successive leading malformed blocks are stripped until the remainder PARSES
+ * (RETURNS) under Pi's loader: a source whose body itself opens with a second
+ * malformed `---`...`---` block would otherwise re-throw at the PARSE-02 backstop
+ * and turn a graceful degrade into a hard-fail. A leading block that parses
+ * cleanly, or a remainder with no opening `---`, is Pi-acceptable and kept
+ * verbatim (matching what Pi's own loader would do). Each pass removes at least
+ * the opening delimiter, so the loop terminates.
  */
 function neutralizeCommandFrontmatter(content: string): string {
-  const closeIdx = content.indexOf("\n---", 3);
-  if (closeIdx === -1) {
-    // Defensive: no closed block means parseFrontmatter would have RETURNED, so
-    // this arm is unreachable on a genuine throw. Leave the content unchanged.
-    return content;
-  }
+  let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  const afterClose = content.indexOf("\n", closeIdx + 1);
-  return afterClose === -1 ? "" : content.slice(afterClose + 1);
+  for (;;) {
+    if (!normalized.startsWith("---")) {
+      // No opening fence: parseFrontmatter RETURNS the body as-is, nothing to strip.
+      return normalized;
+    }
+
+    const closeIdx = normalized.indexOf("\n---", 3);
+    if (closeIdx === -1) {
+      // Opening `---` but no close: parseFrontmatter RETURNS, leave unchanged.
+      return normalized;
+    }
+
+    const afterClose = normalized.indexOf("\n", closeIdx + 1);
+    const stripped = afterClose === -1 ? "" : normalized.slice(afterClose + 1);
+
+    try {
+      // A clean parse (empty or valid frontmatter, or no opening fence) means the
+      // remainder is Pi-acceptable -- stop here.
+      parseFrontmatter(stripped);
+      return stripped;
+    } catch {
+      // The remainder still opens with a malformed block; strip it too.
+      normalized = stripped;
+    }
+  }
 }
 
 /**
@@ -163,7 +192,7 @@ export async function prepareStageCommands(
         warnings: Object.freeze([...discoverWarnings]),
         // CMD-01: the noop branch stages no commands, so no source is parsed and
         // nothing can degrade -- always empty here.
-        degraded: Object.freeze<{ generatedName: string; parseError: string }[]>([]),
+        degraded: Object.freeze<CommandDegradeRecord[]>([]),
       },
     };
   }
@@ -174,7 +203,7 @@ export async function prepareStageCommands(
 
   const renamePairs: { from: string; to: string }[] = [];
   const stagedNames: string[] = [];
-  const degraded: { generatedName: string; parseError: string }[] = [];
+  const degraded: CommandDegradeRecord[] = [];
 
   try {
     for (const command of discovered) {

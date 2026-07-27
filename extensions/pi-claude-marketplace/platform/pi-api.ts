@@ -28,7 +28,7 @@ export { getAgentDir } from "@earendil-works/pi-coding-agent";
  *    (NO throw) -- also an empty-metadata result, never a degrade trigger.
  *  - a CLOSED `---` block whose inner YAML is malformed -> THROWS (via
  *    `yaml.parse`) -- the SKILL-01 synthesize / CMD-01 neutralize degrade trigger.
- *  - the returned `body` is CRLF->LF normalized; on the frontmatter-present
+ *  - the returned `body` is CR/CRLF->LF normalized; on the frontmatter-present
  *    path it is additionally `.trim()`ed (the no-delimiter path leaves the body
  *    normalized-but-untrimmed).
  *

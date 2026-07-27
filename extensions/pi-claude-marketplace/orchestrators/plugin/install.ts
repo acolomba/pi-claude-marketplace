@@ -122,7 +122,11 @@ import {
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { companionSeverity } from "../../shared/notify-reasons.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  type DegradeKind,
+} from "../../shared/notify-reasons.ts";
 import { notify } from "../../shared/notify.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -231,7 +235,7 @@ export type InstallPluginOutcome =
        * `{malformed skill}` / `{malformed command}` token onto its installed
        * row. Absent when nothing degraded.
        */
-      readonly degradedKinds?: readonly ("skill" | "command")[];
+      readonly degradedKinds?: readonly DegradeKind[];
     }
   | {
       /**
@@ -386,7 +390,7 @@ interface InstallCtx {
   // the per-component parse-error detail (orchestrated postCommitWarnings), and
   // the `degradedKinds` outcome seam the reconcile composer consumes.
   frontmatterDegradations: {
-    kind: "skill" | "command";
+    kind: DegradeKind;
     generatedName: string;
     parseError: string;
   }[];
@@ -940,8 +944,7 @@ export async function runInstallLedger(
       c.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.
       c.stagedCommandNames = prep.result.recorded.map((r) => r.generatedName);
-      // CMD-01 / WARN-01: collect per-command degrade records (inert until the
-      // command neutralize arm populates `prep.result.degraded`).
+      // CMD-01 / WARN-01: collect per-command frontmatter degrade records.
       for (const d of prep.result.degraded) {
         c.frontmatterDegradations.push({ kind: "command", ...d });
       }
@@ -1759,13 +1762,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // (mirrors orphan rewake's one-row-per-plugin). The free-text parse-error
     // detail rode postCommitWarnings above (orchestrated only). Reasons share
     // the brace block with any companion soft-dep markers per MSG-GR-4.
-    if (installCtx.frontmatterDegradations.some((d) => d.kind === "skill")) {
-      reasons.push("malformed skill");
-    }
-
-    if (installCtx.frontmatterDegradations.some((d) => d.kind === "command")) {
-      reasons.push("malformed command");
-    }
+    reasons.push(
+      ...malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind)),
+    );
 
     // FSTAT-07 / D-66-04: when the live resolved state is `partially-available`, the
     // install was partially completed with one or more components dropped -- the

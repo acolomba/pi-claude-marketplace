@@ -135,6 +135,50 @@ export const FAILURE_REASONS = [
 export type FailureReason = (typeof FAILURE_REASONS)[number];
 
 /**
+ * WARN-01 / CLASS-01 / D-86-03: a component kind that installs in DEGRADED form
+ * when its SOURCE frontmatter cannot be parsed by Pi's own `parseFrontmatter`
+ * (skill -> synthesized `disable-model-invocation` block; command -> neutralized
+ * frontmatter). Both surfaces map a degraded kind to its `(installed)`-row reason
+ * token through `malformedReasonsForKinds`.
+ */
+export type DegradeKind = "skill" | "command";
+
+/**
+ * The closed map from a degraded component kind to its one failure-class token.
+ * A `Record<DegradeKind, FailureReason>` (via `satisfies`) so a new kind added to
+ * `DegradeKind` fails to compile here until it is given a token -- the single
+ * exhaustiveness guard replacing the two hand-maintained per-kind `if` ladders
+ * the install and reconcile surfaces used to keep in sync by convention.
+ */
+const MALFORMED_REASON_BY_KIND = {
+  skill: "malformed skill",
+  command: "malformed command",
+} as const satisfies Record<DegradeKind, FailureReason>;
+
+/** Canonical emit order for the per-kind tokens: skill before command. */
+const DEGRADE_KIND_ORDER = ["skill", "command"] as const satisfies readonly DegradeKind[];
+
+/**
+ * WARN-01 / CLASS-01 / D-86-03: map degraded component kinds onto ordered,
+ * de-duplicated `(installed)`-row reason tokens -- one `malformed skill` /
+ * `malformed command` per kind regardless of how many components of that kind
+ * degraded, and regardless of duplicate or unordered input. Empty / absent in
+ * -> empty out, so a clean install carries no reasons brace (NREG-01).
+ */
+export function malformedReasonsForKinds(
+  kinds: Iterable<DegradeKind> | undefined,
+): readonly FailureReason[] {
+  if (kinds === undefined) {
+    return [];
+  }
+
+  const present = new Set(kinds);
+  return DEGRADE_KIND_ORDER.filter((kind) => present.has(kind)).map(
+    (kind) => MALFORMED_REASON_BY_KIND[kind],
+  );
+}
+
+/**
  * D-09: the shared topic-grouped reasons -- the union of the three groups
  * above. Command-private reasons (`duplicate name` / `stale clone` for
  * `marketplace add`, `not found` / `not installed` for `uninstall`,

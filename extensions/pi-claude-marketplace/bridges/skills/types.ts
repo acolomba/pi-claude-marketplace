@@ -51,6 +51,15 @@ export interface StagedSkillRecord {
   readonly targetPath: string;
 }
 
+/**
+ * SKILL-01 / PARSE-01: one record per skill whose SOURCE frontmatter could not
+ * be parsed and was synthesized into a `disable-model-invocation` block.
+ */
+export interface SkillDegradeRecord {
+  readonly generatedName: string;
+  readonly parseError: string;
+}
+
 /** Result returned by `commitPreparedSkills` and embedded in the noop variant. */
 export interface StageSkillsCommitResult {
   readonly stagedNames: readonly string[];
@@ -58,12 +67,10 @@ export interface StageSkillsCommitResult {
   readonly recorded: readonly StagedSkillRecord[];
   readonly warnings: readonly string[];
   /**
-   * SKILL-01 / PARSE-01: one record per skill whose SOURCE frontmatter could
-   * not be parsed and was synthesized into a `disable-model-invocation` block.
    * The orchestrator maps these to the `{malformed skill}` reason token and the
    * per-component parse-error detail line. Empty on the all-valid path (NREG-01).
    */
-  readonly degraded: readonly { generatedName: string; parseError: string }[];
+  readonly degraded: readonly SkillDegradeRecord[];
 }
 
 /** `prepareStageSkills` returns a discriminated union; orchestrators MUST narrow on `kind`. */

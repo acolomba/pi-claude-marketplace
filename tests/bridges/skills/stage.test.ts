@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -213,6 +213,54 @@ test("SK-4 substituted SKILL.md contains the resolved pluginRoot path verbatim",
     );
     assert.ok(knowledge.includes(pluginRoot), "substituted body should contain pluginRoot path");
     assert.ok(knowledge.includes(pluginDataDir), "substituted body should contain pluginData path");
+  });
+});
+
+test("SK-4 / AG-8: a ${CLAUDE_PLUGIN_ROOT} in a body-synthesized description survives a backslash (Windows) plugin root (substitute-then-escape)", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const srcRoot = await mkdtemp(path.join(os.tmpdir(), "skills-winpath-src-"));
+    try {
+      // No `description` -> the augment arm fills it from the first body paragraph,
+      // which references ${CLAUDE_PLUGIN_ROOT}, and re-emits it as a double-quoted
+      // scalar. If substitution happened AFTER escaping, a Windows path's backslashes
+      // would splice in raw and form an invalid `\U...` escape that the PARSE-02
+      // gate-2 backstop rejects -- hard-failing the whole prepare.
+      const skillsDir = path.join(srcRoot, "skills");
+      await mkdir(path.join(skillsDir, "winpath"), { recursive: true });
+      await writeFile(
+        path.join(skillsDir, "winpath", "SKILL.md"),
+        "---\nname: winpath\n---\nUses ${CLAUDE_PLUGIN_ROOT} at runtime.\n",
+      );
+
+      // A Windows-style plugin root (only used for substitution; the real source
+      // tree lives at srcRoot). Backslashes are the escape hazard under test.
+      const winPluginRoot = "C:\\Users\\me\\acme-plugin";
+
+      const prepared = await prepareStageSkills({
+        locations,
+        marketplaceName: "mp",
+        pluginName: "acme",
+        pluginRoot: winPluginRoot,
+        pluginDataDir: "D:\\pi-data\\mp\\acme",
+        resolved: makeResolved("acme", srcRoot, skillsDir),
+      });
+
+      // Gate-2 did NOT throw: the value re-emitted with escaped backslashes.
+      assert.equal(prepared.kind, "staged");
+      assert.equal(prepared.result.degraded.length, 0);
+
+      await commitPreparedSkills(prepared);
+      const staged = await readFile(
+        path.join(locations.skillsTargetDir, "acme-winpath", "SKILL.md"),
+        "utf8",
+      );
+
+      assert.ok(!staged.includes("${CLAUDE_PLUGIN_ROOT}"), "the var must be substituted");
+      const { frontmatter } = parseFrontmatter(staged);
+      assert.equal(frontmatter.description, "Uses C:\\Users\\me\\acme-plugin at runtime.");
+    } finally {
+      await rm(srcRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -880,5 +928,55 @@ test("SKILL-03 / WTU-01 a `>-` block-scalar description is replaced as a full no
       !staged.includes("  spanning several source lines."),
       "block-scalar continuation lines removed",
     );
+  });
+});
+
+test("SKILL-01 lone-CR (\\r-only) unparseable source: the malformed frontmatter is not leaked into the synthesized body (line-ending parity with parseFrontmatter)", async () => {
+  await withTmpScope(async ({ locations }) => {
+    const srcRoot = await mkdtemp(path.join(os.tmpdir(), "skill-cr-src-"));
+    try {
+      // A classic-Mac (lone-CR) source whose closed `---` block holds malformed
+      // YAML. parseFrontmatter normalizes CR->LF and THROWS; the body extractor
+      // must normalize CR the same way so it locates the close and does NOT
+      // embed the malformed frontmatter block in the synthesized skill body.
+      const skillsDir = path.join(srcRoot, "skills");
+      await mkdir(path.join(skillsDir, "bad"), { recursive: true });
+      const loneCr =
+        "---\rname: [unterminated\rdescription: never reached\r---\r\r" +
+        "# Bad Skill\r\rThis body must survive verbatim.\r";
+      await writeFile(path.join(skillsDir, "bad", "SKILL.md"), loneCr);
+
+      const resolved = makeResolved("acme", srcRoot, skillsDir);
+      const prepared = await prepareStageSkills({
+        locations,
+        marketplaceName: "mp",
+        pluginName: "acme",
+        pluginRoot: srcRoot,
+        pluginDataDir: path.join(locations.dataRoot, "mp", "acme"),
+        resolved,
+      });
+      assert.equal(prepared.kind, "staged");
+      assert.equal(prepared.result.degraded.length, 1);
+
+      await commitPreparedSkills(prepared);
+      const staged = await readFile(
+        path.join(locations.skillsTargetDir, "acme-bad", "SKILL.md"),
+        "utf8",
+      );
+
+      // The malformed frontmatter must NOT survive inside the synthesized body.
+      assert.ok(!staged.includes("[unterminated"), "malformed frontmatter must not leak into body");
+      assert.ok(!staged.includes("never reached"), "malformed frontmatter must not leak into body");
+      // The real body survives and the synthesized block re-parses cleanly.
+      assert.ok(staged.includes("This body must survive verbatim."));
+      const { frontmatter } = parseFrontmatter<{
+        name: string;
+        "disable-model-invocation": boolean;
+      }>(staged);
+      assert.equal(frontmatter.name, "acme-bad");
+      assert.equal(frontmatter["disable-model-invocation"], true);
+    } finally {
+      await cleanupStaging(srcRoot, "test-cleanup");
+    }
   });
 });

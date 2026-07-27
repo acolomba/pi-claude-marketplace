@@ -45,6 +45,7 @@ import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import type {
   DiscoveredSkill,
   PreparedSkillsStaging,
+  SkillDegradeRecord,
   SkillsReplacement,
   StagedSkillRecord,
   StageSkillsInput,
@@ -92,28 +93,30 @@ export function assertNoSkillCollisions(discovered: readonly DiscoveredSkill[]):
 
 /**
  * SKILL-01: extract the markdown body from a skill source whose frontmatter
- * block failed to parse, reproducing `parseFrontmatter`'s body normalization
- * (CRLF->LF, then trimmed) so the synthesized block preserves the body
- * byte-for-byte identically to the parseable path (PARSE-01 encoding parity).
- * Called ONLY on the gate-1 throw arm, where a closed `---` block is present by
- * construction -- the body is everything after the closing delimiter. Falls
- * back to the whole normalized+trimmed content if no closing delimiter is found.
+ * block failed to parse, reproducing `parseFrontmatter`'s OWN split so the
+ * synthesized block preserves the body byte-for-byte identically to the
+ * parseable path (PARSE-01 encoding parity). Newlines are normalized (CR/CRLF ->
+ * LF, including lone CR) exactly as the parser does; the opening fence is the
+ * parser's anchored `---` prefix (`startsWith`, NOT a per-line `trim`); and the
+ * close is the parser's `\n---` prefix search. An exotic delimiter -- a `---x`
+ * line or an indented `---` -- is therefore classified identically to Pi rather
+ * than by a looser `line.trim() === "---"` match. Called ONLY on the gate-1
+ * throw arm, where a closed `---` block is present by construction -- the body
+ * is everything after the closing delimiter, trimmed. Falls back to the whole
+ * normalized+trimmed content if no opening/closing delimiter is found.
  */
 function extractBodyAfterFrontmatter(content: string): string {
-  const normalized = content.replace(/\r\n/g, "\n");
-  const lines = normalized.split("\n");
-  if (lines[0]?.trim() === "---") {
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i]?.trim() === "---") {
-        return lines
-          .slice(i + 1)
-          .join("\n")
-          .trim();
-      }
-    }
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!normalized.startsWith("---")) {
+    return normalized.trim();
   }
 
-  return normalized.trim();
+  const closeIndex = normalized.indexOf("\n---", 3);
+  if (closeIndex === -1) {
+    return normalized.trim();
+  }
+
+  return normalized.slice(closeIndex + 4).trim();
 }
 
 /**
@@ -146,6 +149,7 @@ function augmentSkillDescription(
   content: string,
   frontmatter: Record<string, unknown>,
   body: string,
+  vars: { pluginRoot: string; pluginData: string },
 ): string {
   const rawDescription = frontmatter.description;
   const sourceDescription = typeof rawDescription === "string" ? rawDescription : "";
@@ -154,10 +158,21 @@ function augmentSkillDescription(
 
   const base = sourceDescription === "" ? firstBodyParagraph(body) : sourceDescription;
   const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
-  const effective = truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded);
+  // SK-4 / AG-8: substitute the Claude path vars BEFORE the value is escaped into
+  // the double-quoted scalar. The later whole-file `substituteClaudeVars` (below)
+  // would otherwise splice a Windows path's backslashes into the ALREADY-escaped
+  // scalar, forming an invalid `\U...`-class escape that fails the PARSE-02
+  // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
+  // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
+  // measures the authored text), matching the prior whole-file ordering.
+  const effective = substituteClaudeVars(
+    truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded),
+    vars,
+  );
 
-  // NREG-01: a present, in-cap `description` with no `when_to_use` is unchanged
-  // -- do NOT re-emit it as a double-quoted scalar (byte-for-byte invariant).
+  // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
+  // var to expand is unchanged -- do NOT re-emit it as a double-quoted scalar
+  // (byte-for-byte invariant).
   if (effective === sourceDescription) {
     return content;
   }
@@ -217,7 +232,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
   const renamePairs: { from: string; to: string }[] = [];
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
-  const degraded: { generatedName: string; parseError: string }[] = [];
+  const degraded: SkillDegradeRecord[] = [];
 
   try {
     for (const skill of discovered) {
@@ -274,7 +289,10 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       // `description`, so it skips both. SK-4 substitution runs on both arms.
       if (parsed !== undefined) {
         content = rewriteFrontmatterName(content, skill.generatedName);
-        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body);
+        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, {
+          pluginRoot,
+          pluginData: pluginDataDir,
+        });
       }
 
       content = substituteClaudeVars(content, { pluginRoot, pluginData: pluginDataDir });

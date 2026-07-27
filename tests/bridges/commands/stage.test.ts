@@ -903,3 +903,121 @@ test("NREG-01 valid command is staged byte-for-byte identical except variable su
     await scope.cleanup();
   }
 });
+
+test("CMD-01 lone-CR (\\r-only) unparseable command source degrades instead of hard-failing (line-ending parity with parseFrontmatter)", async () => {
+  const scope = await tmpScope();
+  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-cr-src-"));
+
+  try {
+    // A classic-Mac (lone-CR) source whose closed `---` block holds malformed
+    // YAML. parseFrontmatter normalizes CR->LF, sees the closed block, and
+    // THROWS -- so neutralize must normalize CR too and find the SAME close,
+    // rather than missing it (raw `\n---` search) and leaving the malformed
+    // block intact for gate-2 to reject and hard-fail the whole install.
+    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
+    const loneCr =
+      "---\rtitle: Deploy: the whole thing\rdescription: never reached\r---\r\rRun it.\r";
+    await writeFile(path.join(srcRoot, "commands", "cr-command.md"), loneCr);
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: srcRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(srcRoot, "commands"),
+    });
+    // Degrade, not hard-fail: staging succeeds with exactly one degrade record.
+    assert.equal(prepared.kind, "staged");
+    assert.equal(prepared.result.degraded.length, 1);
+
+    await commitPreparedCommands(prepared);
+    const staged = await readFile(
+      path.join(scope.loc.promptsTargetDir, "acme:cr-command.md"),
+      "utf8",
+    );
+    // The malformed block is stripped and the neutralized bytes re-parse clean.
+    assert.ok(!staged.startsWith("---"), "frontmatter block must be stripped");
+    assert.ok(!staged.includes("never reached"), "ex-frontmatter junk must not survive");
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
+  } finally {
+    await rm(srcRoot, { recursive: true, force: true });
+    await scope.cleanup();
+  }
+});
+
+test("CMD-01 command whose body opens with a SECOND malformed block degrades (loop strips both) instead of hard-failing", async () => {
+  const scope = await tmpScope();
+  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-stacked-src-"));
+
+  try {
+    // Two stacked malformed `---`...`---` blocks. Stripping only the first would
+    // leave the body opening with the second malformed block, which the PARSE-02
+    // backstop would reject -> a hard-fail. The neutralize loop must strip both.
+    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
+    const stacked = "---\nalpha: one: two\n---\n---\nbeta: three: four\n---\nReal body here.\n";
+    await writeFile(path.join(srcRoot, "commands", "two-blocks.md"), stacked);
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: srcRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(srcRoot, "commands"),
+    });
+    // Degrade, not hard-fail: ONE degrade record for the command (per-command,
+    // regardless of how many nested blocks were stripped).
+    assert.equal(prepared.kind, "staged");
+    assert.equal(prepared.result.degraded.length, 1);
+
+    await commitPreparedCommands(prepared);
+    const staged = await readFile(
+      path.join(scope.loc.promptsTargetDir, "acme:two-blocks.md"),
+      "utf8",
+    );
+    assert.ok(!staged.startsWith("---"), "both malformed blocks must be stripped");
+    assert.ok(!staged.includes("alpha:"), "first ex-frontmatter block must not survive");
+    assert.ok(!staged.includes("beta:"), "second ex-frontmatter block must not survive");
+    assert.ok(staged.includes("Real body here."), "the real body must survive");
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+    assert.deepEqual(parseFrontmatter(staged).frontmatter, {});
+  } finally {
+    await rm(srcRoot, { recursive: true, force: true });
+    await scope.cleanup();
+  }
+});
+
+test("CMD-01 frontmatter-only malformed command with no trailing newline neutralizes to empty (afterClose === -1 branch)", async () => {
+  const scope = await tmpScope();
+  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmd-fmonly-src-"));
+
+  try {
+    // A closed malformed block with NO body and NO trailing newline: the close
+    // `---` is the last line, so the "\n after the close" lookup returns -1 and
+    // neutralize yields "" (rather than slicing out of range).
+    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
+    const frontmatterOnly = "---\nbad: a: b\n---";
+    await writeFile(path.join(srcRoot, "commands", "fm-only.md"), frontmatterOnly);
+
+    const prepared = await prepareStageCommands({
+      locations: scope.loc,
+      marketplaceName: "test-mp",
+      pluginName: "acme",
+      pluginRoot: srcRoot,
+      pluginDataDir: "/tmp/pi-data/test-mp/acme",
+      resolved: makeResolved(srcRoot, "commands"),
+    });
+    assert.equal(prepared.kind, "staged");
+    assert.equal(prepared.result.degraded.length, 1);
+
+    await commitPreparedCommands(prepared);
+    const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:fm-only.md"), "utf8");
+    assert.equal(staged, "");
+    assert.doesNotThrow(() => parseFrontmatter(staged));
+  } finally {
+    await rm(srcRoot, { recursive: true, force: true });
+    await scope.cleanup();
+  }
+});

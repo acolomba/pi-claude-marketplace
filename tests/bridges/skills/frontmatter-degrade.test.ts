@@ -76,6 +76,16 @@ test("SKILL-02: firstBodyParagraph returns empty string for a body with no prose
   assert.equal(firstBodyParagraph("```\nonly a fence\n```\n"), "");
 });
 
+test("SKILL-02: firstBodyParagraph skips a ~~~ (tilde) fenced block and returns the first prose after it", () => {
+  const body = "~~~\ncode in a tilde fence\n~~~\n\nReal prose here.\n";
+  assert.equal(firstBodyParagraph(body), "Real prose here.");
+});
+
+test("SKILL-02: firstBodyParagraph returns empty when an unterminated fence swallows the rest of the body", () => {
+  const body = "```\nnever closed\nstill inside the fence\n";
+  assert.equal(firstBodyParagraph(body), "");
+});
+
 // ---------------------------------------------------------------------------
 // WTU-01: foldWhenToUse
 // ---------------------------------------------------------------------------
@@ -89,6 +99,10 @@ test("WTU-01: foldWhenToUse with an empty or absent when_to_use returns the desc
 
 test("WTU-01 (A1): foldWhenToUse joins description and when_to_use with a single \\n separator", () => {
   assert.equal(foldWhenToUse("desc", "use when X"), "desc\nuse when X");
+});
+
+test("WTU-01: foldWhenToUse with an empty description and a non-empty when_to_use yields a leading-\\n join", () => {
+  assert.equal(foldWhenToUse("", "use when X"), "\nuse when X");
 });
 
 test("WTU-01: foldWhenToUse operates on JS string .length (UTF-16 code units) with no byte reinterpretation", () => {
@@ -132,6 +146,18 @@ test("WTU-02: truncate1536 measures 1536 in UTF-16 code units", () => {
 
 test("WTU-02: truncate1536 on empty combined text returns empty without crashing", () => {
   assert.equal(truncate1536(""), "");
+});
+
+test("WTU-02: truncate1536 cutting through a surrogate pair yields exactly 1536 code units", () => {
+  // 1535 BMP chars + one astral char (U+1F600 = 2 code units at indices 1535,1536).
+  // The 1536-code-unit hard cut keeps index 1535 (the HIGH surrogate) and drops its
+  // LOW half -- a lone surrogate, length exactly 1536, no throw.
+  const text = "a".repeat(1535) + "\u{1F600}";
+  assert.equal(text.length, 1537);
+  const cut = truncate1536(text);
+  assert.equal(cut.length, 1536);
+  const lastUnit = cut.charCodeAt(1535);
+  assert.ok(lastUnit >= 0xd800 && lastUnit <= 0xdbff, "trailing unit is a lone high surrogate");
 });
 
 // ---------------------------------------------------------------------------
@@ -179,6 +205,26 @@ test("SKILL-03 (AG-8 class): setDescriptionScalar emits an author value as a saf
   assert.equal(frontmatter.description, "evil: value malicious-key: injected");
   assert.equal(frontmatter["malicious-key"], undefined, "no injected sibling key");
   assert.equal(frontmatter.name, "safe");
+});
+
+test("SKILL-03 (AG-8 class): setDescriptionScalar escapes embedded quotes and backslashes so the value round-trips through parseFrontmatter", () => {
+  const source = "---\nname: safe\ndescription: placeholder\nversion: 1\n---\n\nBody.\n";
+  // The two characters emitSafeDoubleQuotedScalar exists to escape: a literal
+  // double-quote, a literal backslash (e.g. a Windows path), and the pre-formed
+  // `\"` sequence -- the last proves backslash is escaped BEFORE quote (so the
+  // author `"` is not double-processed). Each must decode back byte-identically.
+  for (const value of ['He said "hi" to me', "a path\\to\\thing", 'mix \\" of both']) {
+    const out = setDescriptionScalar(source, value);
+    const { frontmatter } = parseFrontmatter<{
+      name: string;
+      description: string;
+      version: number;
+    }>(out);
+    assert.equal(frontmatter.description, value);
+    // No injected sibling key and existing siblings intact.
+    assert.equal(frontmatter.name, "safe");
+    assert.equal(frontmatter.version, 1);
+  }
 });
 
 test("CR-01: setDescriptionScalar replaces a multi-line PLAIN scalar description spanning its full node (no orphaned continuation lines)", () => {
