@@ -16,7 +16,7 @@
 
 - Decimal phases (86.1, 86.2): Urgent insertions (marked with INSERTED).
 
-- [ ] **Phase 86: Skill and command frontmatter compliance** — The skills and commands bridges parse source frontmatter with Pi's own `parseFrontmatter` before rewriting, never stage bytes Pi rejects, degrade a broken skill (synthesized `disable-model-invocation` block, body verbatim) or command (neutralized, name-from-filename) at Claude-Code parity, fold a skill's `when_to_use` into the description Pi actually reads, and surface + classify each failure as a warning — while the ~99% of already-valid components stay byte-for-byte unchanged (GitHub issue #101).
+- [x] **Phase 86: Skill and command frontmatter compliance** — The skills and commands bridges parse source frontmatter with Pi's own `parseFrontmatter` before rewriting, never stage bytes Pi rejects, degrade a broken skill (synthesized `disable-model-invocation` block, body verbatim) or command (neutralized, name-from-filename) at Claude-Code parity, fold a skill's `when_to_use` into the description Pi actually reads, and surface + classify each failure as a warning — while the ~99% of already-valid components stay byte-for-byte unchanged (GitHub issue #101). (completed 2026-07-26)
 
 <details>
 <summary>✅ v1.14 mcp-string-refs (Phase 85) — SHIPPED 2026-07-23</summary>
@@ -68,5 +68,5 @@ Single phase: 86
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 86. Skill and command frontmatter compliance | v1.15 | 5/5 | In Progress|  |
+| 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete    | 2026-07-26 |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |
