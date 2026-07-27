@@ -120,3 +120,15 @@ test("SKILL-03 absent source name is inserted as the generated name", () => {
   assert.equal(frontmatter.description, "only a description");
   assert.equal(frontmatter.license, "MIT");
 });
+
+test("SK-3 rewriteFrontmatterName tolerates an exotic close delimiter (`---x`), rewriting the name across the full block", () => {
+  // The opening `---` is closed by a `\n---x` prefix (which Pi's parser accepts as
+  // the close) rather than a bare `---` line -- this exercises the block-end scan
+  // falling through to EOF instead of matching a `trim() === "---"` line.
+  const input = "---\nname: old\n---x\nbody text";
+  const out = rewriteFrontmatterName(input, "acme-gen");
+  const { frontmatter } = parseFrontmatter<{ name: string }>(out);
+  assert.equal(frontmatter.name, "acme-gen");
+  assert.ok(out.includes("body text"));
+  assert.ok(!out.includes("name: old"));
+});

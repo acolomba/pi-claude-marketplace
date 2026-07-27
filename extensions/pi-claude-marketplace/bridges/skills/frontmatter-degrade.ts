@@ -144,8 +144,8 @@ export function truncate1536(text: string): string {
  * author `"` is not double-processed.
  */
 function emitSafeDoubleQuotedScalar(value: string): string {
-  const oneLine = value.replace(/\r?\n/g, " ");
-  const escaped = oneLine.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const oneLine = value.replaceAll(/\r?\n/g, " ");
+  const escaped = oneLine.replaceAll(/\\/g, String.raw`\\`).replaceAll(/"/g, '\\"');
   return `"${escaped}"`;
 }
 

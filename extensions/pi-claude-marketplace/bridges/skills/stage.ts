@@ -106,7 +106,7 @@ export function assertNoSkillCollisions(discovered: readonly DiscoveredSkill[]):
  * normalized+trimmed content if no opening/closing delimiter is found.
  */
 function extractBodyAfterFrontmatter(content: string): string {
-  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const normalized = content.replaceAll(/\r\n/g, "\n").replaceAll(/\r/g, "\n");
   if (!normalized.startsWith("---")) {
     return normalized.trim();
   }

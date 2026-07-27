@@ -125,7 +125,7 @@ export function assertNoCommandCollisions(discovered: readonly DiscoveredCommand
  * the opening delimiter, so the loop terminates.
  */
 function neutralizeCommandFrontmatter(content: string): string {
-  let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  let normalized = content.replaceAll(/\r\n/g, "\n").replaceAll(/\r/g, "\n");
 
   for (;;) {
     if (!normalized.startsWith("---")) {

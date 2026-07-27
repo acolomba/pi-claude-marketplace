@@ -279,3 +279,24 @@ test("CR-01: setDescriptionScalar replaces a multi-line DOUBLE-QUOTED scalar des
   assert.equal(frontmatter.version, "1.2.3");
   assert.ok(!out.includes("  quoted scalar that wraps"), "continuation line must be removed");
 });
+
+test("setDescriptionScalar returns content unchanged when there is no opening `---` fence", () => {
+  const content = "no frontmatter here\n\nbody paragraph.\n";
+  assert.equal(setDescriptionScalar(content, "ignored"), content);
+});
+
+test("setDescriptionScalar replaces the description when the block has no closing `---` (block-end falls back to EOF)", () => {
+  const content = "---\ndescription: old value\nname: acme-skill";
+  const out = setDescriptionScalar(content, "new value");
+  assert.match(out, /^---\ndescription: "new value"\n/);
+  assert.ok(!out.includes("old value"), "old description must be replaced");
+  assert.ok(out.includes("name: acme-skill"), "sibling key survives");
+});
+
+test("setDescriptionScalar spans a description value interrupted by a blank line (blank continuation skipped)", () => {
+  const content = "---\ndescription: old\n\n  wrapped continuation\nname: acme-skill\n---\nbody.\n";
+  const out = setDescriptionScalar(content, "single line");
+  assert.match(out, /description: "single line"/);
+  assert.ok(!out.includes("wrapped continuation"), "the absorbed continuation line is removed");
+  assert.ok(out.includes("name: acme-skill"), "the first column-0 sibling key survives");
+});
