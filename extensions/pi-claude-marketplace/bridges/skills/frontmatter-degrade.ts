@@ -145,7 +145,7 @@ export function truncate1536(text: string): string {
  */
 function emitSafeDoubleQuotedScalar(value: string): string {
   const oneLine = value.replaceAll(/\r?\n/g, " ");
-  const escaped = oneLine.replaceAll(/\\/g, String.raw`\\`).replaceAll(/"/g, '\\"');
+  const escaped = oneLine.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
   return `"${escaped}"`;
 }
 
