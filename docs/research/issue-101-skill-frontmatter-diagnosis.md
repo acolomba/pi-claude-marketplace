@@ -14,16 +14,16 @@ ______________________________________________________________________
 
 `prepareStageSkills` treats `SKILL.md` as opaque text:
 
-```
+```text
 bridges/skills/stage.ts:161-164
   readFile → rewriteFrontmatterName() → substituteClaudeVars() → writeFile
 ```
 
 `rewriteFrontmatterName` (`bridges/skills/rewrite-frontmatter.ts:33-42`) is a regex replace on the `name:` line -- it never parses. Discovery (`bridges/skills/discover.ts:56-59`) only checks that `SKILL.md` exists as a regular file. So an install can fail for reasons the bridge invents (RN-6 collisions, path safety, fs errors) but never for *"the consumer cannot read what we just wrote."*
 
-The consumer is strict. Pi's `core/skills.js::loadSkillFromFile` → `utils/frontmatter.js::parseFrontmatter` → `yaml.parse()`, which throws on a plain (unquoted) scalar containing `: `:
+The consumer is strict. Pi's `core/skills.js::loadSkillFromFile` → `utils/frontmatter.js::parseFrontmatter` → `yaml.parse()`, which throws on a plain (unquoted) scalar containing an unquoted `:` followed by a space:
 
-```
+```text
 name: example
 description: Use this skill for checks. Triggers on: "test", "lint".
 → YAMLParseError: Nested mappings are not allowed in compact mappings at line 2, column 14
@@ -58,7 +58,7 @@ Scanned the 190 `SKILL.md` under `~/.claude`: **2 fail Pi's parser**, 1 has no u
 
 > `… Runs Murphy-style technical analysis: trend (Dow Theory), support/resistance, …`
 
-An unquoted `: ` mid-sentence. Commands corpus: 0/84 locally -- the code gap is identical, but command descriptions are short, whereas skills' trigger-prose is what hits it.
+An unquoted `:` followed by a space mid-sentence. Commands corpus: 0/84 locally -- the code gap is identical, but command descriptions are short, whereas skills' trigger-prose is what hits it.
 
 ______________________________________________________________________
 
@@ -76,7 +76,7 @@ Verified directly; do not re-derive (Claude Code ships as a compiled binary, not
 
 js-yaml rejects the same input Pi rejects:
 
-```
+```text
 description: Runs analysis: trend and volume.     → FAIL bad indentation of a mapping entry (2:27)
 description: Use for checks. Triggers on: "test". → FAIL bad indentation of a mapping entry (2:41)
 ```
