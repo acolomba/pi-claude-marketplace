@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.1] - 2026-07-27
+
+- Skill and command sources whose YAML frontmatter cannot be parsed now degrade gracefully instead of failing the install. An unparseable skill is synthesized into a known-good `disable-model-invocation` block (its body preserved verbatim, still invocable by name and never auto-invoked); an unparseable command has its malformed frontmatter block stripped so Pi falls back to name-from-filename and description-from-first-body-line. The degraded plugin still installs and its row carries a `{malformed skill}` / `{malformed command}` marker at warning severity rather than hard-failing the whole install. Line-ending edge cases (lone-CR sources) and sources whose body opens with a second malformed block degrade the same way.
+- Generated skill descriptions are augmented for the Pi skill listing: an absent or empty `description` is filled from the first genuine body paragraph, a `when_to_use` field is folded in, and the combined text is capped at 1,536 characters -- so a generated skill stays loadable and discoverable without diverging from Claude Code's listing budget. Path variables (`${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`) referenced in a description are substituted before the value is quoted, so a Windows-style path can no longer break the emitted frontmatter.
+
 ## [0.11.0] - 2026-07-24
 
 - Marketplace and plugin manifests can now declare `mcpServers` as a string reference to a wrapped `.mcp.json` file (relative to the plugin root), not only as an inline server map. The referenced file is read, unwrapped, and its servers install at byte-for-byte parity with the inline form. A reference that is missing, malformed, not wrapped, or escapes the plugin root (including via a symlink) degrades just that one plugin to `(unavailable)` with a `{malformed mcp}` reason -- it never fails the rest of the marketplace load, and an unreadable reference file surfaces its own permission/unreadable reason instead of being reported as malformed.
