@@ -1,5 +1,20 @@
 # Milestones: pi-claude-marketplace
 
+## v1.15 frontmatter-compliance (0.11.1, Shipped: 2026-07-27)
+
+**Phases completed:** 1 phases (86), 5 plans, 9 tasks
+
+**Driver:** GitHub issue #101 — a plugin skill/command whose YAML frontmatter Pi could not parse failed the whole install.
+
+**Key accomplishments:**
+
+- A skill or command whose YAML frontmatter cannot be parsed now degrades gracefully instead of failing the install: an unparseable skill is synthesized into a known-good `disable-model-invocation` block (body verbatim, still invocable by name and never auto-invoked) and an unparseable command has its malformed block stripped so Pi falls back to name-from-filename + description-from-first-body-line — the degraded plugin still installs, its row carrying a `{malformed skill}` / `{malformed command}` marker at warning severity (mirroring Claude Code's observable behavior). Lone-CR sources and a body that opens with a second malformed block degrade the same way.
+- Both bridges parse source frontmatter with Pi's own `parseFrontmatter` before rewrite (attribution ground truth + degrade trigger) and re-parse the staged bytes as a Pi-acceptability backstop; the ~99% of already-valid components are written byte-for-byte unchanged, and the written skill `name` is verified against the parsed value so a folded or multi-line source scalar can never silently produce a wrong-named skill.
+- Generated skill descriptions are augmented for Pi's skill listing: an absent or empty `description` is filled from the first genuine body paragraph, a `when_to_use` field is folded in, and the combined text is capped at 1,536 characters — with path variables (`${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`) substituted before the value is quoted, so a Windows-style path can no longer break the emitted frontmatter.
+- The new failure class is surfaced end to end: the closed `REASONS` catalog gains per-kind `malformed skill` / `malformed command` tokens (35→37, byte-stable), and the reconcile install cascade renders them at warning severity with the per-component parse detail redacted to its basename (WARN-01).
+
+---
+
 ## v1.14 mcp-string-refs (Shipped: 2026-07-23)
 
 **Phases completed:** 1 phases, 2 plans, 4 tasks

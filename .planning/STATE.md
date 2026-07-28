@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.15
 milestone_name: frontmatter-compliance
-current_phase: 86
-status: completed
+status: Awaiting next milestone
 stopped_at: Completed 86-05-PLAN.md
-last_updated: "2026-07-27T02:30:40.459Z"
-last_activity: 2026-07-26
-last_activity_desc: Phase 86 complete
+last_updated: "2026-07-28T12:20:36.205Z"
+last_activity: 2026-07-28
+last_activity_desc: Milestone v1.15 completed and archived
 progress:
   total_phases: 1
   completed_phases: 1
   total_plans: 5
   completed_plans: 5
   percent: 100
+current_phase: 86
 current_phase_name: Skill and command frontmatter compliance
 ---
 
@@ -21,10 +21,10 @@ current_phase_name: Skill and command frontmatter compliance
 
 ## Current Position
 
-Phase: 86
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-07-26 — Phase 86 complete
+Phase: Milestone v1.15 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-28 — Milestone v1.15 completed and archived
 
 ## Roadmap Summary
 
@@ -130,4 +130,4 @@ pre-existing (none from v1.14 mcp-string-refs).
 
 ## Operator Next Steps
 
-- Plan Phase 86 with `/gsd-plan-phase 86`
+- Start the next milestone with /gsd-new-milestone

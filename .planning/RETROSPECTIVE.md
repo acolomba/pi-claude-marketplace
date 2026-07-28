@@ -2,6 +2,40 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.15 -- frontmatter-compliance
+
+**Shipped:** 2026-07-27 (npm 0.11.1)
+**Phases:** 1 (Phase 86) | **Plans:** 5 | **Tasks:** 9 | **Requirements:** 11/11 (PARSE-01/02, SKILL-01/02/03, WTU-01/02, CMD-01, WARN-01, CLASS-01, NREG-01) | **Tests:** unit suite green (~3049) + degrade-helper / two-gate / neutralize / NREG byte-equality cases
+
+### What Was Built
+- Two read-only `parseFrontmatter` gates now wrap BOTH the skills and commands staging seams: gate 1 parses the source before name-rewrite / variable substitution (attribution ground truth + degrade trigger); gate 2 re-parses the staged bytes as a Pi-acceptability backstop. Parsing goes through Pi's OWN `parseFrontmatter`, re-exported at the `platform/pi-api.ts` boundary, so accept/reject is byte-identical to Pi's loader.
+- Skill degrade path: an unparseable source synthesizes a `disable-model-invocation: true` block (generated `name`, fixed placeholder description, body verbatim); an absent/empty description falls back to the first body paragraph; `when_to_use` is folded in and the combined text hard-cut at 1,536 chars — all through the block-scalar-safe `setDescriptionScalar`, with the written `name` verified against the parsed value.
+- Command neutralize path: an unparseable source has its entire malformed `---`…`---` block stripped so Pi loads name-from-filename + description-from-first-body-line (no placeholder, no disable flag — the command loader has no non-empty-description gate).
+- New failure-class tokens `malformed skill` / `malformed command` (closed REASONS 35→37, byte-stable) surfaced at warning severity on the reconcile install cascade, per-component detail redacted to basename (WARN-01).
+
+### What Worked
+- **The whole feature mapped onto v1.14's established seam.** `malformed mcp` had just introduced the failure-class-vs-unsupported-class distinction; v1.15 added two parallel tokens in the same `FAILURE_REASONS` family and reused the same `narrow*`/redaction surfaces rather than inventing new machinery.
+- **Parsing with the target's own parser made "never write bytes Pi rejects" provable.** Because both gates call Pi's `parseFrontmatter`, the two-gate model's correctness rests on Pi's semantics, not a hand-rolled reimplementation that could drift.
+- **The NREG byte-equality guard de-risked the ~99% path.** A test proving already-valid skills/commands are written byte-for-byte unchanged kept the robustness gate from silently reformatting good input.
+
+### What Was Inefficient
+- **The diagnosis doc had already gone stale.** Its Prevalence section's two example skills were fixed upstream (`acolomba/claude-plugins` PR #17, `>-` block scalars) before planning; the real gap was third-party plugins shipping plain-scalar descriptions, so the "why" had to be re-scoped at plan time.
+- **Nyquist validation left in draft.** Coverage is real (requirement→test map satisfied, full unit suite green) but `VALIDATION.md` stayed `status: draft` — `/gsd-validate-phase 86` was never run to promote it. A process TODO, not a coverage hole.
+
+### Patterns Established
+- **Observable-behavior parity, not literal parity.** Literal empty-metadata parity is impossible (Pi returns `skill: null` on an empty description), so the target is Claude Code's *observable* behavior via Pi's own machinery — synthesize for skills, neutralize for commands. The asymmetry is driven by the two loaders: the skill loader drops on empty description, the command loader does not.
+- **Full node-span replacement + re-parse assertion as the safe rewrite primitive.** `setDescriptionScalar` replaces the whole description node (block scalars included) and the `name` rewrite is verified against Pi's parse — a folded or multi-line source scalar can never silently corrupt the output, unlike a blind line regex.
+
+### Key Lessons
+1. **A diagnosis doc is a snapshot — re-verify its evidence at plan time.** The Prevalence examples were already fixed upstream; trusting them would have mis-scoped the fix.
+2. **Parse with the target's own parser.** Reusing Pi's `parseFrontmatter` through the platform boundary is what turns "never emit bytes Pi rejects" from a hope into an invariant.
+3. **Reach for the nearest established seam before designing new machinery.** The failure-class token family, the redaction surface, and the reconcile-row severity model all already existed from v1.14 and prior — the milestone was mostly wiring, not invention.
+
+### Cost Observations
+- 1 phase, 5 plans; opus for planner / researcher / executors / reviewer, sonnet for plan-checker / verifier (config `model_profile: quality`).
+- Two Info-level code-review findings (lone-CR / U+2028-9 newline normalization; UTF-16 surrogate split at the 1,536 boundary) were accepted as fail-safe tech debt rather than expanding the Critical+Warning fix scope.
+- Two pre-existing integration tests (`provenance-invisibility`, `skill-path-resolution`, from PR #92) remained red throughout — not a v1.15 regression; Phase 86 touched no integration tests or pi-subagents resolution code.
+
 ## Milestone: v1.14 -- mcp-string-refs
 
 **Shipped:** 2026-07-23
