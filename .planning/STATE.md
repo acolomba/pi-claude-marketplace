@@ -5,8 +5,8 @@ milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: "`agent_settled` dispatcher, Stop contract & StopFailure"
 status: planning
-stopped_at: Phase 87 complete, ready to plan Phase 88
-last_updated: "2026-07-30T09:37:40.394Z"
+stopped_at: Phase 88 context gathered
+last_updated: "2026-07-30T10:41:59.143Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 87 complete, transitioned to Phase 88
 progress:
@@ -88,11 +88,11 @@ Last activity: 2026-07-30 — Phase 87 complete, transitioned to Phase 88
 
 ## Session
 
-**Last session:** 2026-07-30T09:37:40.356Z
-**Stopped at:** Phase 87 complete, ready to plan Phase 88
+**Last session:** 2026-07-30T10:41:59.116Z
+**Stopped at:** Phase 88 context gathered
 **Resume file:** 
 
-## Performance Metrics
+.planning/phases/88-agent-settled-dispatcher-stop-contract-stopfailure/88-CONTEXT.md
 
 No plans executed yet for v1.16.
 
