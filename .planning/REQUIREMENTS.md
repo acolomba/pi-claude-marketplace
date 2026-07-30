@@ -73,14 +73,35 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
+| STOP-01 | Phase 88 | Pending |
+| STOP-02 | Phase 88 | Pending |
+| STOP-03 | Phase 88 | Pending |
+| STOP-04 | Phase 88 | Pending |
+| STOP-05 | Phase 88 | Pending |
+| STOP-06 | Phase 88 | Pending |
+| STOP-07 | Phase 88 | Pending |
+| SFAIL-01 | Phase 88 | Pending |
+| SFAIL-02 | Phase 88 | Pending |
+| SFAIL-03 | Phase 88 | Pending |
+| ADMIT-01 | Phase 87 | Pending |
+| ADMIT-02 | Phase 87 | Pending |
+| FLOOR-01 | Phase 87 | Pending |
+| DOC-04 | Phase 89 | Pending |
+| DOC-05 | Phase 89 | Pending |
 
 **Coverage:**
 
 - v1.16 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15 ✓
+- Unmapped: 0
+
+**By phase:**
+
+- Phase 87 (Bucket-A admission & platform floor): ADMIT-01, ADMIT-02, FLOOR-01 (3)
+- Phase 88 (`agent_settled` dispatcher, Stop contract & StopFailure): STOP-01..07, SFAIL-01..03 (10)
+- Phase 89 (Documentation reconcile): DOC-04, DOC-05 (2)
 
 ---
 
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-07-29 after initial definition*
+*Last updated: 2026-07-29 after roadmap creation (3 phases, 87-89)*
