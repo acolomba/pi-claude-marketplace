@@ -5,15 +5,15 @@ milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
 status: executing
-stopped_at: Completed 88-02-PLAN.md
-last_updated: "2026-07-30T12:48:47.820Z"
+stopped_at: Completed 88-03-PLAN.md
+last_updated: "2026-07-30T13:27:08.874Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 33
 ---
 
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-30 — Phase 88 execution started
 
@@ -88,8 +88,8 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-30T12:48:35.019Z
-**Stopped at:** Completed 88-02-PLAN.md
+**Last session:** 2026-07-30T13:26:56.326Z
+**Stopped at:** Completed 88-03-PLAN.md
 **Resume file:**
 
 None
@@ -128,6 +128,8 @@ record per-plan decisions here.
 - [Phase 88]: 88-01: pi-ai/pi-agent-core nested & not top-level resolvable - StopReason/AssistantMessage/AgentMessage derived structurally from AgentEndEvent.messages, pi-api.ts stays sole import site
 - [Phase 88]: 88-01: DISPATCHABLE_EVENTS folded to 10 (Stop/StopFailure gain translators); subset type + isDispatchableEvent belt retained per D-87-04
 - [Phase ?]: STOP-06 aggregate precedence realized via collectBucketOutcomes (no-short-circuit bucket walk); asyncRewake-on-Stop degraded to noop+log, not sync-bypassed
+- [Phase ?]: 88-03: STOP-07 loop protections -- stop_hook_active (cleared only on genuine input), 8-consecutive-block cap with one-shot warning, D-88-06 reset-on-any-non-block; cap notify via shared/notify.ts seam (cap literal 8 kept out of bridge layer)
+- [Phase ?]: 88-03: D-88-07 reconciled honestly -- cap-trip is a bridge diagnostic, not a NotificationMessage; byte-covered by dedicated hooks-cap-notify.test.ts + Out-of-band catalog entry (catalog-uat skips it), not silently exempted
 
 ## Deferred Items
 
@@ -153,3 +155,4 @@ pre-existing (none from v1.16 stop-hooks).
 |------|----------|-------|-------|
 | Phase 88 P01 | 40min | 2 tasks | 12 files |
 | Phase 88 P02 | 25min | 2 tasks | 4 files |
+| Phase 88 P03 | 40min | 2 tasks | 8 files |

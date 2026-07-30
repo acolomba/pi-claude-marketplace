@@ -23,7 +23,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **STOP-04**: A Stop hook exiting with code 2 blocks the stop with stderr as the reason (the non-JSON idiom), wired through the wire-protocol's per-event exit-2 arm.
 - [x] **STOP-05**: `hookSpecificOutput.additionalContext` without a block keeps the conversation going — same re-entry mechanism as STOP-03, feedback labeling rather than block labeling.
 - [x] **STOP-06**: A top-level `continue: false` takes precedence over any block decision — the bridge does not re-enter.
-- [ ] **STOP-07**: Loop protections match upstream — the bridge holds a per-session `stop_hook_active` flag set when it blocks-and-re-enters and cleared on the next genuine `input` event (bridge-injected custom messages do not pass through `input`), and 8 consecutive blocks trip the override cap with a one-shot notify. Supersedes PAYL-V2-04's draft cap of 10.
+- [x] **STOP-07**: Loop protections match upstream — the bridge holds a per-session `stop_hook_active` flag set when it blocks-and-re-enters and cleared on the next genuine `input` event (bridge-injected custom messages do not pass through `input`), and 8 consecutive blocks trip the override cap with a one-shot notify. Supersedes PAYL-V2-04's draft cap of 10.
 
 ### StopFailure
 
@@ -79,7 +79,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STOP-04 | Phase 88 | Complete |
 | STOP-05 | Phase 88 | Complete |
 | STOP-06 | Phase 88 | Complete |
-| STOP-07 | Phase 88 | Pending |
+| STOP-07 | Phase 88 | Complete |
 | SFAIL-01 | Phase 88 | Pending |
 | SFAIL-02 | Phase 88 | Pending |
 | SFAIL-03 | Phase 88 | Pending |
