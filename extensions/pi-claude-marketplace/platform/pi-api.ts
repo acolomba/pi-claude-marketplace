@@ -38,6 +38,8 @@ export { getAgentDir } from "@earendil-works/pi-coding-agent";
 export { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 
 export type {
+  AgentEndEvent,
+  AgentSettledEvent,
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
@@ -101,7 +103,23 @@ export interface ResourcesDiscoverResult {
   themePaths?: string[];
 }
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+/**
+ * The Pi agent-message union and its assistant-message narrowing, surfaced
+ * here so the hooks settle dispatcher can read `stopReason` off the last
+ * assistant message cached from `AgentEndEvent.messages`.
+ *
+ * The concrete `AgentMessage` / `AssistantMessage` / `StopReason` declarations
+ * live in the nested `@earendil-works/pi-agent-core` / `@earendil-works/pi-ai`
+ * packages, which this install does not hoist to a top-level resolvable
+ * specifier. They are derived structurally from the re-exported
+ * `AgentEndEvent.messages` element type so `pi-api.ts` remains the sole Pi
+ * import site (no direct nested `@earendil-works/*` import in bridge code).
+ */
+export type AgentMessage = AgentEndEvent["messages"][number];
+export type AssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
+export type StopReason = AssistantMessage["stopReason"];
 
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;
