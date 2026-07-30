@@ -78,6 +78,37 @@ export const TOOL_EVENTS = [
 export type ToolEvent = (typeof TOOL_EVENTS)[number];
 
 /**
+ * The bucket-A events whose Pi-side payload translators are wired -- a
+ * strict subset of `BUCKET_A_EVENTS` that the dispatch/rewake tables and
+ * the translator-test tables key on. Decoupling this from `BucketAEvent`
+ * lets the admitted-event union grow independently of which events are
+ * actually dispatchable, so admitting an event does not demand a
+ * translator in the same change (D-87-04).
+ *
+ * The `as const satisfies readonly BucketAEvent[]` pin makes "every
+ * dispatchable event is an admitted bucket-A event" a compile-time
+ * invariant -- same shape as the `TOOL_EVENTS` subset above. Order
+ * matches `BUCKET_A_EVENTS` as a deterministic registration order for
+ * downstream consumers.
+ */
+export const DISPATCHABLE_EVENTS = [
+  "SessionStart",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PreCompact",
+  "PostCompact",
+  "SessionEnd",
+] as const satisfies readonly BucketAEvent[];
+
+/**
+ * Literal union of dispatchable event names. Subset of `BucketAEvent`;
+ * the key domain for the dispatch/rewake/translator tables (D-87-04).
+ */
+export type DispatchableEvent = (typeof DISPATCHABLE_EVENTS)[number];
+
+/**
  * Literal union of non-tool bucket-A event names. The complement of
  * `ToolEvent` within `BucketAEvent`. Keying the matcher-disposition tables on
  * this (rather than `Partial<Record<BucketAEvent, ...>>`) makes them TOTAL: a

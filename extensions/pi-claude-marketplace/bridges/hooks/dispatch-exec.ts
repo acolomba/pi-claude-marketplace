@@ -74,7 +74,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { RoutingEntry } from "./event-router.ts";
 import type { HookExecResult } from "./exec-result.ts";
-import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -99,13 +99,14 @@ const STDERR_MAX_BYTES = 64 * 1024;
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Key the 8 per-event translators by `BucketAEvent`. The dispatcher
+ * Key the 8 per-event translators by `DispatchableEvent` (the subset of
+ * `BucketAEvent` whose translators are wired; D-87-04). The dispatcher
  * casts the runtime `event: unknown` to the per-translator argument
  * shape at the call site; each translator's typed signature is
  * preserved at compile time, narrowed by the `entry.claudeEvent`
  * discriminator.
  */
-const TRANSLATORS: Record<BucketAEvent, (event: never, ctx: TranslationContext) => unknown> = {
+const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationContext) => unknown> = {
   SessionStart: translateSessionStart,
   UserPromptSubmit: translateUserPromptSubmit,
   PreToolUse: translatePreToolUse,
@@ -218,7 +219,7 @@ export async function dispatchHookExec(
  * probe miss so the never-throws contract is preserved -- the goal is
  * diagnostic, not blocking.
  */
-const REQUIRED_EVENT_FIELDS: Record<BucketAEvent, readonly string[]> = {
+const REQUIRED_EVENT_FIELDS: Record<DispatchableEvent, readonly string[]> = {
   SessionStart: [],
   UserPromptSubmit: ["text"],
   PreToolUse: ["toolName", "input"],
@@ -230,7 +231,7 @@ const REQUIRED_EVENT_FIELDS: Record<BucketAEvent, readonly string[]> = {
 };
 
 function buildPayload(
-  claudeEvent: BucketAEvent,
+  claudeEvent: DispatchableEvent,
   event: unknown,
   transCtx: TranslationContext,
 ): unknown {

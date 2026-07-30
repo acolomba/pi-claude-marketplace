@@ -62,7 +62,7 @@ import { buildTranslationContext, type TranslationContext } from "../translation
 import { readPidTable, writePidTable, unlinkPidTable, type PidTableEntry } from "./pid-table.ts";
 import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
-import type { BucketAEvent } from "../../../domain/components/hook-events.ts";
+import type { BucketAEvent, DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
 
@@ -93,7 +93,7 @@ const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
 // Translator dispatch (PAYL-01 reuse; mirrors dispatch-exec.ts)
 // ──────────────────────────────────────────────────────────────────────────
 
-const TRANSLATORS: Record<BucketAEvent, (event: never, ctx: TranslationContext) => unknown> = {
+const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationContext) => unknown> = {
   SessionStart: translateSessionStart,
   UserPromptSubmit: translateUserPromptSubmit,
   PreToolUse: translatePreToolUse,
