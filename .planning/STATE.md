@@ -5,15 +5,15 @@ milestone_name: stop-hooks
 current_phase: 87
 current_phase_name: Bucket-A admission & platform floor
 status: executing
-stopped_at: Completed 87-01-PLAN.md
-last_updated: "2026-07-30T03:24:24.753Z"
+stopped_at: Completed 87-02-PLAN.md
+last_updated: "2026-07-30T03:52:46.921Z"
 last_activity: 2026-07-29
 last_activity_desc: Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 87 (Bucket-A admission & platform floor) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-29 — Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
 
@@ -88,8 +88,8 @@ Last activity: 2026-07-29 — Completed Plan 87-01 (dispatch key decouple + Stop
 
 ## Session
 
-**Last session:** 2026-07-30T03:24:12.924Z
-**Stopped at:** Completed 87-01-PLAN.md
+**Last session:** 2026-07-30T03:52:46.895Z
+**Stopped at:** Completed 87-02-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -100,6 +100,7 @@ No plans executed yet for v1.16.
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
 | Phase 87 P01 | 40min | 2 tasks | 12 files |
+| Phase 87 P02 | 21min | 2 tasks | 11 files |
 
 ## Decisions
 
@@ -118,6 +119,9 @@ record per-plan decisions here.
 
 - [Phase 87]: 87-01: DISPATCHABLE_EVENTS subset decouples dispatch/rewake/translator tables from the BUCKET_A_EVENTS admission tuple (D-87-04); tuple stays 8, admission ships in Plan 02
 - [Phase 87]: 87-01: Stop -> Notification for the canonical unsupported-event example across the suite (D-87-06); hookify wire-byte provenance left on Stop (restored in the admission plan, D-87-03)
+- [Phase 87]: 87-02: BUCKET_A_EVENTS grows 8->10 (Stop null-sentinel + StopFailure closed 10-value error-type set); ClaudeHookEvent widened in lockstep (ADMIT-01)
+- [Phase 87]: 87-02: dispatch.ts adaptForEvent/entryFires/compositeHandlerFor re-keyed to DispatchableEvent (Rule-3 blocking fix from the widen; D-87-04 decoupling, no behavior change)
+- [Phase 87]: 87-02: peer floor @earendil-works/pi-coding-agent >=0.80.5 declarative only (FLOOR-01, D-87-01, D-87-05)
 
 ## Deferred Items
 
