@@ -13,8 +13,13 @@
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
 // same reason.
 
-import { currentEpoch } from "./event-router.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
+import { reduceBucket } from "./dispatch.ts";
+import { currentEpoch, getRoutingBucket } from "./event-router.ts";
+
+import type { StopEvent } from "./payloads/stop.ts";
 import type {
   AgentEndEvent,
   AgentMessage,
@@ -23,6 +28,13 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../platform/pi-api.ts";
+
+/**
+ * Custom-message type for the Stop block re-entry. Distinct from the
+ * async-rewake `claude-hook-rewake` value so the two re-entry semantics stay
+ * separable in the transcript and in `details`-based consumers.
+ */
+const STOP_BLOCK_CUSTOM_TYPE = "claude-hook-stop-block" as const;
 
 // The last assistant message observed on the most recent `agent_end`, read at
 // settle time for its `stopReason`. Last-write-wins across auto-retry /
@@ -103,14 +115,67 @@ export function settleHandlerFor(
   };
 }
 
-// Stop-bucket dispatch + block re-entry. Implementation lands in the
-// implementation step of this tracer.
-function runStopBucket(
-  _last: AssistantMessage,
-  _ctx: ExtensionContext,
-  _pi: ExtensionAPI,
+/**
+ * Concatenate the assistant message's text blocks into the string passed to
+ * the Stop hook as `last_assistant_message`.
+ */
+function renderAssistantText(message: AssistantMessage): string {
+  const parts: string[] = [];
+  for (const block of message.content) {
+    if (block.type === "text") {
+      parts.push(block.text);
+    }
+  }
+
+  return parts.join("");
+}
+
+/**
+ * Run the Stop bucket via the shared reducer and adapt the folded outcome
+ * (STOP-03). This plan handles the `block` arm: re-enter the agent loop with
+ * the hook's reason via `sendMessage({deliverAs:"followUp", triggerTurn:true})`
+ * (the agent is idle at settle, so `triggerTurn` starts the new turn),
+ * display-suppressed. A `stop` (continue:false) or `noop` outcome does not
+ * re-enter; `additionalContext`-only re-entry lands in a later plan.
+ *
+ * A Stop hook that declares `asyncRewake:true` routes to the fire-and-forget
+ * path in `dispatchHookExec` and returns `noop` before a decision exists, so
+ * its block desire degrades to no re-entry -- documented, not gated here.
+ */
+async function runStopBucket(
+  last: AssistantMessage,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
 ): Promise<void> {
-  return Promise.resolve();
+  const bucket = getRoutingBucket("Stop");
+  if (bucket.length === 0) {
+    return;
+  }
+
+  const event: StopEvent = {
+    last_assistant_message: renderAssistantText(last),
+    stop_hook_active: false,
+  };
+  const reduced = await reduceBucket(bucket, event, ctx, pi, () => true);
+  if (reduced.result.kind !== "block") {
+    return;
+  }
+
+  const reason = reduced.result.reason ?? "";
+  const pluginId = reduced.attributedTo?.pluginId ?? "";
+  try {
+    pi.sendMessage(
+      {
+        customType: STOP_BLOCK_CUSTOM_TYPE,
+        content: reason,
+        display: false,
+        details: { pluginId },
+      },
+      { deliverAs: "followUp", triggerTurn: true },
+    );
+  } catch (err) {
+    hookDebugLog(`settle: sendMessage threw (${pluginId}): ${errorMessage(err)}`);
+  }
 }
 
 /**

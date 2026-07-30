@@ -56,6 +56,8 @@ import { translate as translatePreCompact } from "../payloads/pre-compact.ts";
 import { translate as translatePreToolUse } from "../payloads/pre-tool-use.ts";
 import { translate as translateSessionEnd } from "../payloads/session-end.ts";
 import { translate as translateSessionStart } from "../payloads/session-start.ts";
+import { translate as translateStopFailure } from "../payloads/stop-failure.ts";
+import { translate as translateStop } from "../payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
@@ -103,6 +105,10 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   PreCompact: translatePreCompact,
   PostCompact: translatePostCompact,
   SessionEnd: translateSessionEnd,
+  // Stop / StopFailure never take the async-rewake path (they have no async
+  // Pi surface); the entries satisfy the `Record` totality and are inert.
+  Stop: translateStop,
+  StopFailure: translateStopFailure,
 };
 
 // ──────────────────────────────────────────────────────────────────────────

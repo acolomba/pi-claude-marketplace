@@ -166,13 +166,13 @@ async function collectExtensionTsFiles(dir: string): Promise<string[]> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 8 times with
+// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 10 times with
 // the locked event-name set (7 Bucket-A dispatch surfaces + the
 // before_agent_start drain point for the SessionStart additionalContext
-// bridge)
+// bridge + the agent_end cache and agent_settled dispatch surfaces)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("DISP-01: registerHooksBridge calls pi.on exactly 8 times with the locked Pi event names", async () => {
+test("DISP-01: registerHooksBridge calls pi.on exactly 10 times with the locked Pi event names", async () => {
   _resetForTest();
 
   // WR-04: hermetic env. Without this, the user-scope hydrate arm resolves
@@ -199,8 +199,8 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 8 times with the locked P
 
     assert.equal(
       piMock.calls.length,
-      8,
-      `expected 8 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
+      10,
+      `expected 10 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
     );
 
     const locked = new Set([
@@ -212,11 +212,13 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 8 times with the locked P
       "tool_call",
       "tool_result",
       "before_agent_start",
+      "agent_end",
+      "agent_settled",
     ]);
     assert.deepEqual(
       new Set(piMock.calls),
       locked,
-      "pi.on event-name set drifted from the locked 8-tuple",
+      "pi.on event-name set drifted from the locked 10-tuple",
     );
   } finally {
     if (originalHome === undefined) {

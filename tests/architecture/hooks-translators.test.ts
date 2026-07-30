@@ -67,6 +67,8 @@ const LOCAL_DISPATCHABLE: readonly DispatchableEvent[] = [
   "PreCompact",
   "PostCompact",
   "SessionEnd",
+  "Stop",
+  "StopFailure",
 ] as const;
 
 const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
@@ -78,6 +80,8 @@ const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
   PreCompact: "pre-compact",
   PostCompact: "post-compact",
   SessionEnd: "session-end",
+  Stop: "stop",
+  StopFailure: "stop-failure",
 };
 
 // The three tool events the TOOL-01 helper must apply to (Block C/D
@@ -144,6 +148,8 @@ const EVENT_FIXTURES: Readonly<Record<DispatchableEvent, unknown>> = {
     fromExtension: false,
   },
   SessionEnd: { type: "session_shutdown", reason: "quit" },
+  Stop: { last_assistant_message: "done", stop_hook_active: false },
+  StopFailure: { error: "server_error", last_assistant_message: "boom" },
 };
 
 const EXPECTED_JSON: Readonly<Record<DispatchableEvent, string>> = {
@@ -163,6 +169,9 @@ const EXPECTED_JSON: Readonly<Record<DispatchableEvent, string>> = {
     '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"PostCompact","trigger":"auto"}',
   SessionEnd:
     '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"SessionEnd","reason":"quit"}',
+  Stop: '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"Stop","last_assistant_message":"done","stop_hook_active":false}',
+  StopFailure:
+    '{"session_id":"sess-1","transcript_path":"/tmp/t.jsonl","cwd":"/proj","hook_event_name":"StopFailure","error":"server_error","last_assistant_message":"boom"}',
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -176,12 +185,13 @@ test("PAYL-01: every dispatchable event has a translator module exporting `trans
   // `translate` function. Adding a dispatchable event to
   // DISPATCHABLE_EVENTS without a matching translator file fails this
   // block before any dispatch-path bug appears.
-  assert.equal(DISPATCHABLE_EVENTS.length, 8, "the dispatchable subset has exactly 8 events");
+  assert.equal(DISPATCHABLE_EVENTS.length, 10, "the dispatchable subset has exactly 10 events");
 
   // ADMIT-01 / D-87-04: the admission tuple and the dispatchable subset are
-  // separate key domains -- admission grew to 10 (adds Stop / StopFailure)
-  // while the translator count stays 8. Pin both lengths independently so a
-  // future edit that conflates them red-fails here.
+  // separate key domains, retained as distinct types even though they now
+  // hold the same members -- Stop / StopFailure are folded into dispatch and
+  // driven off agent_settled. Pin both lengths independently so a future
+  // admission that outruns its translator red-fails here.
   assert.equal(BUCKET_A_EVENTS.length, 10, "the admission tuple has exactly 10 events");
 
   // Local-mirror equality: catch a drift between the upstream tuple and

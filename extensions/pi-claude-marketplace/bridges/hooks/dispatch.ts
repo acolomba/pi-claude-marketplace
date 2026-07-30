@@ -163,7 +163,7 @@ function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolea
  * Caller controls bucket selection + per-entry matcher filter; this
  * reducer just walks the pre-filtered entry list.
  */
-interface ReducedBucket {
+export interface ReducedBucket {
   readonly result: HookExecResult;
   /**
    * The last entry that produced a `mutate` or `block`/`stop` result.
@@ -174,7 +174,7 @@ interface ReducedBucket {
   readonly attributedTo: RoutingEntry | undefined;
 }
 
-async function reduceBucket(
+export async function reduceBucket(
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
@@ -247,7 +247,10 @@ async function reduceBucket(
  * undefined`; observation events return `undefined`).
  */
 export function compositeHandlerFor<
-  E extends Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
+  E extends Exclude<
+    DispatchableEvent,
+    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
+  >,
 >(
   claudeEvent: E,
   capturedEpoch: number,
@@ -315,7 +318,10 @@ export function toolResultCompositeHandler(
  * and always returns undefined.
  */
 function adaptForEvent(
-  claudeEvent: Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
+  claudeEvent: Exclude<
+    DispatchableEvent,
+    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
+  >,
   reduced: ReducedBucket,
   event: unknown,
 ): ToolCallEventResult | InputEventResult | undefined {
@@ -395,7 +401,10 @@ type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
  * already rejects non-empty matchers on those events at parse time.
  */
 function entryFires(
-  claudeEvent: Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
+  claudeEvent: Exclude<
+    DispatchableEvent,
+    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
+  >,
   entry: RoutingEntry,
   event: unknown,
 ): boolean {

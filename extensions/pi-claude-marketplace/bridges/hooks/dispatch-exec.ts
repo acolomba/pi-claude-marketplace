@@ -68,6 +68,8 @@ import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
 import { translate as translatePreToolUse } from "./payloads/pre-tool-use.ts";
 import { translate as translateSessionEnd } from "./payloads/session-end.ts";
 import { translate as translateSessionStart } from "./payloads/session-start.ts";
+import { translate as translateStopFailure } from "./payloads/stop-failure.ts";
+import { translate as translateStop } from "./payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
@@ -100,12 +102,13 @@ const STDERR_MAX_BYTES = 64 * 1024;
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Key the 8 per-event translators by `DispatchableEvent` (the subset of
+ * Key the per-event translators by `DispatchableEvent` (the subset of
  * `BucketAEvent` whose translators are wired; D-87-04). The dispatcher
  * casts the runtime `event: unknown` to the per-translator argument
  * shape at the call site; each translator's typed signature is
  * preserved at compile time, narrowed by the `entry.claudeEvent`
- * discriminator.
+ * discriminator. `Stop` / `StopFailure` receive the synthetic event the
+ * settle handler assembles rather than a raw Pi event.
  */
 const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationContext) => unknown> = {
   SessionStart: translateSessionStart,
@@ -116,6 +119,8 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   PreCompact: translatePreCompact,
   PostCompact: translatePostCompact,
   SessionEnd: translateSessionEnd,
+  Stop: translateStop,
+  StopFailure: translateStopFailure,
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -193,11 +198,11 @@ export async function dispatchHookExec(
     return { kind: "noop" };
   }
 
-  // D-87-04: the admitted-event union is a superset of the dispatchable
-  // subset (`Stop` / `StopFailure` are admitted but have no translator this
-  // milestone). No Pi event routes them here, so this arm is unreachable
-  // today -- narrow to `DispatchableEvent` before indexing the translator
-  // tables and log + noop on the defensive non-dispatchable arm.
+  // D-87-04: narrow the admitted `BucketAEvent` to the dispatchable subset
+  // before indexing the translator tables. Every admitted event now has a
+  // translator (`Stop` / `StopFailure` are dispatched here by the settle
+  // handler), so this arm is a defensive belt against a future admission that
+  // outruns its translator -- log + noop rather than a type error.
   if (!isDispatchableEvent(entry.claudeEvent)) {
     hookDebugLog(
       `exec: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); noop`,
@@ -241,6 +246,8 @@ const REQUIRED_EVENT_FIELDS: Record<DispatchableEvent, readonly string[]> = {
   PreCompact: [],
   PostCompact: [],
   SessionEnd: [],
+  Stop: [],
+  StopFailure: [],
 };
 
 function buildPayload(

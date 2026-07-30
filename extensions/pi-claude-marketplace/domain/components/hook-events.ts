@@ -85,11 +85,15 @@ export type ToolEvent = (typeof TOOL_EVENTS)[number];
 
 /**
  * The bucket-A events whose Pi-side payload translators are wired -- a
- * strict subset of `BUCKET_A_EVENTS` that the dispatch/rewake tables and
- * the translator-test tables key on. Decoupling this from `BucketAEvent`
- * lets the admitted-event union grow independently of which events are
- * actually dispatchable, so admitting an event does not demand a
- * translator in the same change (D-87-04).
+ * subset of `BUCKET_A_EVENTS` that the dispatch/rewake tables and the
+ * translator-test tables key on. The subset is retained (rather than
+ * collapsed back into `BucketAEvent`) because the two-step
+ * admission-then-dispatch pattern is reused by future bucket promotions:
+ * an event can be admitted at the resolver layer before its dispatch
+ * translator exists (D-87-04). `Stop` / `StopFailure` are now folded in --
+ * they are dispatched by the settle handler off `agent_settled` rather than
+ * a per-Pi-event composite, so the subset currently equals the full
+ * admission tuple.
  *
  * The `as const satisfies readonly BucketAEvent[]` pin makes "every
  * dispatchable event is an admitted bucket-A event" a compile-time
@@ -106,6 +110,8 @@ export const DISPATCHABLE_EVENTS = [
   "PreCompact",
   "PostCompact",
   "SessionEnd",
+  "Stop",
+  "StopFailure",
 ] as const satisfies readonly BucketAEvent[];
 
 /**
@@ -115,14 +121,14 @@ export const DISPATCHABLE_EVENTS = [
 export type DispatchableEvent = (typeof DISPATCHABLE_EVENTS)[number];
 
 /**
- * Runtime membership set + type guard for the dispatchable subset. Now that
- * `BucketAEvent` is a proper superset of `DispatchableEvent` (admission grew
- * to include `Stop` / `StopFailure`, which have no translator this milestone),
- * the dispatch index sites (`dispatch-exec.buildPayload`,
- * `async-rewake/registry`) must narrow a `BucketAEvent` to `DispatchableEvent`
- * before indexing the translator tables. No Pi event routes the two
- * turn-boundary events to dispatch yet, so the non-dispatchable arm is a
- * defensive belt (debug-log + noop), not live behavior (D-87-04).
+ * Runtime membership set + type guard for the dispatchable subset. The
+ * dispatch index sites (`dispatch-exec.buildPayload`,
+ * `async-rewake/registry`) narrow a `BucketAEvent` to `DispatchableEvent`
+ * before indexing the translator tables. Every admitted event is now
+ * dispatchable, so the non-dispatchable arm those sites guard is a defensive
+ * belt (debug-log + noop) that no live event reaches; the guard is retained
+ * so a future admission that outruns its translator degrades to noop rather
+ * than a type error (D-87-04).
  */
 export const DISPATCHABLE_MEMBERS = new Set<string>(DISPATCHABLE_EVENTS);
 

@@ -53,6 +53,7 @@ import { SCOPES } from "../../shared/types.ts";
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
+import { agentEndCacheHandler, resetSettleState, settleHandlerFor } from "./settle.ts";
 
 import type {
   BeforeAgentStartEvent,
@@ -780,13 +781,16 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *      time cold-start path).
  *   3. Rebuild routing tables for both scopes so the first Pi event fires
  *      against a populated table.
- *   4. Register exactly 8 pi.on call sites -- 7 Bucket-A dispatch surfaces
- *      (DISP-01) plus `before_agent_start`, the drain point for the
- *      SessionStart `additionalContext` capture buffer. The eight Claude
+ *   4. Register exactly 10 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *      (DISP-01) plus `before_agent_start` (the drain point for the
+ *      SessionStart `additionalContext` capture buffer) plus the two
+ *      settle-time surfaces `agent_end` (caches the run's last-assistant
+ *      message) and `agent_settled` (gates on stopReason to dispatch the
+ *      Stop / StopFailure buckets; STOP-01). The eight per-Pi-event Claude
  *      buckets fan out from 7 Pi event surfaces because `tool_result`
  *      splits on `event.isError` between the PostToolUse and
- *      PostToolUseFailure buckets (D-59-01); the 8th pi.on call is the
- *      SessionStart additionalContext bridge into `before_agent_start`.
+ *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
+ *      are driven off `agent_settled` rather than a per-Pi-event surface.
  */
 export async function registerHooksBridge(
   pi: ExtensionAPI,
@@ -801,6 +805,11 @@ export async function registerHooksBridge(
   // with an empty pending buffer, which only `adaptObservationResultForEvent`
   // (via `appendPendingSessionStartContext`) can subsequently populate.
   pendingSessionStartContext = [];
+
+  // Same epoch hygiene for the settle dispatcher's cached last-assistant
+  // message: clear it so a `/reload` cannot leak the prior session's message
+  // into the new one's `stopReason` gate.
+  resetSettleState();
 
   // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
   // the prior factory invocation BEFORE the persisted-orphan reap reads
@@ -848,6 +857,11 @@ export async function registerHooksBridge(
   // buffer is empty so the no-context path is a single Map lookup per
   // turn.
   pi.on("before_agent_start", beforeAgentStartHandlerFor(capturedEpoch));
+  // Settle-time turn-boundary dispatch: agent_end caches the run's
+  // last-assistant message; agent_settled reads it and gates on stopReason
+  // to run the Stop / StopFailure buckets (STOP-01).
+  pi.on("agent_end", agentEndCacheHandler(capturedEpoch));
+  pi.on("agent_settled", settleHandlerFor(capturedEpoch, pi));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
