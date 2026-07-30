@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
-current_phase: 87
-current_phase_name: Bucket-A admission & platform floor
-status: verifying
+current_phase: 88
+current_phase_name: "`agent_settled` dispatcher, Stop contract & StopFailure"
+status: planning
 stopped_at: Completed 87-03-PLAN.md
-last_updated: "2026-07-30T04:23:37.275Z"
+last_updated: "2026-07-30T04:49:55.130Z"
 last_activity: 2026-07-30
-last_activity_desc: Completed Plan 87-03 (ADMIT-02 fixture-backed admission flip for Stop/StopFailure)
+last_activity_desc: Phase 87 complete, transitioned to Phase 88
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
   completed_plans: 3
   percent: 33
@@ -21,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 87 (Bucket-A admission & platform floor) — READY FOR VERIFICATION
-Plan: 3 of 3 (all plans executed)
-Status: Phase complete — ready for verification
-Last activity: 2026-07-30 — Completed Plan 87-03 (ADMIT-02 fixture-backed admission flip for Stop/StopFailure)
+Phase: 88 — `agent_settled` dispatcher, Stop contract & StopFailure
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-30 — Phase 87 complete, transitioned to Phase 88
 
 ## Roadmap Summary
 

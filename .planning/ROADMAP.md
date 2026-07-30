@@ -17,7 +17,7 @@
 
 - Decimal phases (87.1, 88.1): Urgent insertions (marked with INSERTED).
 
-- [ ] **Phase 87: Bucket-A admission & platform floor** — `BUCKET_A_EVENTS` grows 8→10, the per-event matcher dispositions land (`Stop` takes the `null` no-matcher sentinel; `StopFailure` takes the closed 10-value error-type set), and the `@earendil-works/pi-coding-agent` peer floor rises to `>=0.80.5` — so a plugin declaring `Stop`/`StopFailure` alongside already-supported events resolves available and `ralph-wiggum` + `hookify` flip to fully available, without yet dispatching.
+- [x] **Phase 87: Bucket-A admission & platform floor** — `BUCKET_A_EVENTS` grows 8→10, the per-event matcher dispositions land (`Stop` takes the `null` no-matcher sentinel; `StopFailure` takes the closed 10-value error-type set), and the `@earendil-works/pi-coding-agent` peer floor rises to `>=0.80.5` — so a plugin declaring `Stop`/`StopFailure` alongside already-supported events resolves available and `ralph-wiggum` + `hookify` flip to fully available, without yet dispatching. (completed 2026-07-30)
 - [ ] **Phase 88: `agent_settled` dispatcher, Stop contract & StopFailure** — one `agent_settled` subscriber gated on the final assistant message's `stopReason` fires `Stop` on genuine completion (`stop`) and `StopFailure` on `error`/`length`, suppressing both on `aborted`; `Stop` delivers the full hook-observable decision-control contract (block re-entry, exit-2, `additionalContext`, `continue:false` precedence) and loop protections (`stop_hook_active`, 8-block cap), while `StopFailure` is observation-only with the classified error type.
 - [ ] **Phase 89: Documentation reconcile** — `docs/hooks-compatibility.md` flips the `Stop`/`StopFailure` rows to supported (timing-shift caveat + error-type matcher row) and rewrites the stale v1.13 hard-trip install-time disposition section for the force-install partial-partition model; `docs/research/claude-hooks-vs-pi-events.md` retires the "`agent_end` is observation-only" claim and adds `agent_settled`.
 
@@ -108,7 +108,7 @@ Sequential: 87 → 88 → 89 (each phase depends on the prior)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 87. Bucket-A admission & platform floor | v1.16 | 3/3 | In Progress|  |
+| 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete    | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 0/? | Not started | — |
 | 89. Documentation reconcile | v1.16 | 0/? | Not started | — |
 | 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete | 2026-07-26 |
