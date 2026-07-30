@@ -97,6 +97,28 @@ function makeAgentEnd(stopReason: StopReason): AgentEndEvent {
   } as unknown as AgentEndEvent;
 }
 
+function makeStopFailureEntry(pluginId: string): RoutingEntry {
+  return { ...makeStopEntry(pluginId), claudeEvent: "StopFailure" };
+}
+
+// A failure ending caches an assistant message whose `errorMessage` carries
+// Pi's rendered error text (the StopFailure `last_assistant_message` source).
+function makeAgentEndWithError(stopReason: StopReason, errorMsg?: string): AgentEndEvent {
+  return {
+    type: "agent_end",
+    messages: [
+      { role: "user", content: "hi", timestamp: 0 },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+        stopReason,
+        ...(errorMsg !== undefined ? { errorMessage: errorMsg } : {}),
+        timestamp: 1,
+      },
+    ],
+  } as unknown as AgentEndEvent;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // STOP-01 / STOP-03: stopReason "stop" + a blocking Stop hook re-enters
 // ──────────────────────────────────────────────────────────────────────────
@@ -697,4 +719,122 @@ test("STOP-07 / STOP-05: additionalContext-without-block re-enters but resets th
     0,
     "additionalContext-without-block is a non-block outcome and resets the counter (D-88-06)",
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SFAIL-01: StopFailure is observation-only. `error` / `length` run the
+// StopFailure bucket and DISCARD the result -- never a sendMessage, never a
+// stop_hook_active or consecutive-block-counter mutation, even when the hook
+// blocks or exits 2.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("SFAIL-01: stopReason error runs the StopFailure bucket observation-only even when the hook blocks", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "stay" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "Rate limit exceeded (429)"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, ["sf1"], "the StopFailure bucket must run at settle on error");
+  assert.equal(
+    sent.length,
+    0,
+    "StopFailure is observation-only: a blocking hook must NOT re-enter",
+  );
+  const state = _peekLoopStateForTest();
+  assert.equal(state.stopHookActive, false, "StopFailure must not touch stop_hook_active");
+  assert.equal(state.consecutiveBlockCount, 0, "StopFailure must not touch the block counter");
+  assert.equal(state.capNotifiedThisSession, false, "StopFailure must not touch the cap latch");
+});
+
+test("SFAIL-01: stopReason length runs the StopFailure bucket observation-only", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "stay" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("length"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, ["sf1"], "the StopFailure bucket must run at settle on length");
+  assert.equal(sent.length, 0, "length is observation-only: no re-entry");
+  assert.deepEqual(
+    _peekLoopStateForTest(),
+    { stopHookActive: false, consecutiveBlockCount: 0, capNotifiedThisSession: false },
+    "length must leave the loop-protection state untouched",
+  );
+});
+
+test("SFAIL-01: a StopFailure hook exiting 2 produces no re-entry (result discarded)", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve(parseHookStdout(2, "", "boom")),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "boom"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.equal(sent.length, 0, "an exit-2 StopFailure hook must NOT re-enter (observation-only)");
+  assert.equal(
+    _peekLoopStateForTest().stopHookActive,
+    false,
+    "exit-2 on StopFailure must not set stop_hook_active",
+  );
+});
+
+test("SFAIL-01: an empty StopFailure bucket dispatches nothing", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "stay" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", []);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "boom"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, [], "an empty StopFailure bucket must not run any executor");
+  assert.equal(sent.length, 0, "an empty StopFailure bucket must not re-enter");
 });
