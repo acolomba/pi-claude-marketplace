@@ -14,6 +14,7 @@
 
 - Integer phases (87, 88, 89): Planned milestone work (continues the global counter
   from Phase 86, the v1.15 frontmatter-compliance phase).
+
 - Decimal phases (87.1, 88.1): Urgent insertions (marked with INSERTED).
 
 - [ ] **Phase 87: Bucket-A admission & platform floor** — `BUCKET_A_EVENTS` grows 8→10, the per-event matcher dispositions land (`Stop` takes the `null` no-matcher sentinel; `StopFailure` takes the closed 10-value error-type set), and the `@earendil-works/pi-coding-agent` peer floor rises to `>=0.80.5` — so a plugin declaring `Stop`/`StopFailure` alongside already-supported events resolves available and `ralph-wiggum` + `hookify` flip to fully available, without yet dispatching.
@@ -61,8 +62,16 @@
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 87-01-PLAN.md — Decouple the dispatch key domain (DISPATCHABLE_EVENTS subset, D-87-04) and re-point Stop→Notification unsupported examples; tuple stays 8, suite green (ADMIT-01 prep)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 87-02-PLAN.md — Admission cutover: widen BUCKET_A_EVENTS 8→10 with Stop null-sentinel + StopFailure closed set, lockstep union, dispatch guard, peer floor `>=0.80.5` (ADMIT-01, FLOOR-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 87-03-PLAN.md — Fixture-backed proof: restore hookify Stop arm + add ralph-wiggum fixture; hookify + ralph-wiggum resolve available and `plugin info` lists both (ADMIT-02)
 
 ### Phase 88: `agent_settled` dispatcher, Stop contract & StopFailure
