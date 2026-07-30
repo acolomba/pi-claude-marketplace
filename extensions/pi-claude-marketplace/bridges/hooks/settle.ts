@@ -16,7 +16,7 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import { reduceBucket } from "./dispatch.ts";
+import { collectBucketOutcomes } from "./dispatch.ts";
 import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 
 import type { StopEvent } from "./payloads/stop.ts";
@@ -131,16 +131,25 @@ function renderAssistantText(message: AssistantMessage): string {
 }
 
 /**
- * Run the Stop bucket via the shared reducer and adapt the folded outcome
- * (STOP-03). This plan handles the `block` arm: re-enter the agent loop with
- * the hook's reason via `sendMessage({deliverAs:"followUp", triggerTurn:true})`
- * (the agent is idle at settle, so `triggerTurn` starts the new turn),
- * display-suppressed. A `stop` (continue:false) or `noop` outcome does not
- * re-enter; `additionalContext`-only re-entry lands in a later plan.
+ * Run the Stop bucket and adapt the collected outcomes over the full
+ * `HookExecResult` union (STOP-03..06). Because D-88-05 makes Stop precedence
+ * AGGREGATE (any `continue:false` suppresses re-entry regardless of another
+ * hook's block), the bucket is collected without the first-block/stop
+ * short-circuit `reduceBucket` uses, then scanned:
  *
- * A Stop hook that declares `asyncRewake:true` routes to the fire-and-forget
- * path in `dispatchHookExec` and returns `noop` before a decision exists, so
- * its block desire degrades to no re-entry -- documented, not gated here.
+ *   1. any `stop` (continue:false) among the group -> no re-entry (STOP-06).
+ *   2. else the first `block` -> re-enter with the reason (STOP-03; exit-2
+ *      already maps to `{kind:"block",reason:stderr}` in `parseHookStdout`, so
+ *      STOP-04 rides this arm with no Stop-specific exit handling).
+ *   3. else the first `mutate` carrying `additionalContext` -> re-enter with
+ *      that context (STOP-05), via the SAME lane as a block.
+ *   4. else nothing (`noop`).
+ *
+ * Re-entry uses `sendMessage({deliverAs:"followUp", triggerTurn:true})` (the
+ * agent is idle at settle, so `triggerTurn` starts the new turn),
+ * display-suppressed. A Stop hook declaring `asyncRewake:true` cannot yield a
+ * synchronous decision and is degraded to `noop` inside `collectBucketOutcomes`
+ * with a `hookDebugLog` -- no silent block loss (research A5).
  */
 async function runStopBucket(
   last: AssistantMessage,
@@ -156,18 +165,40 @@ async function runStopBucket(
     last_assistant_message: renderAssistantText(last),
     stop_hook_active: false,
   };
-  const reduced = await reduceBucket(bucket, event, ctx, pi, () => true);
-  if (reduced.result.kind !== "block") {
+  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
+
+  // STOP-06 / D-88-05: any continue:false suppresses re-entry.
+  if (outcomes.some((o) => o.result.kind === "stop")) {
     return;
   }
 
-  const reason = reduced.result.reason ?? "";
-  const pluginId = reduced.attributedTo?.pluginId ?? "";
+  // STOP-03 / STOP-04: first block wins.
+  const block = outcomes.find((o) => o.result.kind === "block");
+  if (block?.result.kind === "block") {
+    reenter(pi, block.result.reason ?? "", block.entry.pluginId);
+    return;
+  }
+
+  // STOP-05: additionalContext-without-block re-enters via the same lane.
+  const mutate = outcomes.find(
+    (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
+  );
+  if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
+    reenter(pi, mutate.result.additionalContext, mutate.entry.pluginId);
+  }
+}
+
+/**
+ * Re-enter the idle agent loop with `content` as a display-suppressed followUp
+ * message that triggers a new turn. Wrapped in try/catch so a `sendMessage`
+ * throw degrades to a `hookDebugLog` rather than escaping the settle handler.
+ */
+function reenter(pi: ExtensionAPI, content: string, pluginId: string): void {
   try {
     pi.sendMessage(
       {
         customType: STOP_BLOCK_CUSTOM_TYPE,
-        content: reason,
+        content,
         display: false,
         details: { pluginId },
       },
