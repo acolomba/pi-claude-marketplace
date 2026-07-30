@@ -314,12 +314,12 @@ test("PHOOK-01: unmapped tool (MultiEdit) drops the group with cond=unmapped-too
   ]);
 });
 
-test("PHOOK-01: non-bucket-A event (Stop) drops the whole event (P1)", () => {
+test("PHOOK-01: non-bucket-A event (Notification) drops the whole event (P1)", () => {
   const partition = partitionHooks({
-    Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
+    Notification: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
   assert.deepEqual(partition.supported, {});
-  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Stop" }]);
+  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Notification" }]);
 });
 
 test("PHOOK-01: non-empty matcher on UserPromptSubmit drops the group with cond=no-matcher-support (c)", () => {
@@ -428,12 +428,12 @@ test("D-71-02: a mixed event keeps the clean group and drops only the unsupporta
 test("D-71-01: a supported event survives while a sibling non-bucket-A event drops", () => {
   const partition = partitionHooks({
     PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
-    Stop: [{ hooks: [{ type: "command", command: "/bin/stop" }] }],
+    Notification: [{ hooks: [{ type: "command", command: "/bin/notification" }] }],
   });
   assert.deepEqual(partition.supported, {
     PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
   });
-  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Stop" }]);
+  assert.deepEqual(partition.dropped, [{ kind: "event", event: "Notification" }]);
 });
 
 test("PHOOK-01 / Q1: a group with command + non-command handlers keeps the command handler", () => {
@@ -462,7 +462,7 @@ test("PHOOK-01 / Q1: a group with command + non-command handlers keeps the comma
 test("PHOOK-03: parseHooksConfig success arm returns the filtered subset as value plus dropped", () => {
   const raw = JSON.stringify({
     PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
-    Stop: [{ hooks: [{ type: "command", command: "/bin/stop" }] }],
+    Notification: [{ hooks: [{ type: "command", command: "/bin/notification" }] }],
   });
   const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF);
   assert.equal(result.ok, true);
@@ -470,7 +470,7 @@ test("PHOOK-03: parseHooksConfig success arm returns the filtered subset as valu
     assert.deepEqual(result.value, {
       PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "/bin/edit" }] }],
     });
-    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Notification" }]);
   }
 });
 
@@ -641,30 +641,30 @@ test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire 
 // security-guidance) are not in the local checkout.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("PHOOK-01: hooks-stop-only fixture partitions to the empty subset (Q2 edge)", async () => {
+test("PHOOK-01: hooks-notification-only fixture partitions to the empty subset (Q2 edge)", async () => {
   const raw = await readFile(
-    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-stop-only.json"),
+    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-notification-only.json"),
     "utf8",
   );
   const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.value, {});
-    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Notification" }]);
   }
 });
 
-test("PHOOK-01: hooks-posttooluse-and-stop fixture keeps PostToolUse, drops Stop", async () => {
+test("PHOOK-01: hooks-posttooluse-and-notification fixture keeps PostToolUse, drops Notification", async () => {
   const raw = await readFile(
-    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-posttooluse-and-stop.json"),
+    path.resolve(FIXTURE_DIR, "../../fixtures/hooks-posttooluse-and-notification.json"),
     "utf8",
   );
   const result = parseHooksConfig(raw, TEST_IF_CTX, TEST_COMPILE_IF, { skipIfMap: true });
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.ok("PostToolUse" in result.value);
-    assert.ok(!("Stop" in result.value));
-    assert.deepEqual(result.dropped, [{ kind: "event", event: "Stop" }]);
+    assert.ok(!("Notification" in result.value));
+    assert.deepEqual(result.dropped, [{ kind: "event", event: "Notification" }]);
   }
 });
 

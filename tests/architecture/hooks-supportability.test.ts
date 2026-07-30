@@ -245,10 +245,10 @@ test("PHOOK-01: partitionHooks maps each unsupportable matcher to its DroppedHoo
 
   // (c) non-bucket-A event -> kind:"event".
   const nonBucketA = partitionHooks({
-    Stop: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
+    Notification: [{ matcher: "", hooks: [{ type: "command", command: "/bin/false" }] }],
   });
   assert.deepEqual(nonBucketA.supported, {});
-  assert.deepEqual(nonBucketA.dropped, [{ kind: "event", event: "Stop" }]);
+  assert.deepEqual(nonBucketA.dropped, [{ kind: "event", event: "Notification" }]);
 
   // (c) no-matcher-support -> kind:"group", cond:"no-matcher-support".
   const noMatcher = partitionHooks({

@@ -3868,7 +3868,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
       componentsResolved: true,
       components: {
         hooks: [
-          { kind: "lenient", event: "Stop", supported: false },
+          { kind: "lenient", event: "Notification", supported: false },
           { kind: "lenient", event: "PostToolUse", supported: true },
         ],
       },
@@ -3882,7 +3882,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
       "● official [user] <autoupdate>",
       "  ⊘ alpha v1.0.0 (unavailable)",
       "    hooks:",
-      "      Stop (unsupported)",
+      "      Notification (unsupported)",
       "      PostToolUse",
     ].join("\n"),
   );

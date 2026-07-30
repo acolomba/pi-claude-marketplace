@@ -2572,7 +2572,7 @@ test("composeInstallFailureMessage runtime arm: a non-Error throw yields the bar
 // change to install.ts / stage.ts -- the subset is inherited from the partition.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Stop event absent, supported PostToolUse group present", async () => {
+test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Notification event absent, supported PostToolUse group present", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
     try {
@@ -2583,15 +2583,15 @@ test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Sto
         marketplaceName: "mp",
         pluginName: "hook-plugin",
         skills: [{ sourceName: "helper-skill" }],
-        // A supported PostToolUse(Edit) group plus a non-bucket-A `Stop` event.
-        // The partition keeps the PostToolUse group and drops the whole Stop
-        // event (event-level drop, D-71-01).
+        // A supported PostToolUse(Edit) group plus a non-bucket-A `Notification`
+        // event. The partition keeps the PostToolUse group and drops the whole
+        // Notification event (event-level drop, D-71-01).
         hooksJson: {
           hooks: {
             PostToolUse: [
               { matcher: "Edit", hooks: [{ type: "command", command: "echo posttooluse" }] },
             ],
-            Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }],
+            Notification: [{ hooks: [{ type: "command", command: "echo notification" }] }],
           },
         },
       });
@@ -2608,14 +2608,18 @@ test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Sto
       });
 
       // Read the staged file the bridge wrote and assert the strict-subset
-      // property: the dropped `Stop` event is ABSENT, the supported
+      // property: the dropped `Notification` event is ABSENT, the supported
       // `PostToolUse` group is PRESENT (PHOOK-04 / V5 output containment).
       // The bridge stages the bare events map (`parseHooksConfig` unwraps the
       // `{hooks:{...}}` wrapper and returns the filtered subset).
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
       const staged = JSON.parse(await readFile(stagedPath, "utf8")) as Record<string, unknown>;
       assert.ok("PostToolUse" in staged, "supported PostToolUse group must be staged");
-      assert.equal("Stop" in staged, false, "dropped Stop event must NOT be staged");
+      assert.equal(
+        "Notification" in staged,
+        false,
+        "dropped Notification event must NOT be staged",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2695,7 +2699,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
             PostToolUse: [
               { matcher: "Edit", hooks: [{ type: "command", command: "echo posttooluse" }] },
             ],
-            Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }],
+            Notification: [{ hooks: [{ type: "command", command: "echo notification" }] }],
           },
         },
       });
@@ -2742,7 +2746,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       );
 
       // SEV-01 / D-71-06: with `--force` the supported components install, the
-      // Stop event degrades, and the success row reads `(partially-installed)
+      // Notification event degrades, and the success row reads `(partially-installed)
       // {unsupported hooks}` at info severity with NO summary line (the body
       // begins at the marketplace header, not a `... failed.` / `... attention.`
       // summary). FSTAT-07: the row reads `force-installed`.

@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic fixture: a single non-bucket-A Notification event (empty-subset edge, D-71-02 / Q2)",
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [{ "type": "command", "command": "echo notification" }]
+      }
+    ]
+  }
+}
