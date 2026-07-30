@@ -53,7 +53,12 @@ import { SCOPES } from "../../shared/types.ts";
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
-import { agentEndCacheHandler, resetSettleState, settleHandlerFor } from "./settle.ts";
+import {
+  agentEndCacheHandler,
+  inputResetHandlerFor,
+  resetSettleState,
+  settleHandlerFor,
+} from "./settle.ts";
 
 import type {
   BeforeAgentStartEvent,
@@ -781,16 +786,20 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *      time cold-start path).
  *   3. Rebuild routing tables for both scopes so the first Pi event fires
  *      against a populated table.
- *   4. Register exactly 10 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   4. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus the two
  *      settle-time surfaces `agent_end` (caches the run's last-assistant
  *      message) and `agent_settled` (gates on stopReason to dispatch the
- *      Stop / StopFailure buckets; STOP-01). The eight per-Pi-event Claude
- *      buckets fan out from 7 Pi event surfaces because `tool_result`
- *      splits on `event.isError` between the PostToolUse and
+ *      Stop / StopFailure buckets; STOP-01) plus a SECOND `input`
+ *      subscription (the STOP-07 loop-protection reset, distinct from the
+ *      UserPromptSubmit dispatch handler on the same event). The eight
+ *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
+ *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
- *      are driven off `agent_settled` rather than a per-Pi-event surface.
+ *      are driven off `agent_settled` rather than a per-Pi-event surface. The
+ *      locked Pi event-name SET stays 10 (`input` appears twice) -- only the
+ *      call COUNT grows to 11.
  */
 export async function registerHooksBridge(
   pi: ExtensionAPI,
@@ -862,6 +871,12 @@ export async function registerHooksBridge(
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on("agent_end", agentEndCacheHandler(capturedEpoch));
   pi.on("agent_settled", settleHandlerFor(capturedEpoch, pi));
+  // STOP-07 loop-protection reset: a dedicated second `input` subscription
+  // (distinct from the UserPromptSubmit dispatch handler above) clears
+  // `stop_hook_active` and resets the consecutive-block counter + one-shot cap
+  // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
+  // NOT pass through `input`, so the flag never self-clears.
+  pi.on("input", inputResetHandlerFor(capturedEpoch));
 }
 
 // ──────────────────────────────────────────────────────────────────────────

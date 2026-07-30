@@ -24,8 +24,10 @@ import {
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
   agentEndCacheHandler,
+  inputResetHandlerFor,
   resetSettleState,
   settleHandlerFor,
+  _peekLoopStateForTest,
   _peekSettleCacheForTest,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
 import { parseHookStdout } from "../../../extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts";
@@ -451,4 +453,248 @@ test("A5: an asyncRewake Stop hook is degraded to noop and does not re-enter", a
 
   assert.deepEqual(fired, [], "an asyncRewake Stop entry must not reach the executor");
   assert.equal(sent.length, 0, "an asyncRewake Stop entry must not re-enter (degraded to noop)");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// STOP-07: stop_hook_active flag, 8-consecutive-block cap, one-shot warning,
+// input reset, D-88-06 counter semantics.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface NotifyCall {
+  readonly text: string;
+  readonly severity: "info" | "warning" | "error" | undefined;
+}
+
+function makeCapCtx(): { ctx: ExtensionContext; notifyCalls: NotifyCall[] } {
+  const notifyCalls: NotifyCall[] = [];
+  const ctx = {
+    ui: {
+      notify: (text: string, severity?: "info" | "warning" | "error"): void => {
+        notifyCalls.push({ text, severity });
+      },
+    },
+  } as unknown as ExtensionContext;
+  return { ctx, notifyCalls };
+}
+
+// An executor that always blocks and records each invocation's
+// `stop_hook_active` (read off the synthetic Stop event) so a test can assert
+// the flag threads into the NEXT payload.
+function blockingExecutorCapturing(
+  seen: boolean[],
+): (entry: RoutingEntry, event: unknown) => Promise<HookExecResult> {
+  return (_entry, event): Promise<HookExecResult> => {
+    seen.push((event as { stop_hook_active: boolean }).stop_hook_active);
+    return Promise.resolve({ kind: "block", reason: "loop" });
+  };
+}
+
+// Drive one agent_end(stop) -> agent_settled cycle through the settle handler.
+async function runSettleCycle(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+  await settleHandlerFor(epoch, pi)(settledEvent, ctx);
+}
+
+test("STOP-07 boundary/adjacency: 7 blocks re-enter; the 8th suppresses re-entry and trips the cap once; a 9th does not re-notify", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const seen: boolean[] = [];
+  _setExecutorForTest(blockingExecutorCapturing(seen));
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("ralph-wiggum")]);
+
+  const { pi, sent } = makePi();
+  const { ctx, notifyCalls } = makeCapCtx();
+
+  for (let i = 0; i < 7; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(sent.length, 7, "the first 7 consecutive blocks must each re-enter");
+  assert.equal(notifyCalls.length, 0, "the cap must not trip before the 8th block");
+  assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 7);
+
+  // 8th consecutive block -> cap trips: no re-entry + one-shot warning.
+  await runSettleCycle(pi, ctx);
+  assert.equal(sent.length, 7, "the 8th consecutive block must NOT re-enter");
+  assert.equal(notifyCalls.length, 1, "the 8th consecutive block trips the cap once");
+  assert.equal(notifyCalls[0]?.severity, "warning", "the cap warning is warning severity");
+  assert.ok(
+    notifyCalls[0]?.text.includes("ralph-wiggum"),
+    "the cap warning names the blocking plugin",
+  );
+  assert.equal(_peekLoopStateForTest().capNotifiedThisSession, true, "the one-shot latch is set");
+
+  // 9th consecutive block -> still suppressed, but the one-shot latch prevents
+  // a second notify.
+  await runSettleCycle(pi, ctx);
+  assert.equal(sent.length, 7, "the 9th consecutive block must also be suppressed");
+  assert.equal(
+    notifyCalls.length,
+    1,
+    "a 9th consecutive block must NOT re-notify (one-shot latch)",
+  );
+});
+
+test("STOP-07 ordering/precision: a non-block outcome resets the consecutive counter and re-arms the latch", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  // Block on every entry EXCEPT a one-shot noop injected between runs.
+  let mode: "block" | "noop" = "block";
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve(mode === "block" ? { kind: "block", reason: "loop" } : { kind: "noop" }),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const { ctx, notifyCalls } = makeCapCtx();
+
+  // 7 consecutive blocks -> no cap yet.
+  for (let i = 0; i < 7; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 7);
+
+  // A single non-block outcome resets the counter (D-88-06 -- only CONSECUTIVE
+  // blocks count).
+  mode = "noop";
+  await runSettleCycle(pi, ctx);
+  assert.equal(
+    _peekLoopStateForTest().consecutiveBlockCount,
+    0,
+    "a non-block outcome resets the counter",
+  );
+  assert.equal(notifyCalls.length, 0, "the reset must re-arm before any cap trip");
+
+  // 7 FRESH consecutive blocks re-enter without tripping (proves the earlier 7
+  // did not accumulate across the reset).
+  mode = "block";
+  const sentBeforeFreshRun = sent.length;
+  for (let i = 0; i < 7; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(sent.length - sentBeforeFreshRun, 7, "7 fresh consecutive blocks each re-enter");
+  assert.equal(notifyCalls.length, 0, "cap must not trip until 8 FRESH consecutive blocks");
+
+  // The 8th fresh block trips the cap (latch re-armed by the earlier reset).
+  await runSettleCycle(pi, ctx);
+  assert.equal(notifyCalls.length, 1, "the cap re-trips after a reset re-armed the latch");
+});
+
+test("STOP-07 empty: zero blocks -> counter stays 0, no cap, no notify, stop_hook_active false", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> => Promise.resolve({ kind: "noop" }));
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const { ctx, notifyCalls } = makeCapCtx();
+
+  await runSettleCycle(pi, ctx);
+
+  assert.equal(sent.length, 0, "a noop outcome must not re-enter");
+  assert.equal(notifyCalls.length, 0, "zero blocks must not notify");
+  const state = _peekLoopStateForTest();
+  assert.equal(state.consecutiveBlockCount, 0, "counter stays 0 with no blocks");
+  assert.equal(state.stopHookActive, false, "stop_hook_active stays false with no re-entry");
+});
+
+test("STOP-07: stop_hook_active threads into the next payload, survives a bridge re-entry, and clears only on a genuine input", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const seen: boolean[] = [];
+  _setExecutorForTest(blockingExecutorCapturing(seen));
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const { ctx } = makeCapCtx();
+
+  // First block: the payload was built BEFORE any re-entry, so stop_hook_active
+  // is false; the block re-entry then sets the flag.
+  await runSettleCycle(pi, ctx);
+  assert.equal(
+    _peekLoopStateForTest().stopHookActive,
+    true,
+    "a block re-entry sets stop_hook_active",
+  );
+
+  // Second block: the payload now carries stop_hook_active:true (the flag
+  // SURVIVED the bridge-injected re-entry -- it is NOT self-cleared).
+  await runSettleCycle(pi, ctx);
+  assert.deepEqual(
+    seen,
+    [false, true],
+    "stop_hook_active threads true into the payload after a re-entry",
+  );
+
+  // A genuine input event clears the flag (and resets the counter).
+  const epoch = currentEpoch();
+  inputResetHandlerFor(epoch)();
+  const afterInput = _peekLoopStateForTest();
+  assert.equal(afterInput.stopHookActive, false, "input clears stop_hook_active");
+  assert.equal(afterInput.consecutiveBlockCount, 0, "input resets the consecutive-block counter");
+
+  // Third block after the input reset: the payload is false again.
+  await runSettleCycle(pi, ctx);
+  assert.deepEqual(seen, [false, true, false], "input reset makes the next payload false again");
+  assert.equal(sent.length, 3, "each of the three blocks re-entered");
+});
+
+test("STOP-07 / STOP-05: additionalContext-without-block re-enters but resets the consecutive counter (non-block outcome)", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  let mode: "block" | "mutate" = "block";
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve(
+      mode === "block"
+        ? { kind: "block", reason: "loop" }
+        : { kind: "mutate", additionalContext: "keep going" },
+    ),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const { ctx } = makeCapCtx();
+
+  for (let i = 0; i < 3; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 3);
+
+  mode = "mutate";
+  await runSettleCycle(pi, ctx);
+  assert.equal(sent.length, 4, "additionalContext still re-enters via the STOP-05 lane");
+  assert.equal(
+    _peekLoopStateForTest().consecutiveBlockCount,
+    0,
+    "additionalContext-without-block is a non-block outcome and resets the counter (D-88-06)",
+  );
 });

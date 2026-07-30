@@ -166,13 +166,16 @@ async function collectExtensionTsFiles(dir: string): Promise<string[]> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 10 times with
+// Block 1: DISP-01 -- registerHooksBridge calls pi.on exactly 11 times with
 // the locked event-name set (7 Bucket-A dispatch surfaces + the
 // before_agent_start drain point for the SessionStart additionalContext
-// bridge + the agent_end cache and agent_settled dispatch surfaces)
+// bridge + the agent_end cache and agent_settled dispatch surfaces + a SECOND
+// `input` subscription for the STOP-07 loop-protection reset). The call COUNT
+// is 11 but the distinct event-name SET stays 10 -- `input` is subscribed
+// twice (the UserPromptSubmit dispatch handler + the STOP-07 reset).
 // ──────────────────────────────────────────────────────────────────────────
 
-test("DISP-01: registerHooksBridge calls pi.on exactly 10 times with the locked Pi event names", async () => {
+test("DISP-01: registerHooksBridge calls pi.on exactly 11 times with the locked Pi event names (input twice)", async () => {
   _resetForTest();
 
   // WR-04: hermetic env. Without this, the user-scope hydrate arm resolves
@@ -199,8 +202,16 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 10 times with the locked 
 
     assert.equal(
       piMock.calls.length,
-      10,
-      `expected 10 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
+      11,
+      `expected 11 pi.on calls, got ${piMock.calls.length.toString()}: ${piMock.calls.join(",")}`,
+    );
+
+    // `input` is subscribed twice (UserPromptSubmit dispatch + STOP-07 reset),
+    // so the call count is 11 while the distinct event-name set stays 10.
+    assert.equal(
+      piMock.calls.filter((e) => e === "input").length,
+      2,
+      "input must be subscribed exactly twice (dispatch + STOP-07 reset)",
     );
 
     const locked = new Set([

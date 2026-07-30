@@ -15,6 +15,7 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
 import { collectBucketOutcomes } from "./dispatch.ts";
 import { currentEpoch, getRoutingBucket } from "./event-router.ts";
@@ -36,17 +37,76 @@ import type {
  */
 const STOP_BLOCK_CUSTOM_TYPE = "claude-hook-stop-block" as const;
 
+/**
+ * STOP-07 loop-protection cap: the Nth consecutive block that suppresses
+ * re-entry and trips the one-shot warning. Upstream counts 8 *consecutive*
+ * blocks (D-88-06); the 8th block is the one that does NOT re-enter.
+ */
+const STOP_OVERRIDE_CAP = 8;
+
 // The last assistant message observed on the most recent `agent_end`, read at
 // settle time for its `stopReason`. Last-write-wins across auto-retry /
 // compaction chains; reset on every bridge load for `/reload` hygiene.
 let cachedLastAssistant: AssistantMessage | undefined;
 
+// STOP-07 loop-protection state, all per-session and reset on every bridge
+// load (`/reload` hygiene) via `resetSettleState`:
+//   - `stopHookActive`: threaded into the NEXT Stop payload's
+//     `stop_hook_active` field. Set true when a block re-enters; cleared ONLY
+//     by a genuine `input` event (bridge-injected re-entry does NOT pass
+//     through `input`, so it never self-clears -- Pitfall behind STOP-07).
+//   - `consecutiveBlockCount`: incremented on each block re-entry; reset to 0
+//     by ANY non-block outcome (D-88-06 -- 8 *consecutive* blocks).
+//   - `capNotifiedThisSession`: one-shot latch guarding the cap warning so a
+//     9th consecutive block does not re-notify; re-armed when the counter
+//     resets.
+let stopHookActive = false;
+let consecutiveBlockCount = 0;
+let capNotifiedThisSession = false;
+
 /**
  * Reset the settle module-state cells. Called from `registerHooksBridge` so a
- * `/reload` cannot leak a stale cached message into the new session.
+ * `/reload` cannot leak a stale cached message or loop-protection state into
+ * the new session.
  */
 export function resetSettleState(): void {
   cachedLastAssistant = undefined;
+  stopHookActive = false;
+  consecutiveBlockCount = 0;
+  capNotifiedThisSession = false;
+}
+
+/**
+ * Reset the consecutive-block counter and re-arm the one-shot cap latch. Called
+ * on ANY non-block Stop outcome (noop / additionalContext-without-block /
+ * `continue:false`) so the cap requires 8 FRESH consecutive blocks afterward
+ * (D-88-06). Does NOT touch `stopHookActive` -- that flag is cleared only by a
+ * genuine `input` event (STOP-07).
+ */
+function resetConsecutiveBlockState(): void {
+  consecutiveBlockCount = 0;
+  capNotifiedThisSession = false;
+}
+
+/**
+ * `input`-event reset closure (STOP-07). A genuine user `input` event clears
+ * `stop_hook_active` and resets the consecutive-block counter + one-shot latch;
+ * bridge-injected `sendMessage` re-entries do NOT pass through `input`, so the
+ * flag survives a re-entry and clears only when the user actually types. Epoch-
+ * guarded like the other settle handlers so a stale closure from a prior
+ * `/reload` cannot reset the live session's state. Registered as a dedicated
+ * `pi.on("input", ...)` subscription in `registerHooksBridge` (Pi supports
+ * multiple handlers per event).
+ */
+export function inputResetHandlerFor(capturedEpoch: number): () => void {
+  return () => {
+    if (capturedEpoch !== currentEpoch()) {
+      return;
+    }
+
+    stopHookActive = false;
+    resetConsecutiveBlockState();
+  };
 }
 
 /**
@@ -163,29 +223,75 @@ async function runStopBucket(
 
   const event: StopEvent = {
     last_assistant_message: renderAssistantText(last),
-    stop_hook_active: false,
+    // STOP-07: the NEXT Stop payload after a block-re-entry carries
+    // `stop_hook_active: true` so the hook can see it is running inside a
+    // bridge-driven continuation loop.
+    stop_hook_active: stopHookActive,
   };
   const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
 
-  // STOP-06 / D-88-05: any continue:false suppresses re-entry.
+  // STOP-06 / D-88-05: any continue:false suppresses re-entry. This is a
+  // non-block outcome, so it resets the consecutive-block counter (D-88-06).
   if (outcomes.some((o) => o.result.kind === "stop")) {
+    resetConsecutiveBlockState();
     return;
   }
 
-  // STOP-03 / STOP-04: first block wins.
+  // STOP-03 / STOP-04: first block wins. The block arm owns the STOP-07
+  // counter / cap / one-shot-warning bookkeeping.
   const block = outcomes.find((o) => o.result.kind === "block");
   if (block?.result.kind === "block") {
-    reenter(pi, block.result.reason ?? "", block.entry.pluginId);
+    handleBlockOutcome(pi, ctx, block.result.reason ?? "", block.entry.pluginId);
     return;
   }
 
-  // STOP-05: additionalContext-without-block re-enters via the same lane.
+  // STOP-05: additionalContext-without-block re-enters via the same lane, but
+  // it is a NON-block outcome -- it resets the consecutive-block counter
+  // (D-88-06) even though it re-enters.
   const mutate = outcomes.find(
     (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
   );
   if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
+    resetConsecutiveBlockState();
     reenter(pi, mutate.result.additionalContext, mutate.entry.pluginId);
+    return;
   }
+
+  // noop: the agent genuinely settled with no blocking hook -- a non-block
+  // outcome that resets the counter (D-88-06).
+  resetConsecutiveBlockState();
+}
+
+/**
+ * STOP-07 block-outcome bookkeeping. Increments the consecutive-block counter
+ * BEFORE deciding whether to re-enter: the `STOP_OVERRIDE_CAP`th consecutive
+ * block (the 8th, D-88-06) does NOT re-enter and instead fires the one-shot
+ * override-cap warning (guarded by `capNotifiedThisSession` so a 9th block does
+ * not re-notify). Any block below the cap sets `stopHookActive` and re-enters
+ * (STOP-03; exit-2 already maps to `{kind:"block"}` in `parseHookStdout`, so
+ * STOP-04 rides this arm). The cap is the T-88-02 livelock mitigation: an
+ * always-blocking hook is bounded to 7 re-entries then surfaced, never spun
+ * unbounded and never suppressed without notice (transparency, D-88-01).
+ */
+function handleBlockOutcome(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  reason: string,
+  pluginId: string,
+): void {
+  consecutiveBlockCount += 1;
+
+  if (consecutiveBlockCount >= STOP_OVERRIDE_CAP) {
+    if (!capNotifiedThisSession) {
+      notifyStopHookOverrideCap(ctx, pluginId);
+      capNotifiedThisSession = true;
+    }
+
+    return;
+  }
+
+  stopHookActive = true;
+  reenter(pi, reason, pluginId);
 }
 
 /**
@@ -215,4 +321,16 @@ function reenter(pi: ExtensionAPI, content: string, pluginId: string): void {
  */
 export function _peekSettleCacheForTest(): AssistantMessage | undefined {
   return cachedLastAssistant;
+}
+
+/**
+ * Test inspector for the STOP-07 loop-protection cells. NOT re-exported from
+ * `bridges/hooks/index.ts`.
+ */
+export function _peekLoopStateForTest(): {
+  readonly stopHookActive: boolean;
+  readonly consecutiveBlockCount: number;
+  readonly capNotifiedThisSession: boolean;
+} {
+  return { stopHookActive, consecutiveBlockCount, capNotifiedThisSession };
 }
