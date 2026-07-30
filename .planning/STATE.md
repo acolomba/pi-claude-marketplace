@@ -4,17 +4,17 @@ milestone: v1.16
 milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
-status: executing
-stopped_at: Completed 88-04-PLAN.md
-last_updated: "2026-07-30T14:45:26.481Z"
+status: verifying
+stopped_at: Completed 88-05-PLAN.md
+last_updated: "2026-07-30T15:45:10.084Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 execution started
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 33
+  completed_plans: 8
+  percent: 67
 ---
 
 # Project State
@@ -23,7 +23,7 @@ progress:
 
 Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Roadmap Summary
@@ -88,8 +88,8 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-30T14:45:14.787Z
-**Stopped at:** Completed 88-04-PLAN.md
+**Last session:** 2026-07-30T15:44:45.512Z
+**Stopped at:** Completed 88-05-PLAN.md
 **Resume file:**
 
 None
@@ -132,6 +132,7 @@ record per-plan decisions here.
 - [Phase ?]: 88-03: D-88-07 reconciled honestly -- cap-trip is a bridge diagnostic, not a NotificationMessage; byte-covered by dedicated hooks-cap-notify.test.ts + Out-of-band catalog entry (catalog-uat skips it), not silently exempted
 - [Phase ?]: 88-04: StopFailure observation-only arm (error/length -> reduceBucket, result discarded); never touches sendMessage/stop_hook_active/counter (SFAIL-01)
 - [Phase ?]: 88-04: errorMessage-only classifier (D-88-02) into closed 10-value vocab, unknown fallback, length -> max_output_tokens deterministic; membership-pinned to NON_TOOL_EVENT_CLOSED_SETS.StopFailure (SFAIL-02/03)
+- [Phase ?]: 88-05: Live Stop UAT proves STOP-01 (agent_settled dispatch) + STOP-03 (block re-entry) on real Pi via spawn/stdin-ignore + --mode json; the 8-block cap loop cannot be driven headlessly (no PTY) and is routed to human_needed.
 
 ## Deferred Items
 
@@ -159,3 +160,4 @@ pre-existing (none from v1.16 stop-hooks).
 | Phase 88 P02 | 25min | 2 tasks | 4 files |
 | Phase 88 P03 | 40min | 2 tasks | 8 files |
 | Phase 88 P04 | 25min | 2 tasks | 3 files |
+| Phase 88 P05 | 55min | 2 tasks | 4 files |
