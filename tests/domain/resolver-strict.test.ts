@@ -192,6 +192,34 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
   }
 });
 
+// ADMIT-01: a plugin declaring a `Stop` group (match-all matcher) alongside
+// a supported bucket-A event resolves fully `installable` -- Stop is admitted
+// (match-all is always supportable, and Stop carries the null no-matcher
+// sentinel), so there is no `{unsupported hooks}` partition drop. This is the
+// end-to-end admission proof: config -> partitionHooks -> resolver verdict.
+test("ADMIT-01: hooks.json with a match-all Stop group + a supported event -> installable, no Stop drop", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
+        Stop: [{ matcher: "", hooks: [{ type: "command", command: "echo stop" }] }],
+      }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.state === "installable") {
+    assert.ok(r.supported.includes("hooks"));
+    assert.ok(
+      !r.notes.some((n) => n.includes("unsupported hooks")),
+      `notes must not report unsupported hooks: ${r.notes.join(" / ")}`,
+    );
+  }
+});
+
 // D-57-04: structurally-malformed hooks/hooks.json flips installable: false
 // with the parse-failure detail surfaced in notes.
 test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {

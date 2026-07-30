@@ -53,6 +53,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
+import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -189,6 +190,18 @@ export async function dispatchHookExec(
       );
     }
 
+    return { kind: "noop" };
+  }
+
+  // D-87-04: the admitted-event union is a superset of the dispatchable
+  // subset (`Stop` / `StopFailure` are admitted but have no translator this
+  // milestone). No Pi event routes them here, so this arm is unreachable
+  // today -- narrow to `DispatchableEvent` before indexing the translator
+  // tables and log + noop on the defensive non-dispatchable arm.
+  if (!isDispatchableEvent(entry.claudeEvent)) {
+    hookDebugLog(
+      `exec: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); noop`,
+    );
     return { kind: "noop" };
   }
 

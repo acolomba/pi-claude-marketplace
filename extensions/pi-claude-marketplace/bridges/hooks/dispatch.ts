@@ -51,7 +51,7 @@ import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-route
 import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
 
-import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
 import type {
   ExtensionAPI,
@@ -247,7 +247,7 @@ async function reduceBucket(
  * undefined`; observation events return `undefined`).
  */
 export function compositeHandlerFor<
-  E extends Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+  E extends Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
 >(
   claudeEvent: E,
   capturedEpoch: number,
@@ -315,7 +315,7 @@ export function toolResultCompositeHandler(
  * and always returns undefined.
  */
 function adaptForEvent(
-  claudeEvent: Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+  claudeEvent: Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
   reduced: ReducedBucket,
   event: unknown,
 ): ToolCallEventResult | InputEventResult | undefined {
@@ -395,7 +395,7 @@ type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
  * already rejects non-empty matchers on those events at parse time.
  */
 function entryFires(
-  claudeEvent: Exclude<BucketAEvent, "PostToolUse" | "PostToolUseFailure">,
+  claudeEvent: Exclude<DispatchableEvent, "PostToolUse" | "PostToolUseFailure">,
   entry: RoutingEntry,
   event: unknown,
 ): boolean {

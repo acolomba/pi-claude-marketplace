@@ -4,9 +4,9 @@
 // Each test in this file pins one load-bearing decision that is a
 // single textual diff away from regression:
 //
-//   - BUCKET_A_EVENTS is exactly the 8 documented events in locked
+//   - BUCKET_A_EVENTS is exactly the 10 documented events in locked
 //     order (downstream registration iterates the tuple deterministically;
-//     adding a 9th event or reordering an existing one red-fails CI).
+//     adding another event or reordering an existing one red-fails CI).
 //   - TOOL_EVENTS is the closed 3-tuple subset of bucket-A whose matcher
 //     targets a Claude tool name (catches a future contributor who tries
 //     to add a non-tool event to the tool-events partition).
@@ -39,11 +39,11 @@ import { partitionHooks } from "../../extensions/pi-claude-marketplace/domain/co
 // Block 1: TOOL-02 bucket-A 8-event tuple (D-58-06)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("TOOL-02: BUCKET_A_EVENTS is exactly the 8 documented events in locked order", () => {
-  // Order matters: downstream registration in a later phase iterates the
-  // tuple deterministically. A future contributor who reorders or adds a
-  // 9th event (without going through a CONTEXT.md / ROADMAP amendment)
-  // red-fails this assertion.
+test("ADMIT-01: BUCKET_A_EVENTS is exactly the 10 documented events in locked order", () => {
+  // Order matters: downstream registration iterates the tuple
+  // deterministically. `Stop` / `StopFailure` are the turn-boundary
+  // lifecycle tail appended after `SessionEnd` (ADMIT-01). A future
+  // contributor who reorders or adds another event red-fails this assertion.
   assert.deepEqual(
     [...BUCKET_A_EVENTS],
     [
@@ -55,6 +55,8 @@ test("TOOL-02: BUCKET_A_EVENTS is exactly the 8 documented events in locked orde
       "PreCompact",
       "PostCompact",
       "SessionEnd",
+      "Stop",
+      "StopFailure",
     ],
     "BUCKET_A_EVENTS is a public closed-set contract -- shape and order are locked",
   );

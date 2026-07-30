@@ -31,7 +31,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DISPATCHABLE_EVENTS } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import {
+  BUCKET_A_EVENTS,
+  DISPATCHABLE_EVENTS,
+} from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 import type { TranslationContext } from "../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type {
@@ -174,6 +177,12 @@ test("PAYL-01: every dispatchable event has a translator module exporting `trans
   // DISPATCHABLE_EVENTS without a matching translator file fails this
   // block before any dispatch-path bug appears.
   assert.equal(DISPATCHABLE_EVENTS.length, 8, "the dispatchable subset has exactly 8 events");
+
+  // ADMIT-01 / D-87-04: the admission tuple and the dispatchable subset are
+  // separate key domains -- admission grew to 10 (adds Stop / StopFailure)
+  // while the translator count stays 8. Pin both lengths independently so a
+  // future edit that conflates them red-fails here.
+  assert.equal(BUCKET_A_EVENTS.length, 10, "the admission tuple has exactly 10 events");
 
   // Local-mirror equality: catch a drift between the upstream tuple and
   // the kebab map maintained in this file.

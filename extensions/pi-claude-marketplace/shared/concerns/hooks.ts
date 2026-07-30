@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 // SURF-02 / D-63-06 / D-63-07: hook summary type seam.
 //
-// `ClaudeHookEvent` is the public literal-union of the 8 supported Claude
+// `ClaudeHookEvent` is the public literal-union of the supported Claude
 // hook events. Type definitions live here (in `shared/`) so the rendering
 // surface can consume them without violating the `shared/` -> `domain/`
 // import-direction fence (`import-x/no-restricted-paths`). The matching
@@ -63,7 +63,9 @@ export type ClaudeHookEvent =
   | "PostToolUseFailure"
   | "PreCompact"
   | "PostCompact"
-  | "SessionEnd";
+  | "SessionEnd"
+  | "Stop"
+  | "StopFailure";
 
 type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
 

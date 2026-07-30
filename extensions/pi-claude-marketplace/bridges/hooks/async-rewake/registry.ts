@@ -42,6 +42,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
@@ -227,6 +228,18 @@ export async function spawnAndRegister(
   pi: ExtensionAPI,
   loc: ScopedLocations,
 ): Promise<void> {
+  // D-87-04: narrow the admitted event to the dispatchable subset before
+  // indexing the translator table. `Stop` / `StopFailure` are admitted but
+  // have no translator this milestone and no Pi event routes them to an
+  // async-rewake spawn, so this arm is a defensive belt (debug-log + return),
+  // not live behavior.
+  if (!isDispatchableEvent(entry.claudeEvent)) {
+    hookDebugLog(
+      `async-rewake: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); skipping spawn`,
+    );
+    return;
+  }
+
   try {
     const dispatchId = dispatchIdGenerator();
     const capturedEpoch = currentEpoch();
