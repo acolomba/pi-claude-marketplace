@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 3
 waived_count: 0
 fixed_count: 0
-total_count: 1
-last_updated: 2026-07-26T13:18:03.001Z
+total_count: 3
+last_updated: 2026-07-30T12:26:38.396Z
 ---
 
 # Broken Windows Ledger
@@ -16,6 +16,8 @@ last_updated: 2026-07-26T13:18:03.001Z
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 86 | unrun-verify | extensions/pi-claude-marketplace/bridges/skills/stage.ts |  | SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) — needs a live Pi session, not exercised in unit tests | open |  | 2026-07-26T13:18:03.001Z |  |
+| 2 | 88 | stub | extensions/pi-claude-marketplace/bridges/hooks/settle.ts |  | stop_hook_active hardcoded false in synthetic Stop event; loop-protection flag + 8-block cap land in plan 03 (STOP-07) | open |  | 2026-07-30T12:26:37.974Z |  |
+| 3 | 88 | stub | extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts |  | thin StopFailure translator; errorMessage classifier lands in plan 04 (SFAIL-03) | open |  | 2026-07-30T12:26:38.396Z |  |
 
 ````json
 [
@@ -29,6 +31,30 @@ last_updated: 2026-07-26T13:18:03.001Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-07-26T13:18:03.001Z",
+    "resolved_at": null
+  },
+  {
+    "id": 2,
+    "kind": "stub",
+    "phase": "88",
+    "file": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts",
+    "line": null,
+    "description": "stop_hook_active hardcoded false in synthetic Stop event; loop-protection flag + 8-block cap land in plan 03 (STOP-07)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-07-30T12:26:37.974Z",
+    "resolved_at": null
+  },
+  {
+    "id": 3,
+    "kind": "stub",
+    "phase": "88",
+    "file": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts",
+    "line": null,
+    "description": "thin StopFailure translator; errorMessage classifier lands in plan 04 (SFAIL-03)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-07-30T12:26:38.396Z",
     "resolved_at": null
   }
 ]

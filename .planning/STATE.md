@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
 current_phase: 88
-current_phase_name: "`agent_settled` dispatcher, Stop contract & StopFailure"
+current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
 status: executing
-stopped_at: Phase 88 context gathered
-last_updated: "2026-07-30T11:32:15.128Z"
+stopped_at: Completed 88-01-PLAN.md
+last_updated: "2026-07-30T12:27:08.700Z"
 last_activity: 2026-07-30
-last_activity_desc: Phase 87 complete, transitioned to Phase 88
+last_activity_desc: Phase 88 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 3
+  completed_plans: 4
   percent: 33
 ---
 
@@ -21,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 88 — `agent_settled` dispatcher, Stop contract & StopFailure
-Plan: Not started
+Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-30 — Phase 87 complete, transitioned to Phase 88
+Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Roadmap Summary
 
@@ -88,11 +88,11 @@ Last activity: 2026-07-30 — Phase 87 complete, transitioned to Phase 88
 
 ## Session
 
-**Last session:** 2026-07-30T10:41:59.116Z
-**Stopped at:** Phase 88 context gathered
-**Resume file:** 
+**Last session:** 2026-07-30T12:26:51.264Z
+**Stopped at:** Completed 88-01-PLAN.md
+**Resume file:**
 
-.planning/phases/88-agent-settled-dispatcher-stop-contract-stopfailure/88-CONTEXT.md
+None
 
 No plans executed yet for v1.16.
 
@@ -124,6 +124,9 @@ record per-plan decisions here.
 - [Phase 87]: 87-02: dispatch.ts adaptForEvent/entryFires/compositeHandlerFor re-keyed to DispatchableEvent (Rule-3 blocking fix from the widen; D-87-04 decoupling, no behavior change)
 - [Phase 87]: 87-02: peer floor @earendil-works/pi-coding-agent >=0.80.5 declarative only (FLOOR-01, D-87-01, D-87-05)
 - [Phase 87]: 87-03: hookify Stop arm restored + ralph-wiggum (real ralph-loop wire bytes) fixture added; both flip to available with Stop bare-supported, ADMIT-02 proven offline (D-87-03)
+- [Phase 88]: 88-01: settle dispatcher tracer - agent_end caches last-assistant, agent_settled gates on stopReason; stop -> Stop bucket -> block -> sendMessage(followUp+triggerTurn) re-entry (STOP-01, STOP-03)
+- [Phase 88]: 88-01: pi-ai/pi-agent-core nested & not top-level resolvable - StopReason/AssistantMessage/AgentMessage derived structurally from AgentEndEvent.messages, pi-api.ts stays sole import site
+- [Phase 88]: 88-01: DISPATCHABLE_EVENTS folded to 10 (Stop/StopFailure gain translators); subset type + isDispatchableEvent belt retained per D-87-04
 
 ## Deferred Items
 
@@ -142,3 +145,9 @@ pre-existing (none from v1.16 stop-hooks).
 ## Operator Next Steps
 
 - Plan the first phase with `/gsd-plan-phase 87`
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 88 P01 | 40min | 2 tasks | 12 files |
