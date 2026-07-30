@@ -10,6 +10,21 @@ Fifteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.1
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.16 stop-hooks — Stop + StopFailure Hook Promotion (branch: features/stop-hooks, started 2026-07-29)
+
+**Goal:** Promote Claude's `Stop` and `StopFailure` hook events into the supported bucket-A set (GitHub issue #103; retires PAYL-V2-04 + PAYL-V2-06) — one `agent_settled` dispatcher gated on the final assistant message's `stopReason`, delivering the full hook-observable Stop contract (block-to-continue re-entry, loop protections) and the observation-only StopFailure arm (closed-set error-type matcher).
+
+**Target features:**
+
+- **`agent_settled` dispatcher with `stopReason` gate** — fires once per logical completion (after Pi auto-retry/auto-compact/queued continuations); the final assistant message's `stopReason` partitions endings exactly as upstream does: `stop` → Stop, `error` → StopFailure, `length` → StopFailure with deterministic `max_output_tokens` error type, `aborted` → neither (Claude suppresses Stop on user interrupt). Last assistant message captured from the preceding `agent_end.messages` (the settled event carries no payload).
+- **Stop decision control at full hook-observable fidelity** — `decision: "block"` + `reason` re-enters via `pi.sendMessage(..., { deliverAs: "followUp", triggerTurn: true })`; exit-code-2 blocks with stderr as reason; `hookSpecificOutput.additionalContext` continues without block; `continue: false` takes precedence over block; `stop_hook_active` stdin flag held by the bridge (set on block re-entry, cleared on Pi `input` event); 8-consecutive-block override cap matching upstream (not the earlier PAYL-V2-04 draft's 10).
+- **StopFailure observation-only arm** — output and exit code ignored per upstream contract; payload carries `error` (classified), optional `error_details`, and `last_assistant_message` = the rendered error text from Pi's `errorMessage`; matcher is the upstream closed set of 10 error types (`rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`, `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`) with `unknown` as the documented in-vocabulary classifier fallback.
+- **Bucket-A promotion mechanics** — `BUCKET_A_EVENTS` 8→10; `NON_TOOL_EVENT_FIELDS` dispositions (Stop: `null` no-matcher sentinel; StopFailure: closed set); payload translators, wire-protocol arms, event-router wiring; plugins declaring only Stop/StopFailure alongside supported events resolve `available` — `ralph-wiggum` and `hookify` flip to fully available (first-party: 12/13).
+- **Peer floor bump `>=0.74.0` → `>=0.80.4`** — `agent_settled` was added in `@earendil-works/pi-coding-agent` 0.80.4 (2026-07-09); below the floor Stop/StopFailure stay unsupported rather than degrading.
+- **Analysis capture + doc reconcile** — new authority doc `docs/research/issue-103-stop-stopfailure-promotion.md` (session-verified analysis: Pi API surface, upstream contract, pi-hooks prior-art audit); `docs/research/claude-hooks-vs-pi-events.md` amended (retire the "agent_end is observation-only" claim, add `agent_settled`); `docs/hooks-compatibility.md` refreshed (Stop/StopFailure rows + the stale v1.13 hard-trip install-time disposition section superseded by force-install partial partitioning).
+
+**Key context:** The one irreducible divergence from Claude is the turn-boundary "timing shift" — upstream folds a blocked stop into the same turn, Pi re-enters as a new turn; invisible to hook scripts, documented for users. `stop_hook_active` semantics and the 8-block cap follow the upstream contract verified 2026-07-28 at code.claude.com/docs/en/hooks. Canary plugin: `ralph-wiggum` (Stop-only). Implementation-time verifications flagged: `agent_settled` firing after a user abort mid-tool-call; settle timing with queued user messages (upstream fires Stop per response, settle fires after queue drain). Prior art: `@hsingjui/pi-hooks` 0.0.2 validates the `agent_end` → follow-up re-entry mechanics end-to-end but diverges from the upstream contract at seven edges (exit-2 not honored, no block cap, `additionalContext` dropped without block, 60s timeout default, over-fires on retry-bound runs) — a mechanism reference, not a fidelity reference.
+
 ## Previous Milestone: v1.15 frontmatter-compliance — Skill and Command Frontmatter Compliance (branch: features/frontmatter-compliance, shipped 2026-07-27 as npm 0.11.1)
 
 **Goal:** The skills and commands bridges reach full compliance with Claude Code's observable frontmatter-loading behavior: they never write bytes Pi rejects, they degrade a component the same way Claude Code does (a skill stays invocable by name but is never auto-invoked; a command stays invocable by its filename), they fold `when_to_use` into the description Pi actually reads, and they tell the user which component failed and why (GitHub issue #101).
@@ -267,7 +282,13 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ### Active
 
-<!-- No active milestone — v1.15 frontmatter-compliance shipped 2026-07-27 (npm 0.11.1); items moved to Validated. Start the next milestone with /gsd-new-milestone. -->
+<!-- Milestone v1.16 stop-hooks (branch features/stop-hooks, started 2026-07-29). GitHub issue #103; retires PAYL-V2-04 + PAYL-V2-06. -->
+
+- [ ] `Stop` hooks fire once per genuine completion via the `agent_settled` + `stopReason` gate and honor the full upstream decision contract (JSON block + reason, exit-2 block, `additionalContext`-continues, `continue: false` precedence)
+- [ ] Blocked stops re-enter the agent loop with the reason as context; `stop_hook_active` reaches the hook's stdin and 8 consecutive blocks trigger the upstream override cap (no livelock)
+- [ ] `StopFailure` hooks fire on error/length endings with a classified `error` type from the upstream 10-value closed set; observation-only per contract
+- [ ] Plugins declaring `Stop`/`StopFailure` resolve `available`; `ralph-wiggum` and `hookify` install fully; a non-empty `Stop` matcher is reported as unsupported, never silently ignored
+- [ ] Peer floor raised to `>=0.80.4`; hooks research doc and `docs/hooks-compatibility.md` reconciled with shipped behavior
 
 <!-- Milestone agent-skill-preloads (workstream issue-86-agent-skill-preloads, shipped 2026-07-20 as npm 0.10.0). Fixed GitHub issue #86. -->
 
@@ -404,7 +425,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-07-25 after starting milestone v1.15 frontmatter-compliance (branch features/frontmatter-compliance, GitHub issue #101) — full Claude Code frontmatter-loading compliance for the skills and commands bridges: two-gate parse model (source parsed pre-substitution for attribution, staged bytes re-parsed for Pi-acceptability), Claude-parity skill degradation (`disable-model-invocation` synthesized block, first-paragraph fallback, name-integrity assert), `when_to_use` folding at the 1,536-char cap, literal command neutralize, surfaced warning rows, and a `malformed mcp`-parallel failure-class reason. 11 requirements across PARSE/SKILL/WTU/CMD/WARN/CLASS/NREG. Prior updates below.*
+*Last updated: 2026-07-29 after starting milestone v1.16 stop-hooks (branch features/stop-hooks, GitHub issue #103) — Stop + StopFailure hook promotion to bucket-A via an `agent_settled` dispatcher gated on the final assistant message's `stopReason` (stop → Stop, error/length → StopFailure, aborted → neither), full hook-observable Stop decision contract (block re-entry, `stop_hook_active`, 8-block cap), observation-only StopFailure with the upstream 10-value error-type matcher, peer floor `>=0.80.4`, and hooks research/compatibility doc reconcile. Retires PAYL-V2-04 + PAYL-V2-06. Prior updates below.*
 
 *Prior update: 2026-07-23 after completing Phase 85 (milestone v1.14 mcp-string-refs) — `mcpServers` string file-path references shipped in the resolver layer with per-plugin soft-degrade and a new `{malformed mcp}` failure-class reason (MCPR-01..04 validated; provisional MCPR-03 refined to wrapped-only per D-04, provisional MCPR-05 shipped as MCPR-04). Prior updates below.*
 
