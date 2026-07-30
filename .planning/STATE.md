@@ -4,27 +4,27 @@ milestone: v1.16
 milestone_name: stop-hooks
 current_phase: 87
 current_phase_name: Bucket-A admission & platform floor
-status: executing
-stopped_at: Completed 87-02-PLAN.md
-last_updated: "2026-07-30T03:52:46.921Z"
-last_activity: 2026-07-29
-last_activity_desc: Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
+status: verifying
+stopped_at: Completed 87-03-PLAN.md
+last_updated: "2026-07-30T04:23:37.275Z"
+last_activity: 2026-07-30
+last_activity_desc: Completed Plan 87-03 (ADMIT-02 fixture-backed admission flip for Stop/StopFailure)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 33
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 87 (Bucket-A admission & platform floor) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-07-29 — Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
+Phase: 87 (Bucket-A admission & platform floor) — READY FOR VERIFICATION
+Plan: 3 of 3 (all plans executed)
+Status: Phase complete — ready for verification
+Last activity: 2026-07-30 — Completed Plan 87-03 (ADMIT-02 fixture-backed admission flip for Stop/StopFailure)
 
 ## Roadmap Summary
 
@@ -88,8 +88,8 @@ Last activity: 2026-07-29 — Completed Plan 87-01 (dispatch key decouple + Stop
 
 ## Session
 
-**Last session:** 2026-07-30T03:52:46.895Z
-**Stopped at:** Completed 87-02-PLAN.md
+**Last session:** 2026-07-30T04:23:37.247Z
+**Stopped at:** Completed 87-03-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -101,6 +101,7 @@ No plans executed yet for v1.16.
 | —    | —        | —     | —     |
 | Phase 87 P01 | 40min | 2 tasks | 12 files |
 | Phase 87 P02 | 21min | 2 tasks | 11 files |
+| Phase 87 P03 | 35min | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -122,6 +123,7 @@ record per-plan decisions here.
 - [Phase 87]: 87-02: BUCKET_A_EVENTS grows 8->10 (Stop null-sentinel + StopFailure closed 10-value error-type set); ClaudeHookEvent widened in lockstep (ADMIT-01)
 - [Phase 87]: 87-02: dispatch.ts adaptForEvent/entryFires/compositeHandlerFor re-keyed to DispatchableEvent (Rule-3 blocking fix from the widen; D-87-04 decoupling, no behavior change)
 - [Phase 87]: 87-02: peer floor @earendil-works/pi-coding-agent >=0.80.5 declarative only (FLOOR-01, D-87-01, D-87-05)
+- [Phase 87]: 87-03: hookify Stop arm restored + ralph-wiggum (real ralph-loop wire bytes) fixture added; both flip to available with Stop bare-supported, ADMIT-02 proven offline (D-87-03)
 
 ## Deferred Items
 

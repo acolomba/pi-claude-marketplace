@@ -59,7 +59,7 @@
   3. `StopFailure` carries the closed 10-value error-type set (`rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`, `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`) through the existing `NON_TOOL_EVENT_CLOSED_SETS` machinery (same shape as the `SessionStart` source matcher, honoring the narrower exact-match charset — letters, digits, `_`, `|`); a matcher outside the vocabulary is reported as a drop, not silently ignored. (ADMIT-01)
   4. The `@earendil-works/pi-coding-agent` peer floor rises `>=0.74.0` → `>=0.80.5` in `package.json` `peerDependencies` (the version that introduced `agent_settled`; the npm registry has no 0.80.4 release — D-87-05; declarative only, doc mentions deliberately omitted per D-87-01/D-87-02); below the floor `Stop` and `StopFailure` stay unsupported rather than degrading. (FLOOR-01)
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -72,7 +72,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 87-03-PLAN.md — Fixture-backed proof: restore hookify Stop arm + add ralph-wiggum fixture; hookify + ralph-wiggum resolve available and `plugin info` lists both (ADMIT-02)
+- [x] 87-03-PLAN.md — Fixture-backed proof: restore hookify Stop arm + add ralph-wiggum fixture; hookify + ralph-wiggum resolve available and `plugin info` lists both (ADMIT-02)
 
 ### Phase 88: `agent_settled` dispatcher, Stop contract & StopFailure
 
@@ -108,7 +108,7 @@ Sequential: 87 → 88 → 89 (each phase depends on the prior)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 87. Bucket-A admission & platform floor | v1.16 | 2/3 | In Progress|  |
+| 87. Bucket-A admission & platform floor | v1.16 | 3/3 | In Progress|  |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 0/? | Not started | — |
 | 89. Documentation reconcile | v1.16 | 0/? | Not started | — |
 | 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete | 2026-07-26 |

@@ -34,7 +34,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Bucket-A Admission
 
 - [x] **ADMIT-01**: `BUCKET_A_EVENTS` grows 8→10 with per-event matcher dispositions — `Stop` takes the `NON_TOOL_EVENT_FIELDS` `null` sentinel so a non-empty matcher is reported as a `no-matcher-support` group drop, never silently ignored (issue #103 acceptance criterion); `StopFailure` takes the SFAIL-03 closed set.
-- [ ] **ADMIT-02**: Plugins declaring `Stop`/`StopFailure` alongside already-supported events resolve `available` (no `{unsupported hooks}` partition drop for these events); `plugin info` lists both as supported; the `ralph-wiggum` (Stop-only) and `hookify` (Stop + bucket-A) fixture manifests flip to fully available.
+- [x] **ADMIT-02**: Plugins declaring `Stop`/`StopFailure` alongside already-supported events resolve `available` (no `{unsupported hooks}` partition drop for these events); `plugin info` lists both as supported; the `ralph-wiggum` (Stop-only) and `hookify` (Stop + bucket-A) fixture manifests flip to fully available.
 
 ### Platform Floor
 
@@ -84,7 +84,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SFAIL-02 | Phase 88 | Pending |
 | SFAIL-03 | Phase 88 | Pending |
 | ADMIT-01 | Phase 87 | Complete |
-| ADMIT-02 | Phase 87 | Pending |
+| ADMIT-02 | Phase 87 | Complete |
 | FLOOR-01 | Phase 87 | Complete |
 | DOC-04 | Phase 89 | Pending |
 | DOC-05 | Phase 89 | Pending |
