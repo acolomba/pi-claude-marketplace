@@ -58,3 +58,52 @@ exit 1
 ```
 
 STOP-01 and STOP-03 are proven on real Pi. STOP-07's cap loop is item 4 in the human checklist.
+
+## Human verification checklist
+
+These runtime timing / interrupt behaviours cannot be sustained by a headless `pi -p` drive (which tears down its non-interactive lifecycle after the initial request). They require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression.
+
+**Interactive setup** (shared by all items):
+
+```bash
+export PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent
+export PI_CLAUDE_MARKETPLACE_DEBUG=1   # emit [hooks] dispatch logs on stderr
+pi --no-extensions \
+   --extension "$(pwd)/extensions/pi-claude-marketplace/index.ts" \
+   --offline --mode json
+```
+
+For items that need an installed Stop hook, install a Stop-only plugin whose hook logs its received stdin and echoes a decision. A minimal observing hook:
+
+```bash
+#!/usr/bin/env bash
+# stop-observe.sh -- log stdin (carries stop_hook_active) then decide.
+cat >> /tmp/stop-uat/stdin.log
+echo >> /tmp/stop-uat/stdin.log
+# For the always-block canary, uncomment the next line:
+# printf '%s' '{"decision":"block","reason":"keep going"}'
+```
+
+### Item 1 -- abort mid-tool-call does NOT fire Stop (STOP-01)
+
+- **Repro:** In an interactive session, start a turn that calls a slow tool (e.g. ask the model to run `bash -c 'sleep 30'`). While the tool is running, interrupt the turn (the Pi interrupt key). Watch the `--mode json` stream and the `[hooks]` debug log.
+- **Expected:** the final assistant message carries `stopReason: "aborted"`; the settle gate maps `aborted` → **neither** Stop nor StopFailure, so **no** Stop/StopFailure hook fires (no `stop-observe.sh` invocation, no marker). Pi's provider contract says every interrupt path surfaces a final assistant message with `stopReason: "aborted"`.
+- **Failure signature:** a Stop (or StopFailure) hook fires after an abort, OR the final message's `stopReason` is not `"aborted"` on some interrupt path (e.g. interrupting exactly at the tool-result boundary). Record which interrupt paths, if any, do not carry `"aborted"`.
+
+### Item 2 -- settle timing with queued user messages (STOP-01)
+
+- **Repro:** Start a turn, then while it is still running submit a **second** user message so it queues. Let both drain. Count `agent_settled` events and Stop hook firings in the `--mode json` stream / `[hooks]` log.
+- **Expected:** upstream Claude fires `Stop` once per response; Pi's `agent_settled` fires **once, after the queue fully drains** (no automatic retry / compaction / queued continuation remains), so exactly **one** settle-time Stop dispatch for the whole drained sequence.
+- **Failure signature:** `agent_settled` (and the Stop dispatch) fires mid-queue before the drain, or fires more than once for a single logical completion. Document any per-response vs per-settle divergence from the upstream cadence.
+
+### Item 3 -- re-entry does NOT self-clear `stop_hook_active` (STOP-07)
+
+- **Repro:** Install the always-block canary (the `stop-observe.sh` above with the `block` line uncommented, logging stdin). Send one prompt and let the block re-enter at least twice. Inspect `stop-observe.sh`'s `stdin.log`: read the `stop_hook_active` field of each consecutive Stop payload. Then submit a **genuine** new user prompt.
+- **Expected:** the bridge's re-entry uses `sendMessage(customType: "claude-hook-stop-block", display: false, …)`, which does **not** pass through the `input` event -- so `stop_hook_active` stays `true` across every consecutive re-entry (the 2nd+ Stop payloads show `"stop_hook_active": true`). Only the genuine user prompt fires `input`, which clears the flag (the next Stop payload after it shows `"stop_hook_active": false`).
+- **Failure signature:** the 2nd consecutive Stop payload shows `"stop_hook_active": false` (the injected re-entry self-cleared the flag via a stray `input`), or a genuine user prompt fails to clear it.
+
+### Item 4 -- the 8-consecutive-block override cap (STOP-07)
+
+- **Repro:** Install the always-block canary. In an **interactive** session (a real TTY -- the scripted `stop-canary.mjs` proves only the first re-entry; headless `pi` cannot sustain the loop), send one prompt and let the always-block hook drive the re-entry loop with no further input.
+- **Expected:** the loop runs settle → block → re-enter for 8 consecutive blocks; the **8th** block is suppressed (no re-entry), the turn ends, and the warning surfaces **exactly once**: `Stop hook override cap reached.` followed by the detail naming the plugin (`… blocked 8 times in a row; the turn ended despite its active block.`). The marker/`stdin.log` shows exactly 8 block invocations, then the run goes idle (no livelock).
+- **Failure signature:** the marker shows more than 8 blocks (the cap did not bound the livelock -- a T-88-02 regression), the warning is missing or fires more than once, or the run never terminates.
