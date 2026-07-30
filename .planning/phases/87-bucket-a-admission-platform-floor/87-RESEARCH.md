@@ -307,19 +307,25 @@ export type ClaudeHookEvent =
 | A2 | `StopFailure`'s Claude-side matcher field label is `"error"`. | Code Examples | Low — the label is only used in the derivation comment; the gate matches the raw string against the closed set regardless. Confirm against upstream hooks docs. |
 | A3 | The new canonical "non-bucket-A event" for re-pointed tests is a still-deferred event such as `Notification`. | Pitfall 5 | Low — any genuinely non-bucket-A token works; pick one and use it consistently. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Admission-vs-dispatch coupling — how is `BucketAEvent` totality reconciled with "dispatch not wired"? (BLOCKING — resolve before planning tasks)**
+> All three questions were put to the user during planning and resolved as
+> locked decisions in 87-CONTEXT.md: Q1 → **D-87-04** (decouple — `DISPATCHABLE_EVENTS`
+> subset keys the dispatch tables), Q2 → **D-87-05** (floor is `>=0.80.5`),
+> Q3 → **D-87-06** (defer output-catalog example to Phase 89 unless a test forces
+> the lockstep edit).
+
+1. **RESOLVED (D-87-04, option a — decouple).** Admission-vs-dispatch coupling — how is `BucketAEvent` totality reconciled with "dispatch not wired"?
    - What we know: `BUCKET_A_EVENTS`→`BucketAEvent` keys three production `Record<BucketAEvent>` dispatch tables (dispatch-exec.ts:108,221; async-rewake/registry.ts:96) and three test tables (hooks-translators.test.ts:69,104,146). Widening to 10 makes all six a typecheck error demanding Stop/StopFailure translators (Phase 88 work). The admission gate and info listing, by contrast, follow the tuple automatically with no new code.
    - What's unclear: whether the phase should (a) **decouple** the dispatch key domain from the admission tuple (make the three tables `Partial<Record<BucketAEvent, …>>` + a defensive `undefined` guard in `buildPayload`, or introduce a `DISPATCHABLE_EVENTS` subset the tables key on), keeping Phase 87 strictly admission-only; or (b) add real Stop/StopFailure translators now (pulls STOP-02/SFAIL-02 payload design into Phase 87, contradicting the phase boundary); or (c) keep the tables total but stub the two translators with placeholder round-trip fixtures (still Phase-88-shaped work, and `hooks-translators.test.ts` Block B byte-asserts round-trip JSON per event).
    - Recommendation: **Option (a) — decouple.** It is the only option that honors both "grow BUCKET_A_EVENTS 8→10" (locked in CONTEXT) and "dispatch not yet wired (Phase 88)." The dormant Stop/StopFailure routing buckets pre-seeded at event-router.ts:406 are harmless (no Pi event routes to them until Phase 88 subscribes `agent_settled`). Verify with the planner/user before task breakdown, because it changes dispatch-table types the plan-checker will inspect.
 
-2. **Floor version: `>=0.80.4` (locked) vs `>=0.80.5` (verified accurate)?**
+2. **RESOLVED (D-87-05 — `>=0.80.5`).** Floor version: `>=0.80.4` (locked) vs `>=0.80.5` (verified accurate)?
    - What we know: 0.80.4 was never published; 0.80.5 (2026-07-09) is the first version exposing `agent_settled`. `>=0.80.4` is semver-valid and resolves to 0.80.5+.
    - What's unclear: whether to honor the locked FLOOR-01/D-87-01 literal (`0.80.4`) or correct it to `0.80.5`.
    - Recommendation: bump to `>=0.80.5` and note the correction; if the user insists on the locked literal, `>=0.80.4` still works functionally. Surface the discrepancy explicitly (it touches a locked decision).
 
-3. **`docs/output-catalog.md:390` uses `Stop` as its non-bucket-A example — fix now or defer to Phase 89?**
+3. **RESOLVED (D-87-06 — defer to Phase 89 unless a test forces it).** `docs/output-catalog.md:390` uses `Stop` as its non-bucket-A example — fix now or defer to Phase 89?
    - What we know: D-87-02 forbids editing README.md and hooks-compatibility.md specifically; output-catalog.md is not named. Line 390 calls Stop "a non-bucket-A event," which becomes factually wrong. `tests/architecture/catalog-uat.test.ts` exists but does not appear to byte-assert this specific line against Stop.
    - Recommendation: verify whether catalog-uat byte-locks that phrase; if not, either swap the example event in-line (a comment-scoped, illustrative edit, not a compatibility claim) or defer to the Phase 89 doc reconcile. Lean toward deferring to Phase 89 to keep Phase 87 doc-clean per D-87-02's spirit, unless the stale example breaks a test.
 
