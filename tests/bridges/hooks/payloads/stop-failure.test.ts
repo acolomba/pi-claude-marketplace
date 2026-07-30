@@ -26,6 +26,7 @@ const stopFailureVocab = NON_TOOL_EVENT_CLOSED_SETS.StopFailure;
 if (stopFailureVocab === undefined) {
   throw new Error("StopFailure closed vocab must be defined");
 }
+
 const CLOSED_VOCAB = stopFailureVocab;
 
 // ---------------------------------------------------------------------------
