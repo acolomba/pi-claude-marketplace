@@ -88,11 +88,24 @@ Plans:
   5. `StopFailure` fires observation-only at settle on `error` and `length` endings — hook output and exit code ignored, no decision machinery, no re-entry, no loop guard — and its payload carries `error` (the classified type used for matcher filtering: `length` maps deterministically to `max_output_tokens`; `error` endings classify best-effort from Pi's `errorMessage` with `unknown` as the in-vocabulary fallback), optional `error_details`, and `last_assistant_message` = the rendered error text from `errorMessage`. (SFAIL-01, SFAIL-02, SFAIL-03)
 
 **Plans**: 5 plans
+**Wave 1**
 
 - [ ] 88-01-PLAN.md — Tracer: dev-tree refresh to pi-coding-agent 0.82.1 + settle dispatcher gate & Stop block re-entry end-to-end (STOP-01, STOP-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 88-02-PLAN.md — Stop decision control: exit-2, additionalContext, aggregate continue:false precedence + Stop stdin envelope (STOP-02, STOP-03, STOP-04, STOP-05, STOP-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 88-03-PLAN.md — Loop protections: stop_hook_active flag, 8-consecutive-block cap, input reset + cap-trip warning seam & catalog entry (STOP-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 88-04-PLAN.md — StopFailure observation-only arm + errorMessage classifier into the closed 10-value vocab (SFAIL-01, SFAIL-02, SFAIL-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 88-05-PLAN.md — Live Pi runtime UAT: scripted ralph-wiggum canary + human_needed verification items (STOP-01, STOP-07)
 
 ### Phase 89: Documentation reconcile

@@ -4,15 +4,15 @@ milestone: v1.16
 milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: "`agent_settled` dispatcher, Stop contract & StopFailure"
-status: planning
+status: executing
 stopped_at: Phase 88 context gathered
-last_updated: "2026-07-30T10:41:59.143Z"
+last_updated: "2026-07-30T11:32:15.128Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 87 complete, transitioned to Phase 88
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 3
+  total_plans: 8
   completed_plans: 3
   percent: 33
 ---
@@ -23,7 +23,7 @@ progress:
 
 Phase: 88 — `agent_settled` dispatcher, Stop contract & StopFailure
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-30 — Phase 87 complete, transitioned to Phase 88
 
 ## Roadmap Summary
