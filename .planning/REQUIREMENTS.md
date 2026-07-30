@@ -38,7 +38,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Platform Floor
 
-- [ ] **FLOOR-01**: The `@earendil-works/pi-coding-agent` peer floor rises `>=0.74.0` → `>=0.80.4` (`agent_settled` was introduced in 0.80.4), reflected in `package.json` `peerDependencies` and user-facing docs; below the floor the two events stay unsupported rather than degrading.
+- [ ] **FLOOR-01**: The `@earendil-works/pi-coding-agent` peer floor rises `>=0.74.0` → `>=0.80.5` (`agent_settled` was introduced in 0.80.5 — the npm registry has no 0.80.4 release; D-87-05), reflected in `package.json` `peerDependencies` (declarative only, no runtime detection — D-87-01; doc mentions deliberately omitted — D-87-02); below the floor the two events stay unsupported rather than degrading.
 
 ### Documentation Reconcile
 
