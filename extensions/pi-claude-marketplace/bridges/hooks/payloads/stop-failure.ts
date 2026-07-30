@@ -47,18 +47,59 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
 }
 
 /**
+ * Ordered, case-insensitive substring table over Pi's rendered `errorMessage`
+ * (SFAIL-03, D-88-02). Substrings are grounded in Pi's own retry/limit
+ * classifier regexes (`_isNonRetryableProviderLimitError` /
+ * `_isRetryableError`) and its auth-failure error strings; the target token is
+ * always a member of the closed StopFailure vocabulary. Order matters: the
+ * first entry whose any-substring matches wins, so the more specific
+ * limit/billing forms precede the broad HTTP-status forms. `oauth_org_not_allowed`
+ * is intentionally absent -- org-policy errors have no observed Pi substring and
+ * fall through to `unknown` (A2).
+ */
+const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly string[]]> = [
+  [
+    "billing_error",
+    [
+      "billing",
+      "quota exceeded",
+      "insufficient_quota",
+      "usage limit",
+      "available balance",
+      "out of budget",
+    ],
+  ],
+  ["rate_limit", ["rate limit", "429", "too many requests"]],
+  ["overloaded", ["overloaded", "529"]],
+  ["authentication_failed", ["authentication failed", "401", "403"]],
+  [
+    "server_error",
+    ["500", "502", "503", "504", "server error", "internal error", "service unavailable"],
+  ],
+  ["model_not_found", ["model not found", "model_not_found"]],
+  ["invalid_request", ["invalid request", "400"]],
+];
+
+/**
  * Classify a StopFailure ending into the closed 10-value error-type vocabulary
  * (SFAIL-03, D-88-02). Two inputs only -- Pi's rendered `errorMessage` and the
  * run's `stopReason` -- with no `after_provider_response` subscription and no
  * HTTP-status cell (the firming variant was declined). `stopReason "length"`
  * maps deterministically to `max_output_tokens` without consulting
- * `errorMessage`; otherwise a small ordered case-insensitive substring table
+ * `errorMessage`; otherwise the ordered case-insensitive `CLASSIFIER_TABLE`
  * over `errorMessage` maps into the vocab, falling back to the in-vocabulary
- * `unknown`. The substring table lands in a follow-up step.
+ * `unknown`.
  */
-export function classifyStopFailure(_errorMessage: string, stopReason: StopReason): string {
+export function classifyStopFailure(errorMessage: string, stopReason: StopReason): string {
   if (stopReason === "length") {
     return "max_output_tokens";
+  }
+
+  const haystack = errorMessage.toLowerCase();
+  for (const [type, substrings] of CLASSIFIER_TABLE) {
+    if (substrings.some((s) => haystack.includes(s))) {
+      return type;
+    }
   }
 
   return "unknown";

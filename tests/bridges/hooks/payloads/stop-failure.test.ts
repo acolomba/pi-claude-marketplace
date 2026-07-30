@@ -22,7 +22,11 @@ const ctx: TranslationContext = {
   cwd: "/proj",
 };
 
-const CLOSED_VOCAB = NON_TOOL_EVENT_CLOSED_SETS.StopFailure;
+const stopFailureVocab = NON_TOOL_EVENT_CLOSED_SETS.StopFailure;
+if (stopFailureVocab === undefined) {
+  throw new Error("StopFailure closed vocab must be defined");
+}
+const CLOSED_VOCAB = stopFailureVocab;
 
 // ---------------------------------------------------------------------------
 // SFAIL-02: envelope shape
