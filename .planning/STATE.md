@@ -5,15 +5,15 @@ milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
 status: executing
-stopped_at: Completed 88-01-PLAN.md
-last_updated: "2026-07-30T12:27:08.700Z"
+stopped_at: Completed 88-02-PLAN.md
+last_updated: "2026-07-30T12:48:47.820Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
   percent: 33
 ---
 
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-30 — Phase 88 execution started
 
@@ -88,8 +88,8 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-30T12:26:51.264Z
-**Stopped at:** Completed 88-01-PLAN.md
+**Last session:** 2026-07-30T12:48:35.019Z
+**Stopped at:** Completed 88-02-PLAN.md
 **Resume file:**
 
 None
@@ -127,6 +127,7 @@ record per-plan decisions here.
 - [Phase 88]: 88-01: settle dispatcher tracer - agent_end caches last-assistant, agent_settled gates on stopReason; stop -> Stop bucket -> block -> sendMessage(followUp+triggerTurn) re-entry (STOP-01, STOP-03)
 - [Phase 88]: 88-01: pi-ai/pi-agent-core nested & not top-level resolvable - StopReason/AssistantMessage/AgentMessage derived structurally from AgentEndEvent.messages, pi-api.ts stays sole import site
 - [Phase 88]: 88-01: DISPATCHABLE_EVENTS folded to 10 (Stop/StopFailure gain translators); subset type + isDispatchableEvent belt retained per D-87-04
+- [Phase ?]: STOP-06 aggregate precedence realized via collectBucketOutcomes (no-short-circuit bucket walk); asyncRewake-on-Stop degraded to noop+log, not sync-bypassed
 
 ## Deferred Items
 
@@ -151,3 +152,4 @@ pre-existing (none from v1.16 stop-hooks).
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 88 P01 | 40min | 2 tasks | 12 files |
+| Phase 88 P02 | 25min | 2 tasks | 4 files |

@@ -18,11 +18,11 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Settle Dispatcher & Stop Contract
 
 - [x] **STOP-01**: A single `agent_settled` subscriber dispatches Stop hooks only on genuine completions — the final assistant message's `stopReason` gates dispatch (`stop` → fire; `aborted` → suppress, matching upstream's does-not-run-on-user-interrupt rule; `error`/`length` route to StopFailure per SFAIL-01). The last assistant message is cached from the preceding `agent_end.messages` (last-write-wins across auto-retry/compaction chains) under the bridge's existing epoch/`/reload` hygiene so a stale cell never leaks across reloads.
-- [ ] **STOP-02**: Stop hooks receive the standard Claude stdin payload — the shipped bucket-A common fields (`session_id`, `transcript_path`, `cwd`, `hook_event_name`) plus `last_assistant_message` (from the STOP-01 cache) and `stop_hook_active` (from STOP-07). `background_tasks`/`session_crons` are omitted — upstream defines them as present only when the task registry is reachable, and Pi has none, so omission sits inside the documented contract.
+- [x] **STOP-02**: Stop hooks receive the standard Claude stdin payload — the shipped bucket-A common fields (`session_id`, `transcript_path`, `cwd`, `hook_event_name`) plus `last_assistant_message` (from the STOP-01 cache) and `stop_hook_active` (from STOP-07). `background_tasks`/`session_crons` are omitted — upstream defines them as present only when the task registry is reachable, and Pi has none, so omission sits inside the documented contract.
 - [x] **STOP-03**: A hook returning `{"decision": "block", "reason": "..."}` re-enters the agent loop via `pi.sendMessage(..., { deliverAs: "followUp", triggerTurn: true })` with the reason as model-visible, display-suppressed content.
-- [ ] **STOP-04**: A Stop hook exiting with code 2 blocks the stop with stderr as the reason (the non-JSON idiom), wired through the wire-protocol's per-event exit-2 arm.
-- [ ] **STOP-05**: `hookSpecificOutput.additionalContext` without a block keeps the conversation going — same re-entry mechanism as STOP-03, feedback labeling rather than block labeling.
-- [ ] **STOP-06**: A top-level `continue: false` takes precedence over any block decision — the bridge does not re-enter.
+- [x] **STOP-04**: A Stop hook exiting with code 2 blocks the stop with stderr as the reason (the non-JSON idiom), wired through the wire-protocol's per-event exit-2 arm.
+- [x] **STOP-05**: `hookSpecificOutput.additionalContext` without a block keeps the conversation going — same re-entry mechanism as STOP-03, feedback labeling rather than block labeling.
+- [x] **STOP-06**: A top-level `continue: false` takes precedence over any block decision — the bridge does not re-enter.
 - [ ] **STOP-07**: Loop protections match upstream — the bridge holds a per-session `stop_hook_active` flag set when it blocks-and-re-enters and cleared on the next genuine `input` event (bridge-injected custom messages do not pass through `input`), and 8 consecutive blocks trip the override cap with a one-shot notify. Supersedes PAYL-V2-04's draft cap of 10.
 
 ### StopFailure
@@ -74,11 +74,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
 | STOP-01 | Phase 88 | Complete |
-| STOP-02 | Phase 88 | Pending |
+| STOP-02 | Phase 88 | Complete |
 | STOP-03 | Phase 88 | Complete |
-| STOP-04 | Phase 88 | Pending |
-| STOP-05 | Phase 88 | Pending |
-| STOP-06 | Phase 88 | Pending |
+| STOP-04 | Phase 88 | Complete |
+| STOP-05 | Phase 88 | Complete |
+| STOP-06 | Phase 88 | Complete |
 | STOP-07 | Phase 88 | Pending |
 | SFAIL-01 | Phase 88 | Pending |
 | SFAIL-02 | Phase 88 | Pending |
