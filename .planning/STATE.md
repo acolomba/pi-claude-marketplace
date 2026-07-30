@@ -2,9 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
+current_phase_name: roadmap created — 3 phases, 87-89
 status: planning
-last_updated: "2026-07-29T00:00:00.000Z"
+stopped_at: Phase 87 context gathered
+last_updated: "2026-07-30T01:46:39.076Z"
 last_activity: 2026-07-29
+last_activity_desc: v1.16 roadmap created (Phases 87-89)
 progress:
   total_phases: 3
   completed_phases: 0
@@ -84,9 +87,9 @@ Last activity: 2026-07-29 — v1.16 roadmap created (Phases 87-89)
 
 ## Session
 
-**Last session:** 2026-07-29 — roadmap creation
-**Stopped at:** ROADMAP.md + REQUIREMENTS.md traceability + STATE.md written
-**Resume file:** None
+**Last session:** 2026-07-30T01:46:39.053Z
+**Stopped at:** Phase 87 context gathered
+**Resume file:** .planning/phases/87-bucket-a-admission-platform-floor/87-CONTEXT.md
 
 ## Performance Metrics
 
@@ -106,6 +109,7 @@ record per-plan decisions here.
   0.80.4), NOT `agent_end` — `agent_end` over-fires on runs Pi is about to auto-retry,
   which are StopFailure-or-nothing moments under Claude's contract (deviates from issue
   #103's `agent_end` proposal).
+
 - [Roadmap]: Stop + StopFailure combined in Phase 88 (one dispatcher, one `stopReason`
   gate); admission/floor split into Phase 87 as the prerequisite; docs isolated in
   Phase 89 to reconcile against final behavior.
