@@ -220,6 +220,65 @@ test("ADMIT-01: hooks.json with a match-all Stop group + a supported event -> in
   }
 });
 
+// ADMIT-02 (edge: adjacency): the real hookify wire bytes declare `Stop`
+// ALONGSIDE already-supported bucket-A events (PreToolUse, PostToolUse,
+// UserPromptSubmit). Every arm sits in the SAME supported partition -- Stop is
+// not carved into an `{unsupported hooks}` drop -- so the plugin resolves fully
+// `installable` with `hooks` supported and no droppedHooks. Fixture-backed proof
+// (real claude-plugins-official bytes) that growing BUCKET_A_MEMBERS admits Stop
+// with zero new admission code.
+test("ADMIT-02: hookify fixture (Stop + bucket-A events) -> installable, no Stop/StopFailure drop", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: await fixture("hookify-hooks"),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.state === "installable") {
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
+    // No partition drop for Stop (or any arm): the supported subset retained
+    // everything, so the installable variant carries no droppedHooks.
+    assert.equal(r.droppedHooks, undefined);
+    assert.ok(
+      !r.notes.some((n) => n.includes("unsupported hooks")),
+      `notes must not report unsupported hooks: ${r.notes.join(" / ")}`,
+    );
+  }
+});
+
+// ADMIT-02 (edge: empty): a Stop-only plugin (ralph-wiggum fixture, no other
+// bucket-A event) resolves fully `installable` with a NON-empty supported
+// subset -- `hooks` in supported, hooksConfigPath recorded. This is the
+// counterpoint to the Notification-only empty-subset case below (which drops to
+// `partially-available` with no hooksConfigPath): a Stop-only config is admitted
+// because Stop IS bucket-A, so its subset is non-empty.
+test("ADMIT-02: ralph-wiggum fixture (Stop-only) -> installable with a non-empty supported subset", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "hooks", "hooks.json")]: {
+      contents: await fixture("ralph-wiggum-hooks"),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+
+  if (r.state === "installable") {
+    assert.ok(r.supported.includes("hooks"), `supported: ${r.supported.join(" / ")}`);
+    assert.equal(r.hooksConfigPath, path.join("hooks", "hooks.json"));
+    assert.equal(r.droppedHooks, undefined);
+    assert.ok(
+      !r.notes.some((n) => n.includes("unsupported hooks")),
+      `notes must not report unsupported hooks: ${r.notes.join(" / ")}`,
+    );
+  }
+});
+
 // D-57-04: structurally-malformed hooks/hooks.json flips installable: false
 // with the parse-failure detail surfaced in notes.
 test("D-57-04: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {

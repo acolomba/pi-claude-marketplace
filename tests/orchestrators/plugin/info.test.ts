@@ -1810,6 +1810,144 @@ test("SURF-01 / D-63-04: available plugin (not-installed) with hooks/hooks.json 
   });
 });
 
+// ---------------------------------------------------------------------------
+// ADMIT-02: `plugin info` lists Stop / StopFailure as SUPPORTED (bare
+// `<event>` non-tool entries, no ` (unsupported)` suffix) once BUCKET_A_MEMBERS
+// contains them. Fixture-backed for both real-wire-byte plugins; a synthetic
+// case pins the StopFailure listing + deterministic Stop-before-StopFailure
+// order (no first-party plugin ships StopFailure, so it is not in a fixture).
+// ---------------------------------------------------------------------------
+
+test("ADMIT-02: ralph-wiggum fixture (Stop-only) lists Stop as a bare supported hook entry", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "ralph", source: "./ralph", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["ralph"],
+    });
+
+    const pluginDir = path.join(mpRoot, "ralph");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      await readFile("tests/fixtures/ralph-wiggum-hooks.json", "utf8"),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "ralph", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ ralph v1.0.0 (available)",
+        "    hooks:",
+        "      Stop",
+      ].join("\n"),
+    );
+    assert.doesNotMatch(notifications[0]!.message, /Stop \(unsupported\)/);
+  });
+});
+
+test("ADMIT-02: hookify fixture (Stop + bucket-A events) lists Stop supported alongside the other arms", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "hookify", source: "./hookify", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["hookify"],
+    });
+
+    const pluginDir = path.join(mpRoot, "hookify");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      await readFile("tests/fixtures/hookify-hooks.json", "utf8"),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hookify", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    // Declaration order from the fixture is preserved end-to-end. The two
+    // matcher-less tool arms render `<event>()`; Stop and UserPromptSubmit are
+    // non-tool events and render bare -- Stop with NO ` (unsupported)` suffix.
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ hookify v1.0.0 (available)",
+        "    hooks:",
+        "      PreToolUse()",
+        "      PostToolUse()",
+        "      Stop",
+        "      UserPromptSubmit",
+      ].join("\n"),
+    );
+    assert.doesNotMatch(notifications[0]!.message, /Stop \(unsupported\)/);
+  });
+});
+
+test("ADMIT-02: a config declaring Stop + StopFailure lists both bare-supported in declaration order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "sf", source: "./sf", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["sf"],
+    });
+
+    const pluginDir = path.join(mpRoot, "sf");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    // Both are non-tool events with match-all (no-matcher) groups, so both are
+    // admitted and render as bare supported entries. No first-party plugin
+    // ships StopFailure, so this synthetic config pins its supported listing.
+    await writeFile(
+      path.join(pluginDir, "hooks", "hooks.json"),
+      JSON.stringify({
+        Stop: [{ hooks: [{ type: "command", command: "echo stop" }] }],
+        StopFailure: [{ hooks: [{ type: "command", command: "echo stop-failure" }] }],
+      }),
+      "utf8",
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "sf", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ sf v1.0.0 (available)",
+        "    hooks:",
+        "      Stop",
+        "      StopFailure",
+      ].join("\n"),
+    );
+    assert.doesNotMatch(notifications[0]!.message, /\(unsupported\)/);
+  });
+});
+
 test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and info-render surfaces probe-classifier reason via narrowProbeError (POSIX)", async (t) => {
   if (process.platform === "win32") {
     t.skip("chmod-based EACCES fault injection is POSIX-only");
