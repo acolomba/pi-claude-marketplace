@@ -2,17 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
-current_phase_name: roadmap created — 3 phases, 87-89
-status: planning
-stopped_at: Phase 87 context gathered
-last_updated: "2026-07-30T01:46:39.076Z"
+current_phase: 87
+current_phase_name: Bucket-A admission & platform floor
+status: executing
+stopped_at: Completed 87-01-PLAN.md
+last_updated: "2026-07-30T03:24:24.753Z"
 last_activity: 2026-07-29
-last_activity_desc: v1.16 roadmap created (Phases 87-89)
+last_activity_desc: Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started (roadmap created — 3 phases, 87-89)
-Plan: —
-Status: Roadmap approved; ready to plan Phase 87
-Last activity: 2026-07-29 — v1.16 roadmap created (Phases 87-89)
+Phase: 87 (Bucket-A admission & platform floor) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-07-29 — Completed Plan 87-01 (dispatch key decouple + Stop->Notification re-point)
 
 ## Roadmap Summary
 
@@ -87,9 +88,9 @@ Last activity: 2026-07-29 — v1.16 roadmap created (Phases 87-89)
 
 ## Session
 
-**Last session:** 2026-07-30T01:46:39.053Z
-**Stopped at:** Phase 87 context gathered
-**Resume file:** .planning/phases/87-bucket-a-admission-platform-floor/87-CONTEXT.md
+**Last session:** 2026-07-30T03:24:12.924Z
+**Stopped at:** Completed 87-01-PLAN.md
+**Resume file:** None
 
 ## Performance Metrics
 
@@ -98,6 +99,7 @@ No plans executed yet for v1.16.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+| Phase 87 P01 | 40min | 2 tasks | 12 files |
 
 ## Decisions
 
@@ -113,6 +115,9 @@ record per-plan decisions here.
 - [Roadmap]: Stop + StopFailure combined in Phase 88 (one dispatcher, one `stopReason`
   gate); admission/floor split into Phase 87 as the prerequisite; docs isolated in
   Phase 89 to reconcile against final behavior.
+
+- [Phase 87]: 87-01: DISPATCHABLE_EVENTS subset decouples dispatch/rewake/translator tables from the BUCKET_A_EVENTS admission tuple (D-87-04); tuple stays 8, admission ships in Plan 02
+- [Phase 87]: 87-01: Stop -> Notification for the canonical unsupported-event example across the suite (D-87-06); hookify wire-byte provenance left on Stop (restored in the admission plan, D-87-03)
 
 ## Deferred Items
 
