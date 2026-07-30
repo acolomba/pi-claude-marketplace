@@ -385,6 +385,36 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
   ctx.ui.notify(summary, "info");
 }
 
+/**
+ * STOP-07 / D-88-01 IL-2 bridge seam: the one-shot Stop-hook override-cap
+ * warning. The settle dispatcher (`bridges/hooks/settle.ts`) fires this
+ * exactly once when a Stop hook blocks re-entry 8 consecutive times -- the
+ * loop protection suppresses the 8th re-entry and surfaces this warning so a
+ * livelocking hook is visible to the user rather than silently overridden
+ * (the transparency prohibition behind D-88-01). Warning severity per the
+ * tri-state model: the turn DID end (the protection worked) but the plugin's
+ * block desire was deliberately suppressed, so the user should notice.
+ *
+ * On-the-wire form mirrors `notifyDiagnostic`: a non-empty summary first line
+ * ("Stop hook override cap reached.") followed by a `\n\n` separator and a
+ * detail block naming the plugin and stating the 8-consecutive-block / turn-
+ * ended-despite-active-block fact. The host UI prepends the `Warning:` label
+ * to the summary line (the same shape `notifyDiagnostic` /
+ * `notifyAsyncRewakeSummary` already ship without tripping the notify-grammar
+ * invariant, which only walks structured `NotificationMessage` fixtures). The
+ * literal `8` is the fixed override cap (STOP-07); it is duplicated here rather
+ * than imported from the bridge layer so `shared/` does not depend on
+ * `bridges/`. The byte form is locked by
+ * `tests/architecture/hooks-cap-notify.test.ts` against the
+ * `stop-override-cap` block in `docs/output-catalog.md`.
+ */
+export function notifyStopHookOverrideCap(ctx: ExtensionContext, pluginId: string): void {
+  ctx.ui.notify(
+    `Stop hook override cap reached.\n\n\`${pluginId}\`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.`,
+    "warning",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Structured notification type model.
 //

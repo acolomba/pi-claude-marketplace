@@ -2251,6 +2251,18 @@ AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verifica
 
 Triggers: `marketplace add <owner>/<private-repo>` (first access; Phase 35 Plan 35-01) and -- rarely -- `marketplace update <name>` when the stored credential has been evicted from the OS keychain (Phase 35 Plan 35-02). The post-Phase-35-01 happy path on `marketplace update` is silent reuse (AUTH-02): the stored token in the keychain hits on `credentialOps.fill`, no Device Flow runs, no notification fires.
 
+### Stop hook override cap reached (STOP-07 / D-88-01)
+
+<!-- catalog-state: stop-override-cap -->
+
+```text
+Stop hook override cap reached.
+
+`ralph-wiggum`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.
+```
+
+Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when a Stop hook returns `decision: block` on 8 consecutive settle cycles. The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a non-block outcome resets the consecutive-block counter and re-arms it (D-88-06), so a fresh 8-block run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `catalog-uat.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
+
 ______________________________________________________________________
 
 ## Cross-references
