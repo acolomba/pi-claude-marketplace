@@ -1,0 +1,15 @@
+{
+  "description": "Stop-only hook config from the ralph-loop plugin (issue #103 refers to it as 'ralph-wiggum'), derived from real claude-plugins-official wire bytes: plugins/ralph-loop/hooks/hooks.json (D-87-03)",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

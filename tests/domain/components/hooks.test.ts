@@ -668,14 +668,12 @@ test("parseHooksConfig admits the full asyncRewake field family", () => {
 // The fixture under `tests/fixtures/hookify-hooks.json` is derived from
 // hookify@claude-plugins-official's hooks.json (`tmp/pi-uat/agent/
 // pi-claude-marketplace/sources/claude-plugins-official/plugins/hookify/
-// hooks/hooks.json`) with one deliberate slim: the upstream `Stop` event arm
-// is REMOVED because `Stop` is NOT a member of `BUCKET_A_EVENTS` (see
-// `extensions/pi-claude-marketplace/domain/components/hook-events.ts`).
-// v1.13's supportability gate `checkMatcherSupportability` trips
-// `(c) non-bucket-A event: Stop` before the wrapper-acceptance verdict can
-// land. The slim isolates this test to the wire-format wrapper question --
-// the only question this plan owns. Stop-event admission is deferred
-// (`BUCKET_A_EVENTS` extension is a sibling concern, v1.14+).
+// hooks/hooks.json`), carrying its full real wire bytes: the PreToolUse,
+// PostToolUse, Stop, and UserPromptSubmit event arms. `Stop` is a member of
+// `BUCKET_A_EVENTS` (see
+// `extensions/pi-claude-marketplace/domain/components/hook-events.ts`), so
+// every arm is admitted and the wrapper unwraps cleanly to the bare
+// event-keys record.
 //
 // The fixture pins the parser's wrapper-detection arm against real upstream
 // wire bytes; any future schema change that re-narrows the parser to the
@@ -684,7 +682,7 @@ test("parseHooksConfig admits the full asyncRewake field family", () => {
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire bytes, bucket-A slim)", async () => {
+test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire bytes)", async () => {
   const fixturePath = path.resolve(FIXTURE_DIR, "../../fixtures/hookify-hooks.json");
   const raw = await readFile(fixturePath, "utf8");
 
@@ -693,11 +691,11 @@ test("parseHooksConfig accepts the upstream plugin-format wrapper (hookify wire 
   assert.equal(result.ok, true);
   if (result.ok) {
     // After the wrapper-unwrap arm, the parser's `value` is the bare
-    // event-keys record sourced from the upstream wrapper's `hooks` field.
-    // Bucket-A event keys hookify ships (Stop arm slimmed to keep the
-    // fixture inside v1.13's BUCKET_A_EVENTS scope).
+    // event-keys record sourced from the upstream wrapper's `hooks` field --
+    // every bucket-A event key hookify ships, including the restored Stop arm.
     assert.ok("PreToolUse" in result.value);
     assert.ok("PostToolUse" in result.value);
+    assert.ok("Stop" in result.value);
     assert.ok("UserPromptSubmit" in result.value);
   }
 });
