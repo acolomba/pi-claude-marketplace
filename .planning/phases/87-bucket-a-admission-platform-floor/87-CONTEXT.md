@@ -54,6 +54,29 @@ Requirements: ADMIT-01, ADMIT-02, FLOOR-01.
   claude-plugins-official marketplace stays a milestone-audit/UAT concern, not
   a Phase 87 test.
 
+### Research-surfaced decisions (post-discuss, user-confirmed)
+- **D-87-04:** **Decouple key domains.** Growing `BUCKET_A_EVENTS` 8→10 breaks
+  the typecheck at three production dispatch tables
+  (`Record<BucketAEvent>` in `bridges/hooks/dispatch-exec.ts` and
+  `bridges/hooks/async-rewake/registry.ts`) that would demand Phase 88's
+  translators. Introduce a dispatchable-event subset type (the current 8
+  events) as the key domain for the dispatch/rewake tables; the admission
+  tuple grows to 10 independently. Phase 87 stays purely admission; Phase 88
+  extends the subset + adds translators. — **Reversibility:** reversible —
+  Phase 88 folds the subset back up to the full union when translators land.
+- **D-87-05:** **Peer floor is `>=0.80.5`, not `>=0.80.4`.** The npm registry
+  has no 0.80.4 release (0.80.3 → 0.80.5); `agent_settled` first appears in
+  0.80.5 (verified by tarball type-def diff). Update REQUIREMENTS.md FLOOR-01
+  and ROADMAP wording to `>=0.80.5` during planning; the authority doc's
+  0.80.4 misattribution is corrected in Phase 89's doc reconcile.
+- **D-87-06:** **`docs/output-catalog.md` Stop-as-unsupported example defers
+  to Phase 89** — UNLESS the catalog-UAT byte-equality runner or any
+  `npm run check` test breaks in Phase 87 because of it, in which case the
+  minimal lockstep edit lands in 87 (NFR-6 checks-green wins over the
+  D-87-02 doc freeze). Test code (as opposed to docs) that uses Stop as the
+  canonical non-bucket-A example is re-pointed in 87 to a still-deferred
+  event (e.g. `Notification`).
+
 ### Claude's Discretion
 - Tuple placement of the two new events in `BUCKET_A_EVENTS` (append vs
   lifecycle order) — order is a deterministic registration order for
