@@ -63,6 +63,29 @@ Requirements: STOP-01..07, SFAIL-01..03.
   The live UAT is expected to surface as human_needed verification items if
   it cannot run fully scripted.
 
+### Research-surfaced planner directives (within already-locked envelopes)
+- **D-88-04:** **Dev-tree refresh is the first task.** node_modules has
+  pi-coding-agent 0.79.10 (predates `agent_settled`; missing nested
+  pi-agent-core/pi-ai); the lockfile already resolves 0.82.1. `npm install`
+  (materializing the locked 0.82.1) must precede any code referencing the new
+  typings. Commit any lockfile normalization drift rather than reverting it
+  (house precedent). The two env-flaky integration tests resolve the peer
+  from the GLOBAL npm root and are unaffected by the local refresh.
+- **D-88-05:** **STOP-06 precedence is aggregate:** if ANY Stop hook in the
+  group returns top-level `continue: false`, the bridge does not re-enter —
+  regardless of any other hook's block decision (matches the requirement
+  text literally; not first-encountered-wins).
+- **D-88-06:** **Consecutive-block counter semantics:** only a block outcome
+  increments the counter; any non-block outcome (including
+  `additionalContext`-without-block and plain allow) RESETS it — upstream
+  counts 8 *consecutive* blocks. The one-shot cap notify latch is
+  per-session and re-arms with the counter reset.
+- **D-88-07:** The cap-trip warning must satisfy the existing
+  notify-grammar invariant (summary line on the `Warning:` label) rather
+  than carving it out — if the planner finds a genuine structural conflict
+  with `shared/notify.ts`'s closed grammar, surface it in the plan instead
+  of silently exempting.
+
 ### Claude's Discretion
 - Cache-cell placement for the last assistant message under the bridge's
   existing epoch/`/reload` hygiene (stale cell must never leak across
