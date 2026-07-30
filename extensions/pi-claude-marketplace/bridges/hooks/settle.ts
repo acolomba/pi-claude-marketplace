@@ -5,8 +5,9 @@
 // module caches the last assistant message from the preceding
 // `agent_end.messages` and gates dispatch on its `stopReason` (STOP-01):
 // `stop` runs the Stop bucket with full decision control (STOP-03 block
-// re-entry); `error` / `length` route to StopFailure (observation-only,
-// filled in a later plan); `aborted` and `toolUse` dispatch nothing.
+// re-entry); `error` / `length` route to StopFailure (observation-only --
+// the bucket runs but its result is discarded, SFAIL-01); `aborted` and
+// `toolUse` dispatch nothing.
 //
 // Both handlers carry the `capturedEpoch` guard so a stale closure from a
 // prior `/reload` cannot fire against rebuilt routing tables;
@@ -17,9 +18,11 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
-import { collectBucketOutcomes } from "./dispatch.ts";
+import { collectBucketOutcomes, reduceBucket } from "./dispatch.ts";
 import { currentEpoch, getRoutingBucket } from "./event-router.ts";
+import { classifyStopFailure } from "./payloads/stop-failure.ts";
 
+import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
 import type {
   AgentEndEvent,
@@ -143,7 +146,7 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
  * `agent_settled` dispatcher: reads the cached last assistant message and
  * gates on `stopReason` (STOP-01). `stop` runs the Stop bucket and re-enters
  * the agent loop on a blocking hook (STOP-03); `error` / `length` route to the
- * StopFailure observation arm (a later plan); `aborted` / `toolUse` are a
+ * StopFailure observation-only arm (SFAIL-01); `aborted` / `toolUse` are a
  * defensive no-op. No-ops on a stale epoch or an empty cache.
  */
 export function settleHandlerFor(
@@ -166,7 +169,12 @@ export function settleHandlerFor(
         return;
       case "error":
       case "length":
-        // StopFailure observation-only arm lands in a later plan.
+        await runStopFailure(
+          last,
+          classifyStopFailure(last.errorMessage ?? "", last.stopReason),
+          ctx,
+          pi,
+        );
         return;
       case "aborted":
       case "toolUse":
@@ -260,6 +268,37 @@ async function runStopBucket(
   // noop: the agent genuinely settled with no blocking hook -- a non-block
   // outcome that resets the counter (D-88-06).
   resetConsecutiveBlockState();
+}
+
+/**
+ * Run the StopFailure bucket observation-only (SFAIL-01). Reached on `error` /
+ * `length` settle endings. Builds the synthetic StopFailure event
+ * (`error` = the classified error type; `last_assistant_message` = Pi's
+ * rendered `errorMessage`, or "" when absent) and runs the bucket, then
+ * DISCARDS the reduced result: StopFailure carries no decision control, so a
+ * blocking hook or an exit-2 hook produces no re-entry and no loop-state
+ * mutation. `stopHookActive`, the consecutive-block counter, and `sendMessage`
+ * are never touched on this path. An empty bucket is a no-op.
+ */
+async function runStopFailure(
+  last: AssistantMessage,
+  classifiedError: string,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+): Promise<void> {
+  const bucket = getRoutingBucket("StopFailure");
+  if (bucket.length === 0) {
+    return;
+  }
+
+  const event: StopFailureEvent = {
+    error: classifiedError,
+    last_assistant_message: last.errorMessage ?? "",
+  };
+
+  // SFAIL-01: observation-only -- run the bucket for its side effects and drop
+  // the reduced outcome. No re-entry lane exists for StopFailure.
+  await reduceBucket(bucket, event, ctx, pi, () => true);
 }
 
 /**

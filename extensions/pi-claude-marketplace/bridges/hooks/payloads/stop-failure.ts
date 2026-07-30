@@ -1,13 +1,15 @@
 // bridges/hooks/payloads/stop-failure.ts
 //
-// StopFailure payload translator (SFAIL-02).
+// StopFailure payload translator + error-type classifier (SFAIL-02, SFAIL-03).
 //
-// Consumes the synthetic StopFailure event the settle handler builds and
-// emits the Claude `StopFailure` stdin envelope. Thin here: the `error` field
-// is populated verbatim from the synthetic event; the errorMessage classifier
-// that maps Pi's rendered error text into the closed 10-value vocabulary
-// (SFAIL-03) lands in a later plan.
+// `translate` consumes the synthetic StopFailure event the settle handler
+// builds and emits the Claude `StopFailure` stdin envelope.
+// `classifyStopFailure` maps Pi's rendered `errorMessage` into the closed
+// 10-value error-type vocabulary (D-88-02: errorMessage-only), with `unknown`
+// as the in-vocabulary fallback and a deterministic `length ->
+// max_output_tokens` map.
 
+import type { StopReason } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
 
 export interface StopFailureStdin {
@@ -42,4 +44,22 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
     ...(event.error_details !== undefined ? { error_details: event.error_details } : {}),
     last_assistant_message: event.last_assistant_message,
   };
+}
+
+/**
+ * Classify a StopFailure ending into the closed 10-value error-type vocabulary
+ * (SFAIL-03, D-88-02). Two inputs only -- Pi's rendered `errorMessage` and the
+ * run's `stopReason` -- with no `after_provider_response` subscription and no
+ * HTTP-status cell (the firming variant was declined). `stopReason "length"`
+ * maps deterministically to `max_output_tokens` without consulting
+ * `errorMessage`; otherwise a small ordered case-insensitive substring table
+ * over `errorMessage` maps into the vocab, falling back to the in-vocabulary
+ * `unknown`. The substring table lands in a follow-up step.
+ */
+export function classifyStopFailure(_errorMessage: string, stopReason: StopReason): string {
+  if (stopReason === "length") {
+    return "max_output_tokens";
+  }
+
+  return "unknown";
 }
