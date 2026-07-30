@@ -27,9 +27,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### StopFailure
 
-- [ ] **SFAIL-01**: StopFailure hooks fire at settle on `error` and `length` endings, observation-only per the upstream contract — hook output and exit code are ignored; no decision machinery, no re-entry, no loop guard.
-- [ ] **SFAIL-02**: The StopFailure payload carries `error` (the classified type, used for matcher filtering), optional `error_details`, and `last_assistant_message` containing the rendered error text from Pi's `errorMessage`.
-- [ ] **SFAIL-03**: Error-type classification stays inside the upstream 10-value vocabulary (`rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`, `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`) — `length` maps deterministically to `max_output_tokens`; `error` endings classify best-effort from `errorMessage` with `unknown` as the documented in-vocabulary fallback; the matcher is a closed set validated through the existing `NON_TOOL_EVENT_CLOSED_SETS` machinery (same shape as the `SessionStart` source matcher), honoring upstream's narrower exact-match charset (letters, digits, `_`, `|`).
+- [x] **SFAIL-01**: StopFailure hooks fire at settle on `error` and `length` endings, observation-only per the upstream contract — hook output and exit code are ignored; no decision machinery, no re-entry, no loop guard.
+- [x] **SFAIL-02**: The StopFailure payload carries `error` (the classified type, used for matcher filtering), optional `error_details`, and `last_assistant_message` containing the rendered error text from Pi's `errorMessage`.
+- [x] **SFAIL-03**: Error-type classification stays inside the upstream 10-value vocabulary (`rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`, `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`) — `length` maps deterministically to `max_output_tokens`; `error` endings classify best-effort from `errorMessage` with `unknown` as the documented in-vocabulary fallback; the matcher is a closed set validated through the existing `NON_TOOL_EVENT_CLOSED_SETS` machinery (same shape as the `SessionStart` source matcher), honoring upstream's narrower exact-match charset (letters, digits, `_`, `|`).
 
 ### Bucket-A Admission
 
@@ -80,9 +80,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STOP-05 | Phase 88 | Complete |
 | STOP-06 | Phase 88 | Complete |
 | STOP-07 | Phase 88 | Complete |
-| SFAIL-01 | Phase 88 | Pending |
-| SFAIL-02 | Phase 88 | Pending |
-| SFAIL-03 | Phase 88 | Pending |
+| SFAIL-01 | Phase 88 | Complete |
+| SFAIL-02 | Phase 88 | Complete |
+| SFAIL-03 | Phase 88 | Complete |
 | ADMIT-01 | Phase 87 | Complete |
 | ADMIT-02 | Phase 87 | Complete |
 | FLOOR-01 | Phase 87 | Complete |

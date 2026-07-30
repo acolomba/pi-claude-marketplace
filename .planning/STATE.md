@@ -5,15 +5,15 @@ milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
 status: executing
-stopped_at: Completed 88-03-PLAN.md
-last_updated: "2026-07-30T13:27:08.874Z"
+stopped_at: Completed 88-04-PLAN.md
+last_updated: "2026-07-30T14:45:26.481Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 33
 ---
 
@@ -22,7 +22,7 @@ progress:
 ## Current Position
 
 Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-30 — Phase 88 execution started
 
@@ -88,8 +88,8 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-30T13:26:56.326Z
-**Stopped at:** Completed 88-03-PLAN.md
+**Last session:** 2026-07-30T14:45:14.787Z
+**Stopped at:** Completed 88-04-PLAN.md
 **Resume file:**
 
 None
@@ -130,6 +130,8 @@ record per-plan decisions here.
 - [Phase ?]: STOP-06 aggregate precedence realized via collectBucketOutcomes (no-short-circuit bucket walk); asyncRewake-on-Stop degraded to noop+log, not sync-bypassed
 - [Phase ?]: 88-03: STOP-07 loop protections -- stop_hook_active (cleared only on genuine input), 8-consecutive-block cap with one-shot warning, D-88-06 reset-on-any-non-block; cap notify via shared/notify.ts seam (cap literal 8 kept out of bridge layer)
 - [Phase ?]: 88-03: D-88-07 reconciled honestly -- cap-trip is a bridge diagnostic, not a NotificationMessage; byte-covered by dedicated hooks-cap-notify.test.ts + Out-of-band catalog entry (catalog-uat skips it), not silently exempted
+- [Phase ?]: 88-04: StopFailure observation-only arm (error/length -> reduceBucket, result discarded); never touches sendMessage/stop_hook_active/counter (SFAIL-01)
+- [Phase ?]: 88-04: errorMessage-only classifier (D-88-02) into closed 10-value vocab, unknown fallback, length -> max_output_tokens deterministic; membership-pinned to NON_TOOL_EVENT_CLOSED_SETS.StopFailure (SFAIL-02/03)
 
 ## Deferred Items
 
@@ -156,3 +158,4 @@ pre-existing (none from v1.16 stop-hooks).
 | Phase 88 P01 | 40min | 2 tasks | 12 files |
 | Phase 88 P02 | 25min | 2 tasks | 4 files |
 | Phase 88 P03 | 40min | 2 tasks | 8 files |
+| Phase 88 P04 | 25min | 2 tasks | 3 files |
