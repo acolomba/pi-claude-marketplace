@@ -167,7 +167,7 @@ export type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  *
  * `StopFailure` (ADMIT-01 / SFAIL-03) matches against a closed error-type
  * vocabulary. [ASSUMED -- field-name label] the `"error"` label names the
- * Claude-side matcher target field; per 87 research the label is
+ * Claude-side matcher target field; the label is
  * non-load-bearing (the gate compares the raw matcher string to the closed
  * set regardless of the label), and field-name confirmation against the
  * upstream contract is deferred. What is load-bearing is the closed set in
