@@ -217,6 +217,56 @@ test("WR-04: every NON_TOOL_EVENT_FIELDS event with a non-null field name has a 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// Block 5c: ADMIT-01 / SFAIL-03 Stop + StopFailure matcher dispositions
+// ──────────────────────────────────────────────────────────────────────────
+
+test("ADMIT-01: Stop carries the null no-matcher sentinel and is omitted from the closed sets", () => {
+  // Stop has no upstream matcher support -- same disposition as
+  // UserPromptSubmit: null in NON_TOOL_EVENT_FIELDS, absent from
+  // NON_TOOL_EVENT_CLOSED_SETS.
+  assert.equal(
+    NON_TOOL_EVENT_FIELDS.Stop,
+    null,
+    "Stop has no upstream matcher support -- null sentinel marks the disposition",
+  );
+  assert.ok(
+    !("Stop" in NON_TOOL_EVENT_CLOSED_SETS),
+    "Stop must NOT have a closed-set entry -- the null sentinel is the disposition",
+  );
+});
+
+test("SFAIL-03: StopFailure has a non-null field and a closed set of exactly the 10 error-type values", () => {
+  // StopFailure matches against a closed error-type vocabulary: a non-null
+  // field label in NON_TOOL_EVENT_FIELDS and the exact 10-value set in
+  // NON_TOOL_EVENT_CLOSED_SETS (WR-04: both tables land together).
+  assert.notEqual(
+    NON_TOOL_EVENT_FIELDS.StopFailure,
+    null,
+    "StopFailure takes a matcher value -- its field label must be non-null",
+  );
+
+  const stopFailureAllowed = NON_TOOL_EVENT_CLOSED_SETS.StopFailure;
+  assert.ok(stopFailureAllowed !== undefined, "StopFailure must have a closed-set entry");
+  assert.equal(stopFailureAllowed.size, 10, "StopFailure closed set has exactly 10 values");
+  assert.deepEqual(
+    [...stopFailureAllowed].sort(),
+    [
+      "authentication_failed",
+      "billing_error",
+      "invalid_request",
+      "max_output_tokens",
+      "model_not_found",
+      "oauth_org_not_allowed",
+      "overloaded",
+      "rate_limit",
+      "server_error",
+      "unknown",
+    ],
+    "StopFailure admissible values must be the closed 10-value error-type vocabulary",
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // Block 6: PHOOK-01 partitionHooks DroppedHook discriminant contract
 // ──────────────────────────────────────────────────────────────────────────
 

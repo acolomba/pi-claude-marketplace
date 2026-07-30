@@ -53,7 +53,7 @@
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-coding-agent": ">=0.80.5",
     "@earendil-works/pi-tui": "*",
     "pi-subagents": ">=0.35.0",
     "typebox": "*"

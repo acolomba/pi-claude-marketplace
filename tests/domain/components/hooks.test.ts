@@ -386,6 +386,74 @@ test("PHOOK-01: PreCompact empty matcher is admissible (match-all, no drop)", ()
   assert.deepEqual(partition.dropped, []);
 });
 
+test("ADMIT-01: non-empty matcher on Stop drops the group with cond=no-matcher-support", () => {
+  // Stop carries the null no-matcher sentinel (same disposition as
+  // UserPromptSubmit): Claude has no upstream matcher support, so any
+  // non-empty matcher drops the group per strict-supportability (D-58-06).
+  const partition = partitionHooks({
+    Stop: [{ matcher: "anything", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "Stop", matcher: "anything", cond: "no-matcher-support" },
+  ]);
+});
+
+test("ADMIT-01: Stop match-all matcher is admissible (no drop)", () => {
+  // Match-all (`""` / `"*"`) short-circuits before the no-matcher-support
+  // gate, so a Stop group with a match-all matcher is admitted.
+  for (const matcher of ["", "*"]) {
+    const config = {
+      Stop: [{ matcher, hooks: [{ type: "command", command: "/bin/false" }] }],
+    };
+    const partition = partitionHooks(config);
+    assert.deepEqual(partition.supported, config, `match-all "${matcher}" must be admissible`);
+    assert.deepEqual(partition.dropped, []);
+  }
+});
+
+test("SFAIL-03: StopFailure matcher of an in-vocabulary value (rate_limit) is admitted", () => {
+  // `rate_limit` is a member of the closed 10-value error-type set --
+  // exact whole-string membership admits it (no drop).
+  const config = {
+    StopFailure: [{ matcher: "rate_limit", hooks: [{ type: "command", command: "/bin/false" }] }],
+  };
+  const partition = partitionHooks(config);
+  assert.deepEqual(partition.supported, config);
+  assert.deepEqual(partition.dropped, []);
+});
+
+test("SFAIL-03: StopFailure out-of-vocabulary matcher drops the group with cond=closed-set", () => {
+  // A value outside the closed 10-value set trips TOOL-02 as closed-set.
+  const partition = partitionHooks({
+    StopFailure: [{ matcher: "bogus_value", hooks: [{ type: "command", command: "/bin/false" }] }],
+  });
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    { kind: "group", event: "StopFailure", matcher: "bogus_value", cond: "closed-set" },
+  ]);
+});
+
+test("SFAIL-03: StopFailure pipe-compound matcher drops the group with cond=closed-set (no pipe splitting)", () => {
+  // Membership is exact whole-string byte-equality -- a pipe compound is a
+  // single string absent from the closed set, NOT two tokenized values, so
+  // it trips closed-set even though both halves are individually valid.
+  const partition = partitionHooks({
+    StopFailure: [
+      { matcher: "rate_limit|server_error", hooks: [{ type: "command", command: "/bin/false" }] },
+    ],
+  });
+  assert.deepEqual(partition.supported, {});
+  assert.deepEqual(partition.dropped, [
+    {
+      kind: "group",
+      event: "StopFailure",
+      matcher: "rate_limit|server_error",
+      cond: "closed-set",
+    },
+  ]);
+});
+
 test("PHOOK-01 / Q1: non-command handler (http) drops at HANDLER granularity (d)", () => {
   // HOOK-03 lenient schema accepts unknown handler types; the partition
   // drops the non-command handler at HANDLER granularity (Q1). The group's
