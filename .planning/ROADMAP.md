@@ -87,7 +87,13 @@ Plans:
   4. Loop protections match upstream: the bridge holds a per-session `stop_hook_active` flag set when it blocks-and-re-enters and cleared on the next genuine `input` event — bridge-injected custom messages do not pass through `input`, so the flag never self-clears — and 8 consecutive blocks trip the override cap with a one-shot notify (superseding PAYL-V2-04's draft cap of 10). **Verification**: a `ralph-wiggum`-shaped canary fixture exercises the blocking path end-to-end including the 8-block cap. (STOP-07)
   5. `StopFailure` fires observation-only at settle on `error` and `length` endings — hook output and exit code ignored, no decision machinery, no re-entry, no loop guard — and its payload carries `error` (the classified type used for matcher filtering: `length` maps deterministically to `max_output_tokens`; `error` endings classify best-effort from Pi's `errorMessage` with `unknown` as the in-vocabulary fallback), optional `error_details`, and `last_assistant_message` = the rendered error text from `errorMessage`. (SFAIL-01, SFAIL-02, SFAIL-03)
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+- [ ] 88-01-PLAN.md — Tracer: dev-tree refresh to pi-coding-agent 0.82.1 + settle dispatcher gate & Stop block re-entry end-to-end (STOP-01, STOP-03)
+- [ ] 88-02-PLAN.md — Stop decision control: exit-2, additionalContext, aggregate continue:false precedence + Stop stdin envelope (STOP-02, STOP-03, STOP-04, STOP-05, STOP-06)
+- [ ] 88-03-PLAN.md — Loop protections: stop_hook_active flag, 8-consecutive-block cap, input reset + cap-trip warning seam & catalog entry (STOP-07)
+- [ ] 88-04-PLAN.md — StopFailure observation-only arm + errorMessage classifier into the closed 10-value vocab (SFAIL-01, SFAIL-02, SFAIL-03)
+- [ ] 88-05-PLAN.md — Live Pi runtime UAT: scripted ralph-wiggum canary + human_needed verification items (STOP-01, STOP-07)
 
 ### Phase 89: Documentation reconcile
 
