@@ -86,6 +86,18 @@ Requirements: STOP-01..07, SFAIL-01..03.
   with `shared/notify.ts`'s closed grammar, surface it in the plan instead
   of silently exempting.
 
+### Post-review decision (code review CR-01)
+- **D-88-08:** **The override cap counts ALL bridge re-entries** — block AND
+  `additionalContext` continuations share one consecutive-re-entry counter
+  (cap 8, same one-shot warning latch). Safer than upstream's literal
+  blocks-only wording in the one corner upstream leaves unprotected
+  (pure-`additionalContext` livelock); hook-invisible until it trips.
+  `stop_hook_active` is set on BOTH re-entry lanes (a context continuation
+  is "continuing as a result of a stop hook"). Supersedes D-88-06's
+  reset-on-any-non-block for the `additionalContext` case: a context
+  re-entry increments rather than resets; only a plain-allow/no-re-entry
+  outcome resets the counter and re-arms the latch.
+
 ### Claude's Discretion
 - Cache-cell placement for the last assistant message under the bridge's
   existing epoch/`/reload` hygiene (stale cell must never leak across
