@@ -251,10 +251,10 @@ test("DISP-01: registerHooksBridge calls pi.on exactly 11 times with the locked 
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 2: DISP-02 -- rebuildRoutingTables produces exactly the
-// BUCKET_A_EVENTS 8-tuple keyset
+// BUCKET_A_EVENTS 10-tuple keyset
 // ──────────────────────────────────────────────────────────────────────────
 
-test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset (8 buckets)", () => {
+test("DISP-02: rebuildRoutingTables produces exactly the BUCKET_A_EVENTS keyset (10 buckets)", () => {
   _resetForTest();
 
   const config = makeConfig([

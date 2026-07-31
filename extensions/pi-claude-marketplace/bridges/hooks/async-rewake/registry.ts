@@ -235,10 +235,10 @@ export async function spawnAndRegister(
   loc: ScopedLocations,
 ): Promise<void> {
   // D-87-04: narrow the admitted event to the dispatchable subset before
-  // indexing the translator table. `Stop` / `StopFailure` are admitted but
-  // have no translator this milestone and no Pi event routes them to an
-  // async-rewake spawn, so this arm is a defensive belt (debug-log + return),
-  // not live behavior.
+  // indexing the translator table. `Stop` / `StopFailure` never reach this
+  // path -- no Pi event routes them to an async-rewake spawn (their entries in
+  // `TRANSLATORS` above are inert) -- so this arm is a defensive belt
+  // (debug-log + return), not live behavior.
   if (!isDispatchableEvent(entry.claudeEvent)) {
     hookDebugLog(
       `async-rewake: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); skipping spawn`,

@@ -7,7 +7,7 @@
 //
 // Technique:
 //   - Block A: per-event translator-presence sweep -- the closed-set
-//     `DISPATCHABLE_EVENTS` 8-tuple from `domain/components/hook-events.ts`
+//     `DISPATCHABLE_EVENTS` 10-tuple from `domain/components/hook-events.ts`
 //     drives a dynamic-import of every `bridges/hooks/payloads/<kebab>.ts`
 //     sibling file; each module must export a `translate` function.
 //     Adding a dispatchable event to the upstream tuple without shipping

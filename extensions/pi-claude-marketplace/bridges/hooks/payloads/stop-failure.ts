@@ -9,6 +9,7 @@
 // as the in-vocabulary fallback and a deterministic `length ->
 // max_output_tokens` map.
 
+import type { StopFailureErrorType } from "../../../domain/components/hook-events.ts";
 import type { StopReason } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
 
@@ -17,7 +18,7 @@ export interface StopFailureStdin {
   readonly transcript_path: string;
   readonly cwd: string;
   readonly hook_event_name: "StopFailure";
-  readonly error: string;
+  readonly error: StopFailureErrorType;
   readonly error_details?: string;
   readonly last_assistant_message: string;
 }
@@ -29,7 +30,7 @@ export interface StopFailureStdin {
  * (which for a failure ending is Pi's rendered error text).
  */
 export interface StopFailureEvent {
-  readonly error: string;
+  readonly error: StopFailureErrorType;
   readonly error_details?: string;
   readonly last_assistant_message: string;
 }
@@ -49,8 +50,9 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
 /**
  * Ordered, case-insensitive substring table over Pi's rendered `errorMessage`
  * (SFAIL-03, D-88-02). Substrings are grounded in Pi's own retry/limit
- * classifier regexes (`_isNonRetryableProviderLimitError` /
- * `_isRetryableError`) and its auth-failure error strings; the target token is
+ * classifier patterns (pi-ai's `NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN` /
+ * `RETRYABLE_PROVIDER_ERROR_PATTERN`, consumed via `isRetryableAssistantError`)
+ * and its auth-failure error strings; the target token is
  * always a member of the closed StopFailure vocabulary. Order matters: the
  * first entry whose any-substring matches wins, so the more specific
  * limit/billing forms precede the broad HTTP-status forms. `oauth_org_not_allowed`
@@ -63,7 +65,9 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
 // must NOT match `500`, and "request 4290" must NOT match `429`.
 type ClassifierMatcher = string | RegExp;
 
-const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly ClassifierMatcher[]]> = [
+const CLASSIFIER_TABLE: ReadonlyArray<
+  readonly [StopFailureErrorType, readonly ClassifierMatcher[]]
+> = [
   [
     "billing_error",
     [
@@ -95,6 +99,13 @@ const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly ClassifierMatch
 ];
 
 /**
+ * The failure endings the classifier accepts: the settle handler routes only
+ * `error` / `length` here, and the narrowed parameter makes a non-failure
+ * `stopReason` a compile error rather than a spurious failure classification.
+ */
+type FailureStopReason = Extract<StopReason, "error" | "length">;
+
+/**
  * Classify a StopFailure ending into the closed 10-value error-type vocabulary
  * (SFAIL-03, D-88-02). Two inputs only -- Pi's rendered `errorMessage` and the
  * run's `stopReason` -- with no `after_provider_response` subscription and no
@@ -104,7 +115,10 @@ const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly ClassifierMatch
  * over `errorMessage` maps into the vocab, falling back to the in-vocabulary
  * `unknown`.
  */
-export function classifyStopFailure(errorMessage: string, stopReason: StopReason): string {
+export function classifyStopFailure(
+  errorMessage: string,
+  stopReason: FailureStopReason,
+): StopFailureErrorType {
   if (stopReason === "length") {
     return "max_output_tokens";
   }

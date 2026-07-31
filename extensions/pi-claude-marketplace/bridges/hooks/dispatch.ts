@@ -134,15 +134,16 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
 }
 
 /**
- * SessionStart matcher-fires predicate. The parser already narrows the
- * closed set to `{startup, resume}` at parse time, so by the time an
- * entry lands in the SessionStart bucket the rawMatcher is one of `""`,
- * `"*"`, `"startup"`, `"resume"`. Match-all admits every reason; a
- * literal-token matcher fires only on equality.
+ * Closed-set matcher-fires predicate shared by the SessionStart composite
+ * path and the settle-time StopFailure path. The parser admits only
+ * match-all (`""` / `"*"`) and exact members of the per-event closed set at
+ * parse time, so dispatch-time filtering is literal equality against the
+ * event's runtime value (the SessionStart `reason`; the classified
+ * StopFailure error type).
  */
-function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolean {
+export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string): boolean {
   const raw = entry.rawMatcher;
-  return raw === "" || raw === "*" || raw === reason;
+  return raw === "" || raw === "*" || raw === value;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ function matcherFiresOnSessionStart(entry: RoutingEntry, reason: string): boolea
  * Caller controls bucket selection + per-entry matcher filter; this
  * reducer just walks the pre-filtered entry list.
  */
-export interface ReducedBucket {
+interface ReducedBucket {
   readonly result: HookExecResult;
   /**
    * The last entry that produced a `mutate` or `block`/`stop` result.
@@ -176,7 +177,7 @@ export interface ReducedBucket {
   readonly attributedTo: RoutingEntry | undefined;
 }
 
-export async function reduceBucket(
+async function reduceBucket(
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
@@ -296,6 +297,18 @@ export async function collectBucketOutcomes(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * The event domain served by `compositeHandlerFor`: every dispatchable
+ * event except the two `tool_result`-routed events (handled by
+ * `toolResultCompositeHandler`) and the two settle-routed events (handled
+ * in `settle.ts`). Declared once so the exclusion set cannot drift between
+ * the factory constraint and its private helpers.
+ */
+type CompositeDispatchEvent = Exclude<
+  DispatchableEvent,
+  "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
+>;
+
+/**
  * D-59-01 / D-60-02 / D-60-03: six-uniform composite handler factory.
  *
  * `claudeEvent` constrains which bucket the closure reads and which
@@ -309,12 +322,7 @@ export async function collectBucketOutcomes(
  * `ToolCallEventResult | undefined`; input returns `InputEventResult |
  * undefined`; observation events return `undefined`).
  */
-export function compositeHandlerFor<
-  E extends Exclude<
-    DispatchableEvent,
-    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
-  >,
->(
+export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   claudeEvent: E,
   capturedEpoch: number,
   pi?: ExtensionAPI,
@@ -381,10 +389,7 @@ export function toolResultCompositeHandler(
  * and always returns undefined.
  */
 function adaptForEvent(
-  claudeEvent: Exclude<
-    DispatchableEvent,
-    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
-  >,
+  claudeEvent: CompositeDispatchEvent,
   reduced: ReducedBucket,
   event: unknown,
 ): ToolCallEventResult | InputEventResult | undefined {
@@ -464,17 +469,14 @@ type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
  * already rejects non-empty matchers on those events at parse time.
  */
 function entryFires(
-  claudeEvent: Exclude<
-    DispatchableEvent,
-    "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
-  >,
+  claudeEvent: CompositeDispatchEvent,
   entry: RoutingEntry,
   event: unknown,
 ): boolean {
   switch (claudeEvent) {
     case "SessionStart": {
       const reason = (event as SessionStartEvent).reason;
-      return matcherFiresOnSessionStart(entry, reason);
+      return matcherFiresOnClosedSetValue(entry, reason);
     }
 
     case "PreToolUse": {

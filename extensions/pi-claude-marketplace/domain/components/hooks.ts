@@ -727,7 +727,7 @@ export function parseMatcher(raw: string): ParsedMatcher {
  *     entry -- `MultiEdit` / `WebFetch` / `Task` / Pi-form lowercase (was
  *     `(b)`).
  *   - `no-matcher-support`: a non-empty matcher on a no-matcher-support event
- *     (`UserPromptSubmit`; was `(c)`).
+ *     (`UserPromptSubmit`, `Stop`; was `(c)`).
  *   - `closed-set`: a matcher value outside the Pi-mappable closed set (was
  *     `(c)`).
  */
@@ -783,8 +783,8 @@ function tryToolEventTrip(rawMatcher: string): MatcherTrip | null {
  * TOOL-02(c) gate for non-tool bucket-A events. Handles two sub-cases:
  *
  *   - Null sentinel in `NON_TOOL_EVENT_FIELDS`: Claude has no upstream
- *     matcher support (UserPromptSubmit). Any non-empty matcher drops the
- *     group with `cond:"no-matcher-support"`.
+ *     matcher support (UserPromptSubmit, Stop). Any non-empty matcher drops
+ *     the group with `cond:"no-matcher-support"`.
  *   - String field in `NON_TOOL_EVENT_FIELDS`: matcher value must be in the
  *     Pi-mappable closed set per `NON_TOOL_EVENT_CLOSED_SETS`; otherwise the
  *     group drops with `cond:"closed-set"`.

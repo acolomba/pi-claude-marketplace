@@ -18,12 +18,13 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
-import { collectBucketOutcomes } from "./dispatch.ts";
+import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
+import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
   AgentEndEvent,
   AgentMessage,
@@ -174,7 +175,7 @@ export function settleHandlerFor(
 
     switch (last.stopReason) {
       case "stop":
-        await runStopBucket(last, ctx, pi);
+        await runStopBucket(last, capturedEpoch, ctx, pi);
         return;
       case "error":
       case "length":
@@ -188,6 +189,14 @@ export function settleHandlerFor(
       case "aborted":
       case "toolUse":
         return;
+      default: {
+        // Compile-time exhaustiveness pin (NFR-7): a peer-dep bump that widens
+        // `StopReason` becomes a type error here. Runtime stays a silent no-op
+        // -- the settle handler never throws.
+        const _exhaustive: never = last.stopReason;
+        void _exhaustive;
+        return;
+      }
     }
   };
 }
@@ -227,9 +236,16 @@ function renderAssistantText(message: AssistantMessage): string {
  * display-suppressed. A Stop hook declaring `asyncRewake:true` cannot yield a
  * synchronous decision and is degraded to `noop` inside `collectBucketOutcomes`
  * with a `hookDebugLog` -- no silent block loss.
+ *
+ * The epoch is re-checked AFTER the bucket's hooks finish: hook subprocesses
+ * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only
+ * covers the pre-await window. Without the re-check, the stale continuation
+ * would mutate the freshly reset loop state and inject a re-entry turn into
+ * the new session.
  */
 async function runStopBucket(
   last: AssistantMessage,
+  capturedEpoch: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
 ): Promise<void> {
@@ -247,10 +263,21 @@ async function runStopBucket(
   };
   const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
 
+  // A /reload while the bucket's hooks were running bumped the epoch and reset
+  // the settle state; bail before any loop-state mutation or re-entry.
+  if (capturedEpoch !== currentEpoch()) {
+    return;
+  }
+
   // STOP-06 / D-88-05: any continue:false suppresses re-entry. This is a
   // non-re-entry outcome, so it resets the consecutive re-entry counter
   // (D-88-08).
-  if (outcomes.some((o) => o.result.kind === "stop")) {
+  const stop = outcomes.find((o) => o.result.kind === "stop");
+  if (stop?.result.kind === "stop") {
+    hookDebugLog(
+      `settle: continue:false from ${stop.entry.pluginId} suppresses Stop re-entry; ` +
+        `stopReason=${stop.result.stopReason ?? "<none>"}`,
+    );
     resetConsecutiveBlockState();
     return;
   }
@@ -283,16 +310,17 @@ async function runStopBucket(
  * Run the StopFailure bucket observation-only (SFAIL-01). Reached on `error` /
  * `length` settle endings. Builds the synthetic StopFailure event
  * (`error` = the classified error type; `last_assistant_message` = Pi's
- * rendered `errorMessage`, or "" when absent) and runs EVERY registered hook
- * (no short-circuit) then DISCARDS the collected outcomes: StopFailure carries
- * no decision control, so a blocking hook or an exit-2 hook produces no re-entry
- * and no loop-state mutation, and it cannot suppress its peer observers.
- * `stopHookActive`, the consecutive-block counter, and `sendMessage` are never
- * touched on this path. An empty bucket is a no-op.
+ * rendered `errorMessage`, or "" when absent) and runs every hook whose
+ * error-type matcher admits the classified error (SFAIL-03; match-all `""` /
+ * `"*"` admits every type) with no short-circuit, then DISCARDS the collected
+ * outcomes: StopFailure carries no decision control, so a blocking hook or an
+ * exit-2 hook produces no re-entry and no loop-state mutation, and it cannot
+ * suppress its peer observers. `stopHookActive`, the consecutive-block counter,
+ * and `sendMessage` are never touched on this path. An empty bucket is a no-op.
  */
 async function runStopFailure(
   last: AssistantMessage,
-  classifiedError: string,
+  classifiedError: StopFailureErrorType,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
 ): Promise<void> {
@@ -306,12 +334,19 @@ async function runStopFailure(
     last_assistant_message: last.errorMessage ?? "",
   };
 
-  // SFAIL-01: observation-only -- run EVERY registered hook for its side effects
+  // SFAIL-01: observation-only -- run every matching hook for its side effects
   // via the no-short-circuit walker, then discard the collected outcomes. A
   // reducing walk would `return` on a leading block/stop/exit-2 and starve the
-  // later observers; StopFailure has no decision lane, so every hook must get to
-  // observe the failure.
-  await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
+  // later observers; StopFailure has no decision lane, so every matching hook
+  // must get to observe the failure.
+  //
+  // SFAIL-03: the parse-time gate admits only match-all (`""` / `"*"`) and
+  // exact members of the closed error-type vocabulary, so the dispatch filter
+  // is literal equality against the classified error (the shared
+  // `matcherFiresOnClosedSetValue` predicate).
+  await collectBucketOutcomes(bucket, event, ctx, pi, (entry) =>
+    matcherFiresOnClosedSetValue(entry, classifiedError),
+  );
 }
 
 /**

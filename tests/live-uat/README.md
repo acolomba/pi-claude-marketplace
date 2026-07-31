@@ -45,9 +45,9 @@ The harness:
 
 The harness **never fakes a live result**: it exits non-zero rather than reporting a cap it could not observe, so the verifier records `human_needed`.
 
-### Observed result (recorded this phase)
+### Observed result (2026-07-31, pi 0.80.10)
 
-Against `pi 0.80.10`, openai-codex provider, sandbox `tmp/pi-uat/agent`:
+Openai-codex provider, sandbox `tmp/pi-uat/agent`. Summary of the observed run (not a verbatim transcript -- see `stop-canary.mjs` for the exact output formats):
 
 ```text
 blocks=1, agent_settled=1, turn_start=2, cap=8, capWarning=false

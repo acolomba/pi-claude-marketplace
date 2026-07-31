@@ -130,7 +130,7 @@ export type DispatchableEvent = (typeof DISPATCHABLE_EVENTS)[number];
  * so a future admission that outruns its translator degrades to noop rather
  * than a type error (D-87-04).
  */
-export const DISPATCHABLE_MEMBERS = new Set<string>(DISPATCHABLE_EVENTS);
+const DISPATCHABLE_MEMBERS: ReadonlySet<string> = new Set(DISPATCHABLE_EVENTS);
 
 export function isDispatchableEvent(event: BucketAEvent): event is DispatchableEvent {
   return DISPATCHABLE_MEMBERS.has(event);
@@ -190,8 +190,35 @@ export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>
 };
 
 /**
+ * The closed StopFailure error-type vocabulary (SFAIL-03, D-88-02). Single
+ * source of truth: the matcher closed set below is built from this tuple,
+ * and the settle-time classifier (`classifyStopFailure` in
+ * `bridges/hooks/payloads/stop-failure.ts`) returns `StopFailureErrorType`,
+ * so classifier output and matcher vocabulary cannot drift apart without a
+ * compile error.
+ */
+export const STOP_FAILURE_ERROR_TYPES = [
+  "rate_limit",
+  "overloaded",
+  "authentication_failed",
+  "oauth_org_not_allowed",
+  "billing_error",
+  "invalid_request",
+  "model_not_found",
+  "server_error",
+  "max_output_tokens",
+  "unknown",
+] as const;
+
+/**
+ * Literal union of StopFailure error-type names. Derived from the tuple
+ * above so the vocabulary lives in exactly one place.
+ */
+export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
+
+/**
  * Closed set of Claude-side matcher values admissible per non-tool
- * bucket-A event under v1.13. A value not in the set (or an entry not
+ * bucket-A event. A value not in the set (or an entry not
  * present here at all) trips TOOL-02 at parse time per D-58-06.
  *
  * Per-event derivation:
@@ -208,9 +235,8 @@ export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>
  *     fork`. The only literal overlap is `resume`, but the Pi semantic
  *     ("session resumed elsewhere") vs the Claude semantic ("user resumed
  *     prior conversation") diverge enough that admitting it would silently
- *     mis-fire. Empty closed set under v1.13 -- every non-empty SessionEnd
- *     matcher trips TOOL-02. v1.14+ may relax if Pi exposes a matching
- *     value vocabulary.
+ *     mis-fire. Empty closed set -- every non-empty SessionEnd matcher
+ *     trips TOOL-02; may relax if Pi exposes a matching value vocabulary.
  *
  *   - **PreCompact** / **PostCompact**: Claude values `manual | auto`.
  *     Pi `SessionBeforeCompactEvent` / `SessionCompactEvent` carry NO
@@ -234,7 +260,7 @@ export const NON_TOOL_EVENT_FIELDS: Readonly<Record<NonToolEvent, string | null>
  *     tool matcher) no pipe-OR splitting: a compound `rate_limit|server_error`
  *     matcher is not tokenized, it is a single string absent from the set and
  *     therefore trips TOOL-02 as `closed-set`. Same table shape as
- *     SessionStart, narrower charset (D-58-06).
+ *     SessionStart (D-58-06).
  */
 export const NON_TOOL_EVENT_CLOSED_SETS: Readonly<
   Partial<Record<BucketAEvent, ReadonlySet<string>>>
@@ -244,7 +270,7 @@ export const NON_TOOL_EVENT_CLOSED_SETS: Readonly<
   // are unmappable and trip TOOL-02.
   SessionStart: new Set(["startup", "resume"]),
   // D-58-06: Pi `SessionShutdownEvent.reason` shares no semantically
-  // safe value with the Claude SessionEnd reason vocabulary under v1.13.
+  // safe value with the Claude SessionEnd reason vocabulary.
   // Empty set -- every non-empty matcher trips TOOL-02.
   SessionEnd: new Set<string>([]),
   // D-58-06: Pi compact events carry no `trigger` field. Empty set --
@@ -253,19 +279,9 @@ export const NON_TOOL_EVENT_CLOSED_SETS: Readonly<
   PostCompact: new Set<string>([]),
   // UserPromptSubmit and Stop intentionally omitted -- the null sentinel in
   // NON_TOOL_EVENT_FIELDS is their no-matcher-support disposition.
-  // SFAIL-03: the closed error-type vocabulary for StopFailure. Exact
+  // SFAIL-03: the closed error-type vocabulary for StopFailure, built from
+  // the `STOP_FAILURE_ERROR_TYPES` single source of truth above. Exact
   // whole-string membership only -- no pipe-OR splitting (a pipe compound is
   // a single string absent from this set and trips `closed-set`).
-  StopFailure: new Set([
-    "rate_limit",
-    "overloaded",
-    "authentication_failed",
-    "oauth_org_not_allowed",
-    "billing_error",
-    "invalid_request",
-    "model_not_found",
-    "server_error",
-    "max_output_tokens",
-    "unknown",
-  ]),
+  StopFailure: new Set<string>(STOP_FAILURE_ERROR_TYPES),
 };

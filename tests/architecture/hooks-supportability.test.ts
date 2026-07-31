@@ -36,7 +36,7 @@ import {
 import { partitionHooks } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: TOOL-02 bucket-A 8-event tuple (D-58-06)
+// Block 1: ADMIT-01 bucket-A 10-event tuple (D-58-06)
 // ──────────────────────────────────────────────────────────────────────────
 
 test("ADMIT-01: BUCKET_A_EVENTS is exactly the 10 documented events in locked order", () => {

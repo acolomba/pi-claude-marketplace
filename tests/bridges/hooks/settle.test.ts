@@ -97,8 +97,13 @@ function makeAgentEnd(stopReason: StopReason): AgentEndEvent {
   } as unknown as AgentEndEvent;
 }
 
-function makeStopFailureEntry(pluginId: string): RoutingEntry {
-  return { ...makeStopEntry(pluginId), claudeEvent: "StopFailure" };
+function makeStopFailureEntry(pluginId: string, rawMatcher = ""): RoutingEntry {
+  return {
+    ...makeStopEntry(pluginId),
+    claudeEvent: "StopFailure",
+    matcher: parseMatcher(rawMatcher),
+    rawMatcher,
+  };
 }
 
 // A failure ending caches an assistant message whose `errorMessage` carries
@@ -128,8 +133,10 @@ test("STOP-03: stopReason stop + block hook -> one followUp+triggerTurn sendMess
   resetSettleState();
 
   const fired: string[] = [];
-  _setExecutorForTest((entry): Promise<HookExecResult> => {
+  const events: unknown[] = [];
+  _setExecutorForTest((entry, event): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
+    events.push(event);
     return Promise.resolve({ kind: "block", reason: "go on" });
   });
   t.after(() => {
@@ -144,12 +151,66 @@ test("STOP-03: stopReason stop + block hook -> one followUp+triggerTurn sendMess
   await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
 
   assert.deepEqual(fired, ["p1"], "the Stop bucket executor must run exactly once");
+  assert.equal(
+    (events[0] as { last_assistant_message: string }).last_assistant_message,
+    "done",
+    "the Stop payload must carry the run's rendered assistant text (STOP-02)",
+  );
   assert.equal(sent.length, 1, "a blocking Stop hook must re-enter via exactly one sendMessage");
   assert.equal(sent[0]?.message["customType"], "claude-hook-stop-block");
   assert.equal(sent[0]?.message["content"], "go on");
   assert.equal(sent[0]?.message["display"], false);
   assert.equal(sent[0]?.options?.["deliverAs"], "followUp");
   assert.equal(sent[0]?.options?.["triggerTurn"], true);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// STOP-02: last_assistant_message rendering -- text blocks join in order,
+// non-text blocks (thinking / toolCall) are skipped
+// ──────────────────────────────────────────────────────────────────────────
+
+test("STOP-02: last_assistant_message joins text blocks and skips non-text blocks", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const events: unknown[] = [];
+  _setExecutorForTest((_entry, event): Promise<HookExecResult> => {
+    events.push(event);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const multiBlockEnd = {
+    type: "agent_end",
+    messages: [
+      { role: "user", content: "hi", timestamp: 0 },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "part one" },
+          { type: "thinking", thinking: "internal reasoning" },
+          { type: "text", text: " part two" },
+        ],
+        stopReason: "stop",
+        timestamp: 1,
+      },
+    ],
+  } as unknown as AgentEndEvent;
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(multiBlockEnd);
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.equal(
+    (events[0] as { last_assistant_message: string }).last_assistant_message,
+    "part one part two",
+    "text blocks must join in order; the thinking block must not leak into the payload",
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -314,6 +375,42 @@ test("STOP-01: a stale captured epoch no-ops both settle handlers", async (t) =>
   await settleHandlerFor(stale, pi)(settledEvent, stubCtx);
   assert.deepEqual(fired, [], "a stale settle must not dispatch");
   assert.equal(sent.length, 0, "a stale settle must not re-enter");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// STOP-01: an epoch bump DURING Stop-hook execution (a /reload while the hook
+// subprocess runs) stops the continuation after the bucket returns -- no loop
+// state mutation, no re-entry into the new session
+// ──────────────────────────────────────────────────────────────────────────
+
+test("STOP-01: an epoch bump during Stop-hook execution suppresses re-entry and state mutation", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> => {
+    // Simulate a /reload landing while the hook runs: registerHooksBridge
+    // bumps the epoch and resets the settle state mid-execution.
+    _bumpEpochForTest();
+    resetSettleState();
+    return Promise.resolve({ kind: "block", reason: "go on" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.equal(sent.length, 0, "the stale continuation must not re-enter the new session");
+  assert.deepEqual(
+    _peekLoopStateForTest(),
+    { stopHookActive: false, consecutiveBlockCount: 0, capNotifiedThisSession: false },
+    "the stale continuation must not mutate the freshly reset loop state",
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -630,6 +727,11 @@ test("STOP-07 ordering/precision: a non-block outcome resets the consecutive cou
     0,
     "a non-block outcome resets the counter",
   );
+  assert.equal(
+    _peekLoopStateForTest().stopHookActive,
+    true,
+    "a non-re-entry outcome must not clear stop_hook_active (STOP-07)",
+  );
   assert.equal(notifyCalls.length, 0, "the reset must re-arm before any cap trip");
 
   // 7 FRESH consecutive blocks re-enter without tripping (proves the earlier 7
@@ -827,6 +929,74 @@ test("STOP-07 / D-88-08: alternating block and additionalContext share one cap",
   );
 });
 
+test("STOP-07 / D-88-08: a continue:false outcome resets the counter but not stop_hook_active", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  let mode: "block" | "stop" = "block";
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve(mode === "block" ? { kind: "block", reason: "loop" } : { kind: "stop" }),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const { ctx } = makeCapCtx();
+
+  for (let i = 0; i < 2; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 2);
+
+  mode = "stop";
+  await runSettleCycle(pi, ctx);
+
+  assert.equal(sent.length, 2, "the continue:false cycle must not re-enter");
+  const state = _peekLoopStateForTest();
+  assert.equal(state.consecutiveBlockCount, 0, "continue:false resets the consecutive counter");
+  assert.equal(
+    state.stopHookActive,
+    true,
+    "continue:false must not clear stop_hook_active (cleared only by a genuine input)",
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// STOP-03: the settle handler never throws -- a host sendMessage throw is
+// contained (degrades to a debug log)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("STOP-03: a sendMessage throw during block re-entry does not escape the settle handler", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve({ kind: "block", reason: "go on" }),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const pi = {
+    sendMessage: (): void => {
+      throw new Error("host refused");
+    },
+  } as unknown as ExtensionAPI;
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+
+  await assert.doesNotReject(
+    () => settleHandlerFor(epoch, pi)(settledEvent, stubCtx),
+    "a sendMessage throw must degrade to a debug log, not escape the settle handler",
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // SFAIL-01: StopFailure is observation-only. `error` / `length` run the
 // StopFailure bucket and DISCARD the result -- never a sendMessage, never a
@@ -839,8 +1009,10 @@ test("SFAIL-01: stopReason error runs the StopFailure bucket observation-only ev
   resetSettleState();
 
   const fired: string[] = [];
-  _setExecutorForTest((entry): Promise<HookExecResult> => {
+  const events: unknown[] = [];
+  _setExecutorForTest((entry, event): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
+    events.push(event);
     return Promise.resolve({ kind: "block", reason: "stay" });
   });
   t.after(() => {
@@ -855,6 +1027,13 @@ test("SFAIL-01: stopReason error runs the StopFailure bucket observation-only ev
   await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
 
   assert.deepEqual(fired, ["sf1"], "the StopFailure bucket must run at settle on error");
+  const payload = events[0] as { error: string; last_assistant_message: string };
+  assert.equal(payload.error, "rate_limit", "the payload carries the classified error (SFAIL-03)");
+  assert.equal(
+    payload.last_assistant_message,
+    "Rate limit exceeded (429)",
+    "the payload carries Pi's rendered errorMessage (SFAIL-02)",
+  );
   assert.equal(
     sent.length,
     0,
@@ -864,6 +1043,118 @@ test("SFAIL-01: stopReason error runs the StopFailure bucket observation-only ev
   assert.equal(state.stopHookActive, false, "StopFailure must not touch stop_hook_active");
   assert.equal(state.consecutiveBlockCount, 0, "StopFailure must not touch the block counter");
   assert.equal(state.capNotifiedThisSession, false, "StopFailure must not touch the cap latch");
+});
+
+test("SFAIL-02: a failure without errorMessage classifies unknown and carries an empty message", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const events: unknown[] = [];
+  _setExecutorForTest((_entry, event): Promise<HookExecResult> => {
+    events.push(event);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1")]);
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  const payload = events[0] as { error: string; last_assistant_message: string };
+  assert.equal(payload.error, "unknown", "a matchless errorMessage classifies to unknown");
+  assert.equal(
+    payload.last_assistant_message,
+    "",
+    "an absent errorMessage falls back to the empty string",
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SFAIL-03: error-type matcher filtering at dispatch -- an admitted
+// closed-set matcher fires only on its exact classified error; match-all
+// ("" / "*") fires on every failure type.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("SFAIL-03: a rate_limit-matched hook fires on a rate_limit classification", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1", "rate_limit")]);
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "Rate limit exceeded (429)"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, ["sf1"], "the matcher must admit its exact classified error type");
+});
+
+test("SFAIL-03: a rate_limit-matched hook does NOT fire on a billing_error classification", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [makeStopFailureEntry("sf1", "rate_limit")]);
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "quota exceeded"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, [], "a non-matching error-type matcher must not fire the hook");
+});
+
+test('SFAIL-03: "" and "*" matchers fire on every failure classification', async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [
+    makeStopFailureEntry("sf-empty", ""),
+    makeStopFailureEntry("sf-star", "*"),
+    makeStopFailureEntry("sf-rate", "rate_limit"),
+  ]);
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "server error"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(
+    fired,
+    ["sf-empty", "sf-star"],
+    "match-all matchers fire on any classification; the exact matcher stays filtered",
+  );
 });
 
 test("SFAIL-01: every StopFailure observer runs even after a leading block", async (t) => {
