@@ -35,54 +35,54 @@ Claude marketplaces and plugins are managed via a `/claude:plugin` command simil
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev)
-- [pi-subagents](https://pi.dev/packages/pi-subagents) `>=0.35.0` (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
 
 ## Usage
 
-Install the Pi extension.
+Install the Pi extension:
 
 ```bash
 pi install npm:pi-claude-marketplace
 ```
 
-Bootstrap the official Claude plugin marketplace (`anthropics/claude-plugins-official`).
+Bootstrap the official Claude plugin marketplace (`anthropics/claude-plugins-official`):
 
 ```text
 /claude:plugin bootstrap
 ```
 
-List plugins available for installation.
+List plugins available for installation:
 
 ```text
 /claude:plugin list --available
 ```
 
-Install a plugin.
+Install a plugin:
 
 ```text
 /claude:plugin install pr-review-toolkit@claude-plugins-official
 ```
 
-Add another marketplace.
+Add another marketplace:
 
 ```text
 /claude:plugin marketplace add upstash/context7
 ```
 
-List its plugins.
+List its plugins:
 
 ```text
 /claude:plugin list context7-marketplace --available
 ```
 
-Add another plugin.
+Add another plugin:
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace
 ```
 
-Then reload.
+Then reload:
 
 ```text
 /reload
@@ -114,7 +114,7 @@ Skills are also registered with hyphenated names after the `/skill:` prefix:
 | `foo`       | `foo-bar`  | `/skill:foo-bar` |
 | `foo`       | `foo`      | `/skill:foo`     |
 
-MCP server names are not prefixed or rewritten. The server name is the key from the plugin's `mcpServers` object. If another MCP config already uses that name, the plugin install or update fails.
+MCP server names are left as-is. If another MCP config already uses that name, the plugin install or update fails.
 
 | Plugin name | `mcpServers` key | Pi MCP server name                 |
 | ----------- | ---------------- | ---------------------------------- |
@@ -126,13 +126,13 @@ MCP server names are not prefixed or rewritten. The server name is the key from 
 
 Marketplaces and plugins can be installed in the user scope or in the current project's scope. The default is user scope.
 
-The user scope is inherited, so it is possible to install a plugin from a user-scope marketplace in the project scope.
+The user scope is inherited, so it is possible to install a plugin from a user scope marketplace in the project scope.
 
 It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
 
 ### Partially available plugins
 
-Plugins that contain unsupported components, such as an unmappable hook, an LSP server, or a theme, can be partially installed or updated by passing the `--partial` option. The supported components are installed and the unsupported ones are skipped.
+Plugins that contain unsupported components, such as an unmappable hook, an LSP server, or a theme, can be partially installed or updated by passing the `--partial` option. The supported components are installed and the unsupported ones are ignored.
 
 List partially available plugins.
 
@@ -155,7 +155,7 @@ Each scope stores its declarative marketplace and plugin configuration in `claud
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Every mutating command (`marketplace add`, `marketplace remove`, `marketplace autoupdate`, `marketplace noautoupdate`, `install`, `uninstall`, `enable`, `disable`, `import`, `bootstrap`) records its change into this file. The file is the authoritative record of which marketplaces and plugins are installed. Pi applies its contents at extension load (`/reload`).
+This file is the authoritative record of which marketplaces and plugins are installed. Pi applies its contents at extension load (`/reload`).
 
 ### Local configuration files
 
@@ -168,14 +168,12 @@ Each scope can also have a `claude-plugins.local.json` file alongside the base f
 
 The local file overrides individual entries from the base file: a marketplace or plugin entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` wholesale.
 
-Pass `--local` to any mutating command to target the local file.
+Pass `--local` to any mutating command to target the local file only.
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```
-
-A `--local` write never touches the base file.
 
 ### Gitignore convention
 

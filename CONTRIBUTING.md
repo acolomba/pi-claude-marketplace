@@ -15,10 +15,11 @@ The use of generative AI is welcome, provided these conditions are met:
 
 Prerequisites:
 
-- [Open GSD](https://www.opengsd.net/)
+- [Open GSD](https://www.opengsd.net/), specifically [gsd-core](https://opengsd.net/products/gsd-core).
 
 ```bash
 npm install
+npx @opengsd/gsd-core@latest --install --local
 git lfs install
 pre-commit install
 pre-commit install --hook-type commit-msg
