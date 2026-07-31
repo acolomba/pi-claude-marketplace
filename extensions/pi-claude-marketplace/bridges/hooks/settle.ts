@@ -41,9 +41,10 @@ import type {
 const STOP_BLOCK_CUSTOM_TYPE = "claude-hook-stop-block" as const;
 
 /**
- * STOP-07 loop-protection cap: the Nth consecutive block that suppresses
- * re-entry and trips the one-shot warning. Upstream counts 8 *consecutive*
- * blocks (D-88-06); the 8th block is the one that does NOT re-enter.
+ * STOP-07 loop-protection cap: the Nth consecutive bridge re-entry that
+ * suppresses re-entry and trips the one-shot warning. The counter spans BOTH
+ * re-entry lanes -- block AND additionalContext (D-88-08); the 8th consecutive
+ * re-entry is the one that does NOT re-enter.
  */
 const STOP_OVERRIDE_CAP = 8;
 
@@ -55,13 +56,15 @@ let cachedLastAssistant: AssistantMessage | undefined;
 // STOP-07 loop-protection state, all per-session and reset on every bridge
 // load (`/reload` hygiene) via `resetSettleState`:
 //   - `stopHookActive`: threaded into the NEXT Stop payload's
-//     `stop_hook_active` field. Set true when a block re-enters; cleared ONLY
-//     by a genuine `input` event (bridge-injected re-entry does NOT pass
-//     through `input`, so it never self-clears -- Pitfall behind STOP-07).
-//   - `consecutiveBlockCount`: incremented on each block re-entry; reset to 0
-//     by ANY non-block outcome (D-88-06 -- 8 *consecutive* blocks).
+//     `stop_hook_active` field. Set true when ANY bridge re-entry fires -- a
+//     block OR an additionalContext continuation (D-88-08); cleared ONLY by a
+//     genuine `input` event (bridge-injected re-entry does NOT pass through
+//     `input`, so it never self-clears).
+//   - `consecutiveBlockCount`: incremented on EVERY bridge re-entry -- block
+//     AND additionalContext share one counter (D-88-08); reset to 0 by a
+//     non-re-entry outcome (`continue:false` or a plain allow).
 //   - `capNotifiedThisSession`: one-shot latch guarding the cap warning so a
-//     9th consecutive block does not re-notify; re-armed when the counter
+//     re-entry past the cap does not re-notify; re-armed when the counter
 //     resets.
 let stopHookActive = false;
 let consecutiveBlockCount = 0;
@@ -80,11 +83,12 @@ export function resetSettleState(): void {
 }
 
 /**
- * Reset the consecutive-block counter and re-arm the one-shot cap latch. Called
- * on ANY non-block Stop outcome (noop / additionalContext-without-block /
- * `continue:false`) so the cap requires 8 FRESH consecutive blocks afterward
- * (D-88-06). Does NOT touch `stopHookActive` -- that flag is cleared only by a
- * genuine `input` event (STOP-07).
+ * Reset the consecutive re-entry counter and re-arm the one-shot cap latch.
+ * Called on a NON-re-entry Stop outcome (`continue:false` or a plain allow) so
+ * the cap requires a fresh run of 8 consecutive re-entries afterward (D-88-08).
+ * An additionalContext continuation does NOT reset -- it re-enters and counts
+ * toward the cap like a block. Does NOT touch `stopHookActive` -- that flag is
+ * cleared only by a genuine `input` event (STOP-07).
  */
 function resetConsecutiveBlockState(): void {
   consecutiveBlockCount = 0;
@@ -231,7 +235,7 @@ async function runStopBucket(
 
   const event: StopEvent = {
     last_assistant_message: renderAssistantText(last),
-    // STOP-07: the NEXT Stop payload after a block-re-entry carries
+    // STOP-07: the NEXT Stop payload after a bridge re-entry carries
     // `stop_hook_active: true` so the hook can see it is running inside a
     // bridge-driven continuation loop.
     stop_hook_active: stopHookActive,
@@ -239,34 +243,34 @@ async function runStopBucket(
   const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
 
   // STOP-06 / D-88-05: any continue:false suppresses re-entry. This is a
-  // non-block outcome, so it resets the consecutive-block counter (D-88-06).
+  // non-re-entry outcome, so it resets the consecutive re-entry counter
+  // (D-88-08).
   if (outcomes.some((o) => o.result.kind === "stop")) {
     resetConsecutiveBlockState();
     return;
   }
 
-  // STOP-03 / STOP-04: first block wins. The block arm owns the STOP-07
-  // counter / cap / one-shot-warning bookkeeping.
+  // STOP-03 / STOP-04: first block wins. Re-entry funnels through the shared
+  // bounded lane so it counts toward the STOP-07 cap (D-88-08).
   const block = outcomes.find((o) => o.result.kind === "block");
   if (block?.result.kind === "block") {
-    handleBlockOutcome(pi, ctx, block.result.reason ?? "", block.entry.pluginId);
+    reenterBounded(pi, ctx, block.result.reason ?? "", block.entry.pluginId);
     return;
   }
 
-  // STOP-05: additionalContext-without-block re-enters via the same lane, but
-  // it is a NON-block outcome -- it resets the consecutive-block counter
-  // (D-88-06) even though it re-enters.
+  // STOP-05: additionalContext-without-block re-enters through the SAME bounded
+  // lane as a block (D-88-08) -- it counts toward the cap and does NOT reset the
+  // counter, so a pure-additionalContext loop is bounded just like a block loop.
   const mutate = outcomes.find(
     (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
   );
   if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
-    resetConsecutiveBlockState();
-    reenter(pi, mutate.result.additionalContext, mutate.entry.pluginId);
+    reenterBounded(pi, ctx, mutate.result.additionalContext, mutate.entry.pluginId);
     return;
   }
 
-  // noop: the agent genuinely settled with no blocking hook -- a non-block
-  // outcome that resets the counter (D-88-06).
+  // noop: the agent genuinely settled with no continuing hook -- a non-re-entry
+  // outcome that resets the counter (D-88-08).
   resetConsecutiveBlockState();
 }
 
@@ -302,20 +306,24 @@ async function runStopFailure(
 }
 
 /**
- * STOP-07 block-outcome bookkeeping. Increments the consecutive-block counter
- * BEFORE deciding whether to re-enter: the `STOP_OVERRIDE_CAP`th consecutive
- * block (the 8th, D-88-06) does NOT re-enter and instead fires the one-shot
- * override-cap warning (guarded by `capNotifiedThisSession` so a 9th block does
- * not re-notify). Any block below the cap sets `stopHookActive` and re-enters
- * (STOP-03; exit-2 already maps to `{kind:"block"}` in `parseHookStdout`, so
- * STOP-04 rides this arm). The cap is the T-88-02 livelock mitigation: an
- * always-blocking hook is bounded to 7 re-entries then surfaced, never spun
- * unbounded and never suppressed without notice (transparency, D-88-01).
+ * STOP-07 bounded re-entry bookkeeping shared by BOTH re-entry lanes -- a
+ * `block` continuation and an `additionalContext`-without-block continuation
+ * (D-88-08). Increments the shared consecutive re-entry counter BEFORE deciding
+ * whether to re-enter: the `STOP_OVERRIDE_CAP`th consecutive re-entry (the 8th)
+ * does NOT re-enter and instead fires the one-shot override-cap warning (guarded
+ * by `capNotifiedThisSession` so a subsequent re-entry does not re-notify). Any
+ * re-entry below the cap sets `stopHookActive` -- the continuation is
+ * bridge-driven regardless of lane (D-88-08) -- and re-enters (STOP-03; exit-2
+ * already maps to `{kind:"block"}` in `parseHookStdout`, so STOP-04 rides this
+ * arm). The cap is the T-88-02 livelock mitigation: an always-continuing hook,
+ * whether via block or additionalContext, is bounded to 7 re-entries then
+ * surfaced, never spun unbounded and never suppressed without notice
+ * (transparency, D-88-01).
  */
-function handleBlockOutcome(
+function reenterBounded(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
-  reason: string,
+  content: string,
   pluginId: string,
 ): void {
   consecutiveBlockCount += 1;
@@ -330,7 +338,7 @@ function handleBlockOutcome(
   }
 
   stopHookActive = true;
-  reenter(pi, reason, pluginId);
+  reenter(pi, content, pluginId);
 }
 
 /**

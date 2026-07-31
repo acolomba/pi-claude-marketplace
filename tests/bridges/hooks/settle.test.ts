@@ -478,8 +478,8 @@ test("A5: an asyncRewake Stop hook is degraded to noop and does not re-enter", a
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// STOP-07: stop_hook_active flag, 8-consecutive-block cap, one-shot warning,
-// input reset, D-88-06 counter semantics.
+// STOP-07: stop_hook_active flag, 8-consecutive-re-entry cap, one-shot warning,
+// input reset, D-88-08 shared-counter semantics.
 // ──────────────────────────────────────────────────────────────────────────
 
 interface NotifyCall {
@@ -588,8 +588,8 @@ test("STOP-07 ordering/precision: a non-block outcome resets the consecutive cou
 
   assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 7);
 
-  // A single non-block outcome resets the counter (D-88-06 -- only CONSECUTIVE
-  // blocks count).
+  // A single non-re-entry outcome (a plain allow) resets the counter (D-88-08 --
+  // only consecutive re-entries count).
   mode = "noop";
   await runSettleCycle(pi, ctx);
   assert.equal(
@@ -684,7 +684,7 @@ test("STOP-07: stop_hook_active threads into the next payload, survives a bridge
   assert.equal(sent.length, 3, "each of the three blocks re-entered");
 });
 
-test("STOP-07 / STOP-05: additionalContext-without-block re-enters but resets the consecutive counter (non-block outcome)", async (t) => {
+test("STOP-07 / STOP-05: additionalContext re-enters and increments the shared consecutive counter (D-88-08)", async (t) => {
   _resetForTest();
   resetSettleState();
 
@@ -716,8 +716,81 @@ test("STOP-07 / STOP-05: additionalContext-without-block re-enters but resets th
   assert.equal(sent.length, 4, "additionalContext still re-enters via the STOP-05 lane");
   assert.equal(
     _peekLoopStateForTest().consecutiveBlockCount,
-    0,
-    "additionalContext-without-block is a non-block outcome and resets the counter (D-88-06)",
+    4,
+    "additionalContext shares the block counter and increments it, not resets (D-88-08)",
+  );
+  assert.equal(
+    _peekLoopStateForTest().stopHookActive,
+    true,
+    "the additionalContext lane also sets stop_hook_active (WR-05 / D-88-08)",
+  );
+});
+
+test("STOP-07 / D-88-08: a pure-additionalContext loop is bounded by the shared cap", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve({ kind: "mutate", additionalContext: "keep going" }),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("ctx-looper")]);
+
+  const { pi, sent } = makePi();
+  const { ctx, notifyCalls } = makeCapCtx();
+
+  // 8 consecutive additionalContext re-entries: the first 7 re-enter, the 8th
+  // trips the cap without re-entering.
+  for (let i = 0; i < 8; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(sent.length, 7, "a pure-additionalContext loop is bounded to 7 re-entries");
+  assert.equal(notifyCalls.length, 1, "the 8th additionalContext re-entry trips the cap once");
+  assert.equal(notifyCalls[0]?.severity, "warning", "the cap warning is warning severity");
+  assert.ok(
+    notifyCalls[0]?.text.includes("ctx-looper"),
+    "the cap warning names the looping plugin",
+  );
+});
+
+test("STOP-07 / D-88-08: alternating block and additionalContext share one cap", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  // Alternate block -> additionalContext -> block -> ... across settle cycles.
+  let n = 0;
+  _setExecutorForTest((): Promise<HookExecResult> => {
+    const result: HookExecResult =
+      n % 2 === 0
+        ? { kind: "block", reason: "loop" }
+        : { kind: "mutate", additionalContext: "keep going" };
+    n += 1;
+    return Promise.resolve(result);
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("alt")]);
+
+  const { pi, sent } = makePi();
+  const { ctx, notifyCalls } = makeCapCtx();
+
+  // 8 alternating re-entries share ONE counter: the first 7 re-enter, the 8th
+  // trips the shared cap (neither lane resets it).
+  for (let i = 0; i < 8; i += 1) {
+    await runSettleCycle(pi, ctx);
+  }
+
+  assert.equal(sent.length, 7, "alternating block/context re-entries are bounded to 7 together");
+  assert.equal(
+    notifyCalls.length,
+    1,
+    "the 8th alternating re-entry trips the shared cap once (D-88-08)",
   );
 });
 
