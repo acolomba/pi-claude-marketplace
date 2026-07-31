@@ -320,7 +320,7 @@ Marketplace source: `anthropics/claude-code` → `.claude-plugin/marketplace.jso
 
 ### Summary
 
-Of 13 first-party plugins, 5 ship hooks. Under the bucket scheme above, **4 of 5 work end-to-end** (all hook events in bucket A) and **1 (`security-guidance`) is partially supportable** -- its events are fine, but its hook entries use an `asyncRewake` / `rewakeMessage` / `rewakeSummary` payload extension that has no Pi equivalent and would degrade to synchronous in-band output. **No plugin in the official marketplace hooks any event in buckets E, F, G, or H**, so neither the 7 upstream-fixable blockers nor the 3 H-bucket inapplicable events are exercised by Anthropic's own catalog.
+Of 13 first-party plugins, 5 ship hooks. Under the bucket scheme above, **4 of 5 work end-to-end** (all hook events in bucket A) and **1 (`security-guidance`) is partially supportable** -- its events are fine, but its hook entries use an `asyncRewake` / `rewakeMessage` / `rewakeSummary` payload extension that has no Pi equivalent and would degrade to synchronous in-band output. **No plugin in the official marketplace hooks any event in buckets E, F, G, or H**, so neither the 9 upstream-fixable blockers nor the 5 H-bucket inapplicable events are exercised by Anthropic's own catalog.
 
 ### Plugins without hooks (8)
 
