@@ -151,6 +151,12 @@ Per the plan's edge-probe requirement, these are recorded for /gsd-verify-work r
 - Phase 89 (Documentation reconcile) is the last phase of milestone v1.16; all three plans complete. Ready for `/gsd-verify-work` — DOC-04 and DOC-05 verification is human review against the Stale-Claim Inventory (no automated byte-gate for the three narrative docs).
 - No blockers.
 
+## Self-Check: PASSED
+
+- `89-03-SUMMARY.md` — FOUND
+- `docs/research/claude-hooks-vs-pi-events.md` — FOUND
+- Commits `df5914f9`, `ff4d2598`, `1bb1caf3` — all FOUND in git log
+
 ---
 *Phase: 89-documentation-reconcile*
 *Completed: 2026-07-31*
