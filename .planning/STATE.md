@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
-current_phase: 88
-current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
-status: verifying
-stopped_at: Phase 88 human_needed — 4 live-UAT items pending (88-UAT.md)
-last_updated: "2026-07-31T02:27:58.827Z"
+current_phase: 89
+current_phase_name: Documentation reconcile
+status: planning
+stopped_at: Phase 88 verified (live UAT 4/4 passed) — ready to plan Phase 89
+last_updated: "2026-07-31T03:28:56.814Z"
 last_activity: 2026-07-30
-last_activity_desc: Phase 88 execution started
+last_activity_desc: Phase 88 complete, transitioned to Phase 89
 progress:
   total_phases: 3
   completed_phases: 2
@@ -21,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 88 (agent_settled dispatcher, Stop contract & StopFailure) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-07-30 — Phase 88 execution started
+Phase: 89 — Documentation reconcile
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-30 — Phase 88 complete, transitioned to Phase 89
 
 ## Roadmap Summary
 
@@ -88,11 +88,9 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-31T02:27:58.777Z
-**Stopped at:** Phase 88 human_needed — 4 live-UAT items pending (88-UAT.md)
-**Resume file:**
-
-.planning/phases/88-agent-settled-dispatcher-stop-contract-stopfailure/88-UAT.md
+**Last session:** 2026-07-31T03:30:00Z
+**Stopped at:** Phase 88 complete — live UAT 4/4 passed, ready to plan Phase 89
+**Resume file:** None
 
 No plans executed yet for v1.16.
 
@@ -150,7 +148,7 @@ pre-existing (none from v1.16 stop-hooks).
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd-plan-phase 87`
+- Plan the docs-reconcile phase with `/gsd-plan-phase 89`
 
 ## Performance Metrics
 
@@ -164,6 +162,5 @@ pre-existing (none from v1.16 stop-hooks).
 
 ## Deferred Verification
 
-| Phase | State | Resume |
-|-------|-------|--------|
-| 88 | verification_deferred_human | /gsd-verify-work 88 |
+None — Phase 88 human verification completed 2026-07-31 (88-UAT.md, 4/4 passed;
+G-88-D1 doc gap fixed inline).
