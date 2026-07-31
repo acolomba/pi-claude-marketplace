@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.0] - 2026-07-31
+
+- Stop and StopFailure hooks are now bridged (#103). Both fire when the Pi agent settles: Stop on a normal ending with the final assistant message in `last_assistant_message`, StopFailure on `error`/`length` endings with the failure classified into a closed ten-value `error` vocabulary (`rate_limit`, `overloaded`, `billing_error`, ..., `unknown`) and Pi's rendered error text in `last_assistant_message`. A StopFailure matcher filters on the classified value by exact whole-string match (`""`/`"*"` match all); Stop admits only match-all matchers, and a non-empty Stop matcher is reported rather than silently ignored.
+- A Stop hook that returns `decision: "block"` re-enters the agent with its reason as a follow-up turn, with `stop_hook_active` set on re-entry; `additionalContext` output continues the agent the same way. Runaway loops are contained by a cap of 8 consecutive bridge re-entries shared across both lanes (D-88-08); hitting the cap breaks the loop with a warning. A `/reload` during Stop-hook execution invalidates the in-flight settle, so a stale hook can neither mutate the new session's loop state nor inject a turn into it.
+- The pi-coding-agent peer floor rises to `>=0.80.5` (FLOOR-01), which provides the settle fire point these events require. Hooks declaring `asyncRewake: true` never run on Stop/StopFailure -- the settle path skips async-rewake handlers and records the drop in the debug log.
+
 ## [0.11.1] - 2026-07-27
 
 - Skill and command sources whose YAML frontmatter cannot be parsed now degrade gracefully instead of failing the install. An unparseable skill is synthesized into a known-good `disable-model-invocation` block (its body preserved verbatim, still invocable by name and never auto-invoked); an unparseable command has its malformed frontmatter block stripped so Pi falls back to name-from-filename and description-from-first-body-line. The degraded plugin still installs and its row carries a `{malformed skill}` / `{malformed command}` marker at warning severity rather than hard-failing the whole install. Line-ending edge cases (lone-CR sources) and sources whose body opens with a second malformed block degrade the same way.
