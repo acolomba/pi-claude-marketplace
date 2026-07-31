@@ -481,12 +481,12 @@ test("STOP-06: an empty Stop bucket on stop dispatches nothing", async (t) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Research A5: a Stop hook declaring asyncRewake:true degrades to noop (no
-// silent block loss -- the block desire is dropped deterministically, the
-// executor is never invoked)
+// A Stop hook declaring asyncRewake:true degrades to noop (no silent block
+// loss -- the block desire is dropped deterministically, the executor is never
+// invoked)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("A5: an asyncRewake Stop hook is degraded to noop and does not re-enter", async (t) => {
+test("an asyncRewake Stop hook is degraded to noop and does not re-enter", async (t) => {
   _resetForTest();
   resetSettleState();
 

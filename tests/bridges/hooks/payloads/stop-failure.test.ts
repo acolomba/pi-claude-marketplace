@@ -83,7 +83,7 @@ const CLASSIFIER_FIXTURES: ReadonlyArray<readonly [string, "error" | "length", s
   ["retry after 5000ms", "error", "unknown"],
   ["request 4290 failed", "error", "unknown"],
   ["consumed 4013 tokens", "error", "unknown"],
-  // org-policy has no observed Pi substring -> unknown (A2).
+  // org-policy has no observed Pi substring -> unknown.
   ["Organization is not allowed to use this model by policy", "error", "unknown"],
   // rate_limit
   ["Rate limit exceeded (429)", "error", "rate_limit"],

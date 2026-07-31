@@ -226,7 +226,7 @@ function renderAssistantText(message: AssistantMessage): string {
  * agent is idle at settle, so `triggerTurn` starts the new turn),
  * display-suppressed. A Stop hook declaring `asyncRewake:true` cannot yield a
  * synchronous decision and is degraded to `noop` inside `collectBucketOutcomes`
- * with a `hookDebugLog` -- no silent block loss (research A5).
+ * with a `hookDebugLog` -- no silent block loss.
  */
 async function runStopBucket(
   last: AssistantMessage,

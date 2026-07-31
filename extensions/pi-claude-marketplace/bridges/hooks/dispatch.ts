@@ -253,7 +253,7 @@ export interface BucketOutcome {
  * before a decision exists -- so running it here would silently drop its
  * block/stop desire. Such an entry is degraded to `noop` with a `hookDebugLog`
  * (rather than a pointless detached spawn) so the dropped decision is
- * observable (research A5). Mutations are NOT applied in place: the settle
+ * observable. Mutations are NOT applied in place: the settle
  * synthetic event carries no mutable input/output surface.
  *
  * Reuses the same `activeExecutor` seam as `reduceBucket`, so the

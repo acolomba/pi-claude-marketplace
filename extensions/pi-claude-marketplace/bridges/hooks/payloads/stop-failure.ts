@@ -55,7 +55,7 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
  * first entry whose any-substring matches wins, so the more specific
  * limit/billing forms precede the broad HTTP-status forms. `oauth_org_not_allowed`
  * is intentionally absent -- org-policy errors have no observed Pi substring and
- * fall through to `unknown` (A2).
+ * fall through to `unknown`.
  */
 // A matcher is either a case-insensitive substring (named error forms) or a
 // RegExp for HTTP-status codes. Status codes are bounded with `\b` so a bare
