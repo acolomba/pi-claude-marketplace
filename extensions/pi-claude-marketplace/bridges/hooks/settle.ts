@@ -162,7 +162,12 @@ export function settleHandlerFor(
       return;
     }
 
+    // One-shot consumption: clear the cache so a spurious second `agent_settled`
+    // without an intervening `agent_end` no-ops instead of reprocessing the same
+    // (stale) message. Each legitimate re-entry produces a fresh `agent_end`
+    // that repopulates the cache, so this does not break the block loop.
     const last = cachedLastAssistant;
+    cachedLastAssistant = undefined;
     if (last === undefined) {
       return;
     }

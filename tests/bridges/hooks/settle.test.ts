@@ -253,6 +253,39 @@ test("STOP-01: two agent_end events cache the last run's last-assistant message"
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// STOP-01: the cache is one-shot -- a duplicate settle without a fresh
+// agent_end does not reprocess the stale message
+// ──────────────────────────────────────────────────────────────────────────
+
+test("STOP-01: a second agent_settled without a new agent_end is a no-op", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+  assert.deepEqual(fired, ["p1"], "the first settle consumes the cached message");
+  assert.equal(_peekSettleCacheForTest(), undefined, "consuming the cache clears it");
+
+  // A duplicate settle with no intervening agent_end must not reprocess.
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+  assert.deepEqual(fired, ["p1"], "a duplicate settle must not re-run the Stop bucket");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // STOP-01: stale epoch no-ops both handlers
 // ──────────────────────────────────────────────────────────────────────────
 
