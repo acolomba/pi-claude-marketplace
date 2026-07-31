@@ -1,17 +1,17 @@
 # Claude Code hooks vs Pi extension events
 
-Status: research note, not a decision. Date: 2026-06-12. Authors: research transcript, not yet reviewed.
+Status: research note, not a decision. Date: 2026-06-12; amended 2026-07-31 to reconcile the `Stop`/`StopFailure` mapping with shipped behavior (see [issue-103](issue-103-stop-stopfailure-promotion.md)). Authors: research transcript.
 
 ## Executive summary
 
-- **Surface comparison.** Claude Code has 30 hook events; Pi has 30 extension events. Both use a string-match scoping primitive (Claude uses a `matcher` field; Pi uses an in-handler branch).
+- **Surface comparison.** Claude Code has 30 hook events; Pi has 31 extension events. Both use a string-match scoping primitive (Claude uses a `matcher` field; Pi uses an in-handler branch).
 - **Naive 1:1 mapping is misleading.** Direct correspondence: 9 exact, 6 partial, 16 with no Pi analog. The 16 ○ events conflate four different situations -- see [Perfect-fidelity feasibility](#perfect-fidelity-feasibility).
 - **What the bridge can actually ship today.** With synthesis inside the bridge plus the **`pi-subagents` soft dep** (which already publishes the events the bridge needs), **16 of 30 events become supportable at perfect or near-perfect fidelity with zero upstream PRs**. Buckets A + B + D cover 14 events directly; `SubagentStart` and `SubagentStop` lift from bucket F to A/B when `pi-subagents` is installed (see [Soft-dep extension event surfaces](#soft-dep-extension-event-surfaces)). Bucket C is empty in this scope -- the events that fit it structurally (Task and Worktree pairs) all failed the "would-anybody-naturally-invoke-this" test.
 - **Nine events are blocked on upstream PRs that may or may not happen**, and the project is not committed to sending them: 4 events need pi-coding-agent to expose internal state (`Notification`, `PermissionRequest`, `PermissionDenied`, `MessageDisplay`); 1 event (`TeammateIdle`) needs Pi to add an agent-team primitive; 2 events (`Elicitation`, `ElicitationResult`) are blocked on two specific PRs to `pi-mcp-adapter`; 2 events (`WorktreeCreate`, `WorktreeRemove`) are blocked on a PR to `pi-worktrees` to publish events on `pi.events`. These are **structurally distinct from the pi-subagents pattern**: pi-mcp-adapter and pi-worktrees both need a PR before the bridge can observe anything; installing them today doesn't help.
 - **Five events are semantically inapplicable to Pi** and should be silently dropped at install time rather than implemented: `ConfigChange` (matcher values like `user_settings`/`policy_settings` are Claude paths and concepts that don't exist under Pi), `Setup` (Claude's `--init-only` CLI mode has no Pi equivalent), `InstructionsLoaded` (fires for `CLAUDE.md` / `.claude/rules/*.md` -- Pi reads a different context-file set), `TaskCreated` / `TaskCompleted` (Pi has no canonical task primitive -- rpiv-todo and pi-crew represent competing extension takes, and Claude's TaskCreate semantics around sub-task isolation don't cleanly map to either). No upstream PR would change this; the hooks are named for runtime semantics Pi doesn't share.
 - **Empirical check against the official Anthropic marketplace: 5/5 hook-using plugins are supportable** under the v1.13 scope (4 fully, 1 partially). **None of the 14 unsupported events are exercised by any first-party plugin** -- neither the 9 upstream-fixable blockers nor the 5 H-bucket inapplicable events. The blockers are real but not market-driven for the first-party catalog.
 - **The first-party catalog uses only 5 distinct hook events**: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`. A minimum-viable bridge that supports just these five achieves 100% first-party coverage.
-- **`Stop` is the single biggest correctness risk.** 3 of 5 first-party hook-using plugins hook it, and it's a bucket-D lossy synthesis. The bridge's preservation of the `{"decision": "block", "reason": "..."}` JSON contract on `Stop` is a load-bearing test case.
+- **`Stop` ships with full decision control.** 3 of 5 first-party hook-using plugins hook it. It is dispatched off `agent_settled` as a bucket-A event that honors the full `{"decision": "block", "reason": "..."}` JSON contract (block re-entry, exit-2, `continue: false` precedence, 8-block cap); the only divergence is a non-hook-observable turn-boundary timing shift. See [issue-103](issue-103-stop-stopfailure-promotion.md).
 - **New compatibility category -- hook-payload extensions.** The audit surfaced fields like `asyncRewake` on `security-guidance` that change how an existing event behaves without being a new event. The bridge needs an ignore-with-warning policy distinct from event-level blocker handling.
 
 ## Purpose
@@ -79,40 +79,41 @@ Thirty events as documented.
 
 ## Pi extension events
 
-Thirty events as documented in `extensions.md` (lifecycle overview plus the per-event sections). Plus four producer-only return fields surfaced through `session_start` (`watchPaths`, `reloadSkills`, `initialUserMessage`, etc.) that are not events but matter for the comparison.
+Thirty-one events as documented in `extensions.md` (lifecycle overview plus the per-event sections). Plus four producer-only return fields surfaced through `session_start` (`watchPaths`, `reloadSkills`, `initialUserMessage`, etc.) that are not events but matter for the comparison.
 
-| #   | Event                     | Trigger                                                            | Control                                                                                 |
-| --- | ------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| 1   | `project_trust`           | Before deciding to trust a project's dynamic configs               | `{ trusted: "yes" \| "no" \| "undecided", remember? }`                                  |
-| 2   | `resources_discover`      | After `session_start`, on startup or `/reload`                     | Contribute `skillPaths`, `promptPaths`, `themePaths`                                    |
-| 3   | `session_start`           | Session started, loaded, or reloaded                               | Observation; `event.reason` discriminates `startup`/`reload`/`new`/`resume`/`fork`      |
-| 4   | `session_before_switch`   | Before `/new` or `/resume`                                         | `{ cancel: true }`                                                                      |
-| 5   | `session_before_fork`     | Before `/fork` or `/clone`                                         | `{ cancel: true }` or `{ skipConversationRestore: true }`                               |
-| 6   | `session_before_compact`  | Before compaction                                                  | `{ cancel: true }` or `{ compaction: { summary, firstKeptEntryId, tokensBefore } }`     |
-| 7   | `session_compact`         | After compaction completes                                         | Observation                                                                             |
-| 8   | `session_before_tree`     | Before `/tree` navigation                                          | `{ cancel: true }` or `{ summary: { summary, details } }`                               |
-| 9   | `session_tree`            | After tree navigation                                              | Observation                                                                             |
-| 10  | `session_shutdown`        | Before extension runtime is torn down                              | Cleanup; can return shutdown options                                                    |
-| 11  | `before_agent_start`      | User prompt received, before agent loop                            | Inject persistent `message`; modify `systemPrompt`                                      |
-| 12  | `agent_start`             | Agent loop begins                                                  | Observation                                                                             |
-| 13  | `agent_end`               | Agent loop ends                                                    | Observation                                                                             |
-| 14  | `turn_start`              | Each turn (one LLM response + tool calls)                          | Observation                                                                             |
-| 15  | `turn_end`                | Turn ends                                                          | Observation                                                                             |
-| 16  | `message_start`           | User/assistant/toolResult message begins                           | Observation                                                                             |
-| 17  | `message_update`          | Assistant streaming token deltas                                   | Observation                                                                             |
-| 18  | `message_end`             | Message finalized                                                  | Replace finalized message via `{ message }` (must keep `role`)                          |
-| 19  | `tool_execution_start`    | Before tool runs (lifecycle, in assistant source order)            | Observation                                                                             |
-| 20  | `tool_execution_update`   | Tool emits partial output                                          | Observation                                                                             |
-| 21  | `tool_execution_end`      | Tool finalized                                                     | Observation                                                                             |
-| 22  | `context`                 | Before each LLM call                                               | Replace `messages` (deep copy provided)                                                 |
-| 23  | `before_provider_request` | Provider payload built, before HTTP request                        | Return replacement payload (e.g. modify temperature, system instructions)               |
-| 24  | `after_provider_response` | HTTP response received, before stream consumed                     | Inspect `status` + `headers`                                                            |
-| 25  | `model_select`            | Model changed via `/model`, `Ctrl+P`, or session restore           | Observation; `source` is `set`/`cycle`/`restore`                                        |
-| 26  | `thinking_level_select`   | Thinking level changed                                             | Observation                                                                             |
-| 27  | `tool_call`               | After `tool_execution_start`, before tool executes                 | Mutate `event.input` in place; `{ block: true, reason? }`                               |
-| 28  | `tool_result`             | After tool finishes, before result message events                  | Return partial patch `{ content?, details?, isError? }`; handlers chain like middleware |
-| 29  | `user_bash`               | User executes `!` or `!!`                                          | Provide custom `operations`, or return `result` directly                                |
-| 30  | `input`                   | User input received, after extension commands but before expansion | `{ action: "continue" \| "transform" \| "handled", text?, images? }`; transforms chain  |
+| #   | Event                     | Trigger                                                                                    | Control                                                                                 |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| 1   | `project_trust`           | Before deciding to trust a project's dynamic configs                                       | `{ trusted: "yes" \| "no" \| "undecided", remember? }`                                  |
+| 2   | `resources_discover`      | After `session_start`, on startup or `/reload`                                             | Contribute `skillPaths`, `promptPaths`, `themePaths`                                    |
+| 3   | `session_start`           | Session started, loaded, or reloaded                                                       | Observation; `event.reason` discriminates `startup`/`reload`/`new`/`resume`/`fork`      |
+| 4   | `session_before_switch`   | Before `/new` or `/resume`                                                                 | `{ cancel: true }`                                                                      |
+| 5   | `session_before_fork`     | Before `/fork` or `/clone`                                                                 | `{ cancel: true }` or `{ skipConversationRestore: true }`                               |
+| 6   | `session_before_compact`  | Before compaction                                                                          | `{ cancel: true }` or `{ compaction: { summary, firstKeptEntryId, tokensBefore } }`     |
+| 7   | `session_compact`         | After compaction completes                                                                 | Observation                                                                             |
+| 8   | `session_before_tree`     | Before `/tree` navigation                                                                  | `{ cancel: true }` or `{ summary: { summary, details } }`                               |
+| 9   | `session_tree`            | After tree navigation                                                                      | Observation                                                                             |
+| 10  | `session_shutdown`        | Before extension runtime is torn down                                                      | Cleanup; can return shutdown options                                                    |
+| 11  | `before_agent_start`      | User prompt received, before agent loop                                                    | Inject persistent `message`; modify `systemPrompt`                                      |
+| 12  | `agent_start`             | Agent loop begins                                                                          | Observation                                                                             |
+| 13  | `agent_end`               | Agent loop ends                                                                            | Observation                                                                             |
+| 14  | `turn_start`              | Each turn (one LLM response + tool calls)                                                  | Observation                                                                             |
+| 15  | `turn_end`                | Turn ends                                                                                  | Observation                                                                             |
+| 16  | `message_start`           | User/assistant/toolResult message begins                                                   | Observation                                                                             |
+| 17  | `message_update`          | Assistant streaming token deltas                                                           | Observation                                                                             |
+| 18  | `message_end`             | Message finalized                                                                          | Replace finalized message via `{ message }` (must keep `role`)                          |
+| 19  | `tool_execution_start`    | Before tool runs (lifecycle, in assistant source order)                                    | Observation                                                                             |
+| 20  | `tool_execution_update`   | Tool emits partial output                                                                  | Observation                                                                             |
+| 21  | `tool_execution_end`      | Tool finalized                                                                             | Observation                                                                             |
+| 22  | `context`                 | Before each LLM call                                                                       | Replace `messages` (deep copy provided)                                                 |
+| 23  | `before_provider_request` | Provider payload built, before HTTP request                                                | Return replacement payload (e.g. modify temperature, system instructions)               |
+| 24  | `after_provider_response` | HTTP response received, before stream consumed                                             | Inspect `status` + `headers`                                                            |
+| 25  | `model_select`            | Model changed via `/model`, `Ctrl+P`, or session restore                                   | Observation; `source` is `set`/`cycle`/`restore`                                        |
+| 26  | `thinking_level_select`   | Thinking level changed                                                                     | Observation                                                                             |
+| 27  | `tool_call`               | After `tool_execution_start`, before tool executes                                         | Mutate `event.input` in place; `{ block: true, reason? }`                               |
+| 28  | `tool_result`             | After tool finishes, before result message events                                          | Return partial patch `{ content?, details?, isError? }`; handlers chain like middleware |
+| 29  | `user_bash`               | User executes `!` or `!!`                                                                  | Provide custom `operations`, or return `result` directly                                |
+| 30  | `input`                   | User input received, after extension commands but before expansion                         | `{ action: "continue" \| "transform" \| "handled", text?, images? }`; transforms chain  |
+| 31  | `agent_settled`           | Agent run fully settled -- no automatic retry, compaction, or queued continuation will run | Observation (carries no payload)                                                        |
 
 ## Cross-mapping: Claude → Pi
 
