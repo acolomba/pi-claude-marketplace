@@ -78,7 +78,7 @@ The unsupported events fall into three buckets, each with a different forward pa
 | Literal tool name (`Bash`, `Edit`)                                                                                               | ✓           | ✓   |                                                                                                                                                                                                                                                                                  |
 | Pipe-OR alternation (`Edit\|Write`)                                                                                              | ✓           | ✓   |                                                                                                                                                                                                                                                                                  |
 | Empty / `*` / omitted -> match-all                                                                                               | ✓           | ✓   |                                                                                                                                                                                                                                                                                  |
-| Regex matcher                                                                                                                    | ✓           | ✗   | any character outside the safe charset trips `(unavailable) {unsupported hooks}`                                                                                                                                                                                                 |
+| Regex matcher                                                                                                                    | ✓           | ✗   | any character outside the safe charset drops the matcher group per-entry; the plugin resolves `(partially-available)`                                                                                                                                                            |
 | MCP literal (`mcp__<server>__<tool>`)                                                                                            | ✓           | ✓   |                                                                                                                                                                                                                                                                                  |
 | MCP wildcards (`mcp__*`, `mcp__github__.*`)                                                                                      | ✓           | ✗   | regex -> unsupported                                                                                                                                                                                                                                                             |
 | Tools without a Pi analog (`MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`) | ✓           | ✗   | unmapped -> unsupported                                                                                                                                                                                                                                                          |
@@ -103,7 +103,7 @@ The `matcher` field on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFai
 | `find`       | `Glob`           |
 | `ls`         | `LS`             |
 
-Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`, and any `mcp__*` MCP server tool. A matcher value naming one of these tools cannot be translated because there is no Pi-side analog; the plugin will install with `(unavailable) {unsupported hooks}` unless the matcher also matches a tool name that does have a mapping (for example, `Edit|Write|MultiEdit` would still install if the bridge accepts at least one of the alternatives -- but the unmapped alternative will never fire).
+Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite`, `KillShell`, `BashOutput`, and any `mcp__*` MCP server tool. A matcher value naming one of these tools cannot be translated because there is no Pi-side analog; the affected hook entry drops per-entry and the plugin resolves `(partially-available)` under the single aggregate `{unsupported hooks}` brace, unless the matcher also matches a tool name that does have a mapping (for example, `Edit|Write|MultiEdit` would still install if the bridge accepts at least one of the alternatives -- but the unmapped alternative will never fire).
 
 ## `if` field
 
@@ -132,13 +132,13 @@ Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Ta
 
 ## Handler types
 
-| Type       | Claude Code | Pi  | Notes                                            |
-| ---------- | ----------- | --- | ------------------------------------------------ |
-| `command`  | ✓           | ✓   |                                                  |
-| `http`     | ✓           | ✗   | plugin trips `(unavailable) {unsupported hooks}` |
-| `mcp_tool` | ✓           | ✗   | unsupported                                      |
-| `prompt`   | ✓           | ✗   | unsupported                                      |
-| `agent`    | ✓           | ✗   | unsupported                                      |
+| Type       | Claude Code | Pi  | Notes                                                                         |
+| ---------- | ----------- | --- | ----------------------------------------------------------------------------- |
+| `command`  | ✓           | ✓   |                                                                               |
+| `http`     | ✓           | ✗   | unsupported handler; drops per-entry, plugin resolves `(partially-available)` |
+| `mcp_tool` | ✓           | ✗   | unsupported                                                                   |
+| `prompt`   | ✓           | ✗   | unsupported                                                                   |
+| `agent`    | ✓           | ✗   | unsupported                                                                   |
 
 ## Handler fields
 
@@ -155,26 +155,29 @@ Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Ta
 
 ## stdin, stdout, exit codes
 
-| Feature                                                                           | Claude Code | Pi  | Notes                                                                 |
-| --------------------------------------------------------------------------------- | ----------- | --- | --------------------------------------------------------------------- |
-| JSON event on stdin                                                               | ✓           | ✓   | per-event payload                                                     |
-| Exit 0 -> success                                                                 | ✓           | ✓   |                                                                       |
-| Exit 2 -> blocking error, stderr to Claude                                        | ✓           | ✓   | per-event blocking semantics where the Pi event maps                  |
-| Other exit -> non-blocking, stderr to user                                        | ✓           | ✓   |                                                                       |
-| `continue: false` -> stop the session                                             | ✓           | ✓   | wired in `wire-protocol.ts`                                           |
-| `decision: "block"` (top-level)                                                   | ✓           | ✓   | per-event arms in `event-adapters.ts`                                 |
-| `suppressOutput`                                                                  | ✓           | ✓   |                                                                       |
-| `systemMessage`                                                                   | ✓           | ✗   | not surfaced                                                          |
-| `terminalSequence` (OSC)                                                          | ✓           | ✗   | no terminal-sequence emit                                             |
-| `hookSpecificOutput.permissionDecision` (`allow`, `deny`, `ask`)                  | ✓           | ✓   | `defer` arm not implemented (non-interactive `-p` mode only upstream) |
-| `hookSpecificOutput.permissionDecisionReason`                                     | ✓           | ✓   |                                                                       |
-| `updatedInput`                                                                    | ✓           | ✓   | object-merge on tool-call events                                      |
-| `updatedToolOutput`                                                               | ✓           | ✓   | on tool-result events                                                 |
-| `additionalContext` (SessionStart)                                                | ✓           | ✓   | drained via Pi's `before_agent_start`                                 |
-| `additionalContext` (other events)                                                | ✓           | ✗   | only the SessionStart capture path is wired                           |
-| `initialUserMessage`, `sessionTitle`, `watchPaths`, `reloadSkills` (SessionStart) | ✓           | ✗   |                                                                       |
-| `decision.behavior` for `PermissionRequest`                                       | ✓           | ✗   | event itself unsupported                                              |
-| `displayContent` for `MessageDisplay`                                             | ✓           | ✗   | event itself unsupported                                              |
+| Feature                                                                           | Claude Code | Pi  | Notes                                                                                                                 |
+| --------------------------------------------------------------------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------- |
+| JSON event on stdin                                                               | ✓           | ✓   | per-event payload                                                                                                     |
+| `stop_hook_active` (Stop stdin)                                                   | ✓           | ✓   | per-session loop flag; set on block re-entry, cleared on the next user input                                          |
+| `last_assistant_message` (Stop / StopFailure stdin)                               | ✓           | ✓   | final assistant message text, from the cached settle messages                                                         |
+| Exit 0 -> success                                                                 | ✓           | ✓   |                                                                                                                       |
+| Exit 2 -> blocking error, stderr to Claude                                        | ✓           | ✓   | per-event blocking semantics where the Pi event maps; on Stop, rides the block arm with stderr as the re-entry reason |
+| Other exit -> non-blocking, stderr to user                                        | ✓           | ✓   |                                                                                                                       |
+| `continue: false` -> stop the session                                             | ✓           | ✓   | wired in `wire-protocol.ts`; on Stop, top-level `continue: false` takes precedence over a block                       |
+| `decision: "block"` (top-level)                                                   | ✓           | ✓   | per-event arms in `event-adapters.ts`; on Stop, re-enters via `followUp` + `triggerTurn`                              |
+| `suppressOutput`                                                                  | ✓           | ✓   |                                                                                                                       |
+| `systemMessage`                                                                   | ✓           | ✗   | not surfaced                                                                                                          |
+| `terminalSequence` (OSC)                                                          | ✓           | ✗   | no terminal-sequence emit                                                                                             |
+| `hookSpecificOutput.permissionDecision` (`allow`, `deny`, `ask`)                  | ✓           | ✓   | `defer` arm not implemented (non-interactive `-p` mode only upstream)                                                 |
+| `hookSpecificOutput.permissionDecisionReason`                                     | ✓           | ✓   |                                                                                                                       |
+| `updatedInput`                                                                    | ✓           | ✓   | object-merge on tool-call events                                                                                      |
+| `updatedToolOutput`                                                               | ✓           | ✓   | on tool-result events                                                                                                 |
+| `additionalContext` (SessionStart)                                                | ✓           | ✓   | drained via Pi's `before_agent_start`                                                                                 |
+| `additionalContext` (Stop)                                                        | ✓           | ✓   | re-enters the agent loop without a block (feedback labeling; STOP-05)                                                 |
+| `additionalContext` (other events)                                                | ✓           | ✗   | only the SessionStart and Stop capture paths are wired                                                                |
+| `initialUserMessage`, `sessionTitle`, `watchPaths`, `reloadSkills` (SessionStart) | ✓           | ✗   |                                                                                                                       |
+| `decision.behavior` for `PermissionRequest`                                       | ✓           | ✗   | event itself unsupported                                                                                              |
+| `displayContent` for `MessageDisplay`                                             | ✓           | ✗   | event itself unsupported                                                                                              |
 
 ## Environment variables
 
@@ -214,15 +217,17 @@ Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Ta
 
 ## Install-time disposition
 
-The bridge picks one of three responses when a plugin declares a feature outside the supported set:
+The bridge picks one of four responses when a plugin declares a feature outside the supported set:
 
-**Hard install-time trip** -- the plugin flips to `(unavailable) {unsupported hooks}` and none of its hooks run. The bridge chooses strict supportability over partial support because the alternative is silently dropping half of a hook set -- a plugin author whose `PostToolUse` handler runs but whose `Stop` handler does not has no way to discover the gap until something goes wrong. Failing the install fast surfaces the unsupported feature immediately so you can plan around it (rewrite the plugin to use only supported events, gate the unsupported events behind a feature flag, or wait for a future milestone that lifts the restriction). Applies to:
+**Partial-partition drop** -- when a `hooks.json` parses and validates cleanly but declares an unsupportable event, matcher group, or handler type, the bridge drops only the offending entries and installs the rest. The plugin resolves `(partially-available)` and, once installed, derives `(partially-installed)`. Every dropped entry rides a SINGLE aggregate `{unsupported hooks}` brace (D-71-04); the per-handler `event(matcher) (unsupported)` breakdown is shown on the `plugin info` surface (D-71-05). The bridge favors partial support over a whole-plugin failure so that a plugin's supported hooks still run. Applies to:
 
-- any unsupported event in `hooks.json` (including events that are supported but the plugin also declares an unsupported one alongside)
+- any unsupportable event in `hooks.json` (it drops per-entry; supported events declared alongside it still install)
 - regex matchers
 - tool-name matchers naming a Claude tool with no Pi analog
 - non-tool matchers outside the per-event closed set (for example, `clear` or `compact` on `SessionStart`)
 - any handler `type` other than `"command"`
+
+**Structural unavailable** -- a structurally malformed `hooks.json` (invalid JSON, or a schema failure such as a `type: "command"` handler missing its `command`) resolves `(unavailable)` and none of the plugin's hooks install. This is a distinct arm from the partial-partition drop above: its reason brace is sourced through `narrowResolverNotes`, not the `narrowUnsupportedKinds` path the partial drop uses.
 
 **Silent fall-open** -- the hook fires on every matcher hit and a `hookDebugLog` warning records the cause. This matches Claude Code's documented best-effort contract for the `if` field. Applies to:
 
@@ -235,7 +240,7 @@ The bridge picks one of three responses when a plugin declares a feature outside
 
 - `systemMessage`, `terminalSequence` -- no Pi surface to render them
 - `initialUserMessage`, `sessionTitle`, `watchPaths`, `reloadSkills` on `SessionStart`
-- `additionalContext` on events other than `SessionStart`
+- `additionalContext` on events other than `SessionStart` and `Stop`
 
 ## Further reading
 
