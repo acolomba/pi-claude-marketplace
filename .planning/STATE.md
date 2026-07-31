@@ -4,16 +4,16 @@ milestone: v1.16
 milestone_name: stop-hooks
 current_phase: 89
 current_phase_name: Documentation reconcile
-status: executing
-stopped_at: Completed 89-02-PLAN.md
-last_updated: "2026-07-31T10:43:16.266Z"
+status: verifying
+stopped_at: Completed 89-03-PLAN.md
+last_updated: "2026-07-31T10:53:43.888Z"
 last_activity: 2026-07-31
 last_activity_desc: Phase 89 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 67
 ---
 
@@ -23,7 +23,7 @@ progress:
 
 Phase: 89 (Documentation reconcile) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-31 — Phase 89 execution started
 
 ## Roadmap Summary
@@ -88,8 +88,8 @@ Last activity: 2026-07-31 — Phase 89 execution started
 
 ## Session
 
-**Last session:** 2026-07-31T10:43:05.694Z
-**Stopped at:** Completed 89-02-PLAN.md
+**Last session:** 2026-07-31T10:53:31.608Z
+**Stopped at:** Completed 89-03-PLAN.md
 **Resume file:** None
 
 No plans executed yet for v1.16.
@@ -133,6 +133,7 @@ record per-plan decisions here.
 - [Phase ?]: 88-05: Live Stop UAT proves STOP-01 (agent_settled dispatch) + STOP-03 (block re-entry) on real Pi via spawn/stdin-ignore + --mode json; the 8-block cap loop cannot be driven headlessly (no PTY) and is routed to human_needed.
 - [Phase ?]: Phase 89 riders landed: output-catalog Stop->Notification (D-89-07) and issue-103 agent_settled 0.80.4->0.80.5 (D-89-06); DOC-04/DOC-05 deferred to plans 02/03
 - [Phase ?]: 89-02: hooks-compatibility.md reconciled to shipped v1.16 (Stop/StopFailure supported, three-arm partial-partition disposition, v1.13 framing stripped) — DOC-04 complete
+- [Phase ?]: 89-03: claude-hooks-vs-pi-events.md corrected in place (D-89-05) — Stop/StopFailure cross-mapping rows now agent_settled dispatch + stopReason contract, agent_settled added as Pi inventory row #31 (count 31), feasibility A 8->10 / D 5->3, marketplace Stop->A; DOC-05 pointers to issue-103 at every corrected claim; E/F/G/H + soft-dep audit preserved (Pitfall 3)
 
 ## Deferred Items
 
@@ -163,6 +164,7 @@ pre-existing (none from v1.16 stop-hooks).
 | Phase 88 P05 | 55min | 2 tasks | 4 files |
 | Phase 89 P01 | 20min | 2 tasks | 2 files |
 | Phase 89 P02 | ~25min | 2 tasks | 1 files |
+| Phase 89 P03 | 20min | 2 tasks | 1 files |
 
 ## Deferred Verification
 

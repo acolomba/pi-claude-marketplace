@@ -43,7 +43,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Documentation Reconcile
 
 - [x] **DOC-04**: `docs/hooks-compatibility.md` reconciled with shipped behavior — the `Stop`/`StopFailure` event rows flip to supported with the turn-boundary timing-shift caveat documented, the matcher table gains the StopFailure error-type row, and the stale v1.13 hard-trip "Install-time disposition" section is rewritten for the force-install partial-partition model (`(partially-available)` + per-entry drops).
-- [ ] **DOC-05**: `docs/research/claude-hooks-vs-pi-events.md` amended — the naive-table "`agent_end` is observation-only" claim retired, `agent_settled` added to the Pi event inventory, StopFailure's `after_provider_response` synthesis superseded by the `stopReason` protocol contract, with pointers to `docs/research/issue-103-stop-stopfailure-promotion.md`.
+- [x] **DOC-05**: `docs/research/claude-hooks-vs-pi-events.md` amended — the naive-table "`agent_end` is observation-only" claim retired, `agent_settled` added to the Pi event inventory, StopFailure's `after_provider_response` synthesis superseded by the `stopReason` protocol contract, with pointers to `docs/research/issue-103-stop-stopfailure-promotion.md`.
 
 ## v2 Requirements
 
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADMIT-02 | Phase 87 | Complete |
 | FLOOR-01 | Phase 87 | Complete |
 | DOC-04 | Phase 89 | Complete |
-| DOC-05 | Phase 89 | Pending |
+| DOC-05 | Phase 89 | Complete |
 
 **Coverage:**
 
