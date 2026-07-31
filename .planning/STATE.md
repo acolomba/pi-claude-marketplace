@@ -5,15 +5,15 @@ milestone_name: stop-hooks
 current_phase: 89
 current_phase_name: Documentation reconcile
 status: executing
-stopped_at: Phase 89 context gathered
-last_updated: "2026-07-31T10:13:43.521Z"
-last_activity: 2026-07-30
-last_activity_desc: Phase 88 complete, transitioned to Phase 89
+stopped_at: Completed 89-01-PLAN.md
+last_updated: "2026-07-31T10:30:27.549Z"
+last_activity: 2026-07-31
+last_activity_desc: Phase 89 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 67
 ---
 
@@ -21,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 89 — Documentation reconcile
-Plan: Not started
+Phase: 89 (Documentation reconcile) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-30 — Phase 88 complete, transitioned to Phase 89
+Last activity: 2026-07-31 — Phase 89 execution started
 
 ## Roadmap Summary
 
@@ -88,9 +88,9 @@ Last activity: 2026-07-30 — Phase 88 complete, transitioned to Phase 89
 
 ## Session
 
-**Last session:** 2026-07-31T09:42:23.946Z
-**Stopped at:** Phase 89 context gathered
-**Resume file:** .planning/phases/89-documentation-reconcile/89-CONTEXT.md
+**Last session:** 2026-07-31T10:30:27.517Z
+**Stopped at:** Completed 89-01-PLAN.md
+**Resume file:** None
 
 No plans executed yet for v1.16.
 
@@ -131,6 +131,7 @@ record per-plan decisions here.
 - [Phase ?]: 88-04: StopFailure observation-only arm (error/length -> reduceBucket, result discarded); never touches sendMessage/stop_hook_active/counter (SFAIL-01)
 - [Phase ?]: 88-04: errorMessage-only classifier (D-88-02) into closed 10-value vocab, unknown fallback, length -> max_output_tokens deterministic; membership-pinned to NON_TOOL_EVENT_CLOSED_SETS.StopFailure (SFAIL-02/03)
 - [Phase ?]: 88-05: Live Stop UAT proves STOP-01 (agent_settled dispatch) + STOP-03 (block re-entry) on real Pi via spawn/stdin-ignore + --mode json; the 8-block cap loop cannot be driven headlessly (no PTY) and is routed to human_needed.
+- [Phase ?]: Phase 89 riders landed: output-catalog Stop->Notification (D-89-07) and issue-103 agent_settled 0.80.4->0.80.5 (D-89-06); DOC-04/DOC-05 deferred to plans 02/03
 
 ## Deferred Items
 
@@ -159,6 +160,7 @@ pre-existing (none from v1.16 stop-hooks).
 | Phase 88 P03 | 40min | 2 tasks | 8 files |
 | Phase 88 P04 | 25min | 2 tasks | 3 files |
 | Phase 88 P05 | 55min | 2 tasks | 4 files |
+| Phase 89 P01 | 20min | 2 tasks | 2 files |
 
 ## Deferred Verification
 

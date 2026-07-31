@@ -118,12 +118,12 @@ Plans:
   1. `docs/hooks-compatibility.md` is reconciled with shipped behavior: the `Stop` and `StopFailure` event rows flip to supported with the turn-boundary timing-shift caveat documented, the matcher table gains the `StopFailure` error-type row, and the stale v1.13 hard-trip "Install-time disposition" section is rewritten for the force-install partial-partition model (`(partially-available)` + per-entry drops). (DOC-04)
   2. `docs/research/claude-hooks-vs-pi-events.md` is amended: the naive-table "`agent_end` is observation-only" claim is retired, `agent_settled` is added to the Pi event inventory, and `StopFailure`'s `after_provider_response` synthesis is superseded by the `stopReason` protocol contract — with pointers to `docs/research/issue-103-stop-stopfailure-promotion.md`. (DOC-05)
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1** *(sequential, non-worktree; all three plans are file-independent)*
 
-- [ ] 89-01-PLAN.md — Riders (leads to de-risk the only test-coupled edit): re-point `output-catalog.md` Stop→Notification partial-hook example (D-89-07) + correct the issue-103 doc `0.80.4`→`0.80.5` at all four sites (D-89-06) (DOC-04, DOC-05)
+- [x] 89-01-PLAN.md — Riders (leads to de-risk the only test-coupled edit): re-point `output-catalog.md` Stop→Notification partial-hook example (D-89-07) + correct the issue-103 doc `0.80.4`→`0.80.5` at all four sites (D-89-06) (DOC-04, DOC-05)
 - [ ] 89-02-PLAN.md — DOC-04: full-doc reconcile of `hooks-compatibility.md` — Stop/StopFailure rows flip to `✓`, timing-shift subsection, StopFailure error-type matcher row, three-arm install-time disposition rewrite, milestone-version strip (DOC-04)
 - [ ] 89-03-PLAN.md — DOC-05: correct-in-place amendment of `claude-hooks-vs-pi-events.md` — retire the `agent_end`-observation-only Stop claim, add `agent_settled` inventory row #31, supersede StopFailure's `after_provider_response` synthesis with the `stopReason` contract, add issue-103 pointers (DOC-05)
 
@@ -136,6 +136,6 @@ Sequential: 87 → 88 → 89 (each phase depends on the prior)
 |-------|-----------|----------------|--------|-----------|
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete    | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 5/5 | Complete    | 2026-07-30 |
-| 89. Documentation reconcile | v1.16 | 0/3 | Planned | — |
+| 89. Documentation reconcile | v1.16 | 1/3 | In Progress|  |
 | 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete | 2026-07-26 |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |
