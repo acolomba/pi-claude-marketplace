@@ -5,8 +5,8 @@ milestone_name: stop-hooks
 current_phase: 89
 current_phase_name: Documentation reconcile
 status: planning
-stopped_at: Phase 88 verified (live UAT 4/4 passed) — ready to plan Phase 89
-last_updated: "2026-07-31T03:28:56.814Z"
+stopped_at: Phase 89 context gathered
+last_updated: "2026-07-31T09:42:23.996Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 complete, transitioned to Phase 89
 progress:
@@ -88,9 +88,9 @@ Last activity: 2026-07-30 — Phase 88 complete, transitioned to Phase 89
 
 ## Session
 
-**Last session:** 2026-07-31T03:30:00Z
-**Stopped at:** Phase 88 complete — live UAT 4/4 passed, ready to plan Phase 89
-**Resume file:** None
+**Last session:** 2026-07-31T09:42:23.946Z
+**Stopped at:** Phase 89 context gathered
+**Resume file:** .planning/phases/89-documentation-reconcile/89-CONTEXT.md
 
 No plans executed yet for v1.16.
 
