@@ -9,74 +9,100 @@ files_reviewed_list:
   - docs/research/claude-hooks-vs-pi-events.md
   - docs/research/issue-103-stop-stopfailure-promotion.md
 findings:
-  critical: 1
+  critical: 0
   warning: 0
-  info: 1
+  info: 2
   total: 2
-status: issues_found
+status: clean
 ---
 
 # Phase 89: Code Review Report
 
 **Reviewed:** 2026-07-31
-**Depth:** standard
+**Depth:** standard (iteration 3, final — fix/re-review loop)
 **Files Reviewed:** 4
-**Status:** issues_found
+**Status:** clean (info-only)
 
 ## Summary
 
-Docs-only reconcile phase (v1.16 Stop/StopFailure promotion). I verified all four files against ground-truth source — `hook-events.ts` (`BUCKET_A_EVENTS` = 10, `StopFailure` closed set = exactly 10 values), the Stale-Claim Inventory in `89-RESEARCH.md`, and decisions D-89-01..07 — plus the actual phase diffs (`a6dcfdf0..ff4d2598`).
+Docs-only phase reconciling the v1.16 stop-hooks documentation with shipped
+behavior. This is the third and final re-review pass; it verifies the two prior
+fixes (CR-01, WR-01) and re-scans for any inconsistency the fixes may have
+introduced. All narrative claims were cross-checked against the ground-truth
+sources: `extensions/pi-claude-marketplace/domain/components/hook-events.ts`,
+`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`, and the phase
+89-RESEARCH / 89-CONTEXT decisions.
 
-Most of the reconcile landed cleanly and is confirmed correct:
+Both prior fixes are genuinely resolved and introduce no new defect. No Critical
+or Warning findings remain. Two Info items stand: IN-01 (carried forward,
+accepted-as-is per orchestrator) and IN-02 (a newly surfaced minor completeness
+gap, pre-existing, non-blocking). Per protocol, info-only findings permit
+`status: clean`.
 
-- D-89-01: milestone-version framing (`v1.13`) is fully stripped from `hooks-compatibility.md`; only generic "future milestone" phrasing remains (acceptable). No `v1.16` was substituted.
-- D-89-02: `Stop`/`StopFailure` rows flip to `✓`; timing-shift subsection added with issue-103 pointer; StopFailure 10-value matcher row matches `hook-events.ts:259-270` exactly.
-- D-89-06: all four `0.80.4` sites corrected to `0.80.5` (grep confirms zero `0.80.4` remain in `docs/`).
-- D-89-07: `output-catalog.md:390` re-pointed `Stop` → `Notification` (a genuinely non-bucket-A event); byte-safe, outside every fenced block; no other stale Stop-as-unsupported example remains.
-- A7/A8/A9/A12: `(unavailable) {unsupported hooks}` partial-partition reconcile applied; the only surviving `(unavailable)` reference (line 230) is the correct structural-malformed arm.
+### Fix verification
 
-One real defect: the `claude-hooks-vs-pi-events.md` naive-fidelity summary botched the StopFailure correction — it was removed from the `◐` bucket but never promoted to `●`, so it vanishes from the summary entirely, the `●` count is wrong, and the three buckets no longer total 30. This contradicts the doc's own cross-mapping and feasibility tables and the shipped code.
+**CR-01 — StopFailure promoted to the exact-mapping (●) bucket — RESOLVED.**
+- `claude-hooks-vs-pi-events.md` line 8 (exec summary) reads `10 exact, 4
+  partial, 16 with no Pi analog`; the summary table (lines 161–163) lists the
+  same 10/4/16, with `StopFailure` present in the ● row alongside `Stop`.
+- The perfect-fidelity table (line 198) independently lists bucket A = 10 with
+  both `Stop` and `StopFailure`. Naive totals (10 + 4 + 16 = 30) and the
+  reclassification accounting (A+B+D = 14, +2 subagent-conditional, +9 E/F/G,
+  +5 H = 30) both close.
+- Ground truth: `hook-events.ts` `BUCKET_A_EVENTS` includes `"Stop"` and
+  `"StopFailure"` (lines 49–50); the shipped set matches the doc.
 
-## Critical Issues
+**WR-01 — stale 7/3 bucket counts reconciled to 9/5 — RESOLVED.**
+- `claude-hooks-vs-pi-events.md` line 323 now reads `9 upstream-fixable
+  blockers` / `5 H-bucket inapplicable events`. Verified agreement with every
+  other reference in the file: lines 10, 11, 12 (incl. the `14 = 9 + 5`
+  arithmetic), 210, 211, 310, 311, 386, 457, 458.
+- Cross-doc: `hooks-compatibility.md` "Event status classification" lists the
+  "Blocked on upstream Pi support" bucket at 9 events and "Permanently
+  inapplicable" at 5, matching the 9/5 split.
 
-### CR-01: StopFailure dropped from the naive-fidelity summary — wrong count, event omitted, contradicts sibling tables and shipped code
-
-**File:** `docs/research/claude-hooks-vs-pi-events.md:161` (and `:8`, `:165`)
-
-**Issue:**
-The phase moved `StopFailure` out of the `◐ Partial / lossy mapping` bucket (correctly — it now ships as bucket-A) but never added it to the `● Exact or near-exact mapping` bucket. The result is internally inconsistent three ways:
-
-1. The `●` row (line 161) still reads count `9` and its event list omits `StopFailure`. The three buckets now sum to `9 + 4 + 16 = 29`, but the section maps all 30 Claude events. StopFailure fell through the cracks.
-2. The cross-mapping table directly above (line 141) marks `StopFailure` `●` (exact), and the "Perfect-fidelity feasibility" table (line 198) lists it under bucket **A. Direct 1:1 mapping** (count 10). The summary contradicts both sibling tables in the same doc.
-3. Shipped code confirms `StopFailure` is a direct/exact mapping: `hook-events.ts:40-51` includes it in `BUCKET_A_EVENTS`; `settle.ts` dispatches it off `agent_settled`. So `9 exact` is factually wrong — it must be `10`.
-
-The executive-summary count on line 8 ("Direct correspondence: 9 exact, 6 partial, 16 with no Pi analog") was never touched this phase and is now doubly stale: `6 partial` contradicts the body table's corrected `4 partial`, and `9 exact` shares the same StopFailure undercount. D-89-05 required updating count prose "where it becomes false"; this one became false.
-
-The note at line 165 also only accounts for `Stop` moving to the `●` row alone; it should acknowledge `StopFailure` joining `●` as well (or at minimum not leave StopFailure unexplained).
-
-**Fix:**
-Promote `StopFailure` into the `●` bucket and reconcile every dependent count:
-
-```text
-# line 161 — add StopFailure, bump count to 10
-| ● Exact or near-exact mapping    | 10    | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PreCompact, PostCompact, SessionEnd, Stop, StopFailure |
-
-# line 8 — 9 exact → 10 exact, 6 partial → 4 partial
-- **Naive 1:1 mapping is misleading.** Direct correspondence: 10 exact, 4 partial, 16 with no Pi analog. ...
-```
-
-Then extend the line 165 note so `StopFailure` (previously the `◐` `after_provider_response` synthesis) is explicitly folded into `●` alongside `Stop`. Verify the final buckets total 30 (`10 + 4 + 16`).
+**No new inconsistency introduced.** The CR-01 edit touched only the exec
+summary and the two summary rows; the "earlier drafts" note (line 165) correctly
+states StopFailure "joins the ● row." The WR-01 edit was a single 7/3 → 9/5
+correction at line 323. The StopFailure 10-value error vocabulary
+(`hooks-compatibility.md` line 90; `issue-103` line 73; `hook-events.ts` lines
+260–269) and the 8-block cap (`settle.ts` `STOP_OVERRIDE_CAP = 8`;
+`hooks-compatibility.md` line 41; `issue-103` line 64) are consistent
+everywhere. The `agent_settled` `stopReason` dispatch table (`issue-103` lines
+47–53) matches the shipped `settle.ts` switch: `stop`→Stop, `error`/`length`→
+StopFailure (observation-only), `aborted`/`toolUse`→no-op.
 
 ## Info
 
-### IN-01: issue-103 sources-table cites "CHANGELOG -- 0.80.5" while the doc's own nuance says the CHANGELOG names an unreleased patch
+### IN-01: issue-103 CHANGELOG version-label imprecision (carried forward, accepted)
 
-**File:** `docs/research/issue-103-stop-stopfailure-promotion.md:21`
+**File:** `docs/research/issue-103-stop-stopfailure-promotion.md:12`
+**Issue:** The "Cost" bullet states the upstream CHANGELOG "attributes
+`agent_settled` to a patch the npm registry never released — 0.80.3 → 0.80.5".
+The version-label narration is imprecise but the load-bearing claim (`>=0.80.5`
+is the correct installable floor, since the typings first ship in 0.80.5) is
+correct and consistent with line 21 and line 37.
+**Status:** Accepted-as-is per orchestrator direction. Not escalated. No action
+required.
 
-**Issue:**
-The D-89-06 mechanical `0.80.4 → 0.80.5` sweep changed the sources-table row to `agent_settled` introduction ... `CHANGELOG -- 0.80.5 (2026-07-09)`. But lines 8 and 12 of the same doc explain that the upstream CHANGELOG attributes `agent_settled` to a patch npm never released (i.e. 0.80.4), and that `0.80.5` is the *installable* floor, not the CHANGELOG's own version label. Strictly, the CHANGELOG entry is not "0.80.5"; the `(2026-07-09)` date is that unreleased-patch entry's date. This is a minor imprecision, defensible because the row now cites the installable version, and the nuance is preserved elsewhere in the doc.
+### IN-02: additionalContext re-entry lane omitted from cap / flag prose (pre-existing)
 
-**Fix:** Optional. If tightening, phrase the row so it reflects the nuance, e.g. `CHANGELOG entry dated 2026-07-09; first installable in 0.80.5`. Not required — the directed edit is internally survivable given lines 8/12 carry the caveat.
+**File:** `docs/research/issue-103-stop-stopfailure-promotion.md:63-64`; also
+`docs/hooks-compatibility.md:161`
+**Issue:** The docs describe `stop_hook_active` as "set when the bridge blocks
+and re-enters" and the loop cap as "8 consecutive blocks." The shipped code
+(`settle.ts`, D-88-08) folds the `additionalContext`-without-block continuation
+into the *same* per-session flag and the *same* consecutive-re-entry counter:
+`stopHookActive` is "set on ... block OR an additionalContext continuation
+(D-88-08)" and `consecutiveBlockCount` is "incremented on EVERY bridge re-entry
+— block AND additionalContext share one counter." The prose is accurate for the
+block lane but silent on the additionalContext lane also counting toward the
+cap and setting the flag.
+**Fix:** Optional — when next touched, extend the cap/flag sentences to note the
+additionalContext continuation shares the counter and flag (D-88-08). Low
+priority: the doc is a design/research note, the omission is a completeness gap
+rather than a contradiction, and it is pre-existing (not introduced by the
+CR-01/WR-01 fixes). Non-blocking; does not affect `status: clean`.
 
 ---
 
