@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.16
 milestone_name: stop-hooks
-current_phase: 89
-status: completed
+status: Awaiting next milestone
 stopped_at: Completed 89-03-PLAN.md
-last_updated: "2026-07-31T12:40:11.584Z"
+last_updated: "2026-07-31T12:49:26.242Z"
 last_activity: 2026-07-31
-last_activity_desc: Phase 89 complete
+last_activity_desc: Milestone v1.16 completed and archived
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 11
   completed_plans: 11
   percent: 100
+current_phase: 89
 current_phase_name: Documentation reconcile
 ---
 
@@ -21,10 +21,10 @@ current_phase_name: Documentation reconcile
 
 ## Current Position
 
-Phase: 89
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-07-31 — Phase 89 complete
+Phase: Milestone v1.16 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-31 — Milestone v1.16 completed and archived
 
 ## Roadmap Summary
 
@@ -137,8 +137,12 @@ record per-plan decisions here.
 
 ## Deferred Items
 
-Items acknowledged and deferred at v1.14 milestone close on 2026-07-23. All are
-pre-existing (none from v1.16 stop-hooks).
+Items acknowledged and deferred at the v1.14 milestone close on 2026-07-23 and
+re-acknowledged unchanged at the v1.16 close on 2026-07-31 (override_closeout,
+known verification overrides: 5). None originate from v1.16 stop-hooks. New from
+the v1.16 audit (non-blocking): VALIDATION.md left `status: draft` for Phases 88
+and 89 — run `/gsd-validate-phase 88` / `89` to reconcile if desired (coverage
+itself is verified; see `milestones/v1.16-MILESTONE-AUDIT.md`).
 
 | Category | Item | Status |
 |----------|------|--------|
@@ -151,7 +155,11 @@ pre-existing (none from v1.16 stop-hooks).
 
 ## Operator Next Steps
 
-- Plan the docs-reconcile phase with `/gsd-plan-phase 89`
+- Release npm 0.12.0 for v1.16: version bump (package.json + lock +
+  EXTENSION_VERSION + sonar projectVersion + CHANGELOG), then PR off
+  `features/stop-hooks` via /gsd-ship (repo squash-merges; no git tag at GSD
+  milestone close per house convention — tags track npm releases)
+- Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
 

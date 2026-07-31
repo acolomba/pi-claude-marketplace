@@ -1,5 +1,23 @@
 # Milestones: pi-claude-marketplace
 
+## v1.16 stop-hooks (Shipped: 2026-07-31, target npm 0.12.0)
+
+**Phases completed:** 3 phases (87-89), 11 plans, 22 tasks
+
+**Driver:** GitHub issue #103 — Claude plugins hooking `Stop` (ralph-wiggum, hookify, and third-party completion-gating hooks) silently never ran under Pi; retires the PAYL-V2-04 + PAYL-V2-06 deferrals from v1.13.
+
+**Key accomplishments:**
+
+- `Stop` and `StopFailure` are promoted into the supported bucket-A set (`BUCKET_A_EVENTS` 8→10) with per-event matcher dispositions — `Stop` takes the `null` no-matcher sentinel (a non-empty matcher is a reported `no-matcher-support` drop, never silent), `StopFailure` the closed 10-value error-type set — and the `@earendil-works/pi-coding-agent` peer floor rises declaratively to `>=0.80.5`. `ralph-wiggum` and `hookify` flip to fully available (first-party 12/13).
+- One `agent_settled` subscriber owns both events: it reads the last assistant message cached from `agent_end.messages` under the bridge's epoch hygiene and gates on its `stopReason` — `stop` → Stop, `error`/`length` → StopFailure, `aborted` → neither — firing exactly once per logical completion (after auto-retry/compaction/queued-continuation drain).
+- `Stop` delivers the full hook-observable decision-control contract: `{"decision":"block"}` (or exit-2) re-enters via `sendMessage(followUp+triggerTurn)` with the reason model-visible but display-suppressed, `additionalContext`-without-block continues, and aggregate `continue:false` takes precedence; loop protections hold a per-session `stop_hook_active` flag and an 8-consecutive-re-entry override cap shared across both re-entry lanes (D-88-08) with a one-shot warning. Proven end-to-end by a live-Pi canary on 0.80.10 plus 85 targeted mocked tests; the one documented divergence is the non-hook-observable turn-boundary timing shift.
+- `StopFailure` rides the same dispatcher observation-only (output and exit code ignored) with an `errorMessage`-only substring classifier into the closed 10-value vocabulary (`length` → `max_output_tokens` deterministic, `unknown` in-vocabulary fallback).
+- The hooks documentation is reconciled with shipped behavior: `docs/hooks-compatibility.md` flips both rows to supported (timing-shift subsection, StopFailure matcher row, four-arm partial-partition install-time disposition, milestone-version framing stripped), and `docs/research/claude-hooks-vs-pi-events.md` is corrected in place (`agent_settled` inventory row, `stopReason` contract, issue-103 authority pointers) with the still-accurate historical feasibility analysis preserved.
+
+**Closeout:** override_closeout — 5 pre-existing deferred artifacts re-acknowledged (see STATE.md Deferred Items); milestone audit passed 15/15 requirements, all integration seams wired.
+
+---
+
 ## v1.15 frontmatter-compliance (0.11.1, Shipped: 2026-07-27)
 
 **Phases completed:** 1 phases (86), 5 plans, 9 tasks

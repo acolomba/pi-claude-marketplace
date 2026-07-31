@@ -2,7 +2,43 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.15 -- frontmatter-compliance
+## Milestone: v1.16 -- stop-hooks
+
+**Shipped:** 2026-07-31 (target npm 0.12.0; release pending)
+**Phases:** 3 (87-89) | **Plans:** 11 | **Tasks:** 22 | **Requirements:** 15/15 (ADMIT-01/02, FLOOR-01, STOP-01..07, SFAIL-01..03, DOC-04/05) | **Tests:** full unit suite green (~3144) + 85 targeted dispatcher tests + live-Pi canary UAT 4/4
+
+### What Was Built
+- Admission: `BUCKET_A_EVENTS` 8→10 with per-event matcher dispositions (`Stop` `null` no-matcher sentinel, `StopFailure` closed 10-value error-type set); peer floor `>=0.80.5` declarative; `ralph-wiggum` + `hookify` flip fully available.
+- Dispatch: one `agent_settled` subscriber caches the last assistant message from `agent_end.messages` and gates on `stopReason` — full Stop decision contract (block re-entry via `sendMessage(followUp+triggerTurn)`, exit-2, `additionalContext`, aggregate `continue:false` precedence), `stop_hook_active` + shared-lane 8-re-entry cap with one-shot warning, observation-only StopFailure with the `errorMessage`-only classifier.
+- Docs: `hooks-compatibility.md` reconciled version-neutral (rows ✓, timing-shift subsection, matcher row, four-arm disposition); `claude-hooks-vs-pi-events.md` corrected in place; issue-103 authority doc version-corrected.
+
+### What Worked
+- **Decouple-then-fold made the two-phase admission/dispatch split typecheck-safe.** D-87-04's `DISPATCHABLE_EVENTS` subset let Phase 87 widen admission without owing translators, and Phase 88's fold to the full union made the compiler demand every translator at once — the planned "design paying off" moment happened exactly as designed.
+- **Riders-first tracer ordering de-risked the docs phase.** Phase 89 led with its only test-coupled edit (output-catalog) and proved byte-safety against the three coupled suites before the large narrative reconciles began.
+- **The research Stale-Claim Inventory was the edit list.** Row-by-row doc-claim → source:line evidence → correction made the executor's job mechanical and the verifier's job checkable; the phase's 14/14 must-haves traced straight back to it.
+- **The review→fix→re-review auto-loop earned its keep on count-bearing tables.** Two real defects (StopFailure missing from the ● bucket; stale 7/3 vs 9/5 counts) were caught and fixed in-loop before verification.
+
+### What Was Inefficient
+- **The dev tree had silently drifted from the lockfile** (node_modules pi-coding-agent 0.79.10 vs locked 0.82.1, predating `agent_settled`) — D-88-04 made `npm install` the first task, but the drift was only caught at research time.
+- **A verifier-flagged doc fix fell through the phase seam.** Phase 88's verifier deferred the D-88-06→D-88-08 cap-prose correction to Phase 89, but it never entered 89's CONTEXT/plans and was only caught by the milestone integration checker — then fixed during the audit.
+- **VALIDATION.md left in draft again** (Phases 88 and 89, same as v1.15's Phase 86) — coverage is real but `/gsd-validate-phase` was never run to promote the files. This is now a recurring process TODO, not a coverage hole.
+
+### Patterns Established
+- **Cache-at-`agent_end`, act-at-settle.** When a Pi event carries no payload, cache the payload-bearing precursor under the router's epoch hygiene and read it at the actionable event — last-write-wins across retry/compaction chains.
+- **Shared-lane bounded re-entry.** Any bridge-initiated loop (block or context continuation) shares one consecutive counter with a single cap and one-shot latch; only a no-re-entry outcome resets. Safer than upstream's literal blocks-only wording in the corner upstream leaves open.
+- **Reference docs are version-neutral** (D-89-01): `hooks-compatibility.md` describes the current bridge with no milestone-version framing — git carries lineage; research notes get corrected in place with an amended-date line, no superseded relics.
+
+### Key Lessons
+1. **A CHANGELOG entry is not a release.** The upstream CHANGELOG attributed `agent_settled` to 0.80.4; npm never published it (0.80.3 → 0.80.5). Verify the registry before pinning a floor (D-87-05 caught it; the authority doc had to be corrected later).
+2. **A verifier's "defer to phase N" must land in phase N's CONTEXT, not just its VERIFICATION.** The one miss of the milestone (D-88-08 cap prose) was flagged in 88-VERIFICATION's gaps summary but never made it into 89's inputs — cross-phase deferrals need an explicit carrier artifact.
+3. **After editing any count-bearing table, grep-audit every count the doc states.** Both review findings in Phase 89 were internal count drift (bucket totals, 7/3 vs 9/5) in a 600-line analysis doc — the tables were right; the prose summaries lagged.
+
+### Cost Observations
+- Model mix: opus for researcher/planner/executors/reviewer/fixer, sonnet for plan-checker/verifier/integration-checker (config `model_profile: quality`).
+- 94 commits over 2 days (2026-07-29 → 2026-07-31); 39 non-planning files, +3668/−429.
+- The two pre-existing environmental `skill-path-resolution` integration failures (global-peer drift) stayed red throughout — documented environment condition, not a milestone regression.
+
+
 
 **Shipped:** 2026-07-27 (npm 0.11.1)
 **Phases:** 1 (Phase 86) | **Plans:** 5 | **Tasks:** 9 | **Requirements:** 11/11 (PARSE-01/02, SKILL-01/02/03, WTU-01/02, CMD-01, WARN-01, CLASS-01, NREG-01) | **Tests:** unit suite green (~3049) + degrade-helper / two-gate / neutralize / NREG byte-equality cases
