@@ -5,8 +5,8 @@ milestone_name: stop-hooks
 current_phase: 88
 current_phase_name: agent_settled dispatcher, Stop contract & StopFailure
 status: verifying
-stopped_at: Completed 88-05-PLAN.md
-last_updated: "2026-07-30T15:45:10.084Z"
+stopped_at: Phase 88 human_needed — 4 live-UAT items pending (88-UAT.md)
+last_updated: "2026-07-31T02:27:58.827Z"
 last_activity: 2026-07-30
 last_activity_desc: Phase 88 execution started
 progress:
@@ -88,11 +88,11 @@ Last activity: 2026-07-30 — Phase 88 execution started
 
 ## Session
 
-**Last session:** 2026-07-30T15:44:45.512Z
-**Stopped at:** Completed 88-05-PLAN.md
+**Last session:** 2026-07-31T02:27:58.777Z
+**Stopped at:** Phase 88 human_needed — 4 live-UAT items pending (88-UAT.md)
 **Resume file:**
 
-None
+.planning/phases/88-agent-settled-dispatcher-stop-contract-stopfailure/88-UAT.md
 
 No plans executed yet for v1.16.
 
@@ -161,3 +161,9 @@ pre-existing (none from v1.16 stop-hooks).
 | Phase 88 P03 | 40min | 2 tasks | 8 files |
 | Phase 88 P04 | 25min | 2 tasks | 3 files |
 | Phase 88 P05 | 55min | 2 tasks | 4 files |
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 88 | verification_deferred_human | /gsd-verify-work 88 |
