@@ -5,11 +5,11 @@ Verified feasibility analysis for promoting Claude Code's `Stop` and `StopFailur
 ## Executive summary
 
 - **Verdict: promotable.** Both events are implementable at 100% fidelity to the *hook-observable* contract -- every payload field, exit-code semantic, decision-control arm, and loop protection a hook script can depend on -- at the same fidelity bar the eight shipped bucket-A events meet.
-- **The fire-point is `agent_settled`, not `agent_end`.** Pi added `agent_settled` in `@earendil-works/pi-coding-agent` 0.80.4 (2026-07-09), after the v1.13 research was written against 0.73.x. It fires exactly once per logical completion -- after auto-retry, auto-compact-and-retry, and queued continuations -- where `agent_end` fires per low-level run and would over-fire relative to Claude's contract. Issue #103 proposes `agent_end`; this doc records why the bridge deviates.
+- **The fire-point is `agent_settled`, not `agent_end`.** Pi added `agent_settled` in `@earendil-works/pi-coding-agent` 0.80.5 (2026-07-09), after the v1.13 research was written against 0.73.x. It fires exactly once per logical completion -- after auto-retry, auto-compact-and-retry, and queued continuations -- where `agent_end` fires per low-level run and would over-fire relative to Claude's contract. Issue #103 proposes `agent_end`; this doc records why the bridge deviates.
 - **One `stopReason` gate drives both events.** Pi's protocol contract (`pi-agent-core`) requires providers to encode failures as a final assistant message with `stopReason` and `errorMessage`. The full `StopReason` set (`stop | length | toolUse | error | aborted`) partitions turn endings exactly as upstream does: `stop` → Stop, `error` → StopFailure, `length` → StopFailure with the deterministic `max_output_tokens` error type, `aborted` → neither (upstream suppresses Stop on user interrupt).
 - **StopFailure is the cheap half and shipping it is near-mandatory.** A correct Stop must suppress firing on error endings; without StopFailure those endings become invisible to plugins -- matching neither Claude nor a defensible partial. Upstream declares StopFailure observation-only (output and exit code ignored), so none of Stop's re-entry machinery applies.
 - **One irreducible divergence:** upstream folds a blocked stop into the *same* turn; under Pi the agent has settled and re-entry starts a *new* turn. Hook scripts cannot observe the difference (same payload, flag cadence, and cap); the transcript shows an extra turn boundary. Erasing it would need an upstream Pi change (a cancelable settle or a continue-directive event return).
-- **Cost:** peer floor bump `>=0.74.0` → `>=0.80.4`.
+- **Cost:** peer floor bump `>=0.74.0` → `>=0.80.5` (the upstream CHANGELOG attributes `agent_settled` to a patch the npm registry never released -- 0.80.3 → 0.80.5 -- and the typings first ship in 0.80.5, so `>=0.80.5` is the correct installable floor).
 - **Marketplace effect:** `ralph-wiggum` (Stop-only) and `hookify` (Stop + bucket-A) flip to fully available; `security-guidance` remains partial on its unmapped `MultiEdit`/`NotebookEdit` matchers (PROM-01). First-party: 12/13 fully available. No first-party plugin uses StopFailure -- its value is contract completeness for third parties.
 
 ## Authoritative sources
@@ -18,7 +18,7 @@ Verified feasibility analysis for promoting Claude Code's `Stop` and `StopFailur
 | ------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------- |
 | Upstream Stop / StopFailure contract | <https://code.claude.com/docs/en/hooks> (hooks.md render)                                         | 2026-07-28 |
 | Pi event surface + re-entry API      | `@earendil-works/pi-coding-agent` 0.82.1 `dist/core/extensions/types.d.ts` + `docs/extensions.md` | 2026-07-28 |
-| `agent_settled` introduction         | `@earendil-works/pi-coding-agent` CHANGELOG -- 0.80.4 (2026-07-09)                                | 2026-07-28 |
+| `agent_settled` introduction         | `@earendil-works/pi-coding-agent` CHANGELOG -- 0.80.5 (2026-07-09)                                | 2026-07-28 |
 | `StopReason` / `errorMessage` shapes | `@earendil-works/pi-agent-core` + `@earendil-works/pi-ai` bundled `types.d.ts`                    | 2026-07-28 |
 | Prior art                            | `@hsingjui/pi-hooks` 0.0.2 tarball (npm)                                                          | 2026-07-28 |
 | Demand + proposed mapping            | GitHub issue #103 (fank, 2026-07-28)                                                              | 2026-07-28 |
@@ -34,7 +34,7 @@ Where this design deviates from the issue: the fire-point. The issue argues `age
 ## Pi API surface (verified)
 
 - `AgentEndEvent { type: "agent_end"; messages: AgentMessage[] }` -- fires per low-level run end. Pi "may still auto-retry, auto-compact and retry, or continue with queued follow-up messages" afterwards (0.82.1 docs).
-- `AgentSettledEvent { type: "agent_settled" }` -- "fired after an agent run has fully settled and no automatic retry, compaction, or queued continuation will run." Carries no payload; added 0.80.4.
+- `AgentSettledEvent { type: "agent_settled" }` -- "fired after an agent run has fully settled and no automatic retry, compaction, or queued continuation will run." Carries no payload; added 0.80.5.
 - `StopReason = "stop" | "length" | "toolUse" | "error" | "aborted"`; `AssistantMessage.errorMessage?: string`. Provider protocol contract: failures MUST surface as a final assistant message with `stopReason` `"error"`/`"aborted"` plus `errorMessage` -- a documented contract, not an implementation detail, which retires PAYL-V2-06's "depends on Pi `agent_error` shape stability" caveat.
 - `pi.sendMessage(msg, { deliverAs: "followUp", triggerTurn: true })` -- delivery waits for the agent to finish; `triggerTurn` starts an LLM response when idle. `pi.sendUserMessage` always triggers a turn.
 - `input` event -- fires only for genuine user input (after extension-command check, before expansion). Bridge-injected custom messages do not pass through it, so it is the clean `stop_hook_active` reset signal.
@@ -97,5 +97,5 @@ Flagged as fixture-test items, not assumptions:
 
 ## Stale-doc inventory (reconciled by this milestone)
 
-- `docs/research/claude-hooks-vs-pi-events.md` -- the naive mapping table's `Stop` row ("Pi's `agent_end` is observation-only; bridge cannot honor `decision: "block"`") predates both `sendMessage` re-entry usage and `agent_settled`; the `StopFailure` row's `after_provider_response` synthesis is superseded by the `stopReason` protocol contract.
-- `docs/hooks-compatibility.md` -- the `Stop`/`StopFailure` rows flip to supported; the "Install-time disposition" section still describes the v1.13 hard `(unavailable)` trip, superseded by the force-install partial partitioning (`(partially-available)` + per-entry drops) that issue #103's reproduction shows.
+- `docs/research/claude-hooks-vs-pi-events.md` -- reconciled (DOC-05): the naive mapping table's `Stop` row (which predated both `sendMessage` re-entry usage and `agent_settled`, and had claimed "Pi's `agent_end` is observation-only; bridge cannot honor `decision: "block"`") and the `StopFailure` row's `after_provider_response` synthesis were corrected in place to the `agent_settled` dispatch and the `stopReason` protocol contract.
+- `docs/hooks-compatibility.md` -- reconciled (DOC-04): the `Stop`/`StopFailure` rows now read as supported, and the "Install-time disposition" section was rewritten from the v1.13 hard `(unavailable)` trip to the force-install partial partitioning (`(partially-available)` + per-entry drops) that issue #103's reproduction shows.
