@@ -45,7 +45,9 @@ blocked: 0
 
 - gap_id: G-88-D1
   truth: "tests/live-uat/README.md 'Interactive setup' launches a usable interactive session"
-  status: failed
+  status: resolved
+  resolved_by: "inline doc fix during this UAT session (drop --mode json; point evidence reads at session JSONL + stdin.log)"
+  resolved_at: 2026-07-31
   reason: "User reported: running the documented interactive setup (with --mode json) printed the session header and exited immediately — pi's json mode is a non-interactive output mode, not a TUI side-stream"
   severity: minor
   test: 1

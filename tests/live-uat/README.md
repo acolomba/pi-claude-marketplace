@@ -70,8 +70,10 @@ export PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent
 export PI_CLAUDE_MARKETPLACE_DEBUG=1   # emit [hooks] dispatch logs on stderr
 pi --no-extensions \
    --extension "$(pwd)/extensions/pi-claude-marketplace/index.ts" \
-   --offline --mode json
+   --offline
 ```
+
+Do NOT pass `--mode json` here: it is a non-interactive output mode (it prints the session header and exits on a TTY), so it cannot host these checklist items. Read the runtime evidence from the session JSONL (under `PI_CODING_AGENT_SESSION_DIR`, which records each assistant message's `stopReason`) and from the observing hook's `stdin.log`.
 
 For items that need an installed Stop hook, install a Stop-only plugin whose hook logs its received stdin and echoes a decision. A minimal observing hook:
 
@@ -86,13 +88,13 @@ echo >> /tmp/stop-uat/stdin.log
 
 ### Item 1 -- abort mid-tool-call does NOT fire Stop (STOP-01)
 
-- **Repro:** In an interactive session, start a turn that calls a slow tool (e.g. ask the model to run `bash -c 'sleep 30'`). While the tool is running, interrupt the turn (the Pi interrupt key). Watch the `--mode json` stream and the `[hooks]` debug log.
+- **Repro:** In an interactive session, start a turn that calls a slow tool (e.g. ask the model to run `bash -c 'sleep 30'`). While the tool is running, interrupt the turn (the Pi interrupt key). Watch the session JSONL and the `[hooks]` debug log.
 - **Expected:** the final assistant message carries `stopReason: "aborted"`; the settle gate maps `aborted` → **neither** Stop nor StopFailure, so **no** Stop/StopFailure hook fires (no `stop-observe.sh` invocation, no marker). Pi's provider contract says every interrupt path surfaces a final assistant message with `stopReason: "aborted"`.
 - **Failure signature:** a Stop (or StopFailure) hook fires after an abort, OR the final message's `stopReason` is not `"aborted"` on some interrupt path (e.g. interrupting exactly at the tool-result boundary). Record which interrupt paths, if any, do not carry `"aborted"`.
 
 ### Item 2 -- settle timing with queued user messages (STOP-01)
 
-- **Repro:** Start a turn, then while it is still running submit a **second** user message so it queues. Let both drain. Count `agent_settled` events and Stop hook firings in the `--mode json` stream / `[hooks]` log.
+- **Repro:** Start a turn, then while it is still running submit a **second** user message so it queues. Let both drain. Count `agent_settled` events and Stop hook firings in the session JSONL / `[hooks]` log.
 - **Expected:** upstream Claude fires `Stop` once per response; Pi's `agent_settled` fires **once, after the queue fully drains** (no automatic retry / compaction / queued continuation remains), so exactly **one** settle-time Stop dispatch for the whole drained sequence.
 - **Failure signature:** `agent_settled` (and the Stop dispatch) fires mid-queue before the drain, or fires more than once for a single logical completion. Document any per-response vs per-settle divergence from the upstream cadence.
 
