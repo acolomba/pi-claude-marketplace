@@ -78,6 +78,11 @@ const CLASSIFIER_FIXTURES: ReadonlyArray<readonly [string, "error" | "length", s
   // empty / unmatched errorMessage falls back to the in-vocabulary unknown.
   ["", "error", "unknown"],
   ["something entirely unclassifiable", "error", "unknown"],
+  // bare 3-digit runs inside a longer number must NOT alias an HTTP-status code
+  // (bounded numeric matches): 5000 != 500, 4290 != 429, 4013 != 401.
+  ["retry after 5000ms", "error", "unknown"],
+  ["request 4290 failed", "error", "unknown"],
+  ["consumed 4013 tokens", "error", "unknown"],
   // org-policy has no observed Pi substring -> unknown (A2).
   ["Organization is not allowed to use this model by policy", "error", "unknown"],
   // rate_limit

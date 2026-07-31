@@ -57,7 +57,13 @@ export function translate(event: StopFailureEvent, ctx: TranslationContext): Sto
  * is intentionally absent -- org-policy errors have no observed Pi substring and
  * fall through to `unknown` (A2).
  */
-const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly string[]]> = [
+// A matcher is either a case-insensitive substring (named error forms) or a
+// RegExp for HTTP-status codes. Status codes are bounded with `\b` so a bare
+// 3-digit run inside a longer number does not alias -- e.g. "retry after 5000ms"
+// must NOT match `500`, and "request 4290" must NOT match `429`.
+type ClassifierMatcher = string | RegExp;
+
+const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly ClassifierMatcher[]]> = [
   [
     "billing_error",
     [
@@ -69,15 +75,23 @@ const CLASSIFIER_TABLE: ReadonlyArray<readonly [string, readonly string[]]> = [
       "out of budget",
     ],
   ],
-  ["rate_limit", ["rate limit", "429", "too many requests"]],
-  ["overloaded", ["overloaded", "529"]],
-  ["authentication_failed", ["authentication failed", "401", "403"]],
+  ["rate_limit", ["rate limit", /\b429\b/, "too many requests"]],
+  ["overloaded", ["overloaded", /\b529\b/]],
+  ["authentication_failed", ["authentication failed", /\b401\b/, /\b403\b/]],
   [
     "server_error",
-    ["500", "502", "503", "504", "server error", "internal error", "service unavailable"],
+    [
+      /\b500\b/,
+      /\b502\b/,
+      /\b503\b/,
+      /\b504\b/,
+      "server error",
+      "internal error",
+      "service unavailable",
+    ],
   ],
   ["model_not_found", ["model not found", "model_not_found"]],
-  ["invalid_request", ["invalid request", "400"]],
+  ["invalid_request", ["invalid request", /\b400\b/]],
 ];
 
 /**
@@ -96,8 +110,8 @@ export function classifyStopFailure(errorMessage: string, stopReason: StopReason
   }
 
   const haystack = errorMessage.toLowerCase();
-  for (const [type, substrings] of CLASSIFIER_TABLE) {
-    if (substrings.some((s) => haystack.includes(s))) {
+  for (const [type, matchers] of CLASSIFIER_TABLE) {
+    if (matchers.some((m) => (typeof m === "string" ? haystack.includes(m) : m.test(haystack)))) {
       return type;
     }
   }
