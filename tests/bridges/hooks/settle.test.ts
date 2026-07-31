@@ -833,6 +833,41 @@ test("SFAIL-01: stopReason error runs the StopFailure bucket observation-only ev
   assert.equal(state.capNotifiedThisSession, false, "StopFailure must not touch the cap latch");
 });
 
+test("SFAIL-01: every StopFailure observer runs even after a leading block", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    // The first observer blocks; a reducing walk would short-circuit here and
+    // starve the second observer.
+    return Promise.resolve(
+      entry.pluginId === "sf1" ? { kind: "block", reason: "stay" } : { kind: "noop" },
+    );
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("StopFailure", [
+    makeStopFailureEntry("sf1"),
+    makeStopFailureEntry("sf2"),
+  ]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEndWithError("error", "boom"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(
+    fired,
+    ["sf1", "sf2"],
+    "a leading block must not starve later StopFailure observers",
+  );
+  assert.equal(sent.length, 0, "StopFailure is observation-only: no re-entry");
+});
+
 test("SFAIL-01: stopReason length runs the StopFailure bucket observation-only", async (t) => {
   _resetForTest();
   resetSettleState();

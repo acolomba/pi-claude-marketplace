@@ -18,7 +18,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
-import { collectBucketOutcomes, reduceBucket } from "./dispatch.ts";
+import { collectBucketOutcomes } from "./dispatch.ts";
 import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 
@@ -278,11 +278,12 @@ async function runStopBucket(
  * Run the StopFailure bucket observation-only (SFAIL-01). Reached on `error` /
  * `length` settle endings. Builds the synthetic StopFailure event
  * (`error` = the classified error type; `last_assistant_message` = Pi's
- * rendered `errorMessage`, or "" when absent) and runs the bucket, then
- * DISCARDS the reduced result: StopFailure carries no decision control, so a
- * blocking hook or an exit-2 hook produces no re-entry and no loop-state
- * mutation. `stopHookActive`, the consecutive-block counter, and `sendMessage`
- * are never touched on this path. An empty bucket is a no-op.
+ * rendered `errorMessage`, or "" when absent) and runs EVERY registered hook
+ * (no short-circuit) then DISCARDS the collected outcomes: StopFailure carries
+ * no decision control, so a blocking hook or an exit-2 hook produces no re-entry
+ * and no loop-state mutation, and it cannot suppress its peer observers.
+ * `stopHookActive`, the consecutive-block counter, and `sendMessage` are never
+ * touched on this path. An empty bucket is a no-op.
  */
 async function runStopFailure(
   last: AssistantMessage,
@@ -300,9 +301,12 @@ async function runStopFailure(
     last_assistant_message: last.errorMessage ?? "",
   };
 
-  // SFAIL-01: observation-only -- run the bucket for its side effects and drop
-  // the reduced outcome. No re-entry lane exists for StopFailure.
-  await reduceBucket(bucket, event, ctx, pi, () => true);
+  // SFAIL-01: observation-only -- run EVERY registered hook for its side effects
+  // via the no-short-circuit walker, then discard the collected outcomes. A
+  // reducing walk would `return` on a leading block/stop/exit-2 and starve the
+  // later observers; StopFailure has no decision lane, so every hook must get to
+  // observe the failure.
+  await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
 }
 
 /**
