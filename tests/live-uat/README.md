@@ -59,6 +59,24 @@ exit 1
 
 STOP-01 and STOP-03 are proven on real Pi. STOP-07's cap loop is item 4 in the human checklist.
 
+## Real-plugin run -- `ralph-loop@claude-plugins-official`
+
+Observed 2026-07-31, pi 0.80.10, openai-codex provider, sandbox `tmp/pi-uat/agent`, project dir `tmp/work`. Unlike the scripted canary (which carries a synthetic always-block hook), this run exercised the **unmodified upstream plugin** -- `stop-hook.sh` and `setup-ralph-loop.sh` byte-for-byte from `claude-plugins-official` -- installed through `/claude:plugin bootstrap` + `install ralph-loop@claude-plugins-official` + `/reload`, with the command registering as `/ralph-loop:ralph-loop`.
+
+Task given (interactive session):
+
+```text
+/ralph-loop:ralph-loop Append one line "iteration done" to ralph-canary.txt (create it if missing). If the file now has 3 or more lines, output <promise>COUNTER COMPLETE</promise> and stop adding lines. --max-iterations 5 --completion-promise "COUNTER COMPLETE"
+```
+
+Observed sequence (summary from the session JSONL, not a verbatim transcript): the setup script activated the loop (iteration 1, max 5); turns 1 and 2 each appended a line and settled into a Stop block, each re-entering via a `claude-hook-stop-block` injected turn; turn 3 appended the third line and ended with `<promise>COUNTER COMPLETE</promise>` as its final text; on that settle the hook matched the promise, removed `.claude/ralph-loop.local.md`, and allowed the stop. Final state: `ralph-canary.txt` with exactly 3 lines, empty `.claude/`, 2 block re-entries total, no cap warning.
+
+What this proves beyond the scripted canary:
+
+- The upstream block-to-continue contract holds against the real script, including its state-file iteration bookkeeping (the `session_id` guard falls through because `CLAUDE_CODE_SESSION_ID` is unset under Pi, preserving legacy behavior).
+- `transcript_path` (Pi's live session JSONL) is **parseable by the upstream extractor**: the per-line `.message.content[]` shape with `"role":"assistant"` satisfies the script's `grep` + `jq` pipeline, so completion-promise detection terminates the loop exactly as on Claude Code -- the loop ended by promise, not by its `--max-iterations` fallback.
+- Empty-text assistant lines (tool-call turns) are tolerated by the script's `last // ""` guard.
+
 ## Human verification checklist
 
 These runtime timing / interrupt behaviours cannot be sustained by a headless `pi -p` drive (which tears down its non-interactive lifecycle after the initial request). They require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression.
