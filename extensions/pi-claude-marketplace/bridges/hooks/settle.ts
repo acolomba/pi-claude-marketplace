@@ -191,10 +191,10 @@ export function settleHandlerFor(
         return;
       default: {
         // Compile-time exhaustiveness pin (NFR-7): a peer-dep bump that widens
-        // `StopReason` becomes a type error here. Runtime stays a silent no-op
-        // -- the settle handler never throws.
-        const _exhaustive: never = last.stopReason;
-        void _exhaustive;
+        // `StopReason` becomes a type error here. At runtime the unknown ending
+        // is debug-logged and dropped -- the settle handler never throws.
+        const unknownStopReason: never = last.stopReason;
+        hookDebugLog(`settle: unknown stopReason ${JSON.stringify(unknownStopReason)}; dropped`);
         return;
       }
     }

@@ -459,6 +459,30 @@ describe("spawn-and-register", () => {
     }
   });
 
+  test("D-87-04: a non-dispatchable claudeEvent skips the spawn and registers nothing", async () => {
+    const tmp = await makeTempLocations();
+    try {
+      const spy = installSpawnSpy();
+      const ctx = makeMockCtx("/tmp/proj");
+      const pi = makeMockPi();
+      // Every current bucket-A admission is dispatchable, so the guard is a
+      // defensive belt against a future admission outrunning its translator;
+      // the cast stands in for such an event (a real upstream Claude event
+      // outside the dispatchable tuple).
+      await spawnAndRegister(
+        makeEntry({ asyncRewake: true, claudeEvent: "SubagentStop" as unknown as BucketAEvent }),
+        { toolName: "bash", input: {} },
+        ctx.ctx,
+        pi.pi,
+        tmp.loc,
+      );
+      assert.equal(spy.calls.length, 0, "the guard must return before any child-process spawn");
+      assert.equal(_getRegistryForTest().size, 0, "no registry entry may be recorded");
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
   test("D-62-05: PID table persists the registered entry after spawnAndRegister", async () => {
     const tmp = await makeTempLocations();
     try {

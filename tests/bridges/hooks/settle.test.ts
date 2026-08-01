@@ -265,6 +265,35 @@ test("STOP-01: stopReason toolUse is a defensive no-op", async (t) => {
   assert.equal(sent.length, 0, "toolUse must not re-enter");
 });
 
+test("STOP-01: an unknown stopReason is debug-logged and dropped without dispatch or throw", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "go on" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  // A peer-dep bump could widen `StopReason` beyond the pinned union; the
+  // runtime contract is a silent drop (debug log only), never a throw.
+  agentEndCacheHandler(epoch)(makeAgentEnd("someFutureReason" as never));
+
+  await assert.doesNotReject(
+    () => settleHandlerFor(epoch, pi)(settledEvent, stubCtx),
+    "an unknown stopReason must not escape the settle handler",
+  );
+  assert.deepEqual(fired, [], "an unknown stopReason must not dispatch any bucket");
+  assert.equal(sent.length, 0, "an unknown stopReason must not re-enter");
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // STOP-01: empty cache (no preceding agent_end) returns early
 // ──────────────────────────────────────────────────────────────────────────
@@ -310,6 +339,90 @@ test("STOP-01: two agent_end events cache the last run's last-assistant message"
     _peekSettleCacheForTest()?.stopReason,
     "stop",
     "the cache must hold the last agent_end's last-assistant message",
+  );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// STOP-01: last-assistant selection -- a message list with no assistant
+// caches nothing; trailing non-assistant messages are walked past
+// ──────────────────────────────────────────────────────────────────────────
+
+test("STOP-01: an agent_end with no assistant message caches nothing and settle no-ops", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "go on" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const noAssistantEnd = {
+    type: "agent_end",
+    messages: [
+      { role: "user", content: "hi", timestamp: 0 },
+      { role: "toolResult", content: [{ type: "text", text: "ok" }], timestamp: 1 },
+    ],
+  } as unknown as AgentEndEvent;
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(noAssistantEnd);
+  assert.equal(
+    _peekSettleCacheForTest(),
+    undefined,
+    "a run with no assistant message must cache nothing",
+  );
+
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+  assert.deepEqual(fired, [], "an assistant-less run must not dispatch the Stop bucket");
+  assert.equal(sent.length, 0, "an assistant-less run must not re-enter");
+});
+
+test("STOP-01: trailing non-assistant messages are walked past to the last assistant", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const events: unknown[] = [];
+  _setExecutorForTest((_entry, event): Promise<HookExecResult> => {
+    events.push(event);
+    return Promise.resolve({ kind: "noop" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const trailingEnd = {
+    type: "agent_end",
+    messages: [
+      { role: "user", content: "hi", timestamp: 0 },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        stopReason: "stop",
+        timestamp: 1,
+      },
+      { role: "toolResult", content: [{ type: "text", text: "tool output" }], timestamp: 2 },
+    ],
+  } as unknown as AgentEndEvent;
+
+  const { pi } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(trailingEnd);
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.equal(events.length, 1, "the Stop bucket must dispatch off the cached assistant");
+  assert.equal(
+    (events[0] as { last_assistant_message: string }).last_assistant_message,
+    "answer",
+    "the walk from the end must land on the assistant message, not a trailing toolResult",
   );
 });
 
@@ -439,6 +552,30 @@ test("STOP-04: exit-2 maps to block via parseHookStdout and re-enters with the s
   assert.equal(sent[0]?.message["content"], "boom", "the exit-2 stderr becomes the block reason");
   assert.equal(sent[0]?.options?.["deliverAs"], "followUp");
   assert.equal(sent[0]?.options?.["triggerTurn"], true);
+});
+
+test("STOP-03: a block without a reason re-enters with empty-string content", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> => Promise.resolve({ kind: "block" }));
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.equal(sent.length, 1, "a reasonless block must still re-enter exactly once");
+  assert.equal(
+    sent[0]?.message["content"],
+    "",
+    "an absent block reason falls back to the empty string",
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -605,6 +742,41 @@ test("an asyncRewake Stop hook is degraded to noop and does not re-enter", async
 
   assert.deepEqual(fired, [], "an asyncRewake Stop entry must not reach the executor");
   assert.equal(sent.length, 0, "an asyncRewake Stop entry must not re-enter (degraded to noop)");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// MATCH-03: a Stop entry whose if predicate does not fire is skipped
+// (if-no-match -> skip the entry, not block; the executor never runs)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MATCH-03: a non-firing if predicate skips the Stop entry without invoking the executor", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  _setExecutorForTest((entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "go on" });
+  });
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  // The settle synthetic Stop event carries no `toolName`, so an
+  // mcp-literal predicate can never fire against it.
+  const gated: RoutingEntry = {
+    ...makeStopEntry("gated"),
+    ifPredicate: { kind: "mcp-literal", toolName: "mcp__srv__tool" },
+  };
+  _setRoutingBucketForTest("Stop", [gated]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("stop"));
+  await settleHandlerFor(epoch, pi)(settledEvent, stubCtx);
+
+  assert.deepEqual(fired, [], "a non-firing if predicate must not reach the executor");
+  assert.equal(sent.length, 0, "a skipped entry must not re-enter");
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -817,6 +989,40 @@ test("STOP-07: stop_hook_active threads into the next payload, survives a bridge
   await runSettleCycle(pi, ctx);
   assert.deepEqual(seen, [false, true, false], "input reset makes the next payload false again");
   assert.equal(sent.length, 3, "each of the three blocks re-entered");
+});
+
+test("STOP-07: a stale captured epoch no-ops the input reset handler", async (t) => {
+  _resetForTest();
+  resetSettleState();
+
+  _setExecutorForTest((): Promise<HookExecResult> =>
+    Promise.resolve({ kind: "block", reason: "loop" }),
+  );
+  t.after(() => {
+    _resetExecutorForTest();
+  });
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi } = makePi();
+  const stale = currentEpoch();
+  const staleHandler = inputResetHandlerFor(stale);
+
+  // One block re-entry seeds the loop state the stale closure must not touch.
+  await runSettleCycle(pi, stubCtx);
+  assert.equal(_peekLoopStateForTest().stopHookActive, true);
+  assert.equal(_peekLoopStateForTest().consecutiveBlockCount, 1);
+
+  _bumpEpochForTest();
+  staleHandler();
+
+  const state = _peekLoopStateForTest();
+  assert.equal(state.stopHookActive, true, "a stale input closure must not clear stop_hook_active");
+  assert.equal(
+    state.consecutiveBlockCount,
+    1,
+    "a stale input closure must not reset the consecutive-block counter",
+  );
 });
 
 test("STOP-07 / STOP-05: additionalContext re-enters and increments the shared consecutive counter (D-88-08)", async (t) => {

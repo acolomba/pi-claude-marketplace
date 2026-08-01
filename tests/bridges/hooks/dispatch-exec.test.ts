@@ -509,3 +509,25 @@ test("PAYL-01: PreToolUse stdin carries hook_event_name + capitalized tool_name"
   assert.equal(parsed.tool_name, "Bash");
   assert.deepEqual(parsed.tool_input, { cmd: "ls" });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block: D-87-04 defensive non-dispatchable guard
+// ──────────────────────────────────────────────────────────────────────────
+
+test("D-87-04: an admitted-but-not-dispatchable event noops without spawning", async (t) => {
+  relocateAgentDir(t);
+  const spy = installSpawnSpy(t);
+
+  // Every current bucket-A admission is dispatchable, so the guard is a
+  // defensive belt against a future admission outrunning its translator;
+  // the cast stands in for such an event (a real upstream Claude event
+  // outside the dispatchable tuple).
+  const result = await dispatchHookExec(
+    makeEntry({ claudeEvent: "SubagentStop" as unknown as BucketAEvent }),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+  );
+
+  assert.deepEqual(result, { kind: "noop" });
+  assert.equal(spy.calls.length, 0, "the guard must return before any spawn");
+});
