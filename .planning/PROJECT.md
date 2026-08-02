@@ -10,6 +10,20 @@ Eighteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.17 env-parity — Claude Code Environment Variable Parity (started 2026-08-01)
+
+**Goal:** Installed Claude plugins see the same environment variables, delivered the same way, as they would under Claude Code — runtime env injection for session-scoped values, install-time textual substitution for install-stable per-plugin values — across all five component surfaces (skills, commands, agents, hooks, MCP servers).
+
+**Target features:**
+
+- **Session env init** — at session start the extension sets `CLAUDECODE="1"` (decided 2026-08-01) and `CLAUDE_CODE_SESSION_ID=<Pi session id>` on Pi's `process.env`; Pi's bash tool builds every child env from live `process.env` (`getShellEnv()` spreads it, scrubbing only `PI_*`), so skill/command scripts inherit them exactly as under Claude Code. Optional rider: a `CLAUDE_SESSION_ID` alias (not a Claude Code env var) so un-substituted `${CLAUDE_SESSION_ID}` template literals in materialized markdown still expand when they pass through a shell.
+- **Hook env parity** — `CLAUDECODE` + `CLAUDE_CODE_SESSION_ID` added to `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and its deliberate hand-mirror `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`); value already snapshotted as `transCtx.sessionId`. Joins the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set.
+- **MCP staging parity (biggest gap — entries are written verbatim today)** — at stage time (`bridges/mcp/stage.ts::stampServers`) substitute `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in `command`/`args`/`env` values and inject `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` into each server's `env` map — mirroring the injection Claude Code performs at spawn time. `CLAUDE_PROJECT_DIR` baked for project-scope installs only (user-scope value varies per session).
+- **Substitution completion** — `${CLAUDE_SKILL_DIR}` (install-time knowable: the skill's installed dir) joins the skill substitution set; `${CLAUDE_PROJECT_DIR}` substituted in skills/commands/agents for project-scope installs. Extends `shared/vars.ts::substituteClaudeVars` + its three call sites (skills/commands stage, agents convert).
+- **Cross-cutting docs** — NEW `docs/env-vars.md`: the per-variable × per-surface matrix and the two-mechanism model (textual substitution for content the model reads; env inheritance for spawned processes), Claude Code ground truth vs Pi delivery. `docs/hooks-compatibility.md` env table reconciled against it.
+
+**Key context:** Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string-literal extraction of the env-builder and substitution functions) and a live session env — not docs alone: `CLAUDE_CODE_SESSION_ID` is real but absent from current official docs; `CLAUDE_WORKING_DIR` does not exist; Claude Code's bash env does NOT carry `CLAUDE_PROJECT_DIR` (hooks/MCP only). Claude's `${VAR}` template syntax coincides with shell expansion syntax, so env-var delivery also rescues template literals used inside bash command lines. Out of scope (document-only): `${user_config.*}`/`CLAUDE_PLUGIN_OPTION_*` (needs a plugin-options feature), `CLAUDE_CODE_CHILD_SESSION` + `CLAUDE_CODE_ENTRYPOINT` (identity semantics of a different host), headersHelper vars (`CLAUDE_CODE_MCP_SERVER_NAME`/`_URL` — pi-mcp-adapter territory), `CLAUDE_EFFORT` (Pi `thinkingLevel` mapping possible but semantically approximate). Open verification item: whether pi-mcp-adapter spawns servers inheriting Pi's `process.env` (determines runtime coverage for user-scope `CLAUDE_PROJECT_DIR` and session vars in MCP server processes).
+
 ## Previous Milestone: v1.16 stop-hooks — Stop + StopFailure Hook Promotion (branch: features/stop-hooks, shipped 2026-07-31, target npm 0.12.0)
 
 **Goal:** Promote Claude's `Stop` and `StopFailure` hook events into the supported bucket-A set (GitHub issue #103; retires PAYL-V2-04 + PAYL-V2-06) — one `agent_settled` dispatcher gated on the final assistant message's `stopReason`, delivering the full hook-observable Stop contract (block-to-continue re-entry, loop protections) and the observation-only StopFailure arm (closed-set error-type matcher).
@@ -169,7 +183,7 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** nothing — awaiting next milestone (`/gsd-new-milestone`). The v1.16 npm release (target `0.12.0`: version bump, CHANGELOG, PR off `features/stop-hooks`, squash-merge) is pending.
+**In progress:** milestone v1.17 env-parity (started 2026-08-01) — defining requirements. The v1.16 npm release shipped as `0.12.0` (PR #109 squash-merged, v-tag CI publish).
 
 **Just shipped:** v1.16 stop-hooks (2026-07-31, Phases 87-89, 11 plans, 22 tasks). `Stop` + `StopFailure` promoted into bucket-A (8→10 events) at full hook-observable fidelity: admission with per-event matcher dispositions and the `>=0.80.5` peer floor (Phase 87); the `agent_settled` dispatcher gated on the final assistant message's `stopReason` with the complete Stop decision contract, `stop_hook_active` + shared-lane 8-re-entry cap, and the observation-only StopFailure classifier (Phase 88, live-UAT 4/4 on pi 0.80.10); docs reconciled version-neutral with the timing-shift divergence documented (Phase 89). Milestone audit passed 15/15; `ralph-wiggum` and `hookify` now install fully (first-party 12/13).
 
@@ -286,6 +300,14 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 - ✓ v1.3 Drift Guard & Test Alignment (Phase 14, CMC-16/CMC-34/CMC-38): 34-rule ESLint drift-guard plugin (16 meta-assertion + 18 full-impl) under `tests/lint-rules/` wired into `eslint.config.js` with per-rule scoping and composer-file ignores; shared YAML frontmatter loader at `tests/lint-rules/lib/frontmatter.js` reads `docs/messaging-style-guide.md` as the sole binding contract for 4 closed sets (`status_tokens` / `reasons` / `markers` / `pattern_classes`); `tests/architecture/grammar-frontmatter.test.ts` extended to 4-key set-equality; `tests/architecture/msg-rule-registry.test.ts` 4-way parity test ties style-guide body + rule files + ESLint wiring + plugin module. CMC-16 production wiring of `renderManualRecovery` into `orchestrators/plugin/reinstall.ts` with dead-code seam removed from `orchestrators/marketplace/remove.ts` (audit BLOCKER closed); CMC-34 mechanical migration of 13 callsites across 6 edge handlers from `notifyError(ctx, msg + USAGE)` to `notifyUsageError(ctx, reason, USAGE)` (audit BLOCKER closed; `\n\n` separator now MSG-NC-2 / MSG-SR-7 conformant). WARNING-level closures: `transaction/rollback.ts` orchestrator-owns-rendering refactor with `composeRollbackPartialChildren` extracted to `presentation/rollback-partial.ts` (D-14-04 / Pitfall 6); `MARKETPLACE_LABEL_PROBE` deduplicated from 3 inline definitions into `shared/constants/marketplace-label-probe.ts`. `npm run check` GREEN at 1245/1245 tests with all 34 drift-guard rules active in lint; the v1.3 user-contract is now structurally enforced -- no future commit can silently drift on tokens, reasons, markers, pattern-classes, or MSG-* grammar.
 
 ### Active
+
+<!-- Milestone v1.17 env-parity (started 2026-08-01). Claude Code environment variable parity across all five component surfaces. -->
+
+- [ ] Skill/command scripts run via Pi's bash tool see `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` in their environment, matching Claude Code's live bash-child env
+- [ ] Plugin hook processes additionally see `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` (sync and async-rewake lanes identical)
+- [ ] A plugin MCP server declaring `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in `command`/`args`/`env` gets real paths in the written `mcp.json`, and every plugin server's `env` carries `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (+ `CLAUDE_PROJECT_DIR` for project scope)
+- [ ] `${CLAUDE_SKILL_DIR}` resolves in installed skills; `${CLAUDE_PROJECT_DIR}` resolves in project-scope skills/commands/agents
+- [ ] `docs/env-vars.md` documents every Claude Code plugin-facing variable per surface with its Pi delivery mechanism (or documented absence); `docs/hooks-compatibility.md` env table agrees with it
 
 <!-- Milestone v1.16 stop-hooks (branch features/stop-hooks, shipped 2026-07-31). GitHub issue #103; retires PAYL-V2-04 + PAYL-V2-06. -->
 
@@ -432,6 +454,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-08-01 after milestone v1.17 env-parity started (goals confirmed, defining requirements). Scope: session env init (`CLAUDECODE=1` + `CLAUDE_CODE_SESSION_ID` on Pi's `process.env`), hook env parity across both dispatch lanes, MCP stage-time `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` substitution + env injection, `${CLAUDE_SKILL_DIR}` + project-scope `${CLAUDE_PROJECT_DIR}` substitution, and a new cross-cutting `docs/env-vars.md`. Ground truth verified against the Claude Code v2.1.212 binary + live session env. Prior updates below.*
 
 *Last updated: 2026-07-31 after milestone v1.16 stop-hooks shipped (Phases 87-89 complete, audit passed 15/15, archived to `.planning/milestones/v1.16-*`). Stop + StopFailure promoted to bucket-A via the `agent_settled` dispatcher gated on the final assistant message's `stopReason` (stop → Stop, error/length → StopFailure, aborted → neither), full hook-observable Stop decision contract (block re-entry, `stop_hook_active`, shared-lane 8-re-entry cap per D-88-08), observation-only StopFailure with the upstream 10-value error-type matcher, peer floor `>=0.80.5`, and hooks research/compatibility docs reconciled version-neutral. Retires PAYL-V2-04 + PAYL-V2-06; resolves GitHub issue #103. npm 0.12.0 release pending. Prior updates below.*
 

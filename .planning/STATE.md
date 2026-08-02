@@ -1,30 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.16
-milestone_name: stop-hooks
-status: Awaiting next milestone
-stopped_at: Completed 89-03-PLAN.md
-last_updated: "2026-07-31T12:49:26.242Z"
-last_activity: 2026-07-31
-last_activity_desc: Milestone v1.16 completed and archived
+milestone: v1.17
+milestone_name: env-parity
+status: planning
+last_updated: "2026-08-02T03:11:45.514Z"
+last_activity: 2026-08-01
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
-current_phase: 89
-current_phase_name: Documentation reconcile
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: Milestone v1.16 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-31 — Milestone v1.16 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-01 — Milestone v1.17 started
 
 ## Roadmap Summary
 
@@ -159,6 +155,7 @@ itself is verified; see `milestones/v1.16-MILESTONE-AUDIT.md`).
   EXTENSION_VERSION + sonar projectVersion + CHANGELOG), then PR off
   `features/stop-hooks` via /gsd-ship (repo squash-merges; no git tag at GSD
   milestone close per house convention — tags track npm releases)
+
 - Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
