@@ -63,14 +63,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| SENV-01 | Phase 90 | Pending |
+| SENV-02 | Phase 90 | Pending |
+| SENV-03 | Phase 90 | Pending |
+| HENV-01 | Phase 91 | Pending |
+| HENV-02 | Phase 91 | Pending |
+| MENV-01 | Phase 92 | Pending |
+| MENV-02 | Phase 92 | Pending |
+| MENV-03 | Phase 92 | Pending |
+| MENV-04 | Phase 92 | Pending |
+| SUB-01 | Phase 93 | Pending |
+| SUB-02 | Phase 93 | Pending |
+| DOC-06 | Phase 94 | Pending |
+| DOC-07 | Phase 94 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13 ✓
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-08-01*
-*Last updated: 2026-08-01 after initial definition*
+*Last updated: 2026-08-01 after roadmap creation (Phases 90-94 mapped)*

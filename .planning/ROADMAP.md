@@ -2,11 +2,27 @@
 
 ## Milestones
 
-- ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, target npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
+- 🚧 **v1.17 env-parity** — Phases 90-94 (in progress) — installed Claude plugins see the same environment variables, delivered the same way, as under Claude Code, across skills/commands/agents/hooks/MCP servers
+- ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
 - ✅ **v1.14 mcp-string-refs** — Phase 85 (shipped 2026-07-23) — full detail: `milestones/v1.14-ROADMAP.md`
 
 ## Phases
+
+### In progress v1.17 env-parity
+
+**Phase Numbering:**
+
+- Integer phases (90-94): Planned milestone work (continues the global counter
+  from Phase 89, the v1.16 stop-hooks final phase).
+
+- Decimal phases (90.1, 92.1): Urgent insertions (marked with INSERTED).
+
+- [ ] **Phase 90: Session environment initialization** — at session start the extension sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID=<Pi session id>`, and the pi-only `CLAUDE_SESSION_ID` alias on Pi's live `process.env`, so a skill/command script launched through Pi's bash tool (which builds every child env from `process.env` via `getShellEnv()`, scrubbing only `PI_*`) inherits them exactly as under Claude Code. (SENV-01, SENV-02, SENV-03)
+- [ ] **Phase 91: Hook environment parity** — `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` (from the snapshotted `transCtx.sessionId`) join the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set on both hook spawn lanes — `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and its hand-mirror `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`) — with a drift-guard test pinning the two lanes together. (HENV-01, HENV-02)
+- [ ] **Phase 92: MCP staging parity** — at stage time (`bridges/mcp/stage.ts::stampServers`, which today writes entries verbatim) substitute `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in each server's `command`/`args`/`env` and inject `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus project-scope `CLAUDE_PROJECT_DIR`) into the server's `env` map, re-derived on every `update`/`reinstall` re-stage so a plugin-root change never leaves stale paths in `mcp.json`. (MENV-01, MENV-02, MENV-03, MENV-04)
+- [ ] **Phase 93: Substitution completion** — `${CLAUDE_SKILL_DIR}` (the skill's installed dir) and project-scope `${CLAUDE_PROJECT_DIR}` join the install-time substitution set in staged skill/command/agent content, extending `shared/vars.ts::substituteClaudeVars` and its three call sites; user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (documented). (SUB-01, SUB-02)
+- [ ] **Phase 94: Environment-variable documentation** — new `docs/env-vars.md` (per-variable × per-surface matrix, the two-mechanism model, documented absences, and the resolved pi-mcp-adapter `process.env`-inheritance answer) with the `docs/hooks-compatibility.md` env table reconciled against it; runs LAST so it describes shipped behavior, sequential (non-worktree). (DOC-06, DOC-07)
 
 <details>
 <summary>✅ v1.16 stop-hooks (Phases 87-89) — SHIPPED 2026-07-31</summary>
@@ -58,10 +74,89 @@
 
 </details>
 
+## Phase Details
+
+### Phase 90: Session environment initialization
+
+**Goal**: A skill or command script launched through Pi's bash tool sees the Claude Code session environment variables — exactly as it would under Claude Code — because the extension sets them on Pi's live `process.env` at session start and Pi's bash tool builds every child env from `process.env` (`getShellEnv()` spreads it, scrubbing only `PI_*` keys). This is the shared env-injection groundwork the hook lane leans on: it establishes the two session-scoped values (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`) and the pi-only `CLAUDE_SESSION_ID` shim as the milestone's runtime-injection foundation.
+**Depends on**: Nothing (first phase of this milestone; sets values on Pi's `process.env` at the extension's session-start / load path, consumed downstream by Pi's `getShellEnv()` bash-tool env builder).
+**Requirements**: SENV-01, SENV-02, SENV-03
+**Success Criteria** (what must be TRUE):
+
+  1. Whenever the extension is loaded, a skill/command script run through Pi's bash tool sees `CLAUDECODE=1` in its environment. (SENV-01)
+  2. The same script sees `CLAUDE_CODE_SESSION_ID` equal to the current Pi session id, and the value tracks the active session — it is refreshed (never stale) after a session switch or `/reload`. (SENV-02)
+  3. `CLAUDE_SESSION_ID` is set to the same value, so an un-substituted `${CLAUDE_SESSION_ID}` template literal still expands in a shell context (documented pi-only shim). (SENV-03)
+  4. Only these keys are added to `process.env`; `getShellEnv()`'s `PI_*`-scrub and existing environment are otherwise undisturbed (non-interference). (SENV-01, SENV-02, SENV-03)
+
+**Plans**: TBD
+
+### Phase 91: Hook environment parity
+
+**Goal**: A plugin hook process — on both the synchronous dispatch lane and the async-rewake lane — receives `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` alongside the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set, matching what a hook sees under Claude Code. The session id is taken from the authoritative per-dispatch snapshot (`transCtx.sessionId`) rather than left to the `process.env` spread, and the two hand-mirrored spawn sites are pinned together by a drift-guard test.
+**Depends on**: Phase 90 (leans on the shared session-env groundwork — the `CLAUDECODE` value and the session-id-to-env mapping established there; the hook lanes build their env explicitly in `bridges/hooks/dispatch-exec.ts::prepareEnv` and `bridges/hooks/async-rewake/registry.ts::prepareAsyncEnv`).
+**Requirements**: HENV-01, HENV-02
+**Success Criteria** (what must be TRUE):
+
+  1. A plugin hook spawned on the synchronous dispatch lane (`prepareEnv`) receives `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` (= the snapshotted `transCtx.sessionId`) in addition to the four existing `CLAUDE_*` variables. (HENV-01)
+  2. A hook spawned on the async-rewake lane (`prepareAsyncEnv`) receives an identical env set to the sync lane — same keys, same values. (HENV-02)
+  3. A drift-guard test fails if the two lanes' env sets ever diverge, so the deliberate hand-mirror cannot silently rot. (HENV-02)
+
+**Plans**: TBD
+
+### Phase 92: MCP staging parity
+
+**Goal**: A plugin's MCP servers are written to `mcp.json` with Claude-Code-equivalent environment delivery — this is the milestone's biggest gap, since `stampServers` writes entries verbatim today. At stage time, `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` references in each server's `command`/`args`/`env` are substituted with real install paths, and `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus `CLAUDE_PROJECT_DIR` for project-scope installs) are injected into each server's `env` map — mirroring the injection Claude Code performs at spawn time — with the substitution re-derived on every re-stage so a plugin-root change never leaves stale paths.
+**Depends on**: Nothing (independent of the session/hook env lane; touches `bridges/mcp/stage.ts::stampServers` and the `update`/`reinstall` re-stage paths). All disk mutations stay atomic (NFR-1); containment holds (NFR-10).
+**Requirements**: MENV-01, MENV-02, MENV-03, MENV-04
+**Success Criteria** (what must be TRUE):
+
+  1. An MCP server whose `command`/`args`/`env` values contain `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` is written to `mcp.json` with the real installed paths substituted in place of the literals. (MENV-01)
+  2. Every installed MCP server's `env` map carries `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`, and a plugin-declared env key of the same name takes precedence over the injected default (Claude Code's spread order). (MENV-02)
+  3. A project-scope install additionally injects `CLAUDE_PROJECT_DIR` into each server's `env`; a user-scope install omits it (the user-scope value varies per session — documented absence). (MENV-03)
+  4. After `update` or `reinstall` re-stages a plugin whose root changed (e.g. a new sha-addressed clone dir), `mcp.json` holds the newly-substituted paths and re-injected env with no stale path surviving from the prior root. (MENV-04)
+
+**Plans**: TBD
+
+**Implementation-time verification**: Resolve whether pi-mcp-adapter spawns MCP servers inheriting Pi's `process.env` — this determines the runtime coverage for user-scope `CLAUDE_PROJECT_DIR` (deliberately not baked into `env` here) and for the session vars in MCP server processes. The finding feeds `docs/env-vars.md` (DOC-06) in Phase 94.
+
+### Phase 93: Substitution completion
+
+**Goal**: The static `${...}` substitution set that the model reads in materialized skill/command/agent content is completed — `${CLAUDE_SKILL_DIR}` resolves to a skill's installed directory, and `${CLAUDE_PROJECT_DIR}` resolves for project-scope installs (passing through untouched for user-scope, documented). Extends `shared/vars.ts::substituteClaudeVars` (today only `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}`) and its three call sites — skills stage, commands stage, agents convert.
+**Depends on**: Nothing (independent of the session/hook env lane; extends the shared textual-substitution helper and its three call sites). Previously-substituted variables stay unchanged; disk mutations atomic (NFR-1); containment holds (NFR-10).
+**Requirements**: SUB-01, SUB-02
+**Success Criteria** (what must be TRUE):
+
+  1. `${CLAUDE_SKILL_DIR}` in a skill's content is replaced at stage time with the skill's installed directory path. (SUB-01)
+  2. `${CLAUDE_PROJECT_DIR}` in a project-scope skill/command/agent is replaced at stage time with the project root. (SUB-02)
+  3. A user-scope occurrence of `${CLAUDE_PROJECT_DIR}` passes through untouched (documented — SENV-03's shell expansion / env inheritance covers it), and the already-substituted `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` remain correctly substituted. (SUB-02)
+
+**Plans**: TBD
+
+### Phase 94: Environment-variable documentation
+
+**Goal**: The environment-variable behavior shipped by this milestone is documented as the per-variable × per-surface matrix and two-mechanism model in a new `docs/env-vars.md`, with the hooks-compatibility env table reconciled against it — describing shipped behavior, not intent, which is why it lands last.
+**Depends on**: Phases 90, 91, 92, 93 (documents the behavior those phases ship; the pi-mcp-adapter `process.env`-inheritance answer comes from the Phase 92 verification). Runs sequentially (non-worktree) per project convention for docs phases that touch shared planning/state files.
+**Requirements**: DOC-06, DOC-07
+**Success Criteria** (what must be TRUE):
+
+  1. `docs/env-vars.md` exists and presents the per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery across skills, commands, agents, hooks, MCP servers), the two-mechanism model (install-time textual substitution for install-stable per-plugin values vs runtime env injection for session-scoped values), and the documented absences (user-scope MCP `CLAUDE_PROJECT_DIR`, the out-of-scope variables). (DOC-06)
+  2. `docs/env-vars.md` records the resolved answer to whether pi-mcp-adapter spawns servers inheriting Pi's `process.env` (the Phase 92 verification), stating the runtime coverage that follows for user-scope `CLAUDE_PROJECT_DIR` and the session vars in MCP server processes. (DOC-06)
+  3. The `docs/hooks-compatibility.md` environment-variable table is reconciled against `docs/env-vars.md` — the two do not contradict each other on which hook env vars ship. (DOC-07)
+
+**Plans**: TBD
+
 ## Progress
+
+**Execution Order:**
+90 → 91 (the hook lane leans on the Phase 90 session-env groundwork); 92 (MCP) and 93 (substitution) are independent of the env lane and of each other and may run in any order; 94 (docs) runs LAST and sequential (non-worktree) so it documents shipped behavior.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
+| 90. Session environment initialization | v1.17 | 0/? | Not started | - |
+| 91. Hook environment parity | v1.17 | 0/? | Not started | - |
+| 92. MCP staging parity | v1.17 | 0/? | Not started | - |
+| 93. Substitution completion | v1.17 | 0/? | Not started | - |
+| 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 5/5 | Complete | 2026-07-30 |
 | 89. Documentation reconcile | v1.16 | 3/3 | Complete | 2026-07-31 |
