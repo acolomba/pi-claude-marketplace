@@ -47,6 +47,7 @@ import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
 import { assertPathInside } from "../../../shared/path-safety.ts";
+import { claudeSessionEnvFor } from "../../../shared/session-env.ts";
 import { currentEpoch, type RoutingEntry } from "../event-router.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
@@ -612,12 +613,11 @@ async function prepareAsyncEnv(
     CLAUDE_PLUGIN_ROOT: pluginRoot,
     CLAUDE_PLUGIN_DATA: pluginData,
     [MARKER_ENV]: dispatchId,
-    // HENV-02: mirror of dispatch-exec.ts::prepareEnv session env. Assigned
-    // after the `...process.env` spread so the authoritative per-dispatch
-    // snapshot wins (D-91-02). CLAUDE_SESSION_ID is the pi-only alias.
-    CLAUDECODE: "1",
-    CLAUDE_CODE_SESSION_ID: transCtx.sessionId,
-    CLAUDE_SESSION_ID: transCtx.sessionId,
+    // HENV-02: session env from the shared producer, identical to the sync
+    // dispatch-exec lane by construction (WR-01). Spread after the
+    // `...process.env` spread so the authoritative per-dispatch snapshot wins
+    // (D-91-02).
+    ...claudeSessionEnvFor(transCtx.sessionId),
   };
 
   if (entry.claudeEvent === "SessionStart") {

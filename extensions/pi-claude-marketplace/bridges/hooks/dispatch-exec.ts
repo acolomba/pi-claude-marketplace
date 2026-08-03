@@ -58,6 +58,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
@@ -314,13 +315,12 @@ async function prepareEnv(
     CLAUDE_PROJECT_DIR: transCtx.cwd,
     CLAUDE_PLUGIN_ROOT: pluginRoot,
     CLAUDE_PLUGIN_DATA: pluginData,
-    // HENV-01: Claude-Code-parity session env. Assigned AFTER the
-    // `...process.env` spread so the authoritative per-dispatch snapshot wins
-    // over whatever was last written to the live process.env (D-91-02
-    // race-window safety). CLAUDE_SESSION_ID is the pi-only alias (D-91-02).
-    CLAUDECODE: "1",
-    CLAUDE_CODE_SESSION_ID: transCtx.sessionId,
-    CLAUDE_SESSION_ID: transCtx.sessionId,
+    // HENV-01: Claude-Code-parity session env from the shared producer so this
+    // sync lane and the async-rewake lane cannot drift (WR-01). Spread AFTER
+    // the `...process.env` spread so the authoritative per-dispatch snapshot
+    // wins over whatever was last written to the live process.env (D-91-02
+    // race-window safety).
+    ...claudeSessionEnvFor(transCtx.sessionId),
   };
 
   if (entry.claudeEvent === "SessionStart") {

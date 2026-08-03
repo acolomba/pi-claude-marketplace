@@ -21,6 +21,32 @@
 import path from "node:path";
 
 /**
+ * HENV-01/02 / SENV-01/02/03: the three Claude-Code-parity session env vars
+ * as a plain key/value object -- the single source of truth for the session
+ * env contract.
+ *
+ * `applySessionEnv` applies these to Pi's live `process.env` (bash-tool path);
+ * the two hook-spawn lanes (`prepareEnv` in `bridges/hooks/dispatch-exec.ts`
+ * and `prepareAsyncEnv` in `bridges/hooks/async-rewake/registry.ts`) spread the
+ * returned object into each child's env AFTER the `...process.env` spread so
+ * the authoritative per-dispatch snapshot wins over the live process.env
+ * (D-91-02). Sharing one producer keeps the two lanes parity-equal by
+ * construction rather than only by the drift-guard test (WR-01).
+ * CLAUDE_SESSION_ID is the pi-only alias (SENV-03 / D-91-02).
+ */
+export function claudeSessionEnvFor(sessionId: string): {
+  CLAUDECODE: string;
+  CLAUDE_CODE_SESSION_ID: string;
+  CLAUDE_SESSION_ID: string;
+} {
+  return {
+    CLAUDECODE: "1", // SENV-01
+    CLAUDE_CODE_SESSION_ID: sessionId, // SENV-02
+    CLAUDE_SESSION_ID: sessionId, // SENV-03 pi-only shim
+  };
+}
+
+/**
  * SENV-01/02/03: refresh the Claude-Code session env on every `session_start`
  * (startup/reload/new/resume/fork). Overwrite unconditionally so the values
  * track the active session (SENV-02 freshness after a session switch).
@@ -30,9 +56,7 @@ import path from "node:path";
  * CLAUDE_CODE_ENTRYPOINT, ...) is ever set -- only these three.
  */
 export function applySessionEnv(sessionId: string): void {
-  process.env.CLAUDECODE = "1"; // SENV-01
-  process.env.CLAUDE_CODE_SESSION_ID = sessionId; // SENV-02
-  process.env.CLAUDE_SESSION_ID = sessionId; // SENV-03 pi-only shim
+  Object.assign(process.env, claudeSessionEnvFor(sessionId));
 }
 
 /**
