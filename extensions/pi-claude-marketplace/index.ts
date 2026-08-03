@@ -5,10 +5,13 @@ import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./e
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
+import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
+import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notify.ts";
+import { applySessionEnv } from "./shared/session-env.ts";
 
 import type {
   ExtensionAPI,
@@ -92,6 +95,17 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       }
     }
 
+    // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
+    // AFTER applyReconcile has settled install state and BEFORE resource
+    // aggregation. Wrapped so a malformed-state throw from loadState is
+    // swallowed + debug-logged and never propagates past resources_discover
+    // (NFR-2) -- a bad state.json must never block Pi load.
+    try {
+      await recomputePluginPath(event.cwd);
+    } catch (err) {
+      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`);
+    }
+
     const discovered = await aggregateDiscoveredResources(
       locationsFor("user", homedir()),
       locationsFor("project", event.cwd),
@@ -100,6 +114,16 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       skillPaths: [...discovered.skillPaths],
       promptPaths: [...discovered.promptPaths],
     };
+  });
+
+  // SENV-01/02/03: reset the Claude-Code session env on every session_start
+  // (startup/reload/new/resume/fork). Overwrite is unconditional -- that IS the
+  // SENV-02 freshness contract -- so re-registration is harmless (idempotent).
+  // Three unconditional string assignments cannot throw, so no try/catch is
+  // needed. The session id lives on `ctx.sessionManager` (D-90-03 keeps this
+  // concern separate from the resources_discover PATH recompute).
+  pi.on("session_start", (_event, ctx) => {
+    applySessionEnv(ctx.sessionManager.getSessionId());
   });
 
   registerClaudePluginCommand(pi, {
