@@ -4,15 +4,15 @@ milestone: v1.17
 milestone_name: env-parity
 current_phase: 93
 current_phase_name: Substitution completion
-status: planning
+status: executing
 stopped_at: Phase 93 context gathered
-last_updated: "2026-08-03T18:19:53.713Z"
+last_updated: "2026-08-03T18:37:52.394Z"
 last_activity: 2026-08-03
 last_activity_desc: Phase 92 complete, transitioned to Phase 93
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 4
+  total_plans: 6
   completed_plans: 4
   percent: 60
 ---
@@ -23,7 +23,7 @@ progress:
 
 Phase: 93 — Substitution completion
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-03 — Phase 92 complete, transitioned to Phase 93
 env-parity planning docs per validation findings
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)

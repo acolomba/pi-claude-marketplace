@@ -147,7 +147,12 @@
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 93-01-PLAN.md — Extend substituteClaudeVars (single-pass) + skills bridge; SUB-01 + SUB-02 skills arm (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 93-02-PLAN.md — Commands + agents bridges + orchestrator cwd threading; SUB-02 completion (Wave 2)
 
 ### Phase 94: Environment-variable documentation
