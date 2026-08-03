@@ -282,6 +282,42 @@ test("EXEC-01 + HOOK-05: env contains process.env + CLAUDE_PROJECT_DIR + CLAUDE_
   assert.equal(env.CLAUDE_PLUGIN_ROOT, asAbsolutePluginRoot("/test/plugin-root"));
   assert.ok(env.CLAUDE_PLUGIN_DATA?.includes("/data/test-plugin"));
   assert.equal(env.CLAUDE_CODE_REMOTE, undefined);
+  // HENV-01: Claude-Code-parity session env; CLAUDE_SESSION_ID is the pi-only
+  // alias (D-91-02). All three values come from the transCtx.sessionId snapshot.
+  assert.equal(env.CLAUDECODE, "1");
+  assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-xyz");
+  assert.equal(env.CLAUDE_SESSION_ID, "session-xyz");
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block: HENV-01 session id snapshot wins over the process.env spread (D-91-02)
+// ──────────────────────────────────────────────────────────────────────────
+
+test("HENV-01 / D-91-02: session id keys read from the ctx snapshot win over a divergent process.env value", async (t) => {
+  relocateAgentDir(t);
+  const spy = installSpawnSpy(t, (h) => {
+    h.emitClose(0);
+  });
+
+  const prev = process.env.CLAUDE_CODE_SESSION_ID;
+  process.env.CLAUDE_CODE_SESSION_ID = "stale-sentinel-from-spread";
+  t.after(() => {
+    if (prev === undefined) {
+      delete process.env.CLAUDE_CODE_SESSION_ID;
+    } else {
+      process.env.CLAUDE_CODE_SESSION_ID = prev;
+    }
+  });
+
+  await dispatchHookExec(
+    makeEntry({ claudeEvent: "PreToolUse" }),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+  );
+
+  const env = spy.calls[0]?.options.env ?? {};
+  assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-xyz");
+  assert.equal(env.CLAUDE_SESSION_ID, "session-xyz");
 });
 
 // ──────────────────────────────────────────────────────────────────────────
