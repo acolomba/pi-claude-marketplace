@@ -168,7 +168,7 @@ function neutralizeCommandFrontmatter(content: string): string {
 export async function prepareStageCommands(
   input: StageCommandsInput,
 ): Promise<PreparedCommandsStaging> {
-  const { locations, pluginName, pluginRoot, pluginDataDir, resolved } = input;
+  const { locations, pluginName, pluginRoot, pluginDataDir, resolved, cwd } = input;
   const previousNames = input.previousCommandNames ?? [];
   // D-07: discover returns { discovered, warnings }. warnings carry
   // duplicate-generated-name first-wins skips across multiple
@@ -237,7 +237,15 @@ export async function prepareStageCommands(
         });
       }
 
-      content = substituteClaudeVars(content, { pluginRoot, pluginData: pluginDataDir });
+      // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
+      // project scope; user scope leaves the token literal (undefined ->
+      // pass-through). Commands are not skill-scoped, so no skillDir is
+      // supplied and ${CLAUDE_SKILL_DIR} stays literal.
+      content = substituteClaudeVars(content, {
+        pluginRoot,
+        pluginData: pluginDataDir,
+        projectDir: locations.scope === "project" ? cwd : undefined,
+      });
       await writeFile(stagedFile, content, "utf8");
 
       // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability

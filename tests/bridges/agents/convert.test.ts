@@ -1133,3 +1133,39 @@ test("#86 canonical agent without a body token converts with no legend (referenc
   // ...but no legend anywhere in the generated file.
   assert.ok(!out.fileContent.includes(LEGEND_HEADING));
 });
+
+test("SUB-02 convertAgent with projectDir substitutes ${CLAUDE_PROJECT_DIR}; keeps ${CLAUDE_SKILL_DIR} literal", () => {
+  const out = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/abs/plugin",
+    pluginDataDir: "/abs/data",
+    knownSkills: [],
+    discovered: makeDiscovered({
+      raw: { tools: "Read" },
+      body: "Project ${CLAUDE_PROJECT_DIR}/x and skill ${CLAUDE_SKILL_DIR}/y",
+    }),
+    sourceHash: "abc",
+    mapModel: false,
+    projectDir: "/abs/project",
+  });
+  assert.match(out.fileContent, /\/abs\/project\/x/);
+  assert.doesNotMatch(out.fileContent, /\$\{CLAUDE_PROJECT_DIR\}/);
+  // ${CLAUDE_SKILL_DIR} is skill-scoped; agents receive no skillDir.
+  assert.match(out.fileContent, /\$\{CLAUDE_SKILL_DIR\}\/y/);
+});
+
+test("SUB-02 convertAgent without projectDir leaves ${CLAUDE_PROJECT_DIR} literal", () => {
+  const out = convertAgent({
+    pluginName: "acme",
+    pluginRoot: "/abs/plugin",
+    pluginDataDir: "/abs/data",
+    knownSkills: [],
+    discovered: makeDiscovered({
+      raw: { tools: "Read" },
+      body: "Project ${CLAUDE_PROJECT_DIR}/x",
+    }),
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  assert.match(out.fileContent, /\$\{CLAUDE_PROJECT_DIR\}\/x/);
+});
