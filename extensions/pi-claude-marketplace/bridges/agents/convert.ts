@@ -447,6 +447,12 @@ export function convertAgent(input: {
    * this flag, so cascade-driven re-installs always omit `model:`.
    */
   mapModel: boolean;
+  /**
+   * SUB-02: the install cwd (project root) substituted for
+   * `${CLAUDE_PROJECT_DIR}` in the agent body. Supplied only for
+   * project-scope installs; absent leaves the token literal (pass-through).
+   */
+  projectDir?: string | undefined;
 }): ConvertedAgent {
   const {
     pluginName,
@@ -456,6 +462,7 @@ export function convertAgent(input: {
     discovered,
     sourceHash,
     mapModel: mapModelFlag,
+    projectDir,
   } = input;
   const { raw, body, sourceName, generatedName, sourcePath } = discovered;
 
@@ -527,9 +534,13 @@ export function convertAgent(input: {
   // 7. Substitute plugin variables in the body (PI-10).
   // D-08 corollary: the shared primitive sides with PI-10 -- agents DO get
   // substitution.
+  // SUB-02: projectDir is scope-gated upstream (agents/stage.ts). Agents are
+  // not skill-scoped, so no skillDir is supplied and ${CLAUDE_SKILL_DIR} stays
+  // literal via the helper's pass-through.
   const substitutedBody = substituteClaudeVars(body, {
     pluginRoot,
     pluginData: pluginDataDir,
+    projectDir,
   });
 
   // 7.5 AGSK-04: detect same-plugin skill tokens in the emitted body and

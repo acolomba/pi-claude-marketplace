@@ -83,6 +83,13 @@ export interface StageAgentsInput {
    * always leaves this unset, so cascade-driven re-installs omit `model:`.
    */
   readonly mapModel?: boolean;
+  /**
+   * Project-scope install cwd (the project root), substituted for
+   * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Optional: user-scope
+   * and un-threaded callers omit it, leaving the token literal (pass-through).
+   * Unlike the MCP bridge's required `cwd`, this feeds substitution only.
+   */
+  readonly cwd?: string;
 }
 
 /**

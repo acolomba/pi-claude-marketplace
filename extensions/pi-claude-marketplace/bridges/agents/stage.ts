@@ -106,7 +106,13 @@ export async function prepareStagePluginAgents(
     agentsSourceDir,
     knownSkills,
     mapModel,
+    cwd,
   } = input;
+
+  // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for project
+  // scope; user scope leaves the token literal (undefined -> pass-through).
+  // This is the sole point where scope and cwd meet before convertAgent runs.
+  const projectDir = locations.scope === "project" ? cwd : undefined;
 
   // Step 1: discover. D-07 signature: discoverPluginAgents takes
   // `agentsDirs: readonly string[]`. A null agentsSourceDir means the
@@ -140,6 +146,7 @@ export async function prepareStagePluginAgents(
       discovered: d,
       sourceHash: d.sourceHash,
       mapModel: mapModel ?? false,
+      projectDir,
     }),
   );
 
