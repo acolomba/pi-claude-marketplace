@@ -2,29 +2,29 @@
 gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
-current_phase: 91
-current_phase_name: Hook environment parity
-status: executing
+current_phase: 92
+current_phase_name: MCP staging parity
+status: planning
 stopped_at: Phase 91 context gathered
-last_updated: "2026-08-03T15:02:08.423Z"
+last_updated: "2026-08-03T15:58:05.732Z"
 last_activity: 2026-08-03
-last_activity_desc: Phase 91 execution started
+last_activity_desc: Phase 91 complete, transitioned to Phase 92
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
-  completed_plans: 1
-  percent: 20
+  completed_plans: 2
+  percent: 40
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 91 (Hook environment parity) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 91
-Last activity: 2026-08-03 — Phase 91 execution started
+Phase: 92 — MCP staging parity
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-03 — Phase 91 complete, transitioned to Phase 92
 env-parity planning docs per validation findings
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 

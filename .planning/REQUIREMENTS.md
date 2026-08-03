@@ -21,8 +21,8 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 ### Hook Environment
 
-- [ ] **HENV-01**: A plugin hook process (sync dispatch lane) receives `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` alongside the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set
-- [ ] **HENV-02**: The async-rewake lane delivers an identical env set — mirror parity between `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`), drift-guarded by test
+- [x] **HENV-01**: A plugin hook process (sync dispatch lane) receives `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` alongside the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set
+- [x] **HENV-02**: The async-rewake lane delivers an identical env set — mirror parity between `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`), drift-guarded by test
 
 ### MCP Environment Parity
 
@@ -78,8 +78,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SENV-02 | Phase 90 | Pending |
 | SENV-03 | Phase 90 | Pending |
 | PENV-01 | Phase 90 | Pending |
-| HENV-01 | Phase 91 | Pending |
-| HENV-02 | Phase 91 | Pending |
+| HENV-01 | Phase 91 | Complete |
+| HENV-02 | Phase 91 | Complete |
 | MENV-01 | Phase 92 | Pending |
 | MENV-02 | Phase 92 | Pending |
 | MENV-03 | Phase 92 | Pending |
