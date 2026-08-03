@@ -39,6 +39,13 @@ export interface StageCommandsInput {
   readonly resolved: MaterializablePlugin;
   /** Names previously staged for this (mp, plugin) -- read from state.json on re-stage. */
   readonly previousCommandNames?: readonly string[];
+  /**
+   * Project-scope install cwd (the project root), substituted for
+   * `${CLAUDE_PROJECT_DIR}` in command content (SUB-02). Optional: user-scope
+   * and un-threaded callers omit it, leaving the token literal (pass-through).
+   * Unlike the MCP bridge's required `cwd`, this feeds substitution only.
+   */
+  readonly cwd?: string;
 }
 
 /** Per-command record returned for `state.json` population (W-05). */

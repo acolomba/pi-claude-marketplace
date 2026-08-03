@@ -1021,3 +1021,102 @@ test("CMD-01 frontmatter-only malformed command with no trailing newline neutral
     await scope.cleanup();
   }
 });
+
+// SUB-02 substitution ---------------------------------------------------
+
+// Builds a source plugin whose single command body carries all four
+// ${CLAUDE_*} tokens, proving scope-gated projectDir and the skill-scoped
+// ${CLAUDE_SKILL_DIR} pass-through (commands receive no skillDir).
+async function withFourTokenCommand<T>(fn: (ctx: { srcRoot: string }) => Promise<T>): Promise<T> {
+  const srcRoot = await mkdtemp(path.join(os.tmpdir(), "cmds-fourtoken-src-"));
+  try {
+    await mkdir(path.join(srcRoot, "commands"), { recursive: true });
+    await writeFile(
+      path.join(srcRoot, "commands", "vars.md"),
+      "Root: ${CLAUDE_PLUGIN_ROOT}\n" +
+        "Data: ${CLAUDE_PLUGIN_DATA}\n" +
+        "Skill: ${CLAUDE_SKILL_DIR}\n" +
+        "Project: ${CLAUDE_PROJECT_DIR}\n",
+    );
+    return await fn({ srcRoot });
+  } finally {
+    await rm(srcRoot, { recursive: true, force: true });
+  }
+}
+
+test("SUB-02 project-scope command substitutes ${CLAUDE_PROJECT_DIR} to cwd; keeps ${CLAUDE_SKILL_DIR} literal", async () => {
+  await withFourTokenCommand(async ({ srcRoot }) => {
+    const scope = await tmpScope();
+    try {
+      const pluginDataDir = "/tmp/pi-data/test-mp/acme";
+      const prepared = await prepareStageCommands({
+        locations: scope.loc,
+        marketplaceName: "test-mp",
+        pluginName: "acme",
+        pluginRoot: srcRoot,
+        pluginDataDir,
+        resolved: makeResolved(srcRoot, "commands"),
+        cwd: scope.loc.scopeRoot,
+      });
+      await commitPreparedCommands(prepared);
+
+      const staged = await readFile(path.join(scope.loc.promptsTargetDir, "acme:vars.md"), "utf8");
+      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
+      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
+      // SUB-02: projectDir resolves to the install cwd under project scope.
+      assert.ok(staged.includes(`Project: ${scope.loc.scopeRoot}`), "projectDir substituted");
+      // ${CLAUDE_SKILL_DIR} is skill-scoped; commands receive no skillDir.
+      assert.ok(
+        staged.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "skillDir stays literal in commands",
+      );
+    } finally {
+      await scope.cleanup();
+    }
+  });
+});
+
+test("SUB-02 user-scope command keeps ${CLAUDE_PROJECT_DIR} literal; other two substitute", async () => {
+  await withFourTokenCommand(async ({ srcRoot }) => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "cmds-user-scope-"));
+    const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = tmp;
+    try {
+      const locations = locationsFor("user", tmp);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const pluginDataDir = "/tmp/pi-data/test-mp/acme";
+      const prepared = await prepareStageCommands({
+        locations,
+        marketplaceName: "test-mp",
+        pluginName: "acme",
+        pluginRoot: srcRoot,
+        pluginDataDir,
+        resolved: makeResolved(srcRoot, "commands"),
+        // A user-scope caller may still supply cwd; the scope gate must ignore it.
+        cwd: tmp,
+      });
+      await commitPreparedCommands(prepared);
+
+      const staged = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
+      assert.ok(staged.includes(`Root: ${srcRoot}`), "pluginRoot substituted");
+      assert.ok(staged.includes(`Data: ${pluginDataDir}`), "pluginData substituted");
+      // SUB-02 divergence: user scope leaves the token literal.
+      assert.ok(
+        staged.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "projectDir stays literal under user scope",
+      );
+      assert.ok(
+        staged.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "skillDir stays literal in commands",
+      );
+    } finally {
+      if (prevAgentDir === undefined) {
+        delete process.env.PI_CODING_AGENT_DIR;
+      } else {
+        process.env.PI_CODING_AGENT_DIR = prevAgentDir;
+      }
+
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
