@@ -23,9 +23,9 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 | `CLAUDECODE`                           | ✓           | —      | —        | —      | E    | E     | —          | E‡      |
 | `CLAUDE_CODE_SESSION_ID`               | ✓           | —      | —        | —      | E    | E     | —          | E‡      |
 | `CLAUDE_ENV_FILE`                      | ✓           | —      | —        | —      | —    | E§    | —          | —       |
-| `PATH` (plugin `bin` append)           | ✓           | —      | —        | —      | E    | E     | —          | E       |
+| `PATH` (plugin `bin` append)           | ✓           | —      | —        | —      | E    | E     | —          | E‡      |
 | `CLAUDE_SESSION_ID` (pi-only)          | —           | —      | —        | —      | E    | E     | —          | E‡      |
-| `PI_CLAUDE_MARKETPLACE_PATH` (pi-only) | —           | —      | —        | —      | E    | E     | —          | E       |
+| `PI_CLAUDE_MARKETPLACE_PATH` (pi-only) | —           | —      | —        | —      | E    | E     | —          | E‡      |
 | `CLAUDE_CODE_REMOTE`                   | ✓           | —      | —        | —      | —    | ✗     | —          | —       |
 
 - **†** — project-scope installs only. User-scope `${CLAUDE_PROJECT_DIR}` stays literal and no env key is injected; Pi sets none in bash children as deliberate parity. See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through".
@@ -145,7 +145,7 @@ Both hook lanes spread `...process.env` before adding the parity keys. When Pi i
 Pi's MCP servers are spawned by pi-mcp-adapter 2.10.0. Its `server-manager.ts::resolveEnv` builds a stdio server's env as `{...process.env, ...interpolated(config.env)}` — the server inherits Pi's full live `process.env` (so the session vars set at `session_start` reach it), and declared config keys win over the inherited values. Interpolation (`${VAR}` / `$env:VAR`) applies to `env` values, `cwd`, `headers`, and `bearerToken`, with an unknown var resolving to the empty string — but **not** to `command` or `args`. This matches Claude Code, whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, and `CLAUDE_PROJECT_DIR`. Two consequences follow from inheritance-at-spawn:
 
 - **Spawn-order caveat.** A server spawned before the extension's session-start handler has run for that startup misses the session vars.
-- **Session-switch staleness.** A server that keeps running across a session switch retains its spawn-time env; the refreshed session id does not propagate to an already-running server.
+- **Session-switch staleness.** A server that keeps running across a session switch retains its spawn-time env; the refreshed session id does not propagate to an already-running server. This half is scoped to the session vars — `PATH` and `PI_CLAUDE_MARKETPLACE_PATH` do not change on a session switch, so only the spawn-order caveat applies to them.
 
 ### User-scope `${CLAUDE_PROJECT_DIR}` pass-through
 
