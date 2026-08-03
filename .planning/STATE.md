@@ -5,8 +5,8 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: Session environment initialization
 status: planning
-stopped_at: Completed 94-01-PLAN.md
-last_updated: "2026-08-03T21:23:05.926Z"
+stopped_at: Milestone v1.17 code+docs phases complete (91-94 sealed); Phase 90 live-Pi UAT is the only open item before lifecycle
+last_updated: "2026-08-03T21:24:52.829Z"
 last_activity: 2026-08-03
 last_activity_desc: Phase 94 complete, transitioned to Phase 90
 progress:
@@ -73,9 +73,9 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03T20:47:50.875Z
-**Stopped at:** Completed 94-01-PLAN.md
-**Resume file:** None
+**Last session:** 2026-08-03T21:24:52.792Z
+**Stopped at:** Milestone v1.17 code+docs phases complete (91-94 sealed); Phase 90 live-Pi UAT is the only open item before lifecycle
+**Resume file:** 
 
 Phases 91-93 sealed. Phase 93 plan 93-02 was recovered from the interrupted
 executor worktree (Tasks 1-2 committed there; Task 3 finished by continuation)
