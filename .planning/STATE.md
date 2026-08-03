@@ -73,11 +73,11 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03T18:19:53.679Z
-**Stopped at:** Phase 93 context gathered
-**Resume file:** .planning/phases/93-substitution-completion/93-CONTEXT.md
+**Last session:** 2026-08-03 (resumed)
+**Stopped at:** Session resumed; executing Phase 93 wave 2 (plan 93-02)
+**Resume file:** none (pause handoff consumed)
 
-No plans executed yet for v1.17. Next: `/gsd-plan-phase 90`.
+Phases 91-92 sealed; 93 wave 1 (93-01) merged. Next: execute plan 93-02.
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
