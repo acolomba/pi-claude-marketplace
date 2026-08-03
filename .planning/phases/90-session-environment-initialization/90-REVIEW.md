@@ -12,129 +12,86 @@ files_reviewed_list:
   - tests/shared/session-env.test.ts
 findings:
   critical: 0
-  warning: 2
+  warning: 0
   info: 1
-  total: 3
-status: issues_found
+  total: 1
+status: clean
 ---
 
 # Phase 90: Code Review Report
 
-**Reviewed:** 2026-08-03T00:00:00Z
+**Reviewed:** 2026-08-03T00:00:00Z (iteration 3, final)
 **Depth:** standard
 **Files Reviewed:** 6
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-Phase 90 wires Claude-Code session-env parity (`applySessionEnv`, SENV-01/02/03)
-and a plugin-PATH ledger (`applyPathLedger` / `recomputePluginPath`, PENV-01,
-D-90-01/03/04) into the extension entry point. The pure ledger core is clean:
-the append-never-prepend rule (T-90-01), the owned-entry removal via
-`PI_CLAUDE_MARKETPLACE_PATH`, and the dedupe/idempotency semantics are correct
-and well-covered by `tests/shared/plugin-path.test.ts` (including the
-reload-durable uninstall-cleanup and zero-fresh-dir cases). The NFR-2 swallow at
-the `recomputePluginPath` call site is present and correct.
+Iteration-3 (final) re-review after the fix loop closed. Both prior warnings are
+fixed AND now carry real, correct regression tests. All 21 tests across the three
+phase test files pass (0 fail).
 
-Two robustness/security gaps surfaced, both concerning inputs the ledger core
-trusts implicitly. Neither blocks ship, but one re-opens a data-flow the rest of
-the codebase deliberately closed with a branded type.
+- **WR-01 — FIXED (fix `822924cd`) + regression test landed (`876a0d8c`).**
+  `collectBinDirs` (plugin-path.ts:41-47) wraps `asAbsolutePluginRoot(rec.resolvedSource)`
+  in a per-record try/catch, dropping any record whose `resolvedSource` is empty,
+  relative, or null-byte-bearing before it can compose a CWE-426 untrusted-search-path
+  entry. The catch is scoped per-record, so one corrupt entry drops only itself while
+  siblings still contribute. The new test
+  `WR-01 collectBinDirs: drops records with a non-absolute or empty resolvedSource`
+  (plugin-path.test.ts:89-103) seeds an absolute-good, a relative (`plugins/relative`),
+  and an empty record, and asserts `collectBinDirs` returns only `/plugins/good/bin`.
+  This drives the exact catch branch the fix added — a later edit removing the
+  `asAbsolutePluginRoot` call would now turn the suite red. Verified against
+  `domain/plugin-root.ts`: the brand rejects empty/relative/null-byte and passes
+  absolute paths, matching the test's expectations.
 
-## Warnings
+- **WR-02 — FIXED (fix `050835f8`) + regression test landed (`e9bd4a96`).** The
+  `session_start` handler (index.ts:128-134) wraps
+  `applySessionEnv(ctx.sessionManager.getSessionId())` in try/catch, routing a throwing
+  `getSessionId()` or an undefined `ctx.sessionManager` through `hookDebugLog` so it
+  cannot propagate past `session_start` (NFR-2). The new test
+  `WR-02 session_start swallows a throwing or undefined sessionManager`
+  (index-smoke.test.ts:175-203) resolves the SENV handler positionally as
+  `sessionStart[1]`, guarded by an explicit `assert.equal(sessionStart.length, 3)` and
+  a comment documenting the fixed registration order, then asserts `doesNotThrow` for
+  both the throwing-`getSessionId` case and the empty-`ctx` (undefined `sessionManager`)
+  case. This drives the exact catch branch the fix added.
 
-### WR-01: `collectBinDirs` threads unvalidated `resolvedSource` into `process.env.PATH` (relative-PATH / untrusted-search-path risk)
+Verification performed this iteration:
+- Traced `session_start` registration order in `index.ts` to confirm the test targets
+  the right handler: `registerHooksBridge` is `await`ed first (Bucket-A dispatch =
+  index 0) → the SENV `pi.on("session_start")` at line 128 (index 1) →
+  `registerClaudePluginCommand` autocomplete wrapper (index 2). `sessionStart[1]`
+  reliably resolves the SENV handler; the `length === 3` assertion fails loudly if the
+  order ever shifts.
+- Ran `node --test` over all three files: 21 pass, 0 fail.
+- Confirmed via file history that only the four described fix/test commits touched these
+  paths this phase; no unrelated changes slipped in.
+- Test/describe titles use only permitted anchors (`WR-01`, `WR-02`, `SENV-*`,
+  `PENV-01`, `D-90-*`, `PATH_LEDGER_ENV`); no forbidden phase/plan references
+  (`.claude/rules/typescript-comments.md`).
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin-path.ts:30`
-**Issue:**
-`collectBinDirs` composes `path.join(rec.resolvedSource, "bin")` directly from
-the raw state.json value. On state.json, `resolvedSource` is only
-`Type.String()` (see `persistence/state-io.ts:56`) — the schema does not
-constrain it to be absolute, non-empty, or traversal-free. `loadState` never
-brand-validates it. So an enabled record whose `resolvedSource` is `""` yields
-`path.join("", "bin") === "bin"` — a **relative** PATH entry (CWE-426 untrusted
-search path), resolved against each child process's cwd. A relative or
-`..`-bearing `resolvedSource` flows the same way into `process.env.PATH`, which
-every bash child spawned through Pi inherits.
-
-This is exactly the data-flow the codebase already hardened elsewhere: the hooks
-hydrate boundary (`bridges/hooks/event-router.ts:648-655`) wraps the identical
-field in `asAbsolutePluginRoot(...)` and *drops* the record on failure,
-with the explicit rationale "so a corrupted record (empty / relative /
-traversal) is dropped here instead of silently flowing to `CLAUDE_PLUGIN_ROOT`
-on dispatch." `domain/plugin-root.ts` states this invariant must hold "at the
-state-IO load boundary and at every cache-mutator entrypoint." The new PATH
-consumer is a new subprocess-env boundary that bypasses that guard. Under normal
-installs `resolvedSource` is always an absolute `pluginRoot`, so the realistic
-trigger is a corrupted/hand-edited state.json — hence WARNING, not BLOCKER — but
-the guard is cheap and the precedent is established.
-
-**Fix:** Mirror the hydrate-path guard — skip records whose `resolvedSource`
-fails absolute-path validation instead of appending a relative/garbage entry:
-
-```ts
-import { asAbsolutePluginRoot } from "../domain/plugin-root.ts";
-
-export function collectBinDirs(state: ExtensionState): string[] {
-  const dirs: string[] = [];
-  for (const mp of Object.values(state.marketplaces)) {
-    for (const rec of Object.values(mp.plugins)) {
-      if (!rec.enabled) continue;
-      try {
-        const root = asAbsolutePluginRoot(rec.resolvedSource);
-        dirs.push(path.join(root, "bin"));
-      } catch {
-        // Corrupted record (empty/relative/traversal): never let it reach PATH.
-      }
-    }
-  }
-  return dirs;
-}
-```
-
-### WR-02: `session_start` handler is unguarded; the "cannot throw" justification omits the `getSessionId()` call
-
-**File:** `extensions/pi-claude-marketplace/index.ts:119-127`
-**Issue:**
-The comment justifies the absence of a try/catch with "Three unconditional
-string assignments cannot throw." That reasoning covers `applySessionEnv`'s body
-but not the argument expression `ctx.sessionManager.getSessionId()`, which is
-evaluated first and *can* throw (or `ctx.sessionManager` could be undefined). A
-throw there propagates out of the `session_start` event handler — inconsistent
-with the meticulously NFR-2-guarded `resources_discover` handler a few lines
-above, which wraps even "defensive, already-swallowed" calls. If Pi's contract
-guarantees `ctx.sessionManager` is always present and `getSessionId()` is
-infallible, the risk is low; but the stated justification is incomplete and the
-hardening posture is asymmetric with the rest of the entry point.
-
-**Fix:** Either wrap the handler to preserve the file's NFR-2 boundary
-discipline, or correct the comment to state the real invariant being relied on
-(that `ctx.sessionManager.getSessionId()` is contract-guaranteed non-throwing):
-
-```ts
-pi.on("session_start", (_event, ctx) => {
-  try {
-    applySessionEnv(ctx.sessionManager.getSessionId());
-  } catch (err) {
-    hookDebugLog(`session env apply skipped: ${errorMessage(err)}`);
-  }
-});
-```
+The pure primitives remain correct: `applyPathLedger` appends (never prepends), removes
+owned entries by exact match before re-append, and dedupes against the surviving base;
+`applySessionEnv` assigns exactly three keys with no collateral env mutation (proven by
+the before/after delta test). No bugs, security gaps, or quality defects above Info
+remain. Per the fix-loop exit criterion (nothing above Info remaining), status is clean.
 
 ## Info
 
-### IN-01: `collectBinDirs` keys on `enabled` only, admitting non-installable records
+### IN-01: collectBinDirs admits enabled partial records (intentional per PENV-01)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin-path.ts:25-36`
-**Issue:**
-`collectBinDirs` filters on `rec.enabled` but not `rec.compatibility.installable`.
-A `--partial` install persists `installable: false` while remaining enabled with
-a valid absolute `pluginRoot` (see `orchestrators/plugin/install.ts:1125` and the
-INV-1/BFILL-01 comment), so its `<root>/bin` will be added to PATH. This matches
-the PENV-01 wording ("every enabled plugin record") and is likely intended, so
-no change is required — flagging only so the enabled-vs-installable distinction
-is a conscious decision rather than an oversight. If the intent is
-installable-only, add `&& rec.compatibility.installable` to the guard.
-**Fix:** Confirm intent; no code change needed if "enabled" is the correct key.
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin-path.ts:33-51`
+**Issue:** Carried forward unchanged. `collectBinDirs` gates only on `rec.enabled` plus
+the absolute-path brand; it does not check `rec.compatibility.installable`. An
+enabled-but-non-installable record (e.g. a `--partial` install) with a valid absolute
+`resolvedSource` still contributes a `<root>/bin` PATH entry, and no on-disk existence
+check is performed (Claude-Code parity: append with no fs stat). This is intentional per
+PENV-01 ("every enabled plugin record"), so it is recorded as Info, not escalated.
+**Fix:** None required. Behavior is contract-mandated (PENV-01) and covered by
+`applyPathLedger: adds a bin dir even when it does not exist on disk`. If intent were
+installable-only, add `&& rec.compatibility.installable` to the guard — but that is a
+scope change, not a defect.
 
 ---
 
