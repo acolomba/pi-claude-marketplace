@@ -106,9 +106,9 @@
   2. A hook spawned on the async-rewake lane (`prepareAsyncEnv`) receives an identical env set to the sync lane — same keys, same values. (HENV-02)
   3. A drift-guard test fails if the two lanes' env sets ever diverge, so the deliberate hand-mirror cannot silently rot. (HENV-02)
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
-- [ ] 91-01-PLAN.md — add `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` (from `transCtx.sessionId`, after the spread) to both hook env lanes (`prepareEnv` + `prepareAsyncEnv`), with lane-local assertions and the HENV-02 behavioral drift guard (PreToolUse + SessionStart fixtures). Wave 1, autonomous.
+- [x] 91-01-PLAN.md — add `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` (from `transCtx.sessionId`, after the spread) to both hook env lanes (`prepareEnv` + `prepareAsyncEnv`), with lane-local assertions and the HENV-02 behavioral drift guard (PreToolUse + SessionStart fixtures). Wave 1, autonomous.
 
 ### Phase 92: MCP staging parity
 
@@ -160,7 +160,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 90. Session environment initialization | v1.17 | 1/1 | In Progress|  |
-| 91. Hook environment parity | v1.17 | 0/? | Not started | - |
+| 91. Hook environment parity | v1.17 | 1/1 | In Progress|  |
 | 92. MCP staging parity | v1.17 | 0/? | Not started | - |
 | 93. Substitution completion | v1.17 | 0/? | Not started | - |
 | 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |

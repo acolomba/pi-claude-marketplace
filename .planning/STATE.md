@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
-current_phase: 90
-current_phase_name: Session environment initialization
+current_phase: 91
+current_phase_name: Hook environment parity
 status: executing
 stopped_at: Phase 91 context gathered
-last_updated: "2026-08-03T15:01:47.641Z"
+last_updated: "2026-08-03T15:02:08.423Z"
 last_activity: 2026-08-03
-last_activity_desc: Phase 90 execution started
+last_activity_desc: Phase 91 execution started
 progress:
   total_phases: 5
   completed_phases: 1
@@ -21,10 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 90 (Session environment initialization) — EXECUTING
+Phase: 91 (Hook environment parity) — EXECUTING
 Plan: 1 of 1
-Status: Ready to execute
-Last activity: 2026-08-03 — Phase 90 execution started
+Status: Executing Phase 91
+Last activity: 2026-08-03 — Phase 91 execution started
 env-parity planning docs per validation findings
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
