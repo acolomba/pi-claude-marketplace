@@ -26,10 +26,10 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 ### MCP Environment Parity
 
-- [ ] **MENV-01**: A plugin MCP server whose `command`/`args`/`env` values contain a stage-time substitution variable is written to `mcp.json` with real install paths substituted. The substitution set is `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and — project-scope installs only — `${CLAUDE_PROJECT_DIR}`; user-scope `${CLAUDE_PROJECT_DIR}` is a documented absence (unknowable at install time). Rationale: Claude Code substitutes all three (plus `${user_config.*}` and generic `${ENV_VAR}`) at config load; pi-mcp-adapter does NOT interpolate `command`/`args` at all, and interpolates env values against `process.env` replacing unknown `${VAR}` with the empty string — stage-time substitution is therefore the only delivery path for `command`/`args` and the only correct one for per-plugin values in `env`.
-- [ ] **MENV-02**: Every installed plugin MCP server's `env` map carries `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`; plugin-declared env keys take precedence over injected defaults (Claude Code's spread order)
-- [ ] **MENV-03**: Project-scope installs additionally inject `CLAUDE_PROJECT_DIR` into each server's `env`; user-scope absence is documented. Ground truth: upstream injects `CLAUDE_PROJECT_DIR` into ALL MCP stdio spawns (any scope, value resolved at spawn); Pi's project-scope-only bake is the correct install-time approximation, and user-scope absence stays documented.
-- [ ] **MENV-04**: `update`/`reinstall` re-derive substituted paths and injected env — a plugin-root change (e.g. new sha-addressed clone dir) never leaves stale paths in `mcp.json`
+- [x] **MENV-01**: A plugin MCP server whose `command`/`args`/`env` values contain a stage-time substitution variable is written to `mcp.json` with real install paths substituted. The substitution set is `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and — project-scope installs only — `${CLAUDE_PROJECT_DIR}`; user-scope `${CLAUDE_PROJECT_DIR}` is a documented absence (unknowable at install time). Rationale: Claude Code substitutes all three (plus `${user_config.*}` and generic `${ENV_VAR}`) at config load; pi-mcp-adapter does NOT interpolate `command`/`args` at all, and interpolates env values against `process.env` replacing unknown `${VAR}` with the empty string — stage-time substitution is therefore the only delivery path for `command`/`args` and the only correct one for per-plugin values in `env`.
+- [x] **MENV-02**: Every installed plugin MCP server's `env` map carries `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`; plugin-declared env keys take precedence over injected defaults (Claude Code's spread order)
+- [x] **MENV-03**: Project-scope installs additionally inject `CLAUDE_PROJECT_DIR` into each server's `env`; user-scope absence is documented. Ground truth: upstream injects `CLAUDE_PROJECT_DIR` into ALL MCP stdio spawns (any scope, value resolved at spawn); Pi's project-scope-only bake is the correct install-time approximation, and user-scope absence stays documented.
+- [x] **MENV-04**: `update`/`reinstall` re-derive substituted paths and injected env — a plugin-root change (e.g. new sha-addressed clone dir) never leaves stale paths in `mcp.json`
 
 ### Substitution Completion
 
@@ -80,10 +80,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PENV-01 | Phase 90 | Pending |
 | HENV-01 | Phase 91 | Complete |
 | HENV-02 | Phase 91 | Complete |
-| MENV-01 | Phase 92 | Pending |
-| MENV-02 | Phase 92 | Pending |
-| MENV-03 | Phase 92 | Pending |
-| MENV-04 | Phase 92 | Pending |
+| MENV-01 | Phase 92 | Complete |
+| MENV-02 | Phase 92 | Complete |
+| MENV-03 | Phase 92 | Complete |
+| MENV-04 | Phase 92 | Complete |
 | SUB-01 | Phase 93 | Pending |
 | SUB-02 | Phase 93 | Pending |
 | DOC-06 | Phase 94 | Pending |
