@@ -38,6 +38,32 @@ async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * User-scope fixture. `locationsFor("user", …)` resolves scopeRoot to
+ * `getAgentDir()`, which honors PI_CODING_AGENT_DIR -- so point it at a tmp
+ * dir for the duration of the test to keep the user-scope mcp.json hermetic
+ * (never touch the real agent dir). The env var must stay set through the
+ * prepare call too, since the collision-slot walk re-reads getAgentDir().
+ */
+async function withTmpUserScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "mcp-stage-cwd-"));
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "mcp-stage-agent-"));
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  try {
+    const locations = locationsFor("user", cwd);
+    return await fn({ cwd, locations });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
+    await rm(cwd, { recursive: true, force: true });
+    await rm(agentDir, { recursive: true, force: true });
+  }
+}
+
 const MP = "official";
 const PLUGIN = "acme";
 const PLUGIN_ROOT = "/plugins/acme";
@@ -733,6 +759,92 @@ test("D-92-02 url-type entry keeps declared env untouched and gains no env; stri
     const urlWithEnv = servers.urlWithEnv!;
     assert.equal(urlWithEnv.url, "https://y");
     assert.deepEqual(urlWithEnv.env, { TOKEN: "abc" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MENV-03 -- project vs user CLAUDE_PROJECT_DIR scope arms
+// ---------------------------------------------------------------------------
+
+const PROJECT_DIR_SRV = { srv: { command: "${CLAUDE_PROJECT_DIR}/run" } };
+
+test("MENV-03 project scope substitutes and injects CLAUDE_PROJECT_DIR=cwd", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: PROJECT_DIR_SRV,
+    });
+    await commitPreparedMcp(prepared);
+
+    const srv = (await readCommittedServers(locations.mcpJsonPath)).srv!;
+    // Project root == cwd, NOT scopeRoot (<cwd>/.pi).
+    assert.equal(srv.command, `${cwd}/run`);
+    assert.equal(srv.env?.CLAUDE_PROJECT_DIR, cwd);
+    // Injected order: CLAUDE_PROJECT_DIR trails the two plugin keys.
+    assert.deepEqual(Object.keys(srv.env!).slice(0, 3), [
+      "CLAUDE_PLUGIN_ROOT",
+      "CLAUDE_PLUGIN_DATA",
+      "CLAUDE_PROJECT_DIR",
+    ]);
+  });
+});
+
+test("MENV-03 user scope omits CLAUDE_PROJECT_DIR (token passes through, no env key)", async () => {
+  // Cross-check reference: stage the SAME source under project scope in its
+  // own isolated scope (distinct cwd/agent dir) so the two stages never share
+  // a collision slot. Captured before the user stage runs.
+  const projSrv = await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: PROJECT_DIR_SRV,
+    });
+    await commitPreparedMcp(prepared);
+    return (await readCommittedServers(locations.mcpJsonPath)).srv!;
+  });
+
+  await withTmpUserScope(async ({ cwd, locations }) => {
+    assert.equal(locations.scope, "user");
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: PROJECT_DIR_SRV,
+    });
+    await commitPreparedMcp(prepared);
+
+    const userSrv = (await readCommittedServers(locations.mcpJsonPath)).srv!;
+    // Documented user-scope absence: the token is left untouched...
+    assert.equal(userSrv.command, "${CLAUDE_PROJECT_DIR}/run");
+    // ...and no CLAUDE_PROJECT_DIR key is injected, while the plugin keys remain.
+    assert.equal("CLAUDE_PROJECT_DIR" in userSrv.env!, false);
+    assert.equal(userSrv.env?.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
+    assert.equal(userSrv.env?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+
+    // The ONLY divergence from the project-scope stage of the same source is
+    // the ${CLAUDE_PROJECT_DIR} treatment (command literal + env key).
+    assert.notEqual(projSrv.command, userSrv.command);
+    assert.equal("CLAUDE_PROJECT_DIR" in projSrv.env!, true);
+    // Everything else (marker, plugin env keys) matches.
+    assert.deepEqual(
+      projSrv[CLAUDE_MARKETPLACE_MARKER_KEY],
+      userSrv[CLAUDE_MARKETPLACE_MARKER_KEY],
+    );
+    assert.equal(projSrv.env?.CLAUDE_PLUGIN_ROOT, userSrv.env?.CLAUDE_PLUGIN_ROOT);
+    assert.equal(projSrv.env?.CLAUDE_PLUGIN_DATA, userSrv.env?.CLAUDE_PLUGIN_DATA);
   });
 });
 
