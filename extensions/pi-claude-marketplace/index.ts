@@ -119,11 +119,18 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // SENV-01/02/03: reset the Claude-Code session env on every session_start
   // (startup/reload/new/resume/fork). Overwrite is unconditional -- that IS the
   // SENV-02 freshness contract -- so re-registration is harmless (idempotent).
-  // Three unconditional string assignments cannot throw, so no try/catch is
-  // needed. The session id lives on `ctx.sessionManager` (D-90-03 keeps this
-  // concern separate from the resources_discover PATH recompute).
+  // The session id lives on `ctx.sessionManager` (D-90-03 keeps this concern
+  // separate from the resources_discover PATH recompute). WR-02: `applySessionEnv`'s
+  // three string assignments cannot throw, but the argument expression
+  // `ctx.sessionManager.getSessionId()` is evaluated first and could throw (or
+  // `ctx.sessionManager` be undefined); wrap so a throw never propagates past
+  // session_start, matching the NFR-2 boundary discipline of the handlers above.
   pi.on("session_start", (_event, ctx) => {
-    applySessionEnv(ctx.sessionManager.getSessionId());
+    try {
+      applySessionEnv(ctx.sessionManager.getSessionId());
+    } catch (err) {
+      hookDebugLog(`session env apply skipped: ${errorMessage(err)}`);
+    }
   });
 
   registerClaudePluginCommand(pi, {
