@@ -30,7 +30,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 
 - **†** — project-scope installs only. User-scope `${CLAUDE_PROJECT_DIR}` stays literal and no env key is injected; Pi sets none in bash children as deliberate parity. See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through".
 - **‡** — reaches MCP servers only through Pi's live `process.env` at spawn time, subject to the spawn-order and session-switch caveats. See "MCP runtime env inheritance".
-- **§** — SessionStart hook lane only.
+- **§** — exposed on the SessionStart hook event only, and Pi does not source the file back. See "`CLAUDE_ENV_FILE` is exposed but not sourced".
 
 ## Per-surface delivery
 
@@ -84,18 +84,18 @@ Agent content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
 
 Both hook spawn lanes build the child env identically by construction (they share the `claudeSessionEnvFor` producer, pinned by a drift guard). Each spreads `...process.env` first, then adds the keys below so the authoritative per-dispatch snapshot wins.
 
-| Variable                               | Claude Code | Pi  | Notes                                                                                                                   |
-| -------------------------------------- | ----------- | --- | ----------------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE_PROJECT_DIR`                   | ✓           | ✓   | Set to the dispatch cwd on both lanes (HENV-01/02).                                                                     |
-| `CLAUDE_PLUGIN_ROOT`                   | ✓           | ✓   | The plugin's install source; containment-guarded (NFR-10).                                                              |
-| `CLAUDE_PLUGIN_DATA`                   | ✓           | ✓   | Per-plugin data dir; containment-guarded (NFR-10).                                                                      |
-| `CLAUDECODE`                           | ✓           | ✓   | From the shared session-env producer (HENV-01).                                                                         |
-| `CLAUDE_CODE_SESSION_ID`               | ✓           | ✓   | Same producer, both lanes.                                                                                              |
-| `CLAUDE_SESSION_ID` (pi-only)          | —           | ✓   | Pi-only alias; present on both hook lanes. See "Pi-only `CLAUDE_SESSION_ID` alias".                                     |
-| `PATH` (plugin `bin` append)           | ✓           | ✓   | Inherited via the `...process.env` spread; the appended plugin `bin` dirs are documented under "Bash children".         |
-| `PI_CLAUDE_MARKETPLACE_PATH` (pi-only) | —           | ✓   | Inherited via the `...process.env` spread; pi-only PATH ledger. See "Pi-only `PI_CLAUDE_MARKETPLACE_PATH` PATH ledger". |
-| `CLAUDE_ENV_FILE`                      | ✓           | ⚠   | SessionStart hook lane only; path under `<dataRoot>/_shared/`, containment-guarded (D-60-06).                           |
-| `CLAUDE_CODE_REMOTE`                   | ✓           | ✗   | Intentionally unset — Pi runs locally (documented absence).                                                             |
+| Variable                               | Claude Code | Pi  | Notes                                                                                                                                                                                                                 |
+| -------------------------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE_PROJECT_DIR`                   | ✓           | ✓   | Set to the dispatch cwd on both lanes (HENV-01/02).                                                                                                                                                                   |
+| `CLAUDE_PLUGIN_ROOT`                   | ✓           | ✓   | The plugin's install source; containment-guarded (NFR-10).                                                                                                                                                            |
+| `CLAUDE_PLUGIN_DATA`                   | ✓           | ✓   | Per-plugin data dir; containment-guarded (NFR-10).                                                                                                                                                                    |
+| `CLAUDECODE`                           | ✓           | ✓   | From the shared session-env producer (HENV-01).                                                                                                                                                                       |
+| `CLAUDE_CODE_SESSION_ID`               | ✓           | ✓   | Same producer, both lanes.                                                                                                                                                                                            |
+| `CLAUDE_SESSION_ID` (pi-only)          | —           | ✓   | Pi-only alias; present on both hook lanes. See "Pi-only `CLAUDE_SESSION_ID` alias".                                                                                                                                   |
+| `PATH` (plugin `bin` append)           | ✓           | ✓   | Inherited via the `...process.env` spread; the appended plugin `bin` dirs are documented under "Bash children".                                                                                                       |
+| `PI_CLAUDE_MARKETPLACE_PATH` (pi-only) | —           | ✓   | Inherited via the `...process.env` spread; pi-only PATH ledger. See "Pi-only `PI_CLAUDE_MARKETPLACE_PATH` PATH ledger".                                                                                               |
+| `CLAUDE_ENV_FILE`                      | ✓           | ⚠   | Path exposed on the SessionStart hook event only (both spawn lanes; under `<dataRoot>/_shared/`, containment-guarded, D-60-06). Pi does not source the file back. See "`CLAUDE_ENV_FILE` is exposed but not sourced". |
+| `CLAUDE_CODE_REMOTE`                   | ✓           | ✗   | Intentionally unset — Pi runs locally (documented absence).                                                                                                                                                           |
 
 Inherited parent `CLAUDE_CODE_*` / `ANTHROPIC_*` vars also ride the `...process.env` spread; see "Inherited `CLAUDE_CODE_*` / `ANTHROPIC_*` vars are not scrubbed".
 
@@ -139,6 +139,10 @@ Both hook lanes spread `...process.env` before adding the parity keys. When Pi i
 ### Pi-only `CLAUDE_SESSION_ID` alias
 
 `CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists.
+
+### `CLAUDE_ENV_FILE` is exposed but not sourced
+
+Claude Code's `CLAUDE_ENV_FILE` is a round-trip contract: a SessionStart hook writes `KEY=VALUE` lines to the file at `$CLAUDE_ENV_FILE`, and the host then sources that file so subsequent bash commands and the session inherit those vars. Pi implements only the exposure half. Both hook spawn lanes set `CLAUDE_ENV_FILE` on the SessionStart event (`prepareEnv` in `bridges/hooks/dispatch-exec.ts`, `prepareAsyncEnv` in `bridges/hooks/async-rewake/registry.ts`; path under `<dataRoot>/_shared/`, containment-guarded, D-60-06), and the `_shared/` dir is pre-created so a hook can write to it. But nothing in the extension reads, parses, or sources that file back: Pi's bash tool's only `PATH`-related mutation is prepending its managed bin dir (see "Bash children"), and no `session_start` step loads the file. A variable a SessionStart hook writes to `$CLAUDE_ENV_FILE` is therefore inert under Pi — it never reaches the session or later bash children. The path is exposed for a hook that reads it directly; the write-back-and-source side is not wired.
 
 ### MCP runtime env inheritance
 
