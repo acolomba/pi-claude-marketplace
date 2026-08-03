@@ -66,3 +66,62 @@ test("substituteClaudeVars replaces both placeholders in same body", () => {
   });
   assert.equal(out, "/r/skills/x referencing /d/cache");
 });
+
+// SUB-01 / SUB-02 / T-03-01 -- extended four-variable substitution contract.
+
+test("SUB-01/SUB-02 substituteClaudeVars replaces all four tokens when all values present", () => {
+  const body =
+    "R=${CLAUDE_PLUGIN_ROOT} D=${CLAUDE_PLUGIN_DATA} " +
+    "S=${CLAUDE_SKILL_DIR} P=${CLAUDE_PROJECT_DIR}";
+  const out = substituteClaudeVars(body, {
+    pluginRoot: "/r",
+    pluginData: "/d",
+    skillDir: "/s",
+    projectDir: "/p",
+  });
+  assert.equal(out, "R=/r D=/d S=/s P=/p");
+});
+
+test("SUB-01 absent skillDir leaves ${CLAUDE_SKILL_DIR} literal (never empty string)", () => {
+  const body = "before ${CLAUDE_SKILL_DIR} after";
+  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
+  assert.ok(out.includes("${CLAUDE_SKILL_DIR}"), "token stays literal");
+  assert.equal(out, "before ${CLAUDE_SKILL_DIR} after");
+});
+
+test("SUB-02 absent projectDir leaves ${CLAUDE_PROJECT_DIR} literal (never empty string)", () => {
+  const body = "before ${CLAUDE_PROJECT_DIR} after";
+  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
+  assert.ok(out.includes("${CLAUDE_PROJECT_DIR}"), "token stays literal");
+  assert.equal(out, "before ${CLAUDE_PROJECT_DIR} after");
+});
+
+test("substituteClaudeVars leaves an unknown ${CLAUDE_*} token unchanged", () => {
+  const body = "x ${CLAUDE_SOMETHING_ELSE} y";
+  const out = substituteClaudeVars(body, {
+    pluginRoot: "/r",
+    pluginData: "/d",
+    skillDir: "/s",
+    projectDir: "/p",
+  });
+  assert.equal(out, "x ${CLAUDE_SOMETHING_ELSE} y");
+});
+
+test("T-03-01 single-pass: a skillDir value embedding ${CLAUDE_PLUGIN_DATA} is not re-expanded", () => {
+  const body = "S=${CLAUDE_SKILL_DIR} D=${CLAUDE_PLUGIN_DATA}";
+  const out = substituteClaudeVars(body, {
+    pluginRoot: "/r",
+    pluginData: "/data",
+    skillDir: "/prefix/${CLAUDE_PLUGIN_DATA}/suffix",
+    projectDir: "/p",
+  });
+  // The embedded ${CLAUDE_PLUGIN_DATA} inside the skillDir value survives
+  // verbatim; only the standalone token is substituted.
+  assert.equal(out, "S=/prefix/${CLAUDE_PLUGIN_DATA}/suffix D=/data");
+});
+
+test("byte-identity: content using only the two plugin vars matches the pre-existing output", () => {
+  const body = "${CLAUDE_PLUGIN_ROOT}/skills/x referencing ${CLAUDE_PLUGIN_DATA}/cache";
+  const out = substituteClaudeVars(body, { pluginRoot: "/r", pluginData: "/d" });
+  assert.equal(out, "/r/skills/x referencing /d/cache");
+});
