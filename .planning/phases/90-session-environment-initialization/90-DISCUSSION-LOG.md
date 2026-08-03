@@ -20,6 +20,8 @@
 **User's choice:** Module-level baseline
 **Notes:** Follow-up contingency question — if research falsifies module-state survival across `/reload`: user chose **"Stop and ask me"** (blocker, not silent fallback to the env ledger, not accept-the-gap). Recorded as D-90-02.
 
+**Post-research re-decision (2026-08-03):** Research falsified module-state survival (`clearExtensionCache()` + jiti `moduleCache: false` re-evaluates modules fresh on /reload). Per the contingency the orchestrator stopped and re-asked with three options: Env-var ledger (recommended) / Disk ledger (pid-guarded) / Keep baseline + accept gap. **User selected: Env-var ledger.** D-90-01 revised accordingly in CONTEXT.md.
+
 ---
 
 ## PATH recompute trigger + scopes
