@@ -40,7 +40,11 @@ created: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | SUB-01, SUB-02 | — | absent field never substitutes empty string; unknown tokens pass through | unit | `node --test <targeted files>` | ✅ (existing files extended) | ⬜ pending |
+| 01-T1 | 93-01 | 1 | SUB-01, SUB-02 | T-93-01, T-93-02 | single-pass no re-expansion; absent field → literal pass-through; scope-gated projectDir | unit (end-to-end bridge) | `node --test tests/bridges/skills/stage.test.ts` | ✅ existing extended | ⬜ pending |
+| 01-T2 | 93-01 | 1 | SUB-01, SUB-02 | T-93-01, T-93-02 | prohibitions: no empty-string sub, no re-expansion, unknown-token pass-through | unit | `node --test tests/shared/vars.test.ts` | ✅ existing extended | ⬜ pending |
+| 02-T1 | 93-02 | 2 | SUB-02 | T-93-04 | commands: scope-gated projectDir; ${CLAUDE_SKILL_DIR} stays literal | unit | `node --test tests/bridges/commands/stage.test.ts` | ✅ existing extended | ⬜ pending |
+| 02-T2 | 93-02 | 2 | SUB-02 | T-93-04 | agents: scope-gated projectDir via convertAgent; ${CLAUDE_SKILL_DIR} stays literal | unit | `node --test tests/bridges/agents/convert.test.ts` | ✅ existing extended | ⬜ pending |
+| 02-T3 | 93-02 | 2 | SUB-02 | T-93-05 | orchestrator cwd threading delivers projectDir end-to-end (project scope) | integration | `node --test tests/orchestrators/plugin/install.test.ts` then `npm run check` | ✅ existing extended | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
