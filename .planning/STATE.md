@@ -5,8 +5,8 @@ milestone_name: env-parity
 current_phase: 92
 current_phase_name: MCP staging parity
 status: planning
-stopped_at: Phase 91 context gathered
-last_updated: "2026-08-03T15:58:05.732Z"
+stopped_at: Phase 92 context gathered
+last_updated: "2026-08-03T16:06:38.206Z"
 last_activity: 2026-08-03
 last_activity_desc: Phase 91 complete, transitioned to Phase 92
 progress:
@@ -73,9 +73,9 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03T14:43:17.980Z
-**Stopped at:** Phase 91 context gathered
-**Resume file:** .planning/phases/91-hook-environment-parity/91-CONTEXT.md
+**Last session:** 2026-08-03T16:06:38.172Z
+**Stopped at:** Phase 92 context gathered
+**Resume file:** .planning/phases/92-mcp-staging-parity/92-CONTEXT.md
 
 No plans executed yet for v1.17. Next: `/gsd-plan-phase 90`.
 
