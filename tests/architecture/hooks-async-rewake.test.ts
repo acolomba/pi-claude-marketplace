@@ -433,6 +433,11 @@ describe("spawn-and-register", () => {
       const env = spy.calls[0]?.options.env ?? {};
       assert.equal(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
       assert.equal(env[MARKER_ENV], "fixed-uuid-marker");
+      // HENV-02: async lane mirrors dispatch-exec.ts::prepareEnv session env;
+      // CLAUDE_SESSION_ID is the pi-only alias (D-91-02), all from sessionId.
+      assert.equal(env.CLAUDECODE, "1");
+      assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-rewake");
+      assert.equal(env.CLAUDE_SESSION_ID, "session-rewake");
     } finally {
       await tmp.cleanup();
     }
