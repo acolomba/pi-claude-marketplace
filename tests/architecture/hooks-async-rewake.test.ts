@@ -433,6 +433,11 @@ describe("spawn-and-register", () => {
       const env = spy.calls[0]?.options.env ?? {};
       assert.equal(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
       assert.equal(env[MARKER_ENV], "fixed-uuid-marker");
+      // HENV-02: async lane mirrors dispatch-exec.ts::prepareEnv session env;
+      // CLAUDE_SESSION_ID is the pi-only alias (D-91-02), all from sessionId.
+      assert.equal(env.CLAUDECODE, "1");
+      assert.equal(env.CLAUDE_CODE_SESSION_ID, "session-rewake");
+      assert.equal(env.CLAUDE_SESSION_ID, "session-rewake");
     } finally {
       await tmp.cleanup();
     }
@@ -1364,6 +1369,83 @@ describe("rewakeSummary IL-2 exemption", () => {
       spy.children[0]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
       assert.equal(ctx.notifyCalls.length, 0);
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// describe: hook env parity (HENV-02)
+// ──────────────────────────────────────────────────────────────────────────
+
+describe("hook env parity (HENV-02)", () => {
+  // D-91-01 behavioral drift guard: drive both public entry points through the
+  // dual spawn spy and compare the captured child envs. The async lane's ONLY
+  // permitted extra key is MARKER_ENV; every shared key must carry an equal
+  // value. Comparison is by key SET (symmetric difference) + per-key equality,
+  // so it is order-independent and survives refactors -- no source-text lock.
+  function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
+    const syncKeys = new Set(Object.keys(syncEnv));
+    const asyncKeys = new Set(Object.keys(asyncEnv));
+    const onlyAsync = [...asyncKeys].filter((k) => !syncKeys.has(k));
+    const onlySync = [...syncKeys].filter((k) => !asyncKeys.has(k));
+    assert.deepEqual(onlyAsync, [MARKER_ENV], "MARKER_ENV is the sole async-only key");
+    assert.deepEqual(onlySync, [], "sync must not carry keys the async lane lacks");
+    for (const k of syncKeys) {
+      assert.equal(asyncEnv[k], syncEnv[k], `shared key ${k} must match across lanes`);
+    }
+  }
+
+  // Settle the sync EXEC collector (it uses `close`, not `exit`); harmless on
+  // the fire-and-forget async child. Fires on every spawn under wireBoth.
+  const settleSyncChild = (h: MockChild): void => {
+    h.child.stdout?.emit("end");
+    h.child.stderr?.emit("end");
+    (h.child as unknown as EventEmitter).emit("close", 0);
+  };
+
+  test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (PreToolUse, CLAUDE_ENV_FILE absent)", async () => {
+    const tmp = await makeTempLocations();
+    try {
+      const spy = installSpawnSpy(settleSyncChild, { wireBoth: true });
+      _setDispatchIdGeneratorForTest(() => "fixed-marker");
+      const ctx = makeMockCtx(tmp.loc.scopeRoot);
+      const pi = makeMockPi();
+      const entry = makeEntry({ claudeEvent: "PreToolUse" });
+
+      await dispatchHookExec(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi);
+      await spawnAndRegister(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, tmp.loc);
+
+      const syncEnv = spy.calls[0]?.options.env ?? {};
+      const asyncEnv = spy.calls[1]?.options.env ?? {};
+      assertLaneParity(syncEnv, asyncEnv);
+      assert.equal(syncEnv.CLAUDE_ENV_FILE, undefined, "sync: no CLAUDE_ENV_FILE for PreToolUse");
+      assert.equal(asyncEnv.CLAUDE_ENV_FILE, undefined, "async: no CLAUDE_ENV_FILE for PreToolUse");
+    } finally {
+      await tmp.cleanup();
+    }
+  });
+
+  test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (SessionStart, CLAUDE_ENV_FILE present + equal)", async () => {
+    const tmp = await makeTempLocations();
+    try {
+      const spy = installSpawnSpy(settleSyncChild, { wireBoth: true });
+      _setDispatchIdGeneratorForTest(() => "fixed-marker");
+      const ctx = makeMockCtx(tmp.loc.scopeRoot);
+      const pi = makeMockPi();
+      const entry = makeEntry({ claudeEvent: "SessionStart" });
+
+      await dispatchHookExec(entry, { reason: "startup" }, ctx.ctx, pi.pi);
+      await spawnAndRegister(entry, { reason: "startup" }, ctx.ctx, pi.pi, tmp.loc);
+
+      const syncEnv = spy.calls[0]?.options.env ?? {};
+      const asyncEnv = spy.calls[1]?.options.env ?? {};
+      assertLaneParity(syncEnv, asyncEnv);
+      const envFile = syncEnv.CLAUDE_ENV_FILE ?? "";
+      assert.ok(envFile !== "", "sync: CLAUDE_ENV_FILE present for SessionStart");
+      assert.equal(asyncEnv.CLAUDE_ENV_FILE, envFile, "async CLAUDE_ENV_FILE must equal sync");
+      assert.match(envFile, /[/\\]data[/\\]_shared[/\\]claude-env-session-rewake\.env$/);
     } finally {
       await tmp.cleanup();
     }

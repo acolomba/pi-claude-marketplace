@@ -612,6 +612,12 @@ async function prepareAsyncEnv(
     CLAUDE_PLUGIN_ROOT: pluginRoot,
     CLAUDE_PLUGIN_DATA: pluginData,
     [MARKER_ENV]: dispatchId,
+    // HENV-02: mirror of dispatch-exec.ts::prepareEnv session env. Assigned
+    // after the `...process.env` spread so the authoritative per-dispatch
+    // snapshot wins (D-91-02). CLAUDE_SESSION_ID is the pi-only alias.
+    CLAUDECODE: "1",
+    CLAUDE_CODE_SESSION_ID: transCtx.sessionId,
+    CLAUDE_SESSION_ID: transCtx.sessionId,
   };
 
   if (entry.claudeEvent === "SessionStart") {

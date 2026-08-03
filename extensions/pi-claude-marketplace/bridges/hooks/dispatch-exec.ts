@@ -314,6 +314,13 @@ async function prepareEnv(
     CLAUDE_PROJECT_DIR: transCtx.cwd,
     CLAUDE_PLUGIN_ROOT: pluginRoot,
     CLAUDE_PLUGIN_DATA: pluginData,
+    // HENV-01: Claude-Code-parity session env. Assigned AFTER the
+    // `...process.env` spread so the authoritative per-dispatch snapshot wins
+    // over whatever was last written to the live process.env (D-91-02
+    // race-window safety). CLAUDE_SESSION_ID is the pi-only alias (D-91-02).
+    CLAUDECODE: "1",
+    CLAUDE_CODE_SESSION_ID: transCtx.sessionId,
+    CLAUDE_SESSION_ID: transCtx.sessionId,
   };
 
   if (entry.claudeEvent === "SessionStart") {
