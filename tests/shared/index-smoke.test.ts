@@ -77,8 +77,9 @@ test("registers command, read-only tools, session_start, and resources_discover 
   // surfaces agent_end (last-assistant cache) and agent_settled (stopReason
   // gate; STOP-01), and a SECOND input subscription (the STOP-07 loop-
   // protection reset). session_start is also registered by
-  // registerClaudePluginCommand (read-only-tools surface), so its
-  // multiplicity rises to 2; input's multiplicity likewise rises to 2 via
+  // registerClaudePluginCommand (read-only-tools surface) and by the
+  // SENV-01/02/03 session-env injection wired directly in index.ts, so its
+  // multiplicity rises to 3; input's multiplicity likewise rises to 2 via
   // the STOP-07 reset.
   assert.deepEqual(events.map((e) => e.name).sort(), [
     "agent_end",
@@ -90,6 +91,7 @@ test("registers command, read-only tools, session_start, and resources_discover 
     "session_before_compact",
     "session_compact",
     "session_shutdown",
+    "session_start",
     "session_start",
     "session_start",
     "tool_call",

@@ -5,8 +5,10 @@ import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./e
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
+import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
+import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notify.ts";
 import { applySessionEnv } from "./shared/session-env.ts";
@@ -91,6 +93,17 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
         // Last-ditch: never let a notify failure propagate past
         // resources_discover (NFR-2 boundary preservation).
       }
+    }
+
+    // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
+    // AFTER applyReconcile has settled install state and BEFORE resource
+    // aggregation. Wrapped so a malformed-state throw from loadState is
+    // swallowed + debug-logged and never propagates past resources_discover
+    // (NFR-2) -- a bad state.json must never block Pi load.
+    try {
+      await recomputePluginPath(event.cwd);
+    } catch (err) {
+      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`);
     }
 
     const discovered = await aggregateDiscoveredResources(
