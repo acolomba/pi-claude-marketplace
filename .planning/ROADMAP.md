@@ -34,6 +34,7 @@
   a plugin declaring `Stop`/`StopFailure` alongside already-supported events resolves
   available and `ralph-wiggum` + `hookify` flip to fully available, without yet
   dispatching.
+
 - [x] **Phase 88: `agent_settled` dispatcher, Stop contract & StopFailure** (5/5 plans) — completed 2026-07-30
   One `agent_settled` subscriber gated on the final assistant message's `stopReason`
   fires `Stop` on genuine completion (`stop`) and `StopFailure` on `error`/`length`,
@@ -41,6 +42,7 @@
   decision-control contract (block re-entry, exit-2, `additionalContext`,
   `continue:false` precedence) and loop protections (`stop_hook_active`, 8-re-entry
   cap), while `StopFailure` is observation-only with the classified error type.
+
 - [x] **Phase 89: Documentation reconcile** (3/3 plans) — completed 2026-07-31
   `docs/hooks-compatibility.md` flips the `Stop`/`StopFailure` rows to supported
   (timing-shift caveat + error-type matcher row) and rewrites the stale hard-trip
@@ -89,7 +91,9 @@
   4. Only these keys are added to `process.env`; `getShellEnv()`'s `PI_*`-scrub and existing environment are otherwise undisturbed (non-interference). (SENV-01, SENV-02, SENV-03)
   5. At session start, each installed enabled plugin's `<pluginRoot>/bin` is appended to `process.env.PATH` — appended not prepended, deduplicated and idempotent across repeated session-start events, recomputed from install state (installs/uninstalls reflected after reload), and added even if the directory does not exist (verified live: Claude Code 2.1.212 appends `<pluginRoot>/bin` for enabled plugins unconditionally). (PENV-01)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+- [ ] 90-01-PLAN.md — session env vars (`session_start` handler: `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID`) + plugin-PATH recompute with the `PI_CLAUDE_MARKETPLACE_PATH` env-var ledger (both scopes, after `applyReconcile`). Wave 1, autonomous.
 
 ### Phase 91: Hook environment parity
 
@@ -153,7 +157,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 90. Session environment initialization | v1.17 | 0/? | Not started | - |
+| 90. Session environment initialization | v1.17 | 0/1 | Not started | - |
 | 91. Hook environment parity | v1.17 | 0/? | Not started | - |
 | 92. MCP staging parity | v1.17 | 0/? | Not started | - |
 | 93. Substitution completion | v1.17 | 0/? | Not started | - |

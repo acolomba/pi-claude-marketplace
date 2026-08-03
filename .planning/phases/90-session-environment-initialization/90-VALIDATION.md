@@ -40,7 +40,8 @@ created: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | SENV-01..03, PENV-01 | — | env keys never clobber unrelated vars | unit | `node --test <file>` | ❌ W0 | ⬜ pending |
+| 90-01 T1 (tracer) | 90-01 | 1 | SENV-01, SENV-02, SENV-03 | T-90-03 | only the 3 session keys added; non-interference key-delta | unit | `node --test tests/shared/session-env.test.ts` | ❌ W0 (created by task, TDD RED) | ⬜ pending |
+| 90-01 T2 | 90-01 | 1 | PENV-01 | T-90-01, T-90-02, T-90-04 | append-not-prepend; ledger removes only owned entries; malformed state never blocks load | unit | `node --test tests/shared/plugin-path.test.ts` | ❌ W0 (created by task, TDD RED) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
