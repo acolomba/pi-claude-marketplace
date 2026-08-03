@@ -29,6 +29,7 @@ import { errorMessage } from "../../shared/errors.ts";
 
 import { loadEffectiveServerNames } from "./collision-slots.ts";
 import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
+import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
 
 import type {
   McpReplacement,
@@ -145,12 +146,18 @@ function stampServers(
   servers: Record<string, unknown>,
   pluginName: string,
   marketplaceName: string,
+  subCtx: McpSubstitutionContext,
 ): Record<string, unknown> {
   const marker = buildMarker(pluginName, marketplaceName);
   const stamped: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(servers)) {
+    // Deep-substitute + inject env BEFORE the marker is spread on, so the
+    // marker never enters the walk (MENV-01/02, D-92-01/02). Non-object
+    // entries keep the existing `{}` tolerance -- no substitution attempted.
     const entryObj =
-      typeof entry === "object" && entry !== null && !Array.isArray(entry) ? entry : {};
+      typeof entry === "object" && entry !== null && !Array.isArray(entry)
+        ? substituteAndInject(entry as Record<string, unknown>, subCtx)
+        : {};
     stamped[name] = { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker };
   }
 
@@ -169,7 +176,7 @@ function stampServers(
  * Throws `McpServerCollisionError` on cross-slot conflict.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
-  const { locations, cwd, marketplaceName, pluginName, servers } = input;
+  const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
 
   const doc = await readScopedDoc(locations.mcpJsonPath);
   const existing = getMcpServers(doc);
@@ -201,7 +208,15 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // MC-5 marker stamp -- every new entry carries `_piClaudeMarketplace`.
-  const stamped = stampServers(servers, pluginName, marketplaceName);
+  // Scope drives the CLAUDE_PROJECT_DIR arm (project scope only, MENV-03);
+  // CLAUDE_PROJECT_DIR resolves to the project root `cwd`, NOT scopeRoot.
+  const subCtx: McpSubstitutionContext = {
+    pluginRoot,
+    pluginData,
+    scope: locations.scope,
+    cwd,
+  };
+  const stamped = stampServers(servers, pluginName, marketplaceName, subCtx);
 
   // Merge: keep theirs verbatim; replace ours with stamped (or drop if
   // no new servers but ours.size > 0).

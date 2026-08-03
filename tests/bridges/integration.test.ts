@@ -261,6 +261,8 @@ describe("integration: full-plugin staging", () => {
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       servers: resolved.servers,
+      pluginRoot: FIXTURE_PLUGIN,
+      pluginData: await locations.pluginDataDir(MARKETPLACE_NAME, PLUGIN_NAME),
     });
     assert.equal(prep.kind, "staged", "MC-6: servers present -> staged variant");
     const result = await commitPreparedMcp(prep);
