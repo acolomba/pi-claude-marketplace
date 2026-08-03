@@ -139,6 +139,30 @@ test("object keys are never substituted -- only string values", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Verbatim key preservation for a literal __proto__ key (WR-01)
+// ---------------------------------------------------------------------------
+
+test("WR-01 a literal __proto__ key survives the walk verbatim and does not pollute Object.prototype", () => {
+  // JSON.parse materializes __proto__ as a real own-enumerable property, so the
+  // walker must copy it as an own data property rather than hitting the
+  // inherited __proto__ accessor (which would drop the key).
+  const entry: unknown = JSON.parse('{"__proto__": {"ref": "${CLAUDE_PLUGIN_ROOT}"}, "keep": "x"}');
+  const out = rec(deepSubstitute(entry, projectMap));
+
+  assert.ok(Object.hasOwn(out, "__proto__"), "__proto__ must be an own key on the output");
+  assert.deepEqual(rec(out.__proto__), { ref: ROOT });
+  assert.equal(out.keep, "x");
+  assert.deepEqual(Object.keys(out), ["__proto__", "keep"]);
+
+  // The literal-key round-trip must not have mutated the global prototype.
+  assert.equal(
+    ({} as Record<string, unknown>).ref,
+    undefined,
+    "Object.prototype must not be polluted",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Unknown-var pass-through
 // ---------------------------------------------------------------------------
 

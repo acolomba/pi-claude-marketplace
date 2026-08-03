@@ -59,7 +59,22 @@ export function deepSubstitute(node: unknown, map: ReadonlyMap<string, string>):
   if (typeof node === "object" && node !== null) {
     const out: Record<string, unknown> = {};
     for (const [key, childValue] of Object.entries(node)) {
-      out[key] = deepSubstitute(childValue, map);
+      const substitutedChild = deepSubstitute(childValue, map);
+      if (key === "__proto__") {
+        // A literal `__proto__` key (which JSON.parse materializes as a real
+        // own-enumerable property) must be copied as an own data property. A
+        // plain `out[key] = ...` would route it through the inherited
+        // `__proto__` accessor -- reparenting the accumulator and dropping the
+        // key, violating the keys-copied-verbatim invariant (WR-01).
+        Object.defineProperty(out, key, {
+          value: substitutedChild,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        out[key] = substitutedChild;
+      }
     }
 
     return out;
