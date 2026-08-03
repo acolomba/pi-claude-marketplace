@@ -122,10 +122,10 @@
   3. A project-scope install additionally injects `CLAUDE_PROJECT_DIR` into each server's `env`; a user-scope install omits it (the user-scope value varies per session — documented absence). Ground truth: upstream injects `CLAUDE_PROJECT_DIR` into ALL MCP stdio spawns (any scope, value resolved at spawn); Pi's project-scope-only bake is the correct install-time approximation, user-scope absence stays documented. (MENV-03)
   4. After `update` or `reinstall` re-stages a plugin whose root changed (e.g. a new sha-addressed clone dir), `mcp.json` holds the newly-substituted paths and re-injected env with no stale path surviving from the prior root. (MENV-04)
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 **Wave 1**
 
-- [ ] 92-01-PLAN.md — deep-substitution + env-injection engine (`bridges/mcp/substitute.ts`), `StageMcpInput` pluginRoot/pluginData threading, `stampServers` wiring, all three orchestrator call sites, pure-walker unit suite. Wave 1, autonomous. (MENV-01)
+- [x] 92-01-PLAN.md — deep-substitution + env-injection engine (`bridges/mcp/substitute.ts`), `StageMcpInput` pluginRoot/pluginData threading, `stampServers` wiring, all three orchestrator call sites, pure-walker unit suite. Wave 1, autonomous. (MENV-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -168,7 +168,7 @@
 |-------|-----------|----------------|--------|-----------|
 | 90. Session environment initialization | v1.17 | 1/1 | In Progress|  |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
-| 92. MCP staging parity | v1.17 | 0/2 | Not started | - |
+| 92. MCP staging parity | v1.17 | 1/2 | In Progress|  |
 | 93. Substitution completion | v1.17 | 0/? | Not started | - |
 | 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
