@@ -3,9 +3,9 @@ phase: 91
 slug: hook-environment-parity
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-03
 ---
 
@@ -40,7 +40,9 @@ created: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | HENV-01, HENV-02 | — | snapshot id wins over spread; no other env keys disturbed | unit | `node --test <lane test files>` | ✅ (existing files extended) | ⬜ pending |
+| 91-01 T1 (tracer) | 91-01 | 1 | HENV-01 | — | snapshot id wins over spread (sentinel test); existing env set undisturbed | unit | `node --test tests/bridges/hooks/dispatch-exec.test.ts` | ✅ | ✅ green |
+| 91-01 T2 | 91-01 | 1 | HENV-02 | — | async lane mirrors sync; MARKER_ENV sole async-only key | unit | `node --test tests/architecture/hooks-async-rewake.test.ts` | ✅ | ✅ green |
+| 91-01 T3 | 91-01 | 1 | HENV-02 | — | assertLaneParity: key-set symmetric difference == [MARKER_ENV], per-key equality, PreToolUse + SessionStart fixtures | unit | `node --test tests/architecture/hooks-async-rewake.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -63,11 +65,21 @@ All phase behaviors have automated verification — hook spawn env is fully asse
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (none — existing infrastructure)
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-08-03
+
+## Validation Audit 2026-08-03
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Both requirements COVERED: HENV-01 by the sync-lane env assertions + snapshot-wins sentinel test (`tests/bridges/hooks/dispatch-exec.test.ts`), HENV-02 by the async mirror assertions + `assertLaneParity` drift guard (`tests/architecture/hooks-async-rewake.test.ts`). Targeted runs green (63 pass / 1 pre-existing platform skip); full unit suite 3181 pass at phase seal.
