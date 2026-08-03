@@ -40,7 +40,11 @@ created: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | MENV-01..04 | — | theirs entries verbatim; marker untouched; containment holds | unit | `node --test tests/bridges/mcp/*.test.ts` | ✅ (existing files extended) | ⬜ pending |
+| 92-01-T1 | 01 | 1 | MENV-01 | T-92-01..04 | substitution into JSON value slot only; marker stamped after walk; keys never substituted; single-pass no re-expansion | tracer (e2e unit) | `node --test tests/bridges/mcp/stage.test.ts && npm run typecheck` | ✅ (stage.test.ts extended) | ⬜ pending |
+| 92-01-T2 | 01 | 1 | MENV-01 | T-92-02, T-92-03 | keys immutable; marker isolation; unknown-var pass-through; literal `$` insertion | unit | `node --test tests/bridges/mcp/substitute.test.ts` | ✅ (new substitute.test.ts) | ⬜ pending |
+| 92-02-T1 | 02 | 2 | MENV-02 | T-92-05 | injection stdio-only; declared-wins; url-type never env-injected | unit | `node --test tests/bridges/mcp/stage.test.ts` | ✅ (stage.test.ts extended) | ⬜ pending |
+| 92-02-T2 | 02 | 2 | MENV-03 | T-92-06 | project bakes cwd; user-scope absence (token pass-through, no key) | unit | `node --test tests/bridges/mcp/stage.test.ts` | ✅ (stage.test.ts extended) | ⬜ pending |
+| 92-02-T3 | 02 | 2 | MENV-04 | T-92-07, T-92-08 | no stale path after root change; idempotent; theirs verbatim; NFR-1/NFR-10 hold | unit | `node --test tests/bridges/mcp/stage.test.ts` | ✅ (stage.test.ts extended) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

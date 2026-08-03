@@ -122,7 +122,10 @@
   3. A project-scope install additionally injects `CLAUDE_PROJECT_DIR` into each server's `env`; a user-scope install omits it (the user-scope value varies per session — documented absence). Ground truth: upstream injects `CLAUDE_PROJECT_DIR` into ALL MCP stdio spawns (any scope, value resolved at spawn); Pi's project-scope-only bake is the correct install-time approximation, user-scope absence stays documented. (MENV-03)
   4. After `update` or `reinstall` re-stages a plugin whose root changed (e.g. a new sha-addressed clone dir), `mcp.json` holds the newly-substituted paths and re-injected env with no stale path surviving from the prior root. (MENV-04)
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+- [ ] 92-01-PLAN.md — deep-substitution + env-injection engine (`bridges/mcp/substitute.ts`), `StageMcpInput` pluginRoot/pluginData threading, `stampServers` wiring, all three orchestrator call sites, pure-walker unit suite. Wave 1, autonomous. (MENV-01)
+- [ ] 92-02-PLAN.md — injection targeting + precedence (stdio-only, declared-wins), project-vs-user scope arms, MENV-04 re-derivation + theirs/idempotency isolation. Wave 2, autonomous. (MENV-02, MENV-03, MENV-04)
 
 **Verified finding (2026-08-02)**: pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` — full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, and bearerToken (unknown var → empty string), NOT to command/args. Consequences: session vars set by Phase 90 reach MCP servers spawned afterward, matching Claude Code (whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); user-scope `CLAUDE_PROJECT_DIR` stays absent for Pi MCP servers (documented); the spawn-order caveat (servers spawned before the extension's session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env) are documented in `docs/env-vars.md` (DOC-06) in Phase 94.
 
@@ -161,7 +164,7 @@
 |-------|-----------|----------------|--------|-----------|
 | 90. Session environment initialization | v1.17 | 1/1 | In Progress|  |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
-| 92. MCP staging parity | v1.17 | 0/? | Not started | - |
+| 92. MCP staging parity | v1.17 | 0/2 | Not started | - |
 | 93. Substitution completion | v1.17 | 0/? | Not started | - |
 | 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
