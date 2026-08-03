@@ -115,3 +115,8 @@ values are the constant `"1"` and the Pi session id (already exposed to the chil
 via Phase 90's `process.env` mutation and the stdin envelope). `assertPathInside`
 containment on `CLAUDE_PLUGIN_DATA` / `CLAUDE_ENV_FILE` is byte-for-byte unchanged.
 T-91-02 (mirror drift) is mitigated by the new drift guard as planned.
+
+## Self-Check: PASSED
+
+All modified production files exist on disk; all four task/summary commits
+(306e099c, c9c97bac, 00e2acee, 20c38728) are present in the branch history.
