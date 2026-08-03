@@ -128,4 +128,6 @@ v1.17 env-parity.
 
 ## Deferred Verification
 
-None.
+| Phase | State | Resume |
+|-------|-------|--------|
+| 90 | verification_deferred_human | /gsd-verify-work 90 |
