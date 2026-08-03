@@ -40,8 +40,8 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 <!-- DOC numbering continues from v1.16 (DOC-04/05). -->
 
-- [ ] **DOC-06**: New `docs/env-vars.md` — per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery), the two-mechanism model (install-time textual substitution for install-stable per-plugin values vs runtime env injection for session-scoped values), documented absences; records the verified finding that pi-mcp-adapter inherits Pi's `process.env` (spread-then-override) and its runtime-coverage consequences — pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` (full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, bearerToken with unknown var → empty string, NOT to command/args), so session vars set by Phase 90 reach MCP servers spawned afterward (matching Claude Code, whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); documents the spawn-order caveat (servers spawned before the extension's session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env)
-- [ ] **DOC-07**: `docs/hooks-compatibility.md` environment-variable table reconciled against `docs/env-vars.md`
+- [x] **DOC-06**: New `docs/env-vars.md` — per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery), the two-mechanism model (install-time textual substitution for install-stable per-plugin values vs runtime env injection for session-scoped values), documented absences; records the verified finding that pi-mcp-adapter inherits Pi's `process.env` (spread-then-override) and its runtime-coverage consequences — pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` (full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, bearerToken with unknown var → empty string, NOT to command/args), so session vars set by Phase 90 reach MCP servers spawned afterward (matching Claude Code, whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); documents the spawn-order caveat (servers spawned before the extension's session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env)
+- [x] **DOC-07**: `docs/hooks-compatibility.md` environment-variable table reconciled against `docs/env-vars.md`
 
 ## v2 Requirements
 
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MENV-04 | Phase 92 | Complete |
 | SUB-01 | Phase 93 | Complete |
 | SUB-02 | Phase 93 | Complete |
-| DOC-06 | Phase 94 | Pending |
-| DOC-07 | Phase 94 | Pending |
+| DOC-06 | Phase 94 | Complete |
+| DOC-07 | Phase 94 | Complete |
 
 **Coverage:**
 

@@ -166,10 +166,11 @@ Plans:
   2. `docs/env-vars.md` records the verified finding that pi-mcp-adapter inherits Pi's `process.env` (spread-then-override — `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}`, config keys winning; interpolation applies to env/cwd/headers/bearerToken with unknown var → empty string, NOT to command/args) and its runtime-coverage consequences: session vars set by Phase 90 reach MCP servers spawned afterward, user-scope `CLAUDE_PROJECT_DIR` stays absent, plus the spawn-order caveat and session-switch staleness. (DOC-06)
   3. The `docs/hooks-compatibility.md` environment-variable table is reconciled against `docs/env-vars.md` — the two do not contradict each other on which hook env vars ship. (DOC-07)
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
 Plans:
-- [ ] 94-01-PLAN.md — new `docs/env-vars.md` (matrix + two-mechanism model + divergences/absences + pi-mcp-adapter finding) and reconcile the `docs/hooks-compatibility.md` env table (DOC-06, DOC-07)
+
+- [x] 94-01-PLAN.md — new `docs/env-vars.md` (matrix + two-mechanism model + divergences/absences + pi-mcp-adapter finding) and reconcile the `docs/hooks-compatibility.md` env table (DOC-06, DOC-07)
 
 ## Progress
 
@@ -182,7 +183,7 @@ Plans:
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
 | 93. Substitution completion | v1.17 | 2/2 | Complete    | 2026-08-03 |
-| 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |
+| 94. Environment-variable documentation | v1.17 | 1/1 | In Progress|  |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 5/5 | Complete | 2026-07-30 |
 | 89. Documentation reconcile | v1.16 | 3/3 | Complete | 2026-07-31 |

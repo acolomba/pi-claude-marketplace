@@ -3,28 +3,28 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
 current_phase: 94
-current_phase_name: Environment-variable documentation
-status: planning
-stopped_at: Phase 94 context gathered
-last_updated: "2026-08-03T20:24:51.789Z"
+current_phase_name: environment-variable-documentation
+status: verifying
+stopped_at: Completed 94-01-PLAN.md
+last_updated: "2026-08-03T20:48:08.456Z"
 last_activity: 2026-08-03
-last_activity_desc: Phase 93 complete, transitioned to Phase 94
+last_activity_desc: Phase 94 execution started
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
-  percent: 80
+  completed_phases: 5
+  total_plans: 7
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 94 — Environment-variable documentation
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-03 — Phase 93 complete, transitioned to Phase 94
+Phase: 94 (environment-variable-documentation) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-08-03 — Phase 94 execution started
 env-parity planning docs per validation findings
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
@@ -73,9 +73,9 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03T20:24:51.753Z
-**Stopped at:** Phase 94 context gathered
-**Resume file:** /home/acolomba/pi-claude-marketplace/.planning/phases/94-environment-variable-documentation/94-CONTEXT.md
+**Last session:** 2026-08-03T20:47:50.875Z
+**Stopped at:** Completed 94-01-PLAN.md
+**Resume file:** None
 
 Phases 91-93 sealed. Phase 93 plan 93-02 was recovered from the interrupted
 executor worktree (Tasks 1-2 committed there; Task 3 finished by continuation)
@@ -98,6 +98,8 @@ Design decisions are pre-captured in the Roadmap Summary above and in
 PROJECT.md's "Current Milestone: v1.17 env-parity" section (ground truth verified
 2026-08-01 against the Claude Code v2.1.212 binary). Plan-phase and execution will
 record per-plan decisions here.
+
+- [Phase ?]: docs/env-vars.md is authoritative on env-var delivery; hooks-compatibility env table reconciled to it (DOC-06/07)
 
 ## Deferred Items
 
@@ -128,6 +130,7 @@ v1.17 env-parity.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+| Phase 94 P01 | 12min | 3 tasks | 2 files |
 
 ## Deferred Verification
 
