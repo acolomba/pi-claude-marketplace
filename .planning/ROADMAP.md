@@ -144,12 +144,12 @@
   2. `${CLAUDE_PROJECT_DIR}` in a project-scope skill/command/agent is replaced at stage time with the project root. (SUB-02)
   3. A user-scope occurrence of `${CLAUDE_PROJECT_DIR}` passes through untouched (documented divergence — Claude Code substitutes `${CLAUDE_PROJECT_DIR}` at invoke time even for user-scope artefacts, so a user-scope artefact referencing it works under Claude Code but stays literal under Pi; no env var rescues it — Claude Code's own bash children do not carry `CLAUDE_PROJECT_DIR`, so Pi deliberately sets none; DOC-06 states this gap explicitly), and the already-substituted `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` remain correctly substituted. (SUB-02)
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 93-01-PLAN.md — Extend substituteClaudeVars (single-pass) + skills bridge; SUB-01 + SUB-02 skills arm (Wave 1)
+- [x] 93-01-PLAN.md — Extend substituteClaudeVars (single-pass) + skills bridge; SUB-01 + SUB-02 skills arm (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -178,7 +178,7 @@ Plans:
 | 90. Session environment initialization | v1.17 | 1/1 | In Progress|  |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
-| 93. Substitution completion | v1.17 | 0/2 | Planned | - |
+| 93. Substitution completion | v1.17 | 1/2 | In Progress|  |
 | 94. Environment-variable documentation | v1.17 | 0/? | Not started | - |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 5/5 | Complete | 2026-07-30 |
