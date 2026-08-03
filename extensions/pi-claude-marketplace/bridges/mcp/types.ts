@@ -57,6 +57,10 @@ export interface StageMcpInput {
   readonly pluginName: string;
   /** Already-resolved per-plugin servers (output of `resolvePluginMcpServers().servers`). */
   readonly servers: Record<string, unknown>;
+  /** Absolute install path substituted for `${CLAUDE_PLUGIN_ROOT}` and injected into stdio env (MENV-01/02). */
+  readonly pluginRoot: string;
+  /** Per-plugin data dir substituted for `${CLAUDE_PLUGIN_DATA}` and injected into stdio env (MENV-01/02). */
+  readonly pluginData: string;
   /** Canonical provenance for state.json (e.g. "<pluginRoot>/.mcp.json"); optional. */
   readonly sourcePath?: string;
 }

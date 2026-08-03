@@ -40,6 +40,8 @@ async function withTmpScope<T>(fn: (ctx: Ctx) => Promise<T>): Promise<T> {
 
 const MP = "official";
 const PLUGIN = "acme";
+const PLUGIN_ROOT = "/plugins/acme";
+const PLUGIN_DATA = "/data/acme";
 
 // ---------------------------------------------------------------------------
 // MC-5 marker stamping
@@ -52,6 +54,8 @@ test("MC-5 prepareStageMcpServers stamps each new entry with _piClaudeMarketplac
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { a: { command: "x" }, b: { command: "y", args: ["--flag"] } },
     });
 
@@ -75,6 +79,55 @@ test("MC-5 prepareStageMcpServers stamps each new entry with _piClaudeMarketplac
 });
 
 // ---------------------------------------------------------------------------
+// MENV-01/02 end-to-end substitution + injection
+// ---------------------------------------------------------------------------
+
+test("MENV-01 prepareStageMcpServers substitutes ${CLAUDE_PLUGIN_ROOT} and injects env end-to-end", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: {
+        srv: {
+          command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
+          args: ["--data", "${CLAUDE_PLUGIN_DATA}"],
+        },
+      },
+    });
+
+    await commitPreparedMcp(prepared);
+
+    const onDisk = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      mcpServers: Record<
+        string,
+        {
+          command?: string;
+          args?: string[];
+          env?: Record<string, string>;
+          [k: string]: unknown;
+        }
+      >;
+    };
+    const srv = onDisk.mcpServers.srv!;
+    assert.equal(srv.command, `${PLUGIN_ROOT}/bin/server`);
+    assert.equal(srv.args?.[1], PLUGIN_DATA);
+    assert.equal(srv.env?.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
+    assert.equal(srv.env?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+    // Project scope injects CLAUDE_PROJECT_DIR = cwd (MENV-03).
+    assert.equal(srv.env?.CLAUDE_PROJECT_DIR, cwd);
+    // Marker survives the substitution/injection pass intact.
+    assert.deepEqual(srv[CLAUDE_MARKETPLACE_MARKER_KEY], {
+      plugin: PLUGIN,
+      marketplace: MP,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // MC-6 commit
 // ---------------------------------------------------------------------------
 
@@ -85,6 +138,8 @@ test("MC-6 commitPreparedMcp writes mcp.json atomically with full merged doc", a
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "node", args: ["server.js"] } },
     });
 
@@ -111,6 +166,8 @@ test("MC-6 commitPreparedMcp returns recorded with provided sourcePath (W-05)", 
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "x" } },
       sourcePath: "/plugins/acme/.mcp.json",
     });
@@ -127,6 +184,8 @@ test("MC-6 prepareStageMcpServers falls back to synthetic sourcePath when omitte
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "x" } },
     });
     assert.equal(prepared.kind, "staged");
@@ -149,6 +208,8 @@ test("AS-8 prepareStageMcpServers returns kind:'noop' when no new servers AND no
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: {},
     });
     assert.equal(prepared.kind, "noop");
@@ -165,6 +226,8 @@ test("AS-8 commit on noop does NOT create mcp.json", async () => {
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: {},
     });
     await commitPreparedMcp(prepared);
@@ -197,6 +260,8 @@ test("AS-8 prepare with previous-ours but no new still stages (drops old)", asyn
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: {},
     });
 
@@ -244,6 +309,8 @@ test("MC-4 prepareStageMcpServers throws McpServerCollisionError for foreign ent
         cwd,
         marketplaceName: MP,
         pluginName: PLUGIN,
+        pluginRoot: PLUGIN_ROOT,
+        pluginData: PLUGIN_DATA,
         servers: { dup: { command: "y" } },
       }),
       (err) => {
@@ -271,6 +338,8 @@ test("MC-4 prepareStageMcpServers throws McpServerCollisionError for entry in DI
         cwd,
         marketplaceName: MP,
         pluginName: PLUGIN,
+        pluginRoot: PLUGIN_ROOT,
+        pluginData: PLUGIN_DATA,
         servers: { foreign: { command: "y" } },
       }),
       (err) => {
@@ -305,6 +374,8 @@ test("MC-4 prepareStageMcpServers ALLOWS self-replace within own scope", async (
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "new" } },
     });
     assert.equal(prepared.kind, "staged");
@@ -339,6 +410,8 @@ test("MC-3 prepare preserves non-mcp top-level fields in mcp.json", async () => 
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "x" } },
     });
     await commitPreparedMcp(prepared);
@@ -367,6 +440,8 @@ test("PRL-10 replacePreparedMcp rollback restores previous mcp.json bytes", asyn
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "new" } },
     });
 
@@ -388,6 +463,8 @@ test("PRL-10 replacePreparedMcp rollback removes newly-created mcp.json when abs
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "new" } },
     });
 
@@ -408,6 +485,8 @@ test("PRL-10 noop MCP replacements rollback and finalize without leaks", async (
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: {},
     });
 
@@ -440,6 +519,8 @@ test("PRL-10 replacePreparedMcp preserves prepare-owned MCP collision policy", a
         cwd,
         marketplaceName: MP,
         pluginName: PLUGIN,
+        pluginRoot: PLUGIN_ROOT,
+        pluginData: PLUGIN_DATA,
         servers: { dup: { command: "y" } },
       }),
       McpServerCollisionError,
@@ -458,6 +539,8 @@ test("abortPreparedMcp is a synchronous no-op (staged branch)", async () => {
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "x" } },
     });
 
@@ -476,6 +559,8 @@ test("abortPreparedMcp is a synchronous no-op (noop branch)", async () => {
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: {},
     });
     // Synchronous return path -- assert by absence of throw.
@@ -494,6 +579,8 @@ test("stagedNames matches recorded.map(r=>r.generatedName)", async () => {
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { a: { command: "x" }, b: { command: "y" }, c: { command: "z" } },
     });
     assert.equal(prepared.kind, "staged");
@@ -540,6 +627,8 @@ test("PRL-10 replacePreparedMcp rollback records leak when restore fails", async
       cwd,
       marketplaceName: MP,
       pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
       servers: { srv: { command: "new" } },
     });
 

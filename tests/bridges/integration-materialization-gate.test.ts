@@ -75,6 +75,8 @@ describe("integration: materialization gate", () => {
         marketplaceName: "test-mp",
         pluginName: "empty-mcp",
         servers: resolved.servers,
+        pluginRoot: FIXTURE_EMPTY_MCP,
+        pluginData: await locations.pluginDataDir("test-mp", "empty-mcp"),
       });
       assert.equal(prep.kind, "noop", "AS-8: no servers + no previous-ours -> noop");
       await commitPreparedMcp(prep);
@@ -155,6 +157,8 @@ describe("integration: materialization gate", () => {
         marketplaceName: "test-mp",
         pluginName: "acme",
         servers: mcpResolved.servers,
+        pluginRoot: FIXTURE_TEST_PLUGIN,
+        pluginData: await locations.pluginDataDir("test-mp", "acme"),
       });
       assert.equal(mcpPrep.kind, "staged", "MCP staged from test-plugin .mcp.json");
       await commitPreparedMcp(mcpPrep);

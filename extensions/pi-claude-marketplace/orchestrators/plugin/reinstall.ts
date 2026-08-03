@@ -1531,6 +1531,8 @@ async function prepareAllHandles(input: {
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
       servers: input.installable.mcpServers,
+      pluginRoot: input.installable.pluginRoot,
+      pluginData: input.pluginDataDir,
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
     });
   } catch (err) {

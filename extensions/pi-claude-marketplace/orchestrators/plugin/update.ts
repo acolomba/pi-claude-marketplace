@@ -1173,6 +1173,8 @@ async function prepareUpdateHandles(
       marketplaceName: marketplace,
       pluginName: plugin,
       servers: installable.mcpServers,
+      pluginRoot: installable.pluginRoot,
+      pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
     });
   } catch (err) {

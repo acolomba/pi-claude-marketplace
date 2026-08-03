@@ -1069,6 +1069,8 @@ export async function runInstallLedger(
         marketplaceName: c.marketplace,
         pluginName: c.plugin,
         servers: c.resolved.mcpServers,
+        pluginRoot: c.resolved.pluginRoot,
+        pluginData: c.pluginDataDir,
         sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
       });
       c.mcpPrep = prep;
