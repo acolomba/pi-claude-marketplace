@@ -73,11 +73,14 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03 (resumed)
-**Stopped at:** Session resumed; executing Phase 93 wave 2 (plan 93-02)
-**Resume file:** none (pause handoff consumed)
+**Last session:** 2026-08-03
+**Stopped at:** Phase 93 complete (verified, nyquist-compliant, threat-secure); ready to discuss Phase 94
+**Resume file:** None
 
-Phases 91-92 sealed; 93 wave 1 (93-01) merged. Next: execute plan 93-02.
+Phases 91-93 sealed. Phase 93 plan 93-02 was recovered from the interrupted
+executor worktree (Tasks 1-2 committed there; Task 3 finished by continuation)
+and review fix WR-01 added reinstall/update end-to-end SUB-02 guards. Next:
+Phase 94 (docs) — discuss must fold in the five carrier items.
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
