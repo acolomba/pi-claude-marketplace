@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
 status: planning
-last_updated: "2026-08-02T03:28:05.000Z"
-last_activity: 2026-08-01
+last_updated: "2026-08-03T02:55:00.000Z"
+last_activity: 2026-08-02
 progress:
   total_phases: 5
   completed_phases: 0
@@ -20,23 +20,19 @@ progress:
 Phase: Not started (roadmap created — Phases 90-94 mapped)
 Plan: —
 Status: Roadmap created, awaiting phase planning
-Last activity: 2026-08-01 — v1.17 env-parity roadmap created
+Last activity: 2026-08-02 — Completed quick task 260802-v2z: amend v1.17
+env-parity planning docs per validation findings
+Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
 
 - 5 phases (Phases 90-94), continuing the global counter from Phase 89 (v1.16
-  stop-hooks). All 13 v1 requirements mapped, no orphans. Execution order:
+  stop-hooks). All 14 v1 requirements mapped, no orphans. Execution order:
   90 → 91 (the hook lane leans on the session-env groundwork); 92 (MCP) and 93
   (substitution) are independent of the env lane and of each other; 94 (docs)
   LAST and sequential (non-worktree) so it documents shipped behavior.
 
-- **Phase 90 — Session environment initialization** (SENV-01, SENV-02, SENV-03):
-  the shared runtime-injection groundwork. At session start the extension sets
-  `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID=<Pi session id>`, and the pi-only
-  `CLAUDE_SESSION_ID` alias on Pi's live `process.env`; Pi's bash tool builds every
-  child env from `process.env` via `getShellEnv()` (scrubbing only `PI_*`), so
-  skill/command scripts inherit all three exactly as under Claude Code. The
-  session-id value must track the active session (fresh after switch / `/reload`).
+- **Phase 90 — Session environment initialization** (SENV-01, SENV-02, SENV-03, PENV-01): the shared runtime-injection groundwork. At session start the extension sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID=<Pi session id>`, and the pi-only `CLAUDE_SESSION_ID` alias on Pi's live `process.env`, and appends each installed enabled plugin's `<pluginRoot>/bin` to `process.env.PATH` (appended not prepended, deduplicated/idempotent, recomputed from install state, added even if absent — PENV-01). Pi's bash tool builds every child env fresh at each spawn: `getShellEnv()` spreads the full live `process.env` (its only mutation: prepends Pi's managed bin dir to `PATH`), then `resolveSpawnContext()` deletes and re-derives exactly five named keys (`PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`, `PI_REASONING_LEVEL`) — there is no `PI_*`-prefix scrub, so extension mutations of `process.env` reach every later bash child. The session-id value must track the active session (fresh after switch / `/reload`).
 
 - **Phase 91 — Hook environment parity** (HENV-01, HENV-02): `CLAUDECODE=1` +
   `CLAUDE_CODE_SESSION_ID` (from the authoritative `transCtx.sessionId` snapshot,
@@ -48,21 +44,17 @@ Last activity: 2026-08-01 — v1.17 env-parity roadmap created
 
 - **Phase 92 — MCP staging parity** (MENV-01..04): the biggest gap —
   `stampServers` (`bridges/mcp/stage.ts`) writes MCP entries to `mcp.json` verbatim
-  today. Substitute `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in each server's
+  today. Substitute the set `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and — project-scope installs only — `${CLAUDE_PROJECT_DIR}` (user-scope `${CLAUDE_PROJECT_DIR}` a documented absence, unknowable at install time) in each server's
   `command`/`args`/`env`, and inject `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus
   `CLAUDE_PROJECT_DIR` for project-scope only — user-scope value varies per session)
   into each server's `env`, plugin-declared keys winning over injected defaults
-  (Claude's spread order). The `update`/`reinstall` re-stage paths re-derive so a
+  (Claude's spread order). Rationale: Claude Code substitutes all three at config load; pi-mcp-adapter does NOT interpolate `command`/`args` at all and replaces unknown `${VAR}` in env with the empty string — so stage-time substitution is the only delivery path for `command`/`args` and the only correct one for per-plugin `env` values. The `update`/`reinstall` re-stage paths re-derive so a
   plugin-root change (e.g. a new sha-addressed clone dir) never leaves stale paths.
   Atomic writes (NFR-1), containment (NFR-10) hold.
 
 - **Phase 93 — Substitution completion** (SUB-01, SUB-02): extend
   `shared/vars.ts::substituteClaudeVars` (today only `${CLAUDE_PLUGIN_ROOT}`/
-  `${CLAUDE_PLUGIN_DATA}`) and its three call sites (skills stage, commands stage,
-  agents convert) so `${CLAUDE_SKILL_DIR}` resolves to the skill's installed dir and
-  project-scope `${CLAUDE_PROJECT_DIR}` resolves to the project root; user-scope
-  `${CLAUDE_PROJECT_DIR}` passes through untouched (documented — SENV-03 shell
-  expansion / env inheritance covers it).
+  `${CLAUDE_PLUGIN_DATA}`) and its four call sites across the three bridges (skills stage ×2 — description augmentation and whole-file; commands stage; agents convert) so `${CLAUDE_SKILL_DIR}` resolves to the skill's installed dir and project-scope `${CLAUDE_PROJECT_DIR}` resolves to the project root; user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (documented divergence — Claude Code substitutes it at invoke time even for user-scope artefacts, so such an artefact works under Claude Code but stays literal under Pi; no env var rescues it, and Claude Code's own bash children carry no `CLAUDE_PROJECT_DIR` so Pi deliberately sets none; DOC-06 states the gap).
 
 - **Phase 94 — Environment-variable documentation** (DOC-06, DOC-07): NEW
   `docs/env-vars.md` — the per-variable × per-surface matrix (Claude Code ground
@@ -73,11 +65,7 @@ Last activity: 2026-08-01 — v1.17 env-parity roadmap created
   it. Runs sequentially (non-worktree) per project convention for docs phases that
   touch shared planning/state files.
 
-- **Implementation-time verification** (lands in Phase 92, documented in Phase 94):
-  whether pi-mcp-adapter spawns MCP servers inheriting Pi's `process.env` — this
-  determines the runtime coverage for user-scope `CLAUDE_PROJECT_DIR` (deliberately
-  not baked into `env` in MENV-03) and for the session vars in MCP server processes.
-  The finding feeds `docs/env-vars.md` (DOC-06).
+- **Verified finding (2026-08-02, documented in Phase 94)**: pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` — full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, bearerToken (unknown var → empty string), NOT to command/args. Session vars set by Phase 90 reach MCP servers spawned afterward (matching Claude Code, whose stdio MCP spawn injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); user-scope `CLAUDE_PROJECT_DIR` stays absent for Pi MCP servers (documented); DOC-06 records the spawn-order caveat (servers spawned before the session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env).
 
 ## Session
 
@@ -90,6 +78,12 @@ No plans executed yet for v1.17. Next: `/gsd-plan-phase 90`.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260802-v2z | amend v1.17 env-parity planning docs per validation findings | 2026-08-02 | 1ce8f203 | [260802-v2z-amend-v1-17-env-parity-planning-docs-per](./quick/260802-v2z-amend-v1-17-env-parity-planning-docs-per/) |
 
 ## Decisions
 
