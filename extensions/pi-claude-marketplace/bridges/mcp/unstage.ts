@@ -24,6 +24,7 @@ import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
 import { isOwnedBy } from "./marker.ts";
+import { safeSet } from "./safe-set.ts";
 
 import type { RawMcpDoc, UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 
@@ -82,7 +83,10 @@ export async function unstageMcpServers(input: UnstageMcpInput): Promise<Unstage
     if (isOwnedBy(value, pluginName, marketplaceName)) {
       removed.push(name);
     } else {
-      kept[name] = value;
+      // safeSet copies a foreign server literally named `__proto__` as an own
+      // data property rather than routing it through the inherited setter (which
+      // would silently drop the user's entry) -- WR-01.
+      safeSet(kept, name, value);
     }
   }
 

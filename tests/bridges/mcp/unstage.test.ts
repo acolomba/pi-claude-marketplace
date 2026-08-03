@@ -191,6 +191,51 @@ test("MC-6 unstageMcpServers does NOT materialize file when nothing to remove", 
 });
 
 // ---------------------------------------------------------------------------
+// WR-01 -- a foreign server literally named __proto__ survives an unstage
+// ---------------------------------------------------------------------------
+
+test("WR-01 a foreign server literally named __proto__ survives unstage of a different plugin", async () => {
+  await withTmpScope(async ({ locations }) => {
+    // JSON.parse materializes __proto__ as a real own-enumerable key, so the
+    // scoped doc must be seeded as raw text -- an object literal with a
+    // __proto__ key would hit the prototype setter and never create the entry.
+    const rawDoc =
+      '{"customField":"keep-me","mcpServers":{' +
+      `"__proto__":{"command":"foreign","env":{"A":"1"},"${CLAUDE_MARKETPLACE_MARKER_KEY}":` +
+      `{"plugin":"other","marketplace":"${MP}"}},` +
+      `"mine":{"command":"x","${CLAUDE_MARKETPLACE_MARKER_KEY}":{"plugin":"${PLUGIN}","marketplace":"${MP}"}}}}`;
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, rawDoc, "utf8");
+
+    const result = await unstageMcpServers({
+      locations,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+    });
+
+    assert.deepEqual([...result.removedNames], ["mine"]);
+
+    const onDisk = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      customField: unknown;
+      mcpServers: Record<string, unknown>;
+    };
+    // The foreign __proto__ entry survives as an own key, byte-for-byte.
+    assert.ok(
+      Object.hasOwn(onDisk.mcpServers, "__proto__"),
+      "foreign __proto__ entry must survive as an own key",
+    );
+    assert.deepEqual(onDisk.mcpServers["__proto__"], {
+      command: "foreign",
+      env: { A: "1" },
+      [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "other", marketplace: MP },
+    });
+    assert.equal(onDisk.customField, "keep-me", "non-mcp top-level fields preserved");
+    // No global prototype pollution from the round-trip.
+    assert.equal(({} as Record<string, unknown>).command, undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Malformed JSON propagates
 // ---------------------------------------------------------------------------
 
