@@ -166,7 +166,10 @@ Plans:
   2. `docs/env-vars.md` records the verified finding that pi-mcp-adapter inherits Pi's `process.env` (spread-then-override — `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}`, config keys winning; interpolation applies to env/cwd/headers/bearerToken with unknown var → empty string, NOT to command/args) and its runtime-coverage consequences: session vars set by Phase 90 reach MCP servers spawned afterward, user-scope `CLAUDE_PROJECT_DIR` stays absent, plus the spawn-order caveat and session-switch staleness. (DOC-06)
   3. The `docs/hooks-compatibility.md` environment-variable table is reconciled against `docs/env-vars.md` — the two do not contradict each other on which hook env vars ship. (DOC-07)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 94-01-PLAN.md — new `docs/env-vars.md` (matrix + two-mechanism model + divergences/absences + pi-mcp-adapter finding) and reconcile the `docs/hooks-compatibility.md` env table (DOC-06, DOC-07)
 
 ## Progress
 
