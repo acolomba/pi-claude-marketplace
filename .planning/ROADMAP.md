@@ -22,7 +22,7 @@
 - [x] **Phase 91: Hook environment parity** — `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` (from the snapshotted `transCtx.sessionId`) join the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set on both hook spawn lanes — `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and its hand-mirror `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`) — with a drift-guard test pinning the two lanes together. (HENV-01, HENV-02) (completed 2026-08-03)
 - [x] **Phase 92: MCP staging parity** — at stage time (`bridges/mcp/stage.ts::stampServers`, which today writes entries verbatim) substitute `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in each server's `command`/`args`/`env` and inject `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus project-scope `CLAUDE_PROJECT_DIR`) into the server's `env` map, re-derived on every `update`/`reinstall` re-stage so a plugin-root change never leaves stale paths in `mcp.json`. (MENV-01, MENV-02, MENV-03, MENV-04) (completed 2026-08-03)
 - [x] **Phase 93: Substitution completion** — `${CLAUDE_SKILL_DIR}` (the skill's installed dir) and project-scope `${CLAUDE_PROJECT_DIR}` join the install-time substitution set in staged skill/command/agent content, extending `shared/vars.ts::substituteClaudeVars` and its four call sites across the three bridges (skills stage ×2 — description augmentation and whole-file; commands stage; agents convert); user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (documented). (SUB-01, SUB-02) (completed 2026-08-03)
-- [ ] **Phase 94: Environment-variable documentation** — new `docs/env-vars.md` (per-variable × per-surface matrix, the two-mechanism model, documented absences, and the verified pi-mcp-adapter `process.env`-inheritance finding) with the `docs/hooks-compatibility.md` env table reconciled against it; runs LAST so it describes shipped behavior, sequential (non-worktree). (DOC-06, DOC-07)
+- [x] **Phase 94: Environment-variable documentation** — new `docs/env-vars.md` (per-variable × per-surface matrix, the two-mechanism model, documented absences, and the verified pi-mcp-adapter `process.env`-inheritance finding) with the `docs/hooks-compatibility.md` env table reconciled against it; runs LAST so it describes shipped behavior, sequential (non-worktree). (DOC-06, DOC-07) (completed 2026-08-03)
 
 <details>
 <summary>✅ v1.16 stop-hooks (Phases 87-89) — SHIPPED 2026-07-31</summary>
@@ -183,7 +183,7 @@ Plans:
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
 | 93. Substitution completion | v1.17 | 2/2 | Complete    | 2026-08-03 |
-| 94. Environment-variable documentation | v1.17 | 1/1 | In Progress|  |
+| 94. Environment-variable documentation | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 87. Bucket-A admission & platform floor | v1.16 | 3/3 | Complete | 2026-07-30 |
 | 88. `agent_settled` dispatcher, Stop contract & StopFailure | v1.16 | 5/5 | Complete | 2026-07-30 |
 | 89. Documentation reconcile | v1.16 | 3/3 | Complete | 2026-07-31 |
