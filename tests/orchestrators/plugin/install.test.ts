@@ -4650,3 +4650,156 @@ test("PURL-09 regression: a path-source install keeps its 3-tier ladder version 
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// SUB-02 -- end-to-end ${CLAUDE_PROJECT_DIR} delivery from the orchestrator
+//
+// The bridge unit tests prove each surface substitutes scope-gated projectDir,
+// but the orchestrator threads `cwd` into every stage input by hand (optional
+// field a compiler cannot enforce). These tests install a real fixture whose
+// skill/command/agent bodies carry ${CLAUDE_PROJECT_DIR} and ${CLAUDE_SKILL_DIR}
+// and assert the materialized files, closing the silent-miss gap end-to-end.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-proj-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "project",
+        skills: [{ sourceName: "tool", body: "Project: ${CLAUDE_PROJECT_DIR}\n" }],
+        commands: [
+          {
+            sourceName: "deploy",
+            body: "# deploy\nProject: ${CLAUDE_PROJECT_DIR}\nSkill: ${CLAUDE_SKILL_DIR}\n",
+          },
+        ],
+        agents: [
+          {
+            sourceName: "bot",
+            body: "Project: ${CLAUDE_PROJECT_DIR}\nSkill: ${CLAUDE_SKILL_DIR}\n",
+          },
+        ],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const skillBody = await readFile(
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        "utf8",
+      );
+      assert.ok(
+        skillBody.includes(`Project: ${cwd}`),
+        `skill: expected ${cwd} for projectDir, got: ${skillBody}`,
+      );
+      assert.equal(
+        skillBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "skill: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+
+      const commandBody = await readFile(
+        path.join(locations.promptsTargetDir, "hello:deploy.md"),
+        "utf8",
+      );
+      assert.ok(
+        commandBody.includes(`Project: ${cwd}`),
+        `command: expected ${cwd} for projectDir, got: ${commandBody}`,
+      );
+      assert.equal(
+        commandBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "command: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      // ${CLAUDE_SKILL_DIR} is skill-scoped -- commands receive no skillDir, so
+      // it stays literal.
+      assert.ok(
+        commandBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "command: expected literal ${CLAUDE_SKILL_DIR}, got: " + commandBody,
+      );
+
+      const agentBody = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.ok(
+        agentBody.includes(`Project: ${cwd}`),
+        `agent: expected ${cwd} for projectDir, got: ${agentBody}`,
+      );
+      assert.equal(
+        agentBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "agent: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      assert.ok(
+        agentBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "agent: expected literal ${CLAUDE_SKILL_DIR}, got: " + agentBody,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, command, and agent files", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-user-"));
+    try {
+      const locations = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+        skills: [{ sourceName: "tool", body: "Project: ${CLAUDE_PROJECT_DIR}\n" }],
+        commands: [{ sourceName: "deploy", body: "# deploy\nProject: ${CLAUDE_PROJECT_DIR}\n" }],
+        agents: [{ sourceName: "bot", body: "Project: ${CLAUDE_PROJECT_DIR}\n" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({ ctx, pi, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const skillBody = await readFile(
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        "utf8",
+      );
+      assert.ok(
+        skillBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "skill: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + skillBody,
+      );
+
+      const commandBody = await readFile(
+        path.join(locations.promptsTargetDir, "hello:deploy.md"),
+        "utf8",
+      );
+      assert.ok(
+        commandBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "command: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + commandBody,
+      );
+
+      const agentBody = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.ok(
+        agentBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "agent: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + agentBody,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

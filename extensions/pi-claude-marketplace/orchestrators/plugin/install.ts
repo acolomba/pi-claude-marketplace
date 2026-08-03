@@ -901,6 +901,8 @@ export async function runInstallLedger(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
+        // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+        cwd: c.cwd,
       });
       c.skillsPrep = prep;
       // Set before commit so undo can remove any dirs that were placed if
@@ -940,6 +942,8 @@ export async function runInstallLedger(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
+        // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+        cwd: c.cwd,
       });
       c.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.
@@ -983,6 +987,8 @@ export async function runInstallLedger(
         // we explicitly default to false so generated agents omit
         // `model:` (the default behavior).
         mapModel: opts.mapModel ?? false,
+        // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+        cwd: c.cwd,
       });
       c.agentsPrep = prep;
       const leak = await commitPreparedAgents(prep);

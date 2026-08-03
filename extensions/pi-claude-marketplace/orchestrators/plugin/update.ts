@@ -1144,6 +1144,8 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       previousSkillNames: record.resources.skills,
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd,
     });
     handles.commands = await prepareStageCommands({
       locations,
@@ -1153,6 +1155,8 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       previousCommandNames: record.resources.prompts,
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd,
     });
     handles.agents = await prepareStagePluginAgents({
       locations,
@@ -1166,6 +1170,8 @@ async function prepareUpdateHandles(
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
       mapModel: args.mapModel ?? false,
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,

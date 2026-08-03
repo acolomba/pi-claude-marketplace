@@ -1505,6 +1505,8 @@ async function prepareAllHandles(input: {
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
       previousSkillNames: input.oldRecord.resources.skills,
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd: input.cwd,
     });
     handles.commands = await prepareStageCommands({
       locations: input.locations,
@@ -1514,6 +1516,8 @@ async function prepareAllHandles(input: {
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
       previousCommandNames: input.oldRecord.resources.prompts,
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd: input.cwd,
     });
     handles.agents = await prepareStagePluginAgents({
       locations: input.locations,
@@ -1524,6 +1528,8 @@ async function prepareAllHandles(input: {
       resolved: input.installable,
       agentsSourceDir: input.agentsSourceDir,
       knownSkills: handles.skills.result.recorded.map((r) => r.generatedName),
+      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
+      cwd: input.cwd,
     });
     handles.mcp = await prepareStageMcpServers({
       locations: input.locations,
