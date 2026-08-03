@@ -3322,3 +3322,156 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// SUB-02 -- end-to-end ${CLAUDE_PROJECT_DIR} delivery through the reinstall path
+//
+// reinstall's prepareAllHandles threads `cwd` into every stage input by hand
+// (an optional field the compiler cannot enforce). A refactor that drops the
+// `cwd` line would compile, pass the rest of the suite, and silently ship
+// un-substituted project dirs on the reinstall path. These tests install a
+// project-scope fixture whose skill/command/agent bodies carry
+// ${CLAUDE_PROJECT_DIR} and ${CLAUDE_SKILL_DIR}, reinstall, and assert the
+// re-staged files -- closing the silent-miss gap end-to-end.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-sub02-proj-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          skill: "Project: ${CLAUDE_PROJECT_DIR}",
+          command: "Project: ${CLAUDE_PROJECT_DIR} Skill: ${CLAUDE_SKILL_DIR}",
+          agent: "Project: ${CLAUDE_PROJECT_DIR} Skill: ${CLAUDE_SKILL_DIR}",
+        },
+        install: true,
+      });
+
+      // Rewrite the source with a fresh marker so the assertions prove the
+      // reinstall re-staged from source (not leftover install output).
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "Reinstalled project: ${CLAUDE_PROJECT_DIR}",
+        command: "Reinstalled project: ${CLAUDE_PROJECT_DIR} Skill: ${CLAUDE_SKILL_DIR}",
+        agent: "Reinstalled project: ${CLAUDE_PROJECT_DIR} Skill: ${CLAUDE_SKILL_DIR}",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(errorNotifications(notifications).length, 0);
+
+      const skillBody = await readSkill(cwd);
+      assert.ok(
+        skillBody.includes(`Reinstalled project: ${cwd}`),
+        `skill: expected ${cwd} for projectDir, got: ${skillBody}`,
+      );
+      assert.equal(
+        skillBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "skill: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+
+      const commandBody = await readCommand(cwd);
+      assert.ok(
+        commandBody.includes(`Reinstalled project: ${cwd}`),
+        `command: expected ${cwd} for projectDir, got: ${commandBody}`,
+      );
+      assert.equal(
+        commandBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "command: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      // ${CLAUDE_SKILL_DIR} is skill-scoped -- commands receive no skillDir, so
+      // it stays literal.
+      assert.ok(
+        commandBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "command: expected literal ${CLAUDE_SKILL_DIR}, got: " + commandBody,
+      );
+
+      const agentBody = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.ok(
+        agentBody.includes(`Reinstalled project: ${cwd}`),
+        `agent: expected ${cwd} for projectDir, got: ${agentBody}`,
+      );
+      assert.equal(
+        agentBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "agent: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      assert.ok(
+        agentBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "agent: expected literal ${CLAUDE_SKILL_DIR}, got: " + agentBody,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill, command, and agent files", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-sub02-user-"));
+    try {
+      const locations = locationsFor("user", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          skill: "Project: ${CLAUDE_PROJECT_DIR}",
+          command: "Project: ${CLAUDE_PROJECT_DIR}",
+          agent: "Project: ${CLAUDE_PROJECT_DIR}",
+        },
+        install: true,
+        scope: "user",
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "user",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(errorNotifications(notifications).length, 0);
+
+      const skillBody = await readFile(
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        "utf8",
+      );
+      assert.ok(
+        skillBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "skill: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + skillBody,
+      );
+
+      const commandBody = await readFile(
+        path.join(locations.promptsTargetDir, "hello:deploy.md"),
+        "utf8",
+      );
+      assert.ok(
+        commandBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "command: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + commandBody,
+      );
+
+      const agentBody = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.ok(
+        agentBody.includes("Project: ${CLAUDE_PROJECT_DIR}"),
+        "agent: user-scope must keep ${CLAUDE_PROJECT_DIR} literal, got: " + agentBody,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

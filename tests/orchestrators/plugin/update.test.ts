@@ -4386,3 +4386,117 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// SUB-02 -- end-to-end ${CLAUDE_PROJECT_DIR} delivery through the update path
+//
+// update's prepareUpdateHandles threads `cwd` into every stage input by hand
+// (an optional field the compiler cannot enforce). A refactor that drops the
+// `cwd` line would compile, pass the rest of the suite, and silently ship
+// un-substituted project dirs on the update path. This test seeds a
+// project-scope fixture whose skill/command/agent bodies carry
+// ${CLAUDE_PROJECT_DIR} and ${CLAUDE_SKILL_DIR}, updates to a new version, and
+// asserts the re-staged files -- closing the silent-miss gap end-to-end.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sub02-proj-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: { version: "1.0.1", hasSkill: true, hasCommand: true, hasAgent: true },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Overwrite the seeded plugin source with token-bearing bodies so the
+      // update re-stages content that exercises ${CLAUDE_PROJECT_DIR} and
+      // ${CLAUDE_SKILL_DIR} substitution. The first materialization is the
+      // update itself (seedPathMarketplace only seeds a state record).
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await writeFile(
+        path.join(pluginRoot, "skills", "tool", "SKILL.md"),
+        "---\nname: tool\n---\n\nProject: ${CLAUDE_PROJECT_DIR}\n",
+      );
+      await writeFile(
+        path.join(pluginRoot, "commands", "deploy.md"),
+        "# deploy\n\nProject: ${CLAUDE_PROJECT_DIR}\nSkill: ${CLAUDE_SKILL_DIR}\n",
+      );
+      await writeFile(
+        path.join(pluginRoot, "agents", "bot.md"),
+        "---\nname: bot\ntools: Read,Grep\n---\n\nProject: ${CLAUDE_PROJECT_DIR}\nSkill: ${CLAUDE_SKILL_DIR}\n",
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const skillBody = await readFile(
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        "utf8",
+      );
+      assert.ok(
+        skillBody.includes(`Project: ${cwd}`),
+        `skill: expected ${cwd} for projectDir, got: ${skillBody}`,
+      );
+      assert.equal(
+        skillBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "skill: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+
+      const commandBody = await readFile(
+        path.join(locations.promptsTargetDir, "hello:deploy.md"),
+        "utf8",
+      );
+      assert.ok(
+        commandBody.includes(`Project: ${cwd}`),
+        `command: expected ${cwd} for projectDir, got: ${commandBody}`,
+      );
+      assert.equal(
+        commandBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "command: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      // ${CLAUDE_SKILL_DIR} is skill-scoped -- commands receive no skillDir, so
+      // it stays literal.
+      assert.ok(
+        commandBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "command: expected literal ${CLAUDE_SKILL_DIR}, got: " + commandBody,
+      );
+
+      const agentBody = await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        "utf8",
+      );
+      assert.ok(
+        agentBody.includes(`Project: ${cwd}`),
+        `agent: expected ${cwd} for projectDir, got: ${agentBody}`,
+      );
+      assert.equal(
+        agentBody.includes("${CLAUDE_PROJECT_DIR}"),
+        false,
+        "agent: no remaining ${CLAUDE_PROJECT_DIR}",
+      );
+      assert.ok(
+        agentBody.includes("Skill: ${CLAUDE_SKILL_DIR}"),
+        "agent: expected literal ${CLAUDE_SKILL_DIR}, got: " + agentBody,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
