@@ -29,6 +29,7 @@ import { errorMessage } from "../../shared/errors.ts";
 
 import { loadEffectiveServerNames } from "./collision-slots.ts";
 import { CLAUDE_MARKETPLACE_MARKER_KEY, buildMarker, isOwnedBy } from "./marker.ts";
+import { safeSet } from "./safe-set.ts";
 import { substituteAndInject, type McpSubstitutionContext } from "./substitute.ts";
 
 import type {
@@ -107,7 +108,10 @@ function partitionExistingServers(
     if (isOwnedBy(value, pluginName, marketplaceName)) {
       ours.add(name);
     } else {
-      theirs[name] = value;
+      // safeSet copies a server literally named `__proto__` verbatim as an own
+      // key rather than routing it through the inherited setter (which would
+      // drop it, silently losing the user's foreign entry) -- WR-01.
+      safeSet(theirs, name, value);
     }
   }
 
@@ -158,7 +162,10 @@ function stampServers(
       typeof entry === "object" && entry !== null && !Array.isArray(entry)
         ? substituteAndInject(entry as Record<string, unknown>, subCtx)
         : {};
-    stamped[name] = { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker };
+    // safeSet copies a plugin-declared server literally named `__proto__` as an
+    // own key so it is stamped and written rather than dropped via the
+    // inherited setter (which would diverge state.json from disk) -- WR-01.
+    safeSet(stamped, name, { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker });
   }
 
   return stamped;

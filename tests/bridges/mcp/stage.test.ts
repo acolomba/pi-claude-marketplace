@@ -956,6 +956,81 @@ test("MENV-04 re-stage preserves foreign (theirs) entries verbatim", async () =>
   });
 });
 
+// ---------------------------------------------------------------------------
+// WR-01 -- a server literally named __proto__ survives partition and stamping
+// ---------------------------------------------------------------------------
+
+test("WR-01 a foreign server literally named __proto__ is preserved verbatim", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // JSON.parse materializes __proto__ as a real own-enumerable key, so the
+    // scoped doc must be seeded as raw text -- an object literal with a
+    // __proto__ key would hit the prototype setter and never create the entry.
+    const rawDoc =
+      '{"customField":"keep-me","mcpServers":{"__proto__":{"command":"foreign",' +
+      `"env":{"A":"1"},"${CLAUDE_MARKETPLACE_MARKER_KEY}":` +
+      `{"plugin":"other","marketplace":"${MP}"}}}}`;
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, rawDoc, "utf8");
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { srv: { command: "y" } },
+    });
+    await commitPreparedMcp(prepared);
+
+    const servers = await readCommittedServers(locations.mcpJsonPath);
+    // The foreign __proto__ entry survives as an own key, byte-for-byte.
+    assert.ok(Object.hasOwn(servers, "__proto__"), "foreign __proto__ entry must be an own key");
+    assert.deepEqual(servers["__proto__"], {
+      command: "foreign",
+      env: { A: "1" },
+      [CLAUDE_MARKETPLACE_MARKER_KEY]: { plugin: "other", marketplace: MP },
+    });
+    // Our own entry still landed.
+    assert.ok("srv" in servers);
+    // No global prototype pollution from the round-trip.
+    assert.equal(({} as Record<string, unknown>).command, undefined);
+  });
+});
+
+test("WR-01 a plugin-declared server named __proto__ is stamped and written", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // JSON.parse materializes __proto__ as a real own key, mirroring what the
+    // resolver produces from a plugin manifest naming a server "__proto__".
+    const servers = JSON.parse('{"__proto__":{"command":"${CLAUDE_PLUGIN_ROOT}/bin"}}') as Record<
+      string,
+      unknown
+    >;
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers,
+    });
+    await commitPreparedMcp(prepared);
+
+    const committed = await readCommittedServers(locations.mcpJsonPath);
+    assert.ok(
+      Object.hasOwn(committed, "__proto__"),
+      "the __proto__ server must be an own key on disk",
+    );
+    const entry = committed["__proto__"];
+    assert.equal(entry?.command, `${PLUGIN_ROOT}/bin`);
+    assert.deepEqual(entry?.[CLAUDE_MARKETPLACE_MARKER_KEY], { plugin: PLUGIN, marketplace: MP });
+    // No global prototype pollution from the stamp/write round-trip.
+    assert.equal(({} as Record<string, unknown>).command, undefined);
+  });
+});
+
 test("PRL-10 finalizeMcpReplacement throws on unknown replacement handle (defensive)", () => {
   const bogus = { kind: "replaced" } as Parameters<typeof finalizeMcpReplacement>[0];
   assert.throws(() => finalizeMcpReplacement(bogus), /Unknown MCP replacement handle/);
