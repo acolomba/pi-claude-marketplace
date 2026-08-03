@@ -43,6 +43,21 @@ const PLUGIN = "acme";
 const PLUGIN_ROOT = "/plugins/acme";
 const PLUGIN_DATA = "/data/acme";
 
+type CommittedServer = {
+  command?: string;
+  url?: string;
+  env?: Record<string, string>;
+  [k: string]: unknown;
+};
+
+/** Read the committed mcp.json and return its mcpServers map. */
+async function readCommittedServers(mcpJsonPath: string): Promise<Record<string, CommittedServer>> {
+  const onDisk = JSON.parse(await readFile(mcpJsonPath, "utf8")) as {
+    mcpServers: Record<string, CommittedServer>;
+  };
+  return onDisk.mcpServers;
+}
+
 // ---------------------------------------------------------------------------
 // MC-5 marker stamping
 // ---------------------------------------------------------------------------
@@ -593,6 +608,131 @@ test("stagedNames matches recorded.map(r=>r.generatedName)", async () => {
       [...result.stagedNames],
       result.recorded.map((r) => r.generatedName),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MENV-02 / D-92-02 -- stdio env injection targeting + declared-wins precedence
+// ---------------------------------------------------------------------------
+
+test("MENV-02 stdio env carries CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { srv: { command: "node", args: ["server.js"] } },
+    });
+    await commitPreparedMcp(prepared);
+
+    const srv = (await readCommittedServers(locations.mcpJsonPath)).srv!;
+    assert.equal(srv.env?.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
+    assert.equal(srv.env?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+    // Injected-first order: the two plugin keys lead the env map.
+    assert.deepEqual(Object.keys(srv.env!).slice(0, 2), [
+      "CLAUDE_PLUGIN_ROOT",
+      "CLAUDE_PLUGIN_DATA",
+    ]);
+  });
+});
+
+test("MENV-02 plugin-declared env key wins over injected default", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: {
+        // Declares a literal override of an injected key plus a custom key
+        // that references an injected var (proves substitution still runs).
+        override: {
+          command: "x",
+          env: { CLAUDE_PLUGIN_ROOT: "/plugin/override", CUSTOM: "${CLAUDE_PLUGIN_DATA}/c" },
+        },
+        // Declares the same key with a value that itself carries the token --
+        // substitution resolves it AND the declared key still wins.
+        substituted: {
+          command: "y",
+          env: { CLAUDE_PLUGIN_ROOT: "${CLAUDE_PLUGIN_ROOT}/x" },
+        },
+      },
+    });
+    await commitPreparedMcp(prepared);
+
+    const servers = await readCommittedServers(locations.mcpJsonPath);
+    const override = servers.override!;
+    // Declared literal wins over the injected default; the key appears once.
+    assert.equal(override.env?.CLAUDE_PLUGIN_ROOT, "/plugin/override");
+    assert.equal(Object.keys(override.env!).filter((k) => k === "CLAUDE_PLUGIN_ROOT").length, 1);
+    // CLAUDE_PLUGIN_DATA (not declared) is still injected; CUSTOM is substituted.
+    assert.equal(override.env?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+    assert.equal(override.env?.CUSTOM, `${PLUGIN_DATA}/c`);
+
+    // Declared value carrying the token is substituted, and still wins the key.
+    assert.equal(servers.substituted!.env?.CLAUDE_PLUGIN_ROOT, `${PLUGIN_ROOT}/x`);
+  });
+});
+
+test("MENV-02 stdio entry without env gains injected keys; malformed env treated as absent", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: {
+        empty: { command: "x", env: {} },
+        // Non-object env is treated as absent -- injected keys still land.
+        bad: { command: "y", env: "not-an-object" },
+      },
+    });
+    await commitPreparedMcp(prepared);
+
+    const servers = await readCommittedServers(locations.mcpJsonPath);
+    assert.equal(servers.empty!.env?.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
+    assert.equal(servers.empty!.env?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+
+    const badEnv = servers.bad!.env;
+    assert.equal(typeof badEnv, "object");
+    assert.equal(badEnv?.CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT);
+    assert.equal(badEnv?.CLAUDE_PLUGIN_DATA, PLUGIN_DATA);
+  });
+});
+
+test("D-92-02 url-type entry keeps declared env untouched and gains no env; string values still substituted", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: {
+        // No command -> url-type. String value is substituted, but no env synthesized.
+        urlNoEnv: { url: "https://x/${CLAUDE_PLUGIN_ROOT}" },
+        // Declared env on a url-type entry is preserved verbatim (no injection).
+        urlWithEnv: { url: "https://y", env: { TOKEN: "abc" } },
+      },
+    });
+    await commitPreparedMcp(prepared);
+
+    const servers = await readCommittedServers(locations.mcpJsonPath);
+    const urlNoEnv = servers.urlNoEnv!;
+    assert.equal(urlNoEnv.url, `https://x/${PLUGIN_ROOT}`);
+    assert.equal("env" in urlNoEnv, false, "url-type entry must not gain a synthesized env");
+
+    const urlWithEnv = servers.urlWithEnv!;
+    assert.equal(urlWithEnv.url, "https://y");
+    assert.deepEqual(urlWithEnv.env, { TOKEN: "abc" });
   });
 });
 
