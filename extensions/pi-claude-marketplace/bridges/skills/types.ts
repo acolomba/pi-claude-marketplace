@@ -37,6 +37,13 @@ export interface StageSkillsInput {
    * staged content. Empty / absent on fresh installs.
    */
   readonly previousSkillNames?: readonly string[];
+  /**
+   * Project-scope install cwd (the project root), substituted for
+   * `${CLAUDE_PROJECT_DIR}` in skill content (SUB-02). Optional: user-scope
+   * and un-threaded callers omit it, leaving the token literal (pass-through).
+   * Unlike the MCP bridge's required `cwd`, this feeds substitution only.
+   */
+  readonly cwd?: string;
 }
 
 /**

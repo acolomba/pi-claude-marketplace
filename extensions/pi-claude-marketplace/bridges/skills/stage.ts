@@ -50,6 +50,7 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
+import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 type SkillsReplacementInternals = Readonly<{
   backupRoot: string;
@@ -149,7 +150,7 @@ function augmentSkillDescription(
   content: string,
   frontmatter: Record<string, unknown>,
   body: string,
-  vars: { pluginRoot: string; pluginData: string },
+  vars: ClaudePluginVars,
 ): string {
   const rawDescription = frontmatter.description;
   const sourceDescription = typeof rawDescription === "string" ? rawDescription : "";
@@ -196,7 +197,7 @@ function augmentSkillDescription(
  * cause and a manual-cleanup hint in one notification.
  */
 export async function prepareStageSkills(input: StageSkillsInput): Promise<PreparedSkillsStaging> {
-  const { locations, pluginName, pluginRoot, pluginDataDir, resolved } = input;
+  const { locations, pluginName, pluginRoot, pluginDataDir, resolved, cwd } = input;
   const previousNames = input.previousSkillNames ?? [];
 
   // D-07: discover returns { discovered, warnings }. warnings surface
@@ -244,6 +245,17 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       const targetDir = path.join(locations.skillsTargetDir, skill.generatedName);
       await assertPathInside(locations.skillsTargetDir, targetDir, "skill target destination");
 
+      // SUB-01: ${CLAUDE_SKILL_DIR} resolves to the skill's installed dir --
+      // the same assertPathInside-guarded `targetDir` computed above.
+      // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
+      // project scope; user scope leaves the token literal (undefined -> pass-through).
+      const skillVars: ClaudePluginVars = {
+        pluginRoot,
+        pluginData: pluginDataDir,
+        skillDir: targetDir,
+        projectDir: locations.scope === "project" ? cwd : undefined,
+      };
+
       // T-03-15: copy with `verbatimSymlinks: true, dereference: false` so a
       // symlink inside the source tree is preserved as a symlink rather than
       // resolved (which could escape the source tree). errorOnExist=true is a
@@ -289,13 +301,10 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       // `description`, so it skips both. SK-4 substitution runs on both arms.
       if (parsed !== undefined) {
         content = rewriteFrontmatterName(content, skill.generatedName);
-        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, {
-          pluginRoot,
-          pluginData: pluginDataDir,
-        });
+        content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
       }
 
-      content = substituteClaudeVars(content, { pluginRoot, pluginData: pluginDataDir });
+      content = substituteClaudeVars(content, skillVars);
       await writeFile(skillMdPath, content, "utf8");
 
       // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
