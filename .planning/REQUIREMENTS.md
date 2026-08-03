@@ -33,8 +33,8 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 ### Substitution Completion
 
-- [ ] **SUB-01**: `${CLAUDE_SKILL_DIR}` in a skill's content resolves at stage time to the skill's installed directory
-- [ ] **SUB-02**: `${CLAUDE_PROJECT_DIR}` in project-scope skills/commands/agents resolves at stage time to the project root; user-scope occurrences pass through untouched (documented)
+- [x] **SUB-01**: `${CLAUDE_SKILL_DIR}` in a skill's content resolves at stage time to the skill's installed directory
+- [x] **SUB-02**: `${CLAUDE_PROJECT_DIR}` in project-scope skills/commands/agents resolves at stage time to the project root; user-scope occurrences pass through untouched (documented)
 
 ### Documentation
 
@@ -84,8 +84,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MENV-02 | Phase 92 | Complete |
 | MENV-03 | Phase 92 | Complete |
 | MENV-04 | Phase 92 | Complete |
-| SUB-01 | Phase 93 | Pending |
-| SUB-02 | Phase 93 | Pending |
+| SUB-01 | Phase 93 | Complete |
+| SUB-02 | Phase 93 | Complete |
 | DOC-06 | Phase 94 | Pending |
 | DOC-07 | Phase 94 | Pending |
 
