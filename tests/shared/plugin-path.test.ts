@@ -86,6 +86,22 @@ test("collectBinDirs: empty state yields no dirs", () => {
   assert.deepEqual(collectBinDirs({ schemaVersion: 2, marketplaces: {} }), []);
 });
 
+test("WR-01 collectBinDirs: drops records with a non-absolute or empty resolvedSource", () => {
+  // asAbsolutePluginRoot rejects empty/relative/traversal resolvedSource, so a
+  // corrupted record can never compose a CWE-426 relative PATH entry; only the
+  // absolute sibling survives.
+  const state = makeState(
+    {
+      good: { resolvedSource: "/plugins/good", enabled: true },
+      relative: { resolvedSource: "plugins/relative", enabled: true },
+      empty: { resolvedSource: "", enabled: true },
+    },
+    "/plugins",
+  );
+
+  assert.deepEqual(collectBinDirs(state), [join("/plugins/good", "bin")]);
+});
+
 test("applyPathLedger: appends fresh bin dirs after existing entries (never prepend)", () => {
   const current = ["/usr/bin", "/bin"].join(delimiter);
   const result = applyPathLedger(current, "", ["/plugins/alpha/bin"]);
