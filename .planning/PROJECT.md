@@ -184,7 +184,7 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** milestone v1.17 env-parity (started 2026-08-01) — defining requirements. The v1.16 npm release shipped as `0.12.0` (PR #109 squash-merged, v-tag CI publish).
+**In progress:** milestone v1.17 env-parity (started 2026-08-01) — executing. Phase 90 (session env init: `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` on live `process.env` at `session_start` + PENV-01 plugin-bin PATH recompute with the `PI_CLAUDE_MARKETPLACE_PATH` env-var ledger) implemented 2026-08-03, live-Pi UAT deferred (`/gsd-verify-work 90`). Phase 91 (hook env parity: three session keys from the `transCtx.sessionId` snapshot on BOTH spawn lanes via the shared `claudeSessionEnvFor` producer, behavioral drift guard) complete 2026-08-03 — HENV-01/02 validated. The v1.16 npm release shipped as `0.12.0` (PR #109 squash-merged, v-tag CI publish).
 
 **Just shipped:** v1.16 stop-hooks (2026-07-31, Phases 87-89, 11 plans, 22 tasks). `Stop` + `StopFailure` promoted into bucket-A (8→10 events) at full hook-observable fidelity: admission with per-event matcher dispositions and the `>=0.80.5` peer floor (Phase 87); the `agent_settled` dispatcher gated on the final assistant message's `stopReason` with the complete Stop decision contract, `stop_hook_active` + shared-lane 8-re-entry cap, and the observation-only StopFailure classifier (Phase 88, live-UAT 4/4 on pi 0.80.10); docs reconciled version-neutral with the timing-shift divergence documented (Phase 89). Milestone audit passed 15/15; `ralph-wiggum` and `hookify` now install fully (first-party 12/13).
 
