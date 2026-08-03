@@ -106,7 +106,9 @@
   2. A hook spawned on the async-rewake lane (`prepareAsyncEnv`) receives an identical env set to the sync lane — same keys, same values. (HENV-02)
   3. A drift-guard test fails if the two lanes' env sets ever diverge, so the deliberate hand-mirror cannot silently rot. (HENV-02)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+- [ ] 91-01-PLAN.md — add `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` (from `transCtx.sessionId`, after the spread) to both hook env lanes (`prepareEnv` + `prepareAsyncEnv`), with lane-local assertions and the HENV-02 behavioral drift guard (PreToolUse + SessionStart fixtures). Wave 1, autonomous.
 
 ### Phase 92: MCP staging parity
 
