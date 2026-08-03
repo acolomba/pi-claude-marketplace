@@ -2,7 +2,7 @@
 phase: 93-substitution-completion
 reviewed: 2026-08-03T00:00:00Z
 depth: standard
-files_reviewed: 16
+files_reviewed: 17
 files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/agents/convert.ts
   - extensions/pi-claude-marketplace/bridges/agents/stage.ts
@@ -19,11 +19,13 @@ files_reviewed_list:
   - tests/bridges/commands/stage.test.ts
   - tests/bridges/skills/stage.test.ts
   - tests/orchestrators/plugin/install.test.ts
+  - tests/orchestrators/plugin/reinstall.test.ts
+  - tests/orchestrators/plugin/update.test.ts
   - tests/shared/vars.test.ts
 findings:
   critical: 0
-  warning: 1
-  info: 2
+  warning: 0
+  info: 3
   total: 3
 status: issues_found
 ---
@@ -32,109 +34,101 @@ status: issues_found
 
 **Reviewed:** 2026-08-03
 **Depth:** standard
-**Files Reviewed:** 16
-**Status:** issues_found
+**Files Reviewed:** 17
+**Status:** issues_found (info-only)
 
 ## Summary
 
-Phase 93 extends `substituteClaudeVars` from a two-variable, two-pass literal
-`replaceAll` chain to a four-variable single-pass alternation replace, and threads
-scope-gated `${CLAUDE_PROJECT_DIR}` (via `cwd`) plus skill-scoped
-`${CLAUDE_SKILL_DIR}` (via `targetDir`) into the skills/commands/agents bridges
-and the install/reinstall/update orchestrators.
+Iteration 2 re-review of Phase 93 (SUB-01/SUB-02 four-variable
+`substituteClaudeVars`). The prior review's one WARNING (WR-01 -- reinstall/update
+lacked end-to-end SUB-02 `projectDir` tests) is **verified closed** by commit
+9e0fbc00.
 
-The core substitution primitive is correct and the binding prohibitions from the
-plan all hold under inspection:
+Verification performed:
+- Read the two new test blocks. `tests/orchestrators/plugin/reinstall.test.ts`
+  (project-scope + user-scope) and `tests/orchestrators/plugin/update.test.ts`
+  (project-scope) assert substitution against the **materialized target files**
+  (`skillsTargetDir/<name>/SKILL.md`, `promptsTargetDir/<name>.md`,
+  `agentsDir/<name>.md`) -- not just the bridge return value. They assert both
+  arms of the contract: project scope substitutes `${CLAUDE_PROJECT_DIR}` to the
+  install cwd and leaves no residual token, while `${CLAUDE_SKILL_DIR}` stays
+  literal in command/agent output (skill-scoped). The user-scope reinstall case
+  pins the scope gate keeping `${CLAUDE_PROJECT_DIR}` literal.
+- Ran the three SUB-02 tests directly: all pass (`# pass 3 # fail 0`).
 
-- **Single-pass no-reexpansion:** the alternation replacer walks `content` once;
-  `value ?? matched` returns the literal on an absent field. A value that embeds a
-  `${CLAUDE_*}` literal cannot be re-folded within a pass. Verified against
-  `tests/shared/vars.test.ts` (T-03-01 cases) and the byte-identity test.
-- **Absent field -> literal, never empty string:** `undefined ?? matched` yields
-  the matched literal. Confirmed for both `skillDir` and `projectDir`.
-- **Scope gate:** all three surfaces gate `projectDir` on
-  `locations.scope === "project" ? cwd : undefined`, so user-scope
-  `${CLAUDE_PROJECT_DIR}` is never substituted (bridge unit tests + install e2e
-  both cover this).
-- **`${CLAUDE_SKILL_DIR}` stays literal in commands/agents:** neither surface
-  supplies `skillDir`; the pass-through leaves the token literal
-  (`tests/bridges/commands/stage.test.ts`, `tests/bridges/agents/convert.test.ts`).
-- **Cascade preserved:** `updateSinglePlugin` threads no new flag; `cwd` defaults
-  to `process.cwd()` and flows to the same scope gate. No regression in the
-  autoupdate path.
-- **All nine call sites threaded:** install (3 phases), reinstall
-  (`prepareAllHandles`, 3), update (`prepareUpdateHandles`, 3) all pass `cwd`;
-  a repo-wide grep confirms these are the only `prepareStage*` callers.
+Scope-gating is correct and single-sourced: the `locations.scope === "project"
+? cwd : undefined` gate lives in each bridge (`bridges/skills/stage.ts:256`,
+`bridges/commands/stage.ts:247`, `bridges/agents/stage.ts:115`); the three
+orchestrators thread `cwd` unconditionally and the bridge decides. Skills feed
+`skillDir` + gated `projectDir`; commands/agents feed gated `projectDir` only, so
+`${CLAUDE_SKILL_DIR}` correctly stays literal there. `substituteClaudeVars`
+(`shared/vars.ts`) is a single-pass replacer -- an absent field passes the token
+through literally (never empty string), and an injected value is never
+re-scanned. Comment-policy scan found no phase/plan/pitfall/milestone tokens in
+the changed source or tests.
 
-No correctness, security, or data-loss defects were found. The `replaceAll`
-regex carries the required `/g` flag, is module-level and stateless across
-synchronous calls, and performs pure string replacement (no eval, no ReDoS
-surface). Comments use only allowed traceability anchors (SUB-01/02, D-08, PI-10,
-NFR-10, T-03-*); no forbidden phase/plan/pitfall tokens were introduced.
-
-The findings below are a test-coverage gap and two low-severity robustness notes.
-
-## Warnings
-
-### WR-01: reinstall and update orchestrators thread `cwd` by hand with no end-to-end SUB-02 guard
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:1508` and `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1148,1159,1174`
-**Issue:** The install orchestrator's new tests explicitly document the risk they
-close: *"the orchestrator threads `cwd` into every stage input by hand (optional
-field a compiler cannot enforce)"* — an omitted `cwd` silently degrades
-`${CLAUDE_PROJECT_DIR}` to a literal with no compile error. The same hand-threaded,
-compiler-unenforced pattern exists in `reinstall.ts::prepareAllHandles` and
-`update.ts::prepareUpdateHandles`, but only `install.ts` gained an end-to-end
-SUB-02 test. A grep of `tests/orchestrators/plugin/reinstall.test.ts` and
-`tests/orchestrators/plugin/update.test.ts` finds zero references to `SUB-02`,
-`projectDir`, or `CLAUDE_PROJECT_DIR`. A future refactor that drops the `cwd`
-line from either path (both `cwd?` bridge fields are optional) would compile,
-pass the existing suite, and silently ship un-substituted project dirs on the
-reinstall/update paths.
-**Fix:** Add an end-to-end SUB-02 assertion for the reinstall and update
-orchestrators mirroring the install test — install a project-scope fixture whose
-skill/command/agent bodies carry `${CLAUDE_PROJECT_DIR}`, run reinstall (and
-update to a new version), and assert the materialized files substitute `cwd`.
-Alternatively, tighten the risk at the type level by making `cwd` required on the
-three `Stage*Input` interfaces (bridges default the scope gate to pass-through
-when scope !== project), so the compiler enforces threading.
+No BLOCKER or WARNING defects found. The fix broke nothing. Three carried/new
+INFO items remain.
 
 ## Info
 
-### IN-01: description cap is applied pre-substitution, so an expanded `${CLAUDE_*}` token can push the emitted skill description past 1,536 code units
+### IN-01: Skill `description` 1,536-code-unit cap is applied pre-substitution
 
 **File:** `extensions/pi-claude-marketplace/bridges/skills/stage.ts:169-172`
-**Issue:** `augmentSkillDescription` runs `truncate1536(folded)` on the *authored*
-text and then substitutes vars, so the final scalar length is
-`1536 - len("${CLAUDE_SKILL_DIR}") + len(targetDir)` when a token sits inside the
-capped window — which can exceed the WTU-02 budget. This ordering is intentional
-and pre-existing for `pluginRoot`/`pluginData` (the comment notes it matches the
-prior whole-file ordering), but Phase 93 widens the reachable expansions to
-`skillDir` (a full absolute target path) and `projectDir`, making an over-cap
-description more likely for a skill whose description references those tokens near
-the cap boundary. The WTU-02 tests use token-free `a`/`b` fillers, so this path is
-unexercised.
-**Fix:** Low priority. If the 1,536 ceiling is meant to bound the *emitted* bytes
-(not just authored bytes), apply a second `truncate1536` after substitution; if
-it is meant to bound authored text only (per D-86-05), no change is needed — add
-a test with a token-bearing description near the cap to pin whichever semantics is
-intended.
+**Issue:** In `augmentSkillDescription`, `truncate1536` is applied to `folded`
+**before** `substituteClaudeVars`:
+```ts
+const effective = substituteClaudeVars(
+  truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded),
+  vars,
+);
+```
+A `description` that embeds `${CLAUDE_SKILL_DIR}` or `${CLAUDE_PROJECT_DIR}` and
+sits near the cap can exceed 1,536 code units **after** the token expands to a
+long absolute path, so the emitted double-quoted scalar can be longer than the
+WTU-02 budget nominally guarantees. The inline comment documents this as
+intentional ("the WTU-02 listing budget measures the authored text"), and the
+PARSE-02 re-parse still guards Pi-acceptability, so this is a low-severity
+spec-vs-implementation nuance rather than a defect. Carried forward from
+iteration 1 (still true).
+**Fix:** If the cap must hold on the *rendered* description, apply
+`truncate1536` **after** substitution (accepting the Windows-backslash escaping
+tradeoff the current comment calls out), or amend the WTU-02 contract text to
+state the cap measures authored (pre-substitution) length. Otherwise leave as-is
+and treat this as documented behavior.
 
-### IN-02: `name` replacer parameter is type-asserted without a runtime guard
+### IN-02: `TOKEN_TO_FIELD` map and `CLAUDE_VAR_PATTERN` regex are kept in manual lockstep
 
-**File:** `extensions/pi-claude-marketplace/shared/vars.ts:63-65`
-**Issue:** The replacer types its capture-group argument as
-`name: keyof typeof TOKEN_TO_FIELD` and indexes `TOKEN_TO_FIELD[name]` directly.
-The assertion is sound today because `CLAUDE_VAR_PATTERN`'s alternation can only
-capture the four mapped names, but the regex and the `TOKEN_TO_FIELD` map are two
-separate literals that must be kept in lockstep by hand (the comment acknowledges
-this). If a fifth token were added to the regex alternation but not the map,
-`TOKEN_TO_FIELD[name]` would be `undefined`, `vars[undefined]` would be
-`undefined`, and the token would silently pass through as a literal rather than
-failing loudly.
-**Fix:** Low priority. Derive `CLAUDE_VAR_PATTERN` from `Object.keys(TOKEN_TO_FIELD)`
-(join with `|`) so the pattern and the map cannot drift, eliminating the manual
-lockstep requirement and the type assertion.
+**File:** `extensions/pi-claude-marketplace/shared/vars.ts:35-43`
+**Issue:** The substitutable-token set is declared twice: once as the
+`TOKEN_TO_FIELD` object keys and once as the hand-written alternation in
+`CLAUDE_VAR_PATTERN`. The `satisfies Record<string, keyof ClaudePluginVars>`
+constrains the map's *values*, and the replacer types `name: keyof typeof
+TOKEN_TO_FIELD`, but nothing ties the regex alternation to the map keys. Adding a
+fifth token to only one of the two drifts silently: a map-only addition never
+matches (no substitution); a regex-only addition makes the `name` type assertion
+a lie and yields `TOKEN_TO_FIELD[name] === undefined` -> `vars[undefined]` ->
+pass-through literal. Both degrade quietly rather than failing loudly. Carried
+forward from iteration 1 (still true).
+**Fix:** Derive the pattern from the map keys, e.g.
+`new RegExp(String.raw`\$\{(${Object.keys(TOKEN_TO_FIELD).join("|")})\}`, "g")`,
+so the token set has a single source of truth. Optional cleanup; behavior is
+correct today.
+
+### IN-03: `update.ts` SUB-02 coverage lacks a user-scope case (asymmetric with reinstall)
+
+**File:** `tests/orchestrators/plugin/update.test.ts:4402`
+**Issue:** The fix added a project-scope **and** a user-scope SUB-02 test to
+`reinstall.test.ts` but only a project-scope test to `update.test.ts` (the commit
+message acknowledges this). The user-scope "keep `${CLAUDE_PROJECT_DIR}` literal"
+path on the update orchestrator is therefore not exercised end-to-end. Risk is
+low: the literal-when-undefined behavior is decided by the shared bridge gate
+(`locations.scope === "project" ? cwd : undefined`), which is covered by the
+reinstall user-scope test and the `shared/vars.test.ts` absent-`projectDir`
+assertions; the WR-01 threading concern (a dropped `cwd` line) is guarded by the
+existing project-scope update test.
+**Fix:** For parity and defense-in-depth, add a user-scope variant of the
+`update.test.ts` SUB-02 test mirroring the reinstall user-scope case.
 
 ---
 
