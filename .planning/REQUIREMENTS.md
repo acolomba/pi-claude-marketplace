@@ -5,7 +5,7 @@
 
 **Milestone goal:** Installed Claude plugins see the same environment variables, delivered the same way, as they would under Claude Code — runtime env injection for session-scoped values, install-time textual substitution for install-stable per-plugin values — across all five component surfaces (skills, commands, agents, hooks, MCP servers).
 
-Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string-literal extraction of its env-builder and substitution functions) and a live session environment. Key facts the requirements rest on: Claude Code's bash children carry `CLAUDECODE=1` + `CLAUDE_CODE_SESSION_ID` (+ `CLAUDE_EFFORT`) but NOT `CLAUDE_PROJECT_DIR` (hooks/MCP only); Pi's bash tool builds every child env from live `process.env` (`getShellEnv()` spreads it, scrubbing only `PI_*` keys); plugin MCP entries are currently written to `mcp.json` verbatim, so `${CLAUDE_PLUGIN_ROOT}` references reach pi-mcp-adapter unexpanded.
+Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string-literal extraction of its env-builder and substitution functions) and a live session environment. Key facts the requirements rest on: Claude Code's bash children carry `CLAUDECODE=1` + `CLAUDE_CODE_SESSION_ID` (+ `CLAUDE_EFFORT`) but NOT `CLAUDE_PROJECT_DIR` (hooks/MCP only); Pi's bash tool builds every child env fresh at each spawn — `getShellEnv()` spreads the full live `process.env` (its only mutation: prepends Pi's managed bin dir to `PATH`), then the bash tool's `resolveSpawnContext()` deletes and re-derives exactly five named keys from the live session context (`PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`, `PI_REASONING_LEVEL`); there is no `PI_*`-prefix scrub, so extension mutations of `process.env` (other than those five keys) reach every later bash child; plugin MCP entries are currently written to `mcp.json` verbatim, so `${CLAUDE_PLUGIN_ROOT}` references reach pi-mcp-adapter unexpanded. Re-verified 2026-08-02: live Claude Code 2.1.212 session env; binary string extraction (child-env builder, MCP stdio spawn env, invoke-time content-substitution set); pi-mcp-adapter 2.10.0 source; pi-coding-agent 0.82.1 source.
 
 ## v1 Requirements
 
@@ -15,6 +15,10 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 - [ ] **SENV-02**: The same script sees `CLAUDE_CODE_SESSION_ID` equal to the current Pi session id, and the value tracks the active session (fresh after session switch / `/reload`)
 - [ ] **SENV-03**: `CLAUDE_SESSION_ID` is set to the same value — documented pi-only shim so un-substituted `${CLAUDE_SESSION_ID}` template literals still expand in shell contexts
 
+### Plugin PATH
+
+- [ ] **PENV-01**: At session start, each installed enabled plugin's `<pluginRoot>/bin` directory is appended to `process.env.PATH` — appended, never prepended; deduplicated and idempotent across repeated session-start events; recomputed from install state so installs/uninstalls are reflected after reload; the entry is added even if the directory does not exist (verified live: Claude Code 2.1.212 appends `<pluginRoot>/bin` for enabled plugins unconditionally)
+
 ### Hook Environment
 
 - [ ] **HENV-01**: A plugin hook process (sync dispatch lane) receives `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` alongside the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set
@@ -22,9 +26,9 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 ### MCP Environment Parity
 
-- [ ] **MENV-01**: A plugin MCP server whose `command`/`args`/`env` values contain `${CLAUDE_PLUGIN_ROOT}` or `${CLAUDE_PLUGIN_DATA}` is written to `mcp.json` with real install paths substituted
+- [ ] **MENV-01**: A plugin MCP server whose `command`/`args`/`env` values contain a stage-time substitution variable is written to `mcp.json` with real install paths substituted. The substitution set is `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and — project-scope installs only — `${CLAUDE_PROJECT_DIR}`; user-scope `${CLAUDE_PROJECT_DIR}` is a documented absence (unknowable at install time). Rationale: Claude Code substitutes all three (plus `${user_config.*}` and generic `${ENV_VAR}`) at config load; pi-mcp-adapter does NOT interpolate `command`/`args` at all, and interpolates env values against `process.env` replacing unknown `${VAR}` with the empty string — stage-time substitution is therefore the only delivery path for `command`/`args` and the only correct one for per-plugin values in `env`.
 - [ ] **MENV-02**: Every installed plugin MCP server's `env` map carries `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`; plugin-declared env keys take precedence over injected defaults (Claude Code's spread order)
-- [ ] **MENV-03**: Project-scope installs additionally inject `CLAUDE_PROJECT_DIR` into each server's `env`; user-scope absence is documented
+- [ ] **MENV-03**: Project-scope installs additionally inject `CLAUDE_PROJECT_DIR` into each server's `env`; user-scope absence is documented. Ground truth: upstream injects `CLAUDE_PROJECT_DIR` into ALL MCP stdio spawns (any scope, value resolved at spawn); Pi's project-scope-only bake is the correct install-time approximation, and user-scope absence stays documented.
 - [ ] **MENV-04**: `update`/`reinstall` re-derive substituted paths and injected env — a plugin-root change (e.g. new sha-addressed clone dir) never leaves stale paths in `mcp.json`
 
 ### Substitution Completion
@@ -36,7 +40,7 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 <!-- DOC numbering continues from v1.16 (DOC-04/05). -->
 
-- [ ] **DOC-06**: New `docs/env-vars.md` — per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery), the two-mechanism model (install-time textual substitution for install-stable per-plugin values vs runtime env injection for session-scoped values), documented absences; includes the resolved answer on whether pi-mcp-adapter spawns servers inheriting Pi's `process.env`
+- [ ] **DOC-06**: New `docs/env-vars.md` — per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery), the two-mechanism model (install-time textual substitution for install-stable per-plugin values vs runtime env injection for session-scoped values), documented absences; records the verified finding that pi-mcp-adapter inherits Pi's `process.env` (spread-then-override) and its runtime-coverage consequences — pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` (full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, bearerToken with unknown var → empty string, NOT to command/args), so session vars set by Phase 90 reach MCP servers spawned afterward (matching Claude Code, whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); documents the spawn-order caveat (servers spawned before the extension's session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env)
 - [ ] **DOC-07**: `docs/hooks-compatibility.md` environment-variable table reconciled against `docs/env-vars.md`
 
 ## v2 Requirements
@@ -44,6 +48,10 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 ### Effort Mapping
 
 - **EFRT-01**: `CLAUDE_EFFORT` derived from Pi's `thinkingLevel` (env + hook env + substitution) — deferred; semantically approximate mapping needs its own design pass
+
+### Plugin Binaries
+
+- **BINP-01**: Plugin binaries provisioning — a `plugin.json` `binaries` map of sha256-pinned files fetched into `<pluginRoot>/bin` at install time (upstream implements an asset cache with hash verification, containment checks, per-pass caps). Deferred: needs its own design pass AND an NFR-5 decision (install-time network is currently forbidden). PENV-01's PATH wiring still serves plugins that commit executables into `bin/`.
 
 ## Out of Scope
 
@@ -56,6 +64,9 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 | `${CLAUDE_SESSION_ID}`/`${CLAUDE_EFFORT}` textual substitution in content | Runtime values cannot be baked into files materialized once at install; SENV-03's shell expansion covers bash contexts |
 | `CLAUDE_ENV_FILE` beyond SessionStart | The other emitting events (Setup/CwdChanged/FileChanged) are unsupported in the bridge |
 | `CLAUDE_WORKING_DIR` | Does not exist in Claude Code (zero hits in the v2.1.212 binary) |
+| `AI_AGENT` | Identity of a different host (e.g. `claude-code_2-1-212_agent`); setting it would misrepresent Pi — same class as `CLAUDE_CODE_ENTRYPOINT` |
+| `CLAUDE_CODE_BRIDGE_SESSION_ID` / `CLAUDE_CODE_REMOTE_SESSION_ID` | Remote Control / cloud-session features Pi lacks |
+| Plugin binaries provisioning (`plugin.json` `binaries` map) | Deferred to v2 as BINP-01 — needs its own design pass and an NFR-5 install-time-network decision; PENV-01 still wires `<pluginRoot>/bin` onto PATH |
 
 ## Traceability
 
@@ -66,6 +77,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SENV-01 | Phase 90 | Pending |
 | SENV-02 | Phase 90 | Pending |
 | SENV-03 | Phase 90 | Pending |
+| PENV-01 | Phase 90 | Pending |
 | HENV-01 | Phase 91 | Pending |
 | HENV-02 | Phase 91 | Pending |
 | MENV-01 | Phase 92 | Pending |
@@ -79,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage:**
 
-- v1 requirements: 13 total
-- Mapped to phases: 13 ✓
+- v1 requirements: 14 total
+- Mapped to phases: 14 ✓
 - Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-08-01*
-*Last updated: 2026-08-01 after roadmap creation (Phases 90-94 mapped)*
+*Last updated: 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)*
