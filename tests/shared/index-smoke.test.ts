@@ -171,3 +171,33 @@ test("resources_discover handler resolves project cwd at invocation time", async
     await cleanupStaging(processCwd, "test-cleanup");
   }
 });
+
+test("WR-02 session_start swallows a throwing or undefined sessionManager", async () => {
+  const log: RegistrationLog[] = [];
+  const { pi, events } = makePiMock(log);
+  await claudeMarketplaceExtension(pi);
+
+  // Three session_start handlers register in a fixed order: the hooks-bridge
+  // Bucket-A dispatch, the SENV-01/02/03 session-env injection, then the TC-7
+  // autocomplete wrapper. The middle one is the SENV handler under test -- the
+  // only session_start handler that dereferences ctx.sessionManager.getSessionId().
+  const sessionStart = events.get("session_start") ?? [];
+  assert.equal(sessionStart.length, 3, "expected three session_start handlers");
+  const senvHandler = sessionStart[1]! as (event: unknown, ctx: unknown) => unknown;
+
+  // NFR-2: a throwing getSessionId must never propagate past session_start.
+  assert.doesNotThrow(() =>
+    senvHandler(
+      {},
+      {
+        sessionManager: {
+          getSessionId: () => {
+            throw new Error("boom");
+          },
+        },
+      },
+    ),
+  );
+  // An undefined sessionManager (getSessionId deref throws) is likewise swallowed.
+  assert.doesNotThrow(() => senvHandler({}, {}));
+});
