@@ -431,7 +431,7 @@ export interface StageMcpInput {
 | A2 | `installable.mcpServers` at all three call sites is verbatim resolver output (placeholders intact), never a read-back of `mcp.json` | Pitfall 1 | Medium — if a path already read back substituted values, re-stage could double-substitute; plan should assert source provenance in a test |
 | A3 | "stdio-shaped" == `typeof entry.command === "string"` matches pi-mcp-adapter's stdio-vs-remote spawn decision | Pattern 3 / Pitfall 3 | Low — matches the `McpServerEntry` type shape and D-92-02 wording; url/http entries lack `command` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `scope`/`cwd` be passed explicitly or derived inside the bridge?**
    - What we know: `locations.scope` and `input.cwd` are both already on

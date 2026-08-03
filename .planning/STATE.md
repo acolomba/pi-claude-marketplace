@@ -4,15 +4,15 @@ milestone: v1.17
 milestone_name: env-parity
 current_phase: 92
 current_phase_name: MCP staging parity
-status: planning
+status: executing
 stopped_at: Phase 92 context gathered
-last_updated: "2026-08-03T16:06:38.206Z"
+last_updated: "2026-08-03T16:29:11.871Z"
 last_activity: 2026-08-03
 last_activity_desc: Phase 91 complete, transitioned to Phase 92
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 2
+  total_plans: 4
   completed_plans: 2
   percent: 40
 ---
@@ -23,7 +23,7 @@ progress:
 
 Phase: 92 — MCP staging parity
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-03 — Phase 91 complete, transitioned to Phase 92
 env-parity planning docs per validation findings
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)

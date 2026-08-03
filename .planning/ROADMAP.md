@@ -123,8 +123,12 @@
   4. After `update` or `reinstall` re-stages a plugin whose root changed (e.g. a new sha-addressed clone dir), `mcp.json` holds the newly-substituted paths and re-injected env with no stale path surviving from the prior root. (MENV-04)
 
 **Plans**: 2 plans
+**Wave 1**
 
 - [ ] 92-01-PLAN.md — deep-substitution + env-injection engine (`bridges/mcp/substitute.ts`), `StageMcpInput` pluginRoot/pluginData threading, `stampServers` wiring, all three orchestrator call sites, pure-walker unit suite. Wave 1, autonomous. (MENV-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 92-02-PLAN.md — injection targeting + precedence (stdio-only, declared-wins), project-vs-user scope arms, MENV-04 re-derivation + theirs/idempotency isolation. Wave 2, autonomous. (MENV-02, MENV-03, MENV-04)
 
 **Verified finding (2026-08-02)**: pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` — full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, and bearerToken (unknown var → empty string), NOT to command/args. Consequences: session vars set by Phase 90 reach MCP servers spawned afterward, matching Claude Code (whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); user-scope `CLAUDE_PROJECT_DIR` stays absent for Pi MCP servers (documented); the spawn-order caveat (servers spawned before the extension's session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env) are documented in `docs/env-vars.md` (DOC-06) in Phase 94.
