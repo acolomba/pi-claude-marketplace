@@ -49,10 +49,114 @@ Pi's bash tool builds each child's env fresh, spreading the full live `process.e
 | `PATH` (plugin `bin` append)           | ✓                  | ✓   | Each installed enabled plugin's `<pluginRoot>/bin` is appended (never prepended, so a plugin binary cannot shadow a system/Pi binary), deduplicated and idempotent (PENV-01).                                                           |
 | `CLAUDE_PROJECT_DIR`                   | ✓ (hooks/MCP only) | —   | Claude Code's own bash children carry **no** `CLAUDE_PROJECT_DIR` (it is a hooks/MCP-only var upstream), so Pi sets none in bash children either — deliberate parity, not a gap. See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
 
+### Skills content
+
+Skill content is the only surface that resolves the skill-scoped `${CLAUDE_SKILL_DIR}` token.
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                             |
+| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into skill content at install time (SUB-01).                                                                          |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into skill content at install time.                                                                                   |
+| `${CLAUDE_SKILL_DIR}`   | ✓           | ✓   | The skill's installed directory; skill-scoped, so only skill content resolves it (SUB-01).                                        |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
+
+### Commands content
+
+Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                             |
+| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into command content at install time (SUB-01).                                                                        |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into command content at install time.                                                                                 |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
+
+### Agents content
+
+Agent content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                             |
+| ----------------------- | ----------- | --- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into agent content at install time (SUB-01).                                                                          |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into agent content at install time.                                                                                   |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
+
+### Hooks
+
+Both hook spawn lanes build the child env identically by construction (they share the `claudeSessionEnvFor` producer, pinned by a drift guard). Each spreads `...process.env` first, then adds the keys below so the authoritative per-dispatch snapshot wins.
+
+| Variable                      | Claude Code | Pi  | Notes                                                                                         |
+| ----------------------------- | ----------- | --- | --------------------------------------------------------------------------------------------- |
+| `CLAUDE_PROJECT_DIR`          | ✓           | ✓   | Set to the dispatch cwd on both lanes (HENV-01/02).                                           |
+| `CLAUDE_PLUGIN_ROOT`          | ✓           | ✓   | The plugin's install source; containment-guarded (NFR-10).                                    |
+| `CLAUDE_PLUGIN_DATA`          | ✓           | ✓   | Per-plugin data dir; containment-guarded (NFR-10).                                            |
+| `CLAUDECODE`                  | ✓           | ✓   | From the shared session-env producer (HENV-01).                                               |
+| `CLAUDE_CODE_SESSION_ID`      | ✓           | ✓   | Same producer, both lanes.                                                                    |
+| `CLAUDE_SESSION_ID` (pi-only) | —           | ✓   | Pi-only alias; present on both hook lanes. See "Pi-only `CLAUDE_SESSION_ID` alias".           |
+| `CLAUDE_ENV_FILE`             | ✓           | ⚠   | SessionStart hook lane only; path under `<dataRoot>/_shared/`, containment-guarded (D-60-06). |
+| `CLAUDE_CODE_REMOTE`          | ✓           | ✗   | Intentionally unset — Pi runs locally (documented absence).                                   |
+
+Inherited parent `CLAUDE_CODE_*` / `ANTHROPIC_*` vars also ride the `...process.env` spread; see "Inherited `CLAUDE_CODE_*` / `ANTHROPIC_*` vars are not scrubbed".
+
+### MCP config substitution
+
+Substitution is whole-entry and deep: every string value at any nesting depth in the entry's `command`/`args`/`env` is walked once. Object keys are never substituted.
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                                                         |
+| ----------------------- | ----------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Deep-substituted across the entry at stage time (MENV-01).                                                                                                    |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Deep-substituted across the entry at stage time.                                                                                                              |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user scope omits the key so the token passes through literally (MENV-03). See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
+
+### MCP spawn env
+
+Env injection targets stdio-shaped entries (those with a string `command`) only; url/http/sse entries never gain a synthesized env. Injected defaults come first and the declared env spreads over them, so plugin-declared keys win. The session vars are not written into config — they are inherited from Pi's live `process.env` at spawn.
+
+| Variable                      | Claude Code | Pi  | Notes                                                                                                      |
+| ----------------------------- | ----------- | --- | ---------------------------------------------------------------------------------------------------------- |
+| `CLAUDE_PLUGIN_ROOT`          | ✓           | ✓   | Injected into each stdio server's `env`; plugin-declared keys win (MENV-02).                               |
+| `CLAUDE_PLUGIN_DATA`          | ✓           | ✓   | Injected into each stdio server's `env`.                                                                   |
+| `CLAUDE_PROJECT_DIR`          | ✓           | ⚠   | Injected for project-scope installs only (MENV-03). See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through". |
+| `CLAUDECODE`                  | ✓           | ✓   | Inherited from Pi's live `process.env` at spawn. See "MCP runtime env inheritance".                        |
+| `CLAUDE_CODE_SESSION_ID`      | ✓           | ✓   | Inherited from `process.env`. See "MCP runtime env inheritance".                                           |
+| `CLAUDE_SESSION_ID` (pi-only) | —           | ✓   | Inherited pi-only alias. See "MCP runtime env inheritance".                                                |
+
 ## Divergences and documented absences
 
 The behaviors below are deliberate divergences from Claude Code or documented absences. Each is the single citable home for a caveat that the overview matrix and per-surface tables mark with a footnote — the caveat text is not duplicated elsewhere.
 
+### Inherited `CLAUDE_CODE_*` / `ANTHROPIC_*` vars are not scrubbed
+
+Both hook lanes spread `...process.env` before adding the parity keys. When Pi itself runs nested inside a Claude Code session — or under any parent that exported `CLAUDE_CODE_*` / `ANTHROPIC_*` — those inherited vars ride the spread into every hook child. The bridge deliberately does **not** scrub them: the stance is non-interference, and no requirement authorized scrubbing. The related threat is dispositioned in `91-SECURITY.md` (code-review finding WR-02; accepted as T-91-01 / AR-91-01) — an inherited session id is an internal identifier, not a credential.
+
+### Pi-only `PI_CLAUDE_MARKETPLACE_PATH` PATH ledger
+
+`PI_CLAUDE_MARKETPLACE_PATH` records exactly the plugin `bin` dirs the extension appended to `PATH`. It is an env var rather than module state because module top-level is re-evaluated fresh on `/reload` while `process.env` persists in-process — the ledger must survive a reload so that a recompute removes only the entries it previously added and never a system or Pi entry (PENV-01, D-90-01). It is visible to child processes; a documented pi-only bookkeeping var with no upstream equivalent.
+
+### Pi-only `CLAUDE_SESSION_ID` alias
+
+`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists.
+
+### MCP runtime env inheritance
+
+Pi's MCP servers are spawned by pi-mcp-adapter 2.10.0. Its `server-manager.ts::resolveEnv` builds a stdio server's env as `{...process.env, ...interpolated(config.env)}` — the server inherits Pi's full live `process.env` (so the session vars set at `session_start` reach it), and declared config keys win over the inherited values. Interpolation (`${VAR}` / `$env:VAR`) applies to `env` values, `cwd`, `headers`, and `bearerToken`, with an unknown var resolving to the empty string — but **not** to `command` or `args`. This matches Claude Code, whose stdio MCP spawn env injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, and `CLAUDE_PROJECT_DIR`. Two consequences follow from inheritance-at-spawn:
+
+- **Spawn-order caveat.** A server spawned before the extension's session-start handler has run for that startup misses the session vars.
+- **Session-switch staleness.** A server that keeps running across a session switch retains its spawn-time env; the refreshed session id does not propagate to an already-running server.
+
+### User-scope `${CLAUDE_PROJECT_DIR}` pass-through
+
+Claude Code substitutes `${CLAUDE_PROJECT_DIR}` at invoke time, even for user-scope artefacts. Pi materializes content once at install time, when the project root of a future session is unknowable, so user-scope `${CLAUDE_PROJECT_DIR}` occurrences stay **literal** and no env var rescues them (SUB-02). Pi sets no `CLAUDE_PROJECT_DIR` in bash children either — deliberate parity, because Claude Code's own bash children carry none (it is a hooks/MCP-only var upstream). For MCP, user-scope installs omit the substitution key entirely and inject no `CLAUDE_PROJECT_DIR` into the server env. The related user-scope disposition is recorded in `92-SECURITY.md` (T-92-06).
+
 ## Not delivered (out of scope)
 
 The following Claude Code variables are recognized but not delivered by this milestone. They are listed here so a reader finds a recorded decision rather than silence; they are deliberately kept out of the overview matrix, which reflects delivered behavior.
+
+- **`${user_config.*}` / `CLAUDE_PLUGIN_OPTION_*`** — needs a plugin-options feature Pi does not have.
+- **`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_ENTRYPOINT`** — identity and entrypoint semantics of a different host; Pi is not Claude Code and sets no host-identity var.
+- **`CLAUDE_CODE_MCP_SERVER_NAME`, `CLAUDE_CODE_MCP_SERVER_URL`** (headersHelper vars) — pi-mcp-adapter territory, not this extension's to inject.
+- **`CLAUDE_EFFORT`** — a Pi `thinkingLevel` mapping is possible but semantically approximate; deferred (EFRT-01).
+
+Two absences are recorded affirmatively rather than by silence:
+
+- **`CLAUDE_CODE_REMOTE`** — intentionally unset on hook spawns; Pi runs locally.
+- **User-scope MCP `CLAUDE_PROJECT_DIR`** — not injected into a user-scope MCP server's env, because the project root is unknowable at install time (see "User-scope `${CLAUDE_PROJECT_DIR}` pass-through").
