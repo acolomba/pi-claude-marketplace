@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-03T19:07:08.949Z",
+  "phase": "93",
+  "phase_name": "substitution-completion",
+  "phase_dir": ".planning/phases/93-substitution-completion",
+  "plan": 2,
+  "task": 1,
+  "total_tasks": 5,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "90-*", "name": "Phase 90 session-environment-initialization — implemented, review clean, verification human_needed", "status": "deferred_uat", "commit": "753240eb"},
+    {"id": "91-*", "name": "Phase 91 hook-environment-parity — COMPLETE (passed 9/9, Nyquist-compliant, threat-secure)", "status": "done", "commit": "a036a1e6"},
+    {"id": "92-*", "name": "Phase 92 mcp-staging-parity — COMPLETE (passed 24/24, Nyquist-compliant, threat-secure, safeSet hardening chain)", "status": "done", "commit": "71fad063"},
+    {"id": "93-01", "name": "Phase 93 plan 01 — substitution engine (single-pass alternation, skillDir/projectDir) + skills call sites", "status": "done", "commit": "0c1e82af"}
+  ],
+  "remaining_tasks": [
+    {"id": "93-02", "name": "Phase 93 plan 02 — commands/agents SUB-02 arms + orchestrator cwd threading + end-to-end delivery test (3 tasks; wave 2; dispatch was interrupted before start — no work exists)", "status": "not_started"},
+    {"id": "93-post", "name": "Phase 93 post-execution chain: full npm run check, code review (+fix loop), gsd-verifier, phase.complete, validate-phase + secure-phase hooks", "status": "not_started"},
+    {"id": "94", "name": "Phase 94 environment-variable documentation (DOC-06/DOC-07) — discuss/plan/execute; MUST fold in the carrier items listed in context_notes; runs sequentially (non-worktree) per house convention", "status": "not_started"},
+    {"id": "90-uat", "name": "Phase 90 live-Pi UAT (2 items in 90-UAT.md) via /gsd-verify-work 90 — required before milestone audit/close", "status": "not_started"},
+    {"id": "lifecycle", "name": "Milestone lifecycle: audit-milestone → complete-milestone → cleanup (only after 90 UAT closes and 93/94 pass)", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Phase 90 verification_deferred_human — 2 live-Pi UAT items (bash-child env visibility; plugin-bin PATH install/uninstall+reload cycle). Recorded in STATE.md Deferred Verification.", "type": "human_action", "workaround": "Resume via /gsd-verify-work 90; must close before milestone archive (house convention)."}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Run the two Phase 90 live-Pi UAT checks (90-UAT.md) in a live Pi session", "context": "SENV-01..03 end-to-end + PENV-01 PATH ledger cycle; all automated evidence already green", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "D-90-01 revised: PATH-entry ownership via pi-only env-var ledger PI_CLAUDE_MARKETPLACE_PATH (module-baseline falsified by research: /reload re-imports via jiti moduleCache:false; process.env survives)", "rationale": "User-selected after STOP-and-ask contingency fired", "phase": "90"},
+    {"decision": "D-91-01 behavioral drift guard (assertLaneParity, MARKER_ENV sole delta); D-91-02 pin CLAUDE_SESSION_ID alias in both hook lanes", "rationale": "User-selected", "phase": "91"},
+    {"decision": "WR-02 (91 review): inherited parent CLAUDE_CODE_*/ANTHROPIC_* vars NOT scrubbed from hook env — document nested-host caveat in Phase 94 DOC-06 instead", "rationale": "User-selected: non-interference stance; requirements never authorized scrubbing", "phase": "91"},
+    {"decision": "D-92-01 whole-entry deep substitution (string values only, keys/marker never, unknown ${...} pass-through); D-92-02 stdio-shaped-only env injection", "rationale": "User-selected", "phase": "92"},
+    {"decision": "Phase 93: no-gray-area assessment (research deliberately skipped; CONTEXT carries session-verified file:line facts); planner chose optional cwd on the three stage inputs, closed by end-to-end test 02-T3", "rationale": "Everything requirement-locked or precedent-locked", "phase": "93"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "/gsd-resume-work, then /gsd-autonomous --interactive --from 93 (execute-phase 93 will skip 93-01 via its SUMMARY and run only wave 2 / plan 93-02 from base fa865156, then the post-execution chain)",
+  "context_notes": "Autonomous --interactive run of milestone v1.17 env-parity, paused mid-Phase-93 at a clean wave boundary (wave 1 merged + tracked at fa865156; wave 2 executor dispatch rejected by user — zero wave-2 work exists). Phase 94 CARRIER ITEMS (must land in 94's CONTEXT/DOC-06 or they ship un-documented): (1) WR-02 nested-host caveat — inherited parent CLAUDE_CODE_*/ANTHROPIC_* vars ride the process.env spread into hook envs, deliberately not scrubbed; (2) pi-only PI_CLAUDE_MARKETPLACE_PATH PATH-ledger env var (Phase 90) visible to children — documented bookkeeping var; (3) pi-only CLAUDE_SESSION_ID alias present in bash children AND hook envs (SENV-03 + D-91-02); (4) spawn-order caveat + session-switch staleness for MCP servers (already in DOC-06 requirement text); (5) 91-SECURITY.md and 92-SECURITY.md record the related threat dispositions. Known environment issue: the 2 pi-subagents integration tests (provenance-invisibility, skill-path-resolution) fail locally on a stale global peer — environment, not regression; npm run check still exits 0. Stray worktree agent-a7b89223e91f006e1 @ a1500568 (branch worktree-agent-a7b89223e91f006e1) is in no manifest from this session — inspect (likely a fixer leftover; contains possibly-merged work) before removing; do NOT bulk-clean."
+}
