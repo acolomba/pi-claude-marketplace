@@ -2139,7 +2139,11 @@ function classifyEntityShapeError(
         // `.kind === "not-installable" | "no-longer-installable"`
         // guarantees `.reasons` is present -- no `?? []` fallback
         // needed.
-        reasons: narrowResolverReasons(err.shape.reasons, err.shape.unsupportedKinds),
+        reasons: narrowResolverReasons(
+          err.shape.reasons,
+          err.shape.unsupportedKinds,
+          err.shape.partialable,
+        ),
         // SEV-02 / D-69-03: thread the three-way distinction the resolver
         // stamped on the throw so the composer conditions the `--partial` hint.
         partialable: err.shape.partialable,
@@ -2216,10 +2220,13 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
  *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
  *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
- *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) routes its
+ *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) is arm-
+ *      dependent: on the partially-available arm (`partialable`) it routes its
  *      bare token through the shared `narrowUnsupportedKinds` helper so the
- *      install surface emits the same per-kind marker set as `list`/`info`
- *      (CR-01 / SURF-01 / D-64-02) instead of dropping non-`lspServers` kinds
+ *      install surface emits the same per-kind `unsupported component` marker
+ *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
+ *      `unavailable` arm it stays on the source axis as `unsupported source`,
+ *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
  *   2. "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
@@ -2235,11 +2242,19 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
  * plugin yields one `lsp`, sourced from both the note and the typed kind). The
  * permissive `unsupported source` fallback fires only when BOTH sources are empty.
+ *
+ * SURF-01 / WR-01 / D-64-07: `partialable` is the resolver arm discriminant
+ * (`err.shape.partialable`). It defaults to the structural `unavailable` arm
+ * (`false`) and only affects the non-carve-out `contains <kind>` note handler
+ * (step 1b) -- the component-axis `unsupported component` token is emitted for
+ * such a note ONLY on the partially-available arm; the structural arm keeps it on
+ * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
 // eslint-disable-next-line sonarjs/cognitive-complexity
 function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
+  partialable = false,
 ): readonly ContentReason[] {
   const out: ContentReason[] = [...narrowUnsupportedKinds(unsupportedKinds)];
   for (const reason of reasons) {
@@ -2273,16 +2288,25 @@ function narrowResolverReasons(
       continue;
     }
 
-    // CR-01 / SURF-01 / D-64-02: a `contains <kind>` note for a kind OTHER than
-    // the `lspServers` carve-out handled above (e.g. `monitors`, `themes`) is
-    // still a per-kind unsupported component marker. Route its bare token
-    // through the SAME shared helper `list`/`info` consume so a multi-kind
-    // `partially-available` plugin emits a byte-identical marker set on every surface.
-    // Previously these notes were dropped here whenever an earlier note had
-    // already populated `out` (the empty-array fallback then did not fire), so
-    // `install` rendered fewer markers than `list`/`info` for the same plugin.
+    // SURF-01 / WR-01 / D-64-07: a `contains <kind>` note for a kind OTHER than
+    // the `lspServers` carve-out (e.g. `monitors`, `themes`) is arm-dependent.
+    // On the partially-available arm (`partialable === true`) it is a per-kind
+    // COMPONENT marker: route the bare token through the SAME shared helper
+    // `list`/`info` consume (`narrowUnsupportedKinds` -> `unsupported component`)
+    // so a multi-kind plugin emits a byte-identical marker set on every surface
+    // (CR-01 / D-64-02 / D-90-05). On the structural `unavailable` arm
+    // (`partialable === false`) the note stays on the SOURCE axis and renders
+    // `unsupported source`, mirroring `narrowResolverNotes`'s permissive
+    // catch-all so install agrees with `list`/`info` there too. The component-
+    // axis token belongs to the partially-available arm ONLY (D-64-07 structural
+    // precedence); leaking it onto the structural arm was the SURF-01 divergence.
     if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
-      out.push(...narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)]));
+      if (partialable) {
+        out.push(...narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)]));
+      } else {
+        out.push("unsupported source");
+      }
+
       continue;
     }
 

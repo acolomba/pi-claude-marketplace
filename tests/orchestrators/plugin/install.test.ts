@@ -2249,18 +2249,20 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
     await import("../../../extensions/pi-claude-marketplace/shared/errors.ts");
   // The resolver's `r.notes` carry the
   // `"contains <kind>"` prefix (via `addUnsupportedKindNotes`); the
-  // carve-out in `narrowResolverReasons` strips the prefix and routes the
-  // bare token through the shared `narrowUnsupportedKinds` helper.
-  // `contains lspServers` maps to `lsp` (SNM-36 / D-24-04).
+  // `lspServers` carve-out in `narrowResolverReasons` strips the prefix and
+  // routes the bare token through the shared `narrowUnsupportedKinds` helper
+  // -> `lsp` (SNM-36 / D-24-04). The carve-out is arm-independent.
   //
-  // PHOOK-05 / D-71-04: the `hooks` kind is now a force-degradable marker
-  // and renders the single aggregate `unsupported hooks` reason via the SAME
-  // shared helper. A synthetic input mixing `contains hooks` with `contains
-  // lspServers` therefore emits BOTH markers (`unsupported hooks`, `lsp`),
-  // byte-identical to what `list`/`info` derive from the typed `unsupported[]`
-  // list for the same kinds. (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`,
-  // so the resolver never emits a real `contains hooks` note -- this synthetic
-  // input pins the shared-helper mapping for cross-surface parity.)
+  // SURF-01 / WR-01 / D-64-07: a `not-installable` shape is the structural
+  // `unavailable` arm (`partialable: false`). A non-carve-out `contains <kind>`
+  // note on that arm stays on the SOURCE axis and renders `unsupported source`,
+  // mirroring `narrowResolverNotes` -- the component-axis `unsupported hooks` /
+  // `unsupported component` markers belong to the partially-available arm only.
+  // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver never
+  // emits a real `contains hooks` note; the force-degradable `hooks` marker
+  // travels on the typed `unsupported[]` list, covered by the IN-02 parity
+  // cases. This synthetic structural note therefore collapses to the source
+  // axis.)
   const err = new PluginShapeError({
     kind: "not-installable",
     plugin: "p",
@@ -2274,7 +2276,7 @@ test("classifyEntityShapeError dispatches on kind=not-installable -> unavailable
   });
   assert.ok(row);
   assert.equal(row.status, "unavailable");
-  assert.deepEqual(row.reasons, ["unsupported hooks", "lsp"]);
+  assert.deepEqual(row.reasons, ["unsupported source", "lsp"]);
 });
 
 test("classifyEntityShapeError dispatches on kind=not-installable with source note -> {unsupported source}", async () => {
@@ -2861,7 +2863,14 @@ test("PHOOK-05 / D-71-04: narrowResolverReasons routes the `contains hooks` toke
   // (`hooks` is not in `UNSUPPORTED_COMPONENT_KINDS`, so the resolver does not
   // emit a real `contains hooks` note; the degradable signal travels on the
   // typed `unsupported[]` list. This pins the shared-helper mapping.)
-  assert.deepEqual([...__test_narrowResolverReasons(["contains hooks"])], ["unsupported hooks"]);
+  //
+  // SURF-01 / D-64-07: the `hooks` kind is force-degradable, so it lives on the
+  // partially-available arm -- pass the arm discriminant (`true`) so the
+  // `contains <kind>` token routes through the component-axis helper.
+  assert.deepEqual(
+    [...__test_narrowResolverReasons(["contains hooks"], ["hooks"], true)],
+    ["unsupported hooks"],
+  );
 });
 
 test("260525-cjr B2 / C5: narrowResolverReasons -> `contains lspServers` extracts the `lspServers` token and emits the `lsp` Reason (SNM-36)", () => {
@@ -2884,7 +2893,12 @@ test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-o
   // SAME `narrowUnsupportedKinds` seam list/info use, so a non-carve-out
   // component kind renders the truthful `{unsupported component}` marker
   // (D-90-05) rather than borrowing the source-axis `{unsupported source}`.
-  const reasons = __test_narrowResolverReasons(["contains monitors"]);
+  //
+  // SURF-01 / D-64-07: this component-axis marker belongs to the partially-
+  // available arm, so pass the arm discriminant (`true`); on the structural
+  // `unavailable` arm the same note stays on the source axis (covered by the
+  // cross-surface parity suite).
+  const reasons = __test_narrowResolverReasons(["contains monitors"], ["monitors"], true);
   assert.deepEqual([...reasons], ["unsupported component"]);
 });
 
