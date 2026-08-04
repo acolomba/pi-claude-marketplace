@@ -264,7 +264,6 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     },
     { kind: "themes", relativePath: "themes", stat: "dir" },
     { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
-    { kind: "bin", relativePath: "bin", stat: "dir" },
     { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
   ];
 
@@ -279,6 +278,22 @@ test("PR-4 loose: discovers unsupported default component locations", async () =
     assert.equal(r.state, "partially-available", `${c.kind} should be unsupported`);
     assert.ok(r.notes.includes(`contains ${c.kind}`), `notes: ${r.notes.join(" / ")}`);
   }
+});
+
+// D-90-06 loose: a bin/ dir on disk resolves installable (runtime-honored via
+// the PENV-01 PATH ledger), not partially-available.
+test("D-90-06 loose: bin/ dir on disk -> installable, no bin contains-note", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "bin")]: "dir",
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("contains bin")),
+    `notes must not contain "contains bin": ${r.notes.join(" / ")}`,
+  );
 });
 
 test("PR-5 loose: entry.dependencies -> installable with manual-install note", async () => {

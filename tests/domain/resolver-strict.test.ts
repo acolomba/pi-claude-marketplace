@@ -192,6 +192,37 @@ test("HOOK-01: hooks/hooks.json present + parseable -> installable WITH hooks in
   }
 });
 
+// D-90-06: bin moved out of UNSUPPORTED_COMPONENT_KINDS. A plugin whose only
+// on-disk payload is a `bin/` directory resolves installable (its bin/ is
+// honored at runtime by the PENV-01 PATH ledger, not staged as a component),
+// with no `contains bin` note and bin absent from unsupported.
+test("D-90-06: bin/ dir on disk -> installable, no bin contains-note, bin not in unsupported", async () => {
+  const localRoot = ROOT("./local");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "bin")]: "dir",
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+
+  assert.ok(
+    !r.notes.some((n) => n.includes("contains bin")),
+    `notes must not contain "contains bin": ${r.notes.join(" / ")}`,
+  );
+});
+
+// D-90-06: a `bin` field declared in the entry likewise resolves installable
+// with no `contains bin` note.
+test("D-90-06: entry declares a bin field -> installable, no bin contains-note", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", bin: "bin" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("contains bin")),
+    `notes must not contain "contains bin": ${r.notes.join(" / ")}`,
+  );
+});
+
 // ADMIT-01: a plugin declaring a `Stop` group (match-all matcher) alongside
 // a supported bucket-A event resolves fully `installable` -- Stop is admitted
 // (match-all is always supportable, and Stop carries the null no-matcher
@@ -609,7 +640,6 @@ test("PR-4 discovers unsupported default component locations", async () => {
     },
     { kind: "themes", relativePath: "themes", stat: "dir" },
     { kind: "outputStyles", relativePath: "output-styles", stat: "dir" },
-    { kind: "bin", relativePath: "bin", stat: "dir" },
     { kind: "settings", relativePath: "settings.json", stat: { contents: "{}" } },
   ];
 
@@ -1012,7 +1042,7 @@ test("PR-2(9) [D-07 narrowed] nested array element -> notInstallable with descri
 test("PR-3 multiple unsupported components both surface as notes", async () => {
   const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
   const r = await resolveStrict(
-    basicEntry({ source: "./local", themes: { dark: {} }, bin: { tool: "x" } }),
+    basicEntry({ source: "./local", themes: { dark: {} }, monitors: { m: "x" } }),
     ctx,
   );
   // D-64-06: multiple unsupported kinds, no structural defect -> unsupported.
@@ -1021,7 +1051,10 @@ test("PR-3 multiple unsupported components both surface as notes", async () => {
     r.notes.includes("contains themes"),
     `themes note missing; got: ${r.notes.join(" / ")}`,
   );
-  assert.ok(r.notes.includes("contains bin"), `bin note missing; got: ${r.notes.join(" / ")}`);
+  assert.ok(
+    r.notes.includes("contains monitors"),
+    `monitors note missing; got: ${r.notes.join(" / ")}`,
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────

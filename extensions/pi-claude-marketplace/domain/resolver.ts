@@ -343,6 +343,13 @@ type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
  * SECURITY (T-02-25): The list is closed. A new kind upstream that's neither
  * in SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
  * Re-audit when Claude Code adds new component kinds.
+ *
+ * D-90-06: `bin` is intentionally NOT in this list. A plugin's
+ * `<pluginRoot>/bin` is runtime-honored via the PENV-01 PATH ledger (it is
+ * appended to PATH for every enabled installed record), so a bin-shipping
+ * plugin installs by default at Claude Code parity rather than being detected
+ * and dropped. `bin` carries no staged component-path semantics, so it is
+ * likewise absent from SUPPORTED_COMPONENT_KINDS.
  */
 export const UNSUPPORTED_COMPONENT_KINDS = [
   "lspServers",
@@ -351,7 +358,6 @@ export const UNSUPPORTED_COMPONENT_KINDS = [
   "outputStyles",
   "channels",
   "userConfig",
-  "bin",
   "settings",
 ] as const;
 type UnsupportedKind = (typeof UNSUPPORTED_COMPONENT_KINDS)[number];
@@ -366,7 +372,6 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
   monitors: [{ relativePath: path.join("monitors", "monitors.json"), kind: "file" }],
   themes: [{ relativePath: "themes", kind: "dir" }],
   outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
-  bin: [{ relativePath: "bin", kind: "dir" }],
   settings: [{ relativePath: "settings.json", kind: "file" }],
 };
 
