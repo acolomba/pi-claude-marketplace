@@ -6,6 +6,7 @@
 // brand returns the input string unmodified.
 
 import assert from "node:assert/strict";
+import { delimiter } from "node:path";
 import { test } from "node:test";
 
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
@@ -33,4 +34,11 @@ test("asAbsolutePluginRoot: throws when the input contains a null byte", () => {
 
 test("asAbsolutePluginRoot: throws on a relative path", () => {
   assert.throws(() => asAbsolutePluginRoot("relative/path"), /not absolute/);
+});
+
+test("asAbsolutePluginRoot: throws when the input contains the PATH delimiter", () => {
+  // A delimiter-bearing root cannot round-trip the delimiter-joined
+  // PI_CLAUDE_MARKETPLACE_PATH ledger, so it must be rejected before it can
+  // enter the ledger and leak a stale fragment on cleanup.
+  assert.throws(() => asAbsolutePluginRoot(`/tmp/a${delimiter}b`), /delimiter/);
 });
