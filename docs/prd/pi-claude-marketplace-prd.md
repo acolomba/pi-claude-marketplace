@@ -89,7 +89,7 @@ ______________________________________________________________________
 - Claude `local` scope (no Pi equivalent).
 - SSH or arbitrary git URLs, remote `marketplace.json` URLs, sparse checkouts, browser-paste tree URLs (`/tree/<ref>`).
 - Plugin sources beyond local relative paths (`./`, `../`); GitHub object/git-URL/git-subdir/npm sources are parsed and listed as **unavailable**.
-- Components beyond skills, commands, agents, and MCP servers (hooks, LSP servers, monitors, themes, output styles, channels, userConfig, bin, settings) -- detected and surfaced as **unavailable** with explanatory notes.
+- Components beyond skills, commands, agents, and MCP servers (hooks, LSP servers, monitors, themes, output styles, channels, userConfig, settings) -- detected and surfaced with explanatory notes, rendered `{unsupported component}` for a dropped non-carve-out kind (D-90-05). A plugin's `<pluginRoot>/bin` is NOT in this set: it is appended to `PATH` at runtime (PENV-01), supported at Claude Code parity.
 - Automatic dependency resolution; declared `dependencies` produce a manual-install warning only.
 - Mutating LLM tools (install/update/uninstall) -- only listing tools are exposed.
 
@@ -115,7 +115,7 @@ ______________________________________________________________________
 - **Marketplace source** -- how a marketplace is fetched: GitHub `owner/repo[#<ref>]`, GitHub HTTPS URL, or a local path.
 - **Plugin** -- a Claude plugin, identified by `<plugin>@<marketplace>`. A plugin install record is scoped independently from the marketplace record that supplied its manifest/source.
 - **Target scope** -- the scope where a mutating plugin operation writes or changes the plugin install record and generated Pi artefacts.
-- **Component** -- one of skills, commands, agents (supported), or hooks, lspServers, monitors, themes, outputStyles, channels, userConfig, bin, settings (unsupported), plus mcpServers (supported, with soft dep).
+- **Component** -- one of skills, commands, agents (supported), or hooks, lspServers, monitors, themes, outputStyles, channels, userConfig, settings (unsupported), plus mcpServers (supported, with soft dep). A plugin's `bin` is not a staged component: `<pluginRoot>/bin` is appended to `PATH` at runtime (PENV-01), so a bin-shipping plugin installs by default at Claude Code parity (D-90-06).
 - **Strict marketplace** -- `marketplace.json` `strict: true` (default) → resolver takes the union of four declaration sources: the marketplace-entry component fields, the plugin-manifest component fields, implicit-by-convention directories (`skills/`, `commands/`, `agents/`), and standalone files at the plugin root (`hooks/hooks.json`, `.mcp.json`). `strict: false` → resolver uses the marketplace-entry declarations only and treats any of the other three sources declaring unsupported components (or declaring `mcpServers` without a matching entry-level declaration) as conflicts.
 - **Generated name** -- the deterministic name produced for a Pi-side artefact: `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, `pi-claude-marketplace-<plugin>-<agent>` for agents.
 - **Reload hint** -- the trailing `Run /reload to <verb> ...` line appended to messages whenever generated resources changed.
@@ -1034,7 +1034,7 @@ ______________________________________________________________________
 
 These items are documented in `BACKLOG.md` and intentionally deferred from V1 to keep the surface manageable:
 
-- **Components beyond skills/commands/agents/mcpServers** -- hooks, lspServers, monitors, themes, output styles, channels, userConfig, bin, settings (each integrated through dedicated Pi extensions where appropriate).
+- **Components beyond skills/commands/agents/mcpServers** -- hooks, lspServers, monitors, themes, output styles, channels, userConfig, settings (each integrated through dedicated Pi extensions where appropriate). A plugin's `<pluginRoot>/bin` is already runtime-honored (appended to `PATH` at load, PENV-01) rather than dropped; only heavier binary-asset provisioning (BINP-01) stays deferred.
 - **Plugin sources beyond local paths** -- github / git / git-subdir / npm object sources surface as unavailable.
 - **Marketplace source kinds beyond GitHub + local** -- SSH URLs, arbitrary HTTPS git URLs, remote `marketplace.json` URLs, sparse checkout, browser-paste tree URLs.
 - **Claude `local` scope** (no Pi equivalent).
