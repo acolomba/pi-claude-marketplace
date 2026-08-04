@@ -11,13 +11,13 @@ Ground truth verified 2026-08-01 against the Claude Code v2.1.212 binary (string
 
 ### Session Environment
 
-- [ ] **SENV-01**: A skill/command script run through Pi's bash tool sees `CLAUDECODE=1` in its environment whenever the extension is loaded
-- [ ] **SENV-02**: The same script sees `CLAUDE_CODE_SESSION_ID` equal to the current Pi session id, and the value tracks the active session (fresh after session switch / `/reload`)
-- [ ] **SENV-03**: `CLAUDE_SESSION_ID` is set to the same value — documented pi-only shim so un-substituted `${CLAUDE_SESSION_ID}` template literals still expand in shell contexts
+- [x] **SENV-01**: A skill/command script run through Pi's bash tool sees `CLAUDECODE=1` in its environment whenever the extension is loaded
+- [x] **SENV-02**: The same script sees `CLAUDE_CODE_SESSION_ID` equal to the current Pi session id, and the value tracks the active session (fresh after session switch / `/reload`)
+- [x] **SENV-03**: `CLAUDE_SESSION_ID` is set to the same value — documented pi-only shim so un-substituted `${CLAUDE_SESSION_ID}` template literals still expand in shell contexts
 
 ### Plugin PATH
 
-- [ ] **PENV-01**: At session start, each installed enabled plugin's `<pluginRoot>/bin` directory is appended to `process.env.PATH` — appended, never prepended; deduplicated and idempotent across repeated session-start events; recomputed from install state so installs/uninstalls are reflected after reload; the entry is added even if the directory does not exist (verified live: Claude Code 2.1.212 appends `<pluginRoot>/bin` for enabled plugins unconditionally)
+- [x] **PENV-01**: At session start, each installed enabled plugin's `<pluginRoot>/bin` directory is appended to `process.env.PATH` — appended, never prepended; deduplicated and idempotent across repeated session-start events; recomputed from install state so installs/uninstalls are reflected after reload; the entry is added even if the directory does not exist (verified live: Claude Code 2.1.212 appends `<pluginRoot>/bin` for enabled plugins unconditionally)
 
 ### Hook Environment
 
@@ -74,10 +74,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SENV-01 | Phase 90 | Pending |
-| SENV-02 | Phase 90 | Pending |
-| SENV-03 | Phase 90 | Pending |
-| PENV-01 | Phase 90 | Gaps Found |
+| SENV-01 | Phase 90 | Complete |
+| SENV-02 | Phase 90 | Complete |
+| SENV-03 | Phase 90 | Complete |
+| PENV-01 | Phase 90 | Complete |
 | HENV-01 | Phase 91 | Complete |
 | HENV-02 | Phase 91 | Complete |
 | MENV-01 | Phase 92 | Complete |

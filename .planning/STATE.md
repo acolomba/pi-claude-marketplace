@@ -4,27 +4,27 @@ milestone: v1.17
 milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
-status: executing
-stopped_at: 90-03 complete (SURF-01 fix + G-90-3 live retest passed); awaiting phase re-verification
-last_updated: "2026-08-04T12:48:55Z"
+status: All phases complete — awaiting milestone close
+stopped_at: Phase 90 re-verification passed (20/20); milestone v1.17 phases 90-94 all complete
+last_updated: "2026-08-04T13:05:55.100Z"
 last_activity: 2026-08-04
-last_activity_desc: 90-03 gap-closure complete; G-90-3 checkpoint resolved
+last_activity_desc: Phase 90 verified passed after 90-03 gap closure; milestone v1.17 execution complete
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 9
   completed_plans: 9
-  percent: 90
+  percent: 100
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 90 (session-environment-initialization) — EXECUTING (all 3 plans complete; awaiting re-verification)
-Plan: 3 of 3 (complete)
-Status: 90-03 gap-closure complete; G-90-3 checkpoint resolved
-Last activity: 2026-08-04 — 90-03 complete (SURF-01 arm-aware classifier + G-90-3 live retest passed)
+Phase: 90 (session-environment-initialization) — COMPLETE (re-verification passed 20/20 after gap-closure rounds 90-02/90-03)
+Plan: 3 of 3 executed
+Status: All milestone v1.17 phases (90-94) complete — next: milestone audit/UAT, then /gsd-complete-milestone
+Last activity: 2026-08-04 — Phase 90 re-verified passed; UAT 3/3; G-90-3 and SURF-01 closed
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
