@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
 current_phase: 90
-current_phase_name: Session environment initialization
-status: planning
-stopped_at: Milestone v1.17 code+docs phases complete (91-94 sealed); Phase 90 live-Pi UAT is the only open item before lifecycle
-last_updated: "2026-08-03T21:24:52.829Z"
+current_phase_name: session-environment-initialization
+status: executing
+stopped_at: Completed 90-02-PLAN.md
+last_updated: "2026-08-04T01:59:29.601Z"
 last_activity: 2026-08-03
-last_activity_desc: Phase 94 complete, transitioned to Phase 90
+last_activity_desc: Phase 90 execution started
 progress:
   total_phases: 5
   completed_phases: 5
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 8
+  completed_plans: 8
   percent: 100
 ---
 
@@ -21,11 +21,10 @@ progress:
 
 ## Current Position
 
-Phase: 90 — Session environment initialization
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-03 — Phase 94 complete, transitioned to Phase 90
-env-parity planning docs per validation findings
+Phase: 90 (session-environment-initialization) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-08-03 — Phase 90 execution: 90-02 gap-closure (G-90-3) complete
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
@@ -73,14 +72,14 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-03T21:24:52.792Z
-**Stopped at:** Milestone v1.17 code+docs phases complete (91-94 sealed); Phase 90 live-Pi UAT is the only open item before lifecycle
-**Resume file:** 
+**Last session:** 2026-08-04T01:59:29.562Z
+**Stopped at:** Completed 90-02-PLAN.md
+**Resume file:** None
 
-Phases 91-93 sealed. Phase 93 plan 93-02 was recovered from the interrupted
-executor worktree (Tasks 1-2 committed there; Task 3 finished by continuation)
-and review fix WR-01 added reinstall/update end-to-end SUB-02 guards. Next:
-Phase 94 (docs) — discuss must fold in the five carrier items.
+Phase 90 gap-closure 90-02 (G-90-3) complete: bin resolves installable
+(installs by default, PENV-01 PATH ledger honors it at runtime; D-90-06) and a
+dropped non-carve-out component kind renders {unsupported component} (D-90-05).
+Remaining open item: Phase 90 live-Pi UAT (90-UAT.md Test 3) via /gsd-verify-work.
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
@@ -100,6 +99,8 @@ PROJECT.md's "Current Milestone: v1.17 env-parity" section (ground truth verifie
 record per-plan decisions here.
 
 - [Phase ?]: docs/env-vars.md is authoritative on env-var delivery; hooks-compatibility env table reconciled to it (DOC-06/07)
+- [Phase 90]: D-90-06: bin reclassified out of UNSUPPORTED_COMPONENT_KINDS -> bin-shipping plugin installs by default (PENV-01 PATH ledger honors it at runtime)
+- [Phase 90]: D-90-05: dropped non-carve-out component kinds render the new closed-set token 'unsupported component' (was 'unsupported source' fallback); REASONS grows to 38
 
 ## Deferred Items
 
@@ -131,6 +132,7 @@ v1.17 env-parity.
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
 | Phase 94 P01 | 12min | 3 tasks | 2 files |
+| Phase 90 P02 | ~45m | 3 tasks | 14 files |
 
 ## Deferred Verification
 
