@@ -5,26 +5,26 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
 status: executing
-stopped_at: 90-03 Task 1 committed (SURF-01 fix); paused at Task 2 live-Pi G-90-3 checkpoint
-last_updated: "2026-08-04T09:44:22.112Z"
+stopped_at: 90-03 complete (SURF-01 fix + G-90-3 live retest passed); awaiting phase re-verification
+last_updated: "2026-08-04T12:48:55Z"
 last_activity: 2026-08-04
-last_activity_desc: Phase 90 execution started
+last_activity_desc: 90-03 gap-closure complete; G-90-3 checkpoint resolved
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 9
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 90 (session-environment-initialization) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 90
-Last activity: 2026-08-04 — Phase 90 execution started
+Phase: 90 (session-environment-initialization) — EXECUTING (all 3 plans complete; awaiting re-verification)
+Plan: 3 of 3 (complete)
+Status: 90-03 gap-closure complete; G-90-3 checkpoint resolved
+Last activity: 2026-08-04 — 90-03 complete (SURF-01 arm-aware classifier + G-90-3 live retest passed)
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
@@ -72,21 +72,24 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-04T09:44:22.112Z
-**Stopped at:** 90-03 Task 1 committed; paused at Task 2 checkpoint (blocking human-verify)
-**Resume file:** .planning/phases/90-session-environment-initialization/90-03-PLAN.md
+**Last session:** 2026-08-04T12:48:55Z
+**Stopped at:** 90-03 complete; all 3 Phase 90 plans executed; awaiting phase re-verification
+**Resume file:** None
 
-Phase 90 gap-closure 90-03 Task 1 (SURF-01 / WR-01 Option 2) committed: install's
-narrowResolverReasons is now arm-aware (partialable discriminant) so a structural
+Phase 90 gap-closure 90-03 is COMPLETE. Task 1 (SURF-01 / WR-01 Option 2): install's
+narrowResolverReasons is arm-aware (partialable discriminant) so a structural
 `unavailable` plugin carrying a `contains <non-carve-out-kind>` note renders
 `{unsupported source}` byte-identically across install/list/info; the partially-
 available per-kind `{unsupported component}` behavior (D-90-05) is unchanged;
 shared/probe-classifiers.ts untouched; REASONS length lock stays 38; npm unit
-suite + typecheck/lint/format green. PAUSED at Task 2: the G-90-3 live-Pi retest
-of 90-UAT.md Test 3 (blocking human-verify) — requires a running Pi session via
-/gsd-verify-work; do NOT mark 90-03 complete until resolved. (Pre-existing env
-failure noted in deferred-items.md: two pi-subagents global-peer integration
-tests fail locally, unrelated to this change.)
+suite + typecheck/lint/format green. Task 2 (blocking human-verify): the G-90-3
+live-Pi retest of 90-UAT.md Test 3 was performed by the operator and APPROVED —
+bin-only plugin installs by default, non-carve-out kind renders {unsupported
+component} on install/list/info, both-defects case renders byte-identical
+{unsupported source}. UAT Test 3 issue -> pass, G-90-3 resolved, debug session
+closed. Next: re-verify Phase 90 (/gsd-verify-work 90). (Pre-existing env failure
+noted in deferred-items.md: two pi-subagents global-peer integration tests fail
+locally, unrelated to this change.)
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
@@ -140,6 +143,7 @@ v1.17 env-parity.
 | —    | —        | —     | —     |
 | Phase 94 P01 | 12min | 3 tasks | 2 files |
 | Phase 90 P02 | ~45m | 3 tasks | 14 files |
+| Phase 90 P03 | ~15m | 2 tasks | 3 files |
 
 ## Deferred Verification
 
