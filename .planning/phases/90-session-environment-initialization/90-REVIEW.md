@@ -1,6 +1,6 @@
 ---
 phase: 90-session-environment-initialization
-reviewed: 2026-08-04T02:10:21Z
+reviewed: 2026-08-04T04:55:00Z
 depth: standard
 files_reviewed: 20
 files_reviewed_list:
@@ -8,6 +8,7 @@ files_reviewed_list:
   - docs/prd/pi-claude-marketplace-prd.md
   - extensions/pi-claude-marketplace/domain/resolver.ts
   - extensions/pi-claude-marketplace/index.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin-path.ts
   - extensions/pi-claude-marketplace/shared/notify-reasons.ts
   - extensions/pi-claude-marketplace/shared/notify.ts
@@ -27,139 +28,150 @@ files_reviewed_list:
 findings:
   critical: 0
   warning: 1
-  info: 2
-  total: 3
+  info: 1
+  total: 2
 status: issues_found
 ---
 
 # Phase 90: Code Review Report
 
-**Reviewed:** 2026-08-04T02:10:21Z
+**Reviewed:** 2026-08-04T04:55:00Z
 **Depth:** standard
 **Files Reviewed:** 20
 **Status:** issues_found
 
 ## Summary
 
-Adversarial re-review of the phase-90 scope, weighted toward the 90-02 gap-closure
-diff (commits 46892fd2, 26551d8e, 8e9b9850, 5654e485). Two changes landed:
+Fresh adversarial re-review of the full phase-90 scope after the SURF-01
+gap-closure (plan 90-03, commits 333f30e6 / 8085c6d7). The phase delivers:
+session-env injection (SENV-01..03), the plugin bin PATH ledger (PENV-01), the
+`bin` install-by-default reclassification (D-90-06), the `unsupported component`
+reason token (D-90-05), and the arm-aware classifier fix (WR-01 / SURF-01).
 
-- D-90-06: `bin` was removed from `UNSUPPORTED_COMPONENT_KINDS` (and its convention
-  probe) so a bin-shipping plugin resolves `installable` and its `<pluginRoot>/bin`
-  is honored at runtime via the PENV-01 PATH ledger.
-- D-90-05: a new closed-set reason token `unsupported component` was appended to
-  `REASONS` (now 38), registered in `UNSUPPORTED_REASONS`, and made the per-kind
-  fallback of `kindToReason`.
+**WR-01 (SURF-01 cross-surface reason divergence) is verified resolved.** The
+prior open finding is closed by an arm-aware `narrowResolverReasons`:
 
-The closed-set plumbing is internally consistent: the `REASONS` tuple length (38)
-matches the lock, the `_ReasonsCoverageProof` partition stays total (the token is
-homed in `UNSUPPORTED_REASONS`), the catalog fenced blocks byte-match their
-`catalog-uat.test.ts` fixtures for the two touched examples, and the PENV-01
-PATH-ledger core (`applyPathLedger`) plus the `applySessionEnv` primitive are pure,
-well-tested, and NFR-2-boundary-wrapped at their `index.ts` call sites.
+- `install.ts::narrowResolverReasons` now takes a `partialable` discriminant
+  (default `false`) and routes a non-carve-out `contains <kind>` note through
+  the component axis (`narrowUnsupportedKinds` -> `unsupported component`)
+  ONLY on the partially-available arm; on the structural `unavailable` arm it
+  stays on the source axis (`unsupported source`), mirroring
+  `narrowResolverNotes`'s catch-all (install.ts:2303-2311).
+- The throw sites thread the discriminant truthfully: `requireInstallable`
+  stamps `partialable: r.state === "partially-available"` and
+  `unsupportedKinds: r.state === "partially-available" ? r.unsupported : []`
+  (resolver.ts:1494-1500); `requirePartialInstallable` only ever throws for
+  `unavailable`, so it stamps `partialable: false` (resolver.ts:1532).
+- The read surfaces agree by construction: list's `partially-available` arm
+  sources reasons solely from `narrowUnsupportedKinds(resolved.unsupported)`
+  (list.ts:641) and never re-classifies `resolved.notes`, while its
+  `unavailable` arm uses `sharedNarrowResolverNotes(resolved.notes)`
+  (list.ts:654). I traced both arms against the install path and found no
+  reason-set divergence (the only non-structural notes reaching the
+  partially-available arm are `contains <kind>` -- matched by the typed kinds --
+  and the unclassified `declares dependencies...` note, which pushes nothing).
+- `shared/probe-classifiers.ts` is correctly left untouched, and the
+  `cross-surface-reason-parity.test.ts` gap the prior review flagged is now
+  closed: `PARITY_CASES` pins `contains monitors -> unsupported source`
+  (line 47) and a dedicated both-defects structural test pins byte-identical
+  `["malformed mcp", "unsupported source"]` across the note and install
+  surfaces (lines 87-98).
 
-The one substantive defect is a cross-surface reason divergence (SURF-01 violation)
-that D-90-05 introduced but did not test for: the kind-axis classifier and the
-install-side note classifier were retargeted to `unsupported component`, but the
-shared note-axis classifier `narrowResolverNotes` was left emitting `unsupported
-source` for the same `contains <kind>` note. The two disagree on the structural
-`unavailable` arm.
+The rest of the closed-set plumbing is internally consistent: `REASONS` length
+is 38 and the lock test asserts 38 (notify-closed-set-locks.test.ts:37),
+`unsupported component` is homed in `UNSUPPORTED_REASONS` so the
+`_ReasonsCoverageProof` partition stays total, D-90-06 removes `bin` from
+`UNSUPPORTED_COMPONENT_KINDS` (and it is absent from its convention map), and the
+catalog documents the new token on the partially-available/partially-upgradable
+rows (output-catalog.md:139, 398, 1489).
+
+The SENV primitives (`applySessionEnv`) assign exactly three keys and are
+non-interfering; both `session_start` and `resources_discover` call sites are
+NFR-2-boundary-wrapped in `index.ts`. The one remaining substantive issue is a
+PATH-normalization side effect in `applyPathLedger` that reaches non-owned PATH
+content, contrary to that function's own stated contract.
 
 ## Warnings
 
-### WR-01: `unsupported component` breaks cross-surface (SURF-01) parity on the `unavailable` arm
-
-**File:** `extensions/pi-claude-marketplace/shared/probe-classifiers.ts:130-155` (`classifyResolverNote`) vs `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:2284-2287` (`narrowResolverReasons`)
-
-**Issue:**
-D-90-05 retargeted the per-kind axis (`kindToReason` -> `unsupported component`) and,
-because `install.ts::narrowResolverReasons` routes a `contains <kind>` note through
-`narrowUnsupportedKinds`, the install failure surface now emits `unsupported
-component` for a note like `contains monitors`. But the shared note-axis classifier
-`narrowResolverNotes` / `classifyResolverNote` was NOT updated — a `contains
-<non-carve-out-kind>` note still falls through its catch-all to `unsupported source`.
-
-These two classifiers diverge for a plugin that is BOTH structurally broken AND
-declares a non-carve-out unsupported kind (e.g. a malformed `.mcp.json` plus a
-top-level `monitors` field). `addUnsupportedKindNotes` unconditionally pushes
-`contains monitors` into `partial.notes`, and structural precedence (D-64-07) routes
-the plugin to the `unavailable` arm, whose notes are `[<structural note>, "contains
-monitors"]`. Then:
-
-- `list`/`info` (`orchestrators/plugin/list.ts:654`, `sharedNarrowResolverNotes(resolved.notes)`)
-  render `{... unsupported source}`.
-- The install failure surface (`install.ts:2142` -> `narrowResolverReasons(err.shape.reasons, [])`)
-  renders `{... unsupported component}` for the SAME plugin.
-
-This is exactly the same-plugin-same-reason invariant (SURF-01) that
-`tests/orchestrators/plugin/cross-surface-reason-parity.test.ts` exists to guard, and
-the catalog design note (`docs/output-catalog.md:1489`) explicitly states the
-structural arm sources reasons via `narrowResolverNotes` limited to `{unsupported
-source}` / `{malformed mcp}`. The divergence is untested: the note-parity
-`PARITY_CASES` block only pins `contains lspServers` and a generic
-`some other unsupported source detail`; there is no `contains monitors`/`contains
-themes` case, so the drift slips through green.
-
-Reachability is narrow (requires a both-defects plugin), which is why this is a
-WARNING rather than a BLOCKER, but it violates a documented, test-enforced contract.
-
-**Fix:** Decide the single truthful axis for a `contains <kind>` note and make both
-classifiers agree. Two options:
-
-1. If a `contains <kind>` note should read `unsupported component` everywhere, add a
-   `contains <kind>` arm to `classifyResolverNote` that delegates to the same
-   per-kind mapping (mirroring the install path), before the catch-all:
-   ```ts
-   if (note.startsWith("contains ")) {
-     return kindToReason(note.slice("contains ".length));
-   }
-   ```
-   (`ResolverNoteReason` already admits `unsupported component` via `UnsupportedReason`.)
-2. If the structural `unavailable` arm should keep the source-axis token, stop the
-   install-side note handler from routing `contains <kind>` through
-   `narrowUnsupportedKinds` when the throw came from the `unavailable` arm.
-
-Then add the missing `contains monitors` / multi-kind cases to
-`cross-surface-reason-parity.test.ts::PARITY_CASES` so the note-axis vs install-axis
-agreement is pinned, not just the kind-axis vs install-axis agreement.
-
-## Info
-
-### IN-01: `applyPathLedger` silently strips empty PATH segments
+### WR-01: `applyPathLedger` strips empty PATH segments from non-owned content on every load
 
 **File:** `extensions/pi-claude-marketplace/shared/session-env.ts:90-96`
 
-**Issue:** `split()` filters `entry.length > 0`, so any empty PATH segment (a leading
-`:`, trailing `:`, or `::` — POSIX implicit-current-directory) is dropped from the
-reconstructed PATH. `recomputePluginPath` is documented as only appending fresh bin
-dirs and removing prior-owned entries, but it also normalizes-away empty segments on
-every recompute. In practice this is benign (an empty PATH segment is itself a
-CWE-426 hazard, so removing it is arguably a hardening), but the mutation is broader
-than the stated "never touch a non-owned entry" contract in the same comment block.
+**Issue:**
+The pure ledger core documents a tight contract in the same comment block --
+"Remove exactly the prior-ledger entries from PATH (never touch a non-owned
+entry)". But its `split` helper filters `entry.length > 0`, so every empty PATH
+segment (a leading `:`, trailing `:`, or `::` -- the POSIX implicit-current-
+directory form) is dropped when `base` is rebuilt, then never restored:
 
-**Fix:** Either preserve empty segments through the round-trip (only strip when
-building the `owned` / `seen` sets, not when rebuilding `base`), or document that
-empty implicit-cwd PATH segments are intentionally dropped as a hardening side effect.
+```ts
+const split = (value: string): string[] =>
+  value.split(path.delimiter).filter((entry) => entry.length > 0);
+...
+const base = split(currentPath).filter((entry) => !owned.has(entry));
+...
+return { path: [...base, ...appended].join(path.delimiter), ... };
+```
 
-### IN-02: PATH-ledger round-trip is not robust to a `path.delimiter` inside a bin dir
+Two properties make this broader than the PENV-01 feature intends:
 
-**File:** `extensions/pi-claude-marketplace/shared/session-env.ts:85-111`
+1. It touches content the ledger does not own. An empty segment is neither a
+   prior-ledger entry nor a fresh bin dir, yet it is silently removed from the
+   live `process.env.PATH` that every bash child in the Pi session inherits.
+2. It fires unconditionally, even in the zero-plugin case. `recomputePluginPath`
+   runs on every `resources_discover` (index.ts:104). With no enabled plugins,
+   `freshBinDirs` is empty and `priorLedger` is empty, so `applyPathLedger`
+   still rewrites PATH to the empty-segment-stripped form. A user with this
+   extension loaded but no plugins installed has their session PATH normalized
+   as a side effect.
+
+Reachability is narrow (empty PATH segments are uncommon and are themselves a
+CWE-426 hazard, so dropping them is arguably a hardening), which is why this is a
+WARNING rather than a BLOCKER. But it is a provable deviation from the
+function's documented invariant with a real, if rare, user-visible effect
+(losing an implicit-cwd PATH entry the operator deliberately configured), and it
+is currently neither documented nor tested as intended behavior.
+
+**Fix:** Either preserve empty segments through the round-trip -- strip them only
+when building the `owned` / `seen` membership sets, not when rebuilding `base` --
+or make the drop an explicit, documented, tested hardening:
+
+```ts
+// Preserve non-owned segments verbatim (including empty ones); only the
+// membership sets need the length filter to avoid an empty-string key.
+const toKeys = (value: string): string[] =>
+  value.split(path.delimiter).filter((e) => e.length > 0);
+const owned = new Set(toKeys(priorLedger));
+const base = currentPath.split(path.delimiter).filter((e) => !owned.has(e));
+```
+
+If the drop is intentional, state it in the JSDoc contract ("empty implicit-cwd
+PATH segments are intentionally normalized away as a CWE-426 hardening") and add
+a `plugin-path.test.ts` case pinning it, so the contract and the code agree.
+
+## Info
+
+### IN-01: PATH-ledger round-trip is not robust to a `path.delimiter` inside a bin dir
+
+**File:** `extensions/pi-claude-marketplace/shared/session-env.ts:85-111` (with
+`orchestrators/plugin-path.ts::collectBinDirs`)
 
 **Issue:** The ledger is stored as a single delimiter-joined string in
-`PI_CLAUDE_MARKETPLACE_PATH`. If a plugin's resolved root ever contains the platform
-`path.delimiter` (`:` is a legal POSIX filename character), the join/split round-trip
-mis-parses the ledger, so the stale entry cannot be matched-and-removed on the next
-recompute and would leak. `asAbsolutePluginRoot` (the WR-01 guard in
-`collectBinDirs`) rejects empty/relative/traversal roots but does not reject an
-embedded delimiter. This mirrors an inherent PATH limitation and is very unlikely in
-practice, hence INFO only.
+`PI_CLAUDE_MARKETPLACE_PATH`. If a plugin's resolved root ever contains the
+platform `path.delimiter` (`:` is a legal POSIX filename character), the
+join/split round-trip mis-parses the ledger, so the stale entry cannot be
+matched-and-removed on the next recompute and would leak on the plugin's
+removal. `collectBinDirs`'s `asAbsolutePluginRoot` guard rejects empty /
+relative / null-byte / traversal roots but does NOT reject an embedded
+delimiter, so such a root can still enter the ledger. This mirrors an inherent
+PATH limitation and is very unlikely in practice, hence INFO only.
 
-**Fix:** If defensiveness is wanted, drop any bin dir containing `path.delimiter` in
-`collectBinDirs` (same drop-and-skip pattern as the existing WR-01 guard), so a
-delimiter-bearing root can never enter the ledger.
+**Fix:** If defensiveness is wanted, drop any bin dir containing `path.delimiter`
+in `collectBinDirs` (same drop-and-skip pattern as the existing absolute-root
+guard), so a delimiter-bearing root can never enter the ledger.
 
 ---
 
-_Reviewed: 2026-08-04T02:10:21Z_
+_Reviewed: 2026-08-04T04:55:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
