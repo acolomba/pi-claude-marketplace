@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 90-session-environment-initialization
 source: [90-VERIFICATION.md]
 started: 2026-08-03T12:20:00Z
-updated: 2026-08-04T00:54:47Z
+updated: 2026-08-04T12:48:55Z
 ---
 
 ## Current Test
@@ -24,15 +24,14 @@ note: "Verified with disposable path-source marketplace tmp/penv-uat-mkt (plugin
 
 ### 3. Bin-shipping plugin default install + reason accuracy
 expected: A plugin that ships a `bin/` directory installs by default (Claude Code 2.1.212 parity — bin dirs are honored at runtime since PENV-01), and any install-failure reason token names the actual axis of the problem.
-result: issue
-reported: "installing produces an error; this shows as unsupported source. is this right?"
-severity: major
+result: pass
+note: "Retested live 2026-08-04 after 90-02 (D-90-06 bin install-by-default, D-90-05 {unsupported component}) and 90-03 (SURF-01 arm-aware install classifier); bin-only plugin installs by default; non-carve-out kind renders {unsupported component} on install/list/info; both-defects case renders byte-identical {unsupported source}."
 
 ## Summary
 
 total: 3
-passed: 2
-issues: 1
+passed: 3
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -41,7 +40,7 @@ blocked: 0
 
 - gap_id: G-90-3
   truth: "A plugin shipping a bin/ directory installs by default (its bin/ is honored at runtime via PENV-01 PATH injection), and install-failure reason tokens name the actual axis of the problem"
-  status: failed
+  status: resolved
   reason: "User reported: installing produces an error; this shows as unsupported source. is this right?"
   severity: major
   test: 3

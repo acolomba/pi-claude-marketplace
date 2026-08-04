@@ -54,3 +54,26 @@ removes the entry cleanly).
   the `unsupported source` fallback. New tokens are closed-set REASONS
   catalog amendments (docs/output-catalog.md) and must stay byte-identical
   across the install/list/info surfaces (SURF-01).
+
+## Resolution
+
+Fixed and confirmed live 2026-08-04. Both coupled halves of the root cause are
+closed:
+
+1. **Stale classification (90-02, D-90-06).** `bin` was reclassified out of
+   `UNSUPPORTED_COMPONENT_KINDS` (with its convention probe removed), so a
+   bin-shipping plugin now resolves `installable` and installs by DEFAULT — no
+   `--partial` required — matching Claude Code 2.1.212 parity and the PENV-01
+   runtime PATH injection.
+2. **Reason-token collapse (90-02 D-90-05 + 90-03 SURF-01).** Dropped
+   non-carve-out kinds now render the `{unsupported component}` token
+   (D-90-05); and 90-03 made install's `narrowResolverReasons` arm-aware
+   (`partialable` discriminant, WR-01 Option 2) so a `contains <kind>` note on
+   the structural `unavailable` arm renders `{unsupported source}`
+   byte-identically across install/list/info (SURF-01, D-64-07), while the
+   partially-available per-kind `{unsupported component}` axis is unchanged.
+
+Live-Pi retest (UAT Test 3, G-90-3) passed: bin-only plugin installs by
+default; a non-carve-out kind renders `{unsupported component}` on
+install/list/info; the both-defects case renders byte-identical
+`{unsupported source}` across surfaces. G-90-3 marked resolved.
