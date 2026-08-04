@@ -91,9 +91,10 @@
   4. Only these keys are added to `process.env`; `getShellEnv()`'s `PI_*`-scrub and existing environment are otherwise undisturbed (non-interference). (SENV-01, SENV-02, SENV-03)
   5. At session start, each installed enabled plugin's `<pluginRoot>/bin` is appended to `process.env.PATH` — appended not prepended, deduplicated and idempotent across repeated session-start events, recomputed from install state (installs/uninstalls reflected after reload), and added even if the directory does not exist (verified live: Claude Code 2.1.212 appends `<pluginRoot>/bin` for enabled plugins unconditionally). (PENV-01)
 
-**Plans**: 1/1 plans executed
+**Plans**: 1 executed + 1 gap-closure plan (G-90-3)
 
 - [x] 90-01-PLAN.md — session env vars (`session_start` handler: `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID`) + plugin-PATH recompute with the `PI_CLAUDE_MARKETPLACE_PATH` env-var ledger (both scopes, after `applyReconcile`). Wave 1, autonomous.
+- [ ] 90-02-PLAN.md — gap closure G-90-3: reclassify `bin` as install-by-default (resolver, D-90-06; Claude Code 2.1.212 parity — PENV-01 already PATH-honors `bin/`) and add the `unsupported component` REASONS token (D-90-05) so a dropped non-carve-out component kind is named truthfully across install/list/info (SURF-01), with output-catalog + PRD reconciled. Wave 1, autonomous.
 
 ### Phase 91: Hook environment parity
 
