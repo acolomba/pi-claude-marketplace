@@ -84,9 +84,10 @@ const PER_KIND_PARITY_CASES = [
   // HOOK-04 / D-58-02: `lspServers` is the sole non-generic (soft-degradable)
   // per-kind marker and renders as `lsp`.
   { kind: "lspServers", note: "contains lspServers", expected: "lsp" },
-  // Every other unsupported component kind renders the generic marker.
-  { kind: "monitors", note: "contains monitors", expected: "unsupported source" },
-  { kind: "themes", note: "contains themes", expected: "unsupported source" },
+  // D-90-05: every other non-carve-out component kind renders the truthful
+  // `unsupported component` marker (was the generic source-axis token).
+  { kind: "monitors", note: "contains monitors", expected: "unsupported component" },
+  { kind: "themes", note: "contains themes", expected: "unsupported component" },
 ] as const;
 
 for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
@@ -121,7 +122,7 @@ for (const { kind, note, expected } of PER_KIND_PARITY_CASES) {
 // for a MULTI-kind `unsupported` plugin, where the install path previously
 // dropped every non-`lspServers` kind once an earlier kind had populated the
 // row -- so `install` rendered `["lsp"]` while `list`/`info` rendered
-// `["lsp","unsupported source"]` for the SAME plugin. This case pairs the typed
+// `["lsp","unsupported component"]` for the SAME plugin. This case pairs the typed
 // kind list (list/info input) against the matching resolver notes (install
 // input) and asserts both surfaces emit a byte-identical multi-marker set.
 test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-identical across list, info, and install", () => {
@@ -133,12 +134,12 @@ test("RSTATE-05 / SURF-01 / D-64-02 multi-kind unsupported markers are byte-iden
   const installOut = __test_narrowResolverReasons(["contains lspServers", "contains themes"]);
   assert.deepEqual(
     listInfoOut,
-    ["lsp", "unsupported source"],
+    ["lsp", "unsupported component"],
     `list/info surface emitted ${JSON.stringify(listInfoOut)}`,
   );
   assert.deepEqual(
     installOut,
-    ["lsp", "unsupported source"],
+    ["lsp", "unsupported component"],
     `install surface emitted ${JSON.stringify(installOut)}`,
   );
   assert.deepEqual(
@@ -215,7 +216,7 @@ test("IN-02 / RSTATE-05: empty notes + empty typed kinds keeps the permissive `u
 // `unsupported hooks` sources are distinct: structural via notes, degradable via
 // the typed kind list. This guard pins that a structural input never sneaks onto
 // the per-kind path -- a `hooks`-free kind list yields only `lsp` / `unsupported
-// source`, never the marker by structural means.
+// component`, never the marker by structural means.
 test("RSTATE-05 / D-64-07 structural hooks reason stays on the notes path, distinct from the degradable per-kind marker", () => {
   const structuralNote =
     "malformed hooks.json: hooks.json failed schema validation: /description: expected array";
@@ -223,10 +224,10 @@ test("RSTATE-05 / D-64-07 structural hooks reason stays on the notes path, disti
   assert.deepEqual(narrowResolverNotes([structuralNote]), ["unsupported hooks"]);
   assert.deepEqual(__test_narrowResolverReasons([structuralNote]), ["unsupported hooks"]);
   // ... while a kind list WITHOUT `hooks` only yields the closed `lsp` /
-  // `unsupported source` family (the degradable `hooks` kind is the sole path to
-  // the per-kind `unsupported hooks` marker, exercised above).
+  // `unsupported component` family (the degradable `hooks` kind is the sole path
+  // to the per-kind `unsupported hooks` marker, exercised above).
   const listOut = narrowUnsupportedKinds(["lspServers", "monitors"]);
-  assert.deepEqual(listOut, ["lsp", "unsupported source"]);
+  assert.deepEqual(listOut, ["lsp", "unsupported component"]);
   assert.ok(
     !listOut.includes("unsupported hooks"),
     "a structural-only kind list must never emit the `unsupported hooks` marker",

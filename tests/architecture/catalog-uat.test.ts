@@ -823,7 +823,7 @@ const FIXTURES: FixtureMap = {
                 status: "partially-upgradable",
                 name: "clean-plugin",
                 version: "1.0.0",
-                reasons: ["unsupported source"],
+                reasons: ["unsupported component"],
               },
             ],
           },

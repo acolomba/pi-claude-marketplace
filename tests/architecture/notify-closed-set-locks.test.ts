@@ -26,13 +26,15 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-test("OUT-08: REASONS is the closed 37-entry reason set", () => {
+test("OUT-08: REASONS is the closed 38-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
   // CLASS-01 / D-86-01: +2 for the per-kind `malformed skill` / `malformed
   // command` failure-class members (35 -> 37).
-  assert.equal(REASONS.length, 37);
+  // D-90-05: +1 for the `unsupported component` member -- the truthful marker
+  // for a dropped non-carve-out component kind (37 -> 38).
+  assert.equal(REASONS.length, 38);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

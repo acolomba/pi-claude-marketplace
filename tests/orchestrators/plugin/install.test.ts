@@ -2877,19 +2877,15 @@ test("260525-cjr C5: narrowResolverReasons recognises `contains lspServers` as t
   assert.deepEqual([...__test_narrowResolverReasons(["contains lspServers"])], ["lsp"]);
 });
 
-test("260525-cjr C5: narrowResolverReasons ignores `contains <unknown-kind>` (kind not in MANIFEST_FIELD_REASONS)", () => {
+test("260525-cjr C5 / D-90-05: narrowResolverReasons maps `contains <non-carve-out-kind>` to {unsupported component}", () => {
   // Resolver also emits `"contains monitors"`, `"contains themes"`,
-  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those
-  // are NOT in the bare-token carve-out -- the catalog renders them
-  // as `{unsupported source}` per the existing convention. The
-  // helper returns `undefined` for those, and the downstream
-  // `reason.includes("source")` check (or the final fallback) takes
-  // over.
+  // etc. for the other UNSUPPORTED_COMPONENT_KINDS members. Those are
+  // NOT the `lspServers` carve-out; their bare token routes through the
+  // SAME `narrowUnsupportedKinds` seam list/info use, so a non-carve-out
+  // component kind renders the truthful `{unsupported component}` marker
+  // (D-90-05) rather than borrowing the source-axis `{unsupported source}`.
   const reasons = __test_narrowResolverReasons(["contains monitors"]);
-  // `contains monitors` does NOT contain "source"; falls through to
-  // the final `unsupported source` permissive default (empty-out
-  // guard runs).
-  assert.deepEqual([...reasons], ["unsupported source"]);
+  assert.deepEqual([...reasons], ["unsupported component"]);
 });
 
 test("260525-cjr B2: narrowResolverReasons -> source-substring -> `unsupported source`", () => {
@@ -3724,7 +3720,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partia
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3750,7 +3746,7 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
         skills: [{ sourceName: "tool" }],
         agents: [{ sourceName: "bot" }],
         // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm -> the row is (partially-installed) {unsupported source}.
+        // `unsupported` arm -> the row is (partially-installed) {unsupported component}.
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
@@ -3774,13 +3770,13 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
       assert.equal(notifications[0]?.severity, "warning", "missing companion -> warning");
       // WR-03: the soft-dep marker shares the brace with the dropped-component
       // reason -- composeReasons appends `{requires pi-subagents}` AFTER the
-      // typed reason (MSG-GR-4), so `unsupported source` leads.
+      // typed reason (MSG-GR-4), so `unsupported component` leads.
       assert.equal(
         notifications[0]?.message,
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ p1 v1.0.0 (partially-installed) {unsupported source, requires pi-subagents}\n" +
+          "  ◉ p1 v1.0.0 (partially-installed) {unsupported component, requires pi-subagents}\n" +
           "\n" +
           "/reload to pick up changes",
       );

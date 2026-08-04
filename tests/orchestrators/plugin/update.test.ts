@@ -3342,7 +3342,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {unsupported source}\n" +
+          "  ◉ hello v1.1.0 (partially-installed) {unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -3431,12 +3431,13 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
       // failures/warnings) renders the cascade BODY (the Phase-73 row +
       // `--force` trailer) AND the never-silent `Plugin update: nothing to
       // update` headline below it -- the summary line does NOT vanish. The
-      // degrade reason `{unsupported source}` is the `makeCandidateUnsupported`
-      // (experimental manifest) form sourced through `narrowUnsupportedKinds`.
+      // degrade reason `{unsupported component}` is the `makeCandidateUnsupported`
+      // (experimental manifest) form sourced through `narrowUnsupportedKinds`
+      // (D-90-05: a non-carve-out component kind renders `unsupported component`).
       assert.equal(
         body,
         "● mp [project]\n" +
-          "  ● hello v1.0.0 (partially-upgradable) {unsupported source}\n" +
+          "  ● hello v1.0.0 (partially-upgradable) {unsupported component}\n" +
           "    Re-run with --partial to update with the supported components.\n" +
           "\n" +
           "Plugin update: nothing to update",

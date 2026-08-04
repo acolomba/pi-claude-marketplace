@@ -88,6 +88,8 @@ export const UNSUPPORTED_REASONS = [
   "requires pi-subagents",
   "requires pi-mcp",
   "unsupported source",
+  // D-90-05: the truthful marker for a dropped non-carve-out component kind.
+  "unsupported component",
   "no longer installable",
 ] as const;
 export type UnsupportedReason = (typeof UNSUPPORTED_REASONS)[number];

@@ -164,3 +164,14 @@ test("PHOOK-05 / RSTATE-05: a mixed `hooks` + `lspServers` list dedups to two di
 test("PHOOK-05 / D-71-04: repeated `hooks` kinds collapse to a single aggregate `unsupported hooks` marker", () => {
   assert.deepEqual([...narrowUnsupportedKinds(["hooks", "hooks"])], ["unsupported hooks"]);
 });
+
+test("D-90-05: a non-carve-out component kind narrows to `unsupported component` (not the source axis)", () => {
+  assert.deepEqual([...narrowUnsupportedKinds(["monitors"])], ["unsupported component"]);
+});
+
+test("D-90-05: a mixed carve-out + non-carve-out list yields `lsp` + `unsupported component`", () => {
+  assert.deepEqual(
+    [...narrowUnsupportedKinds(["lspServers", "monitors"])],
+    ["lsp", "unsupported component"],
+  );
+});

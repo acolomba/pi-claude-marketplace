@@ -96,6 +96,13 @@ export const REASONS = [
   "invalid manifest",
   "no longer installable",
   "unsupported source",
+  // D-90-05: a dropped non-carve-out unsupported COMPONENT kind
+  // (`monitors` / `themes` / `outputStyles` / `channels` / `userConfig` /
+  // `settings`). Distinct from `unsupported source` (the source/note axis)
+  // and from the `unsupported hooks` / `lsp` carve-outs. `kindToReason`'s
+  // per-kind fallback emits this so a component-kind drop is named truthfully
+  // rather than mislabeled as a source problem.
+  "unsupported component",
   "unsupported hooks",
   "lsp",
   "requires pi-subagents",

@@ -71,7 +71,8 @@ export function narrowProbeError(
  * `kindToReason`). Extracted so the three sites reference one alias instead of
  * re-declaring the union.
  */
-type UnsupportedReason = "unsupported hooks" | "lsp" | "unsupported source";
+type UnsupportedReason =
+  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component";
 
 /**
  * MCPR-03 / D-02: the closed-set members `narrowResolverNotes` can emit. It is
@@ -163,15 +164,15 @@ function classifyResolverNote(note: string): ResolverNoteReason {
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
- * Mapping (HOOK-04 / D-58-02 / D-71-04): `lspServers` renders as `lsp`; the
- * `hooks` kind (a parseable hooks.json with at least one unsupportable
- * event / matcher group / handler dropped) renders the single aggregate
- * `unsupported hooks` marker -- an EXISTING REASONS member, so the closed
- * set stays 32 (no new literal). Every other unsupported component kind
- * renders the generic `unsupported source` marker. First-wins dedup matches
- * `narrowResolverNotes` semantics (WR-01) so a multi-kind list never emits a
- * duplicate token (one `{unsupported hooks}` regardless of how many handlers
- * dropped).
+ * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05): `lspServers` renders as
+ * `lsp`; the `hooks` kind (a parseable hooks.json with at least one
+ * unsupportable event / matcher group / handler dropped) renders the single
+ * aggregate `unsupported hooks` marker. Every other unsupported component kind
+ * renders `unsupported component` (D-90-05) -- the truthful COMPONENT-axis
+ * marker, distinct from `unsupported source` (the source/note axis, owned by
+ * `narrowResolverNotes`). First-wins dedup matches `narrowResolverNotes`
+ * semantics (WR-01) so a multi-kind list never emits a duplicate token (one
+ * `{unsupported hooks}` regardless of how many handlers dropped).
  *
  * Structural reasons (malformed `hooks.json`, NFR-10 source escape) are NOT
  * in this family: a structural defect routes to the `unavailable` arm
@@ -198,9 +199,11 @@ export function narrowUnsupportedKinds(
 // TD-3: `kind` is deliberately typed `string`, NOT the closed `UnsupportedKind`
 // union. The resolver's `unsupported` array is `Type.Array(Type.String())` and
 // legitimately carries `hooks` (a SUPPORTED kind flagged as dropped) alongside
-// the `UnsupportedKind` literals, so no closed union spans the real input. Any
-// kind outside the two recognized markers intentionally collapses to the generic
-// `"unsupported source"` reason rather than forcing an unsafe cast at the callers.
+// the `UnsupportedKind` literals, so no closed union spans the real input.
+// D-90-05: a kind outside the two carve-outs (`lspServers` -> `lsp`, `hooks` ->
+// `unsupported hooks`) is a non-carve-out COMPONENT kind and collapses to
+// `unsupported component`, naming the axis truthfully rather than borrowing the
+// source-axis `unsupported source` token.
 function kindToReason(kind: string): UnsupportedReason {
   if (kind === "lspServers") {
     return "lsp";
@@ -210,5 +213,5 @@ function kindToReason(kind: string): UnsupportedReason {
     return "unsupported hooks";
   }
 
-  return "unsupported source";
+  return "unsupported component";
 }
