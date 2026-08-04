@@ -172,6 +172,50 @@ test("applyPathLedger: zero fresh dirs removes prior-owned entries and empties t
   assert.equal(result.ledger, "");
 });
 
+test("applyPathLedger: zero-plugin round-trip preserves a `::` empty segment byte-identical (PENV-01 non-interference)", () => {
+  const current = ["/usr/bin", "", "/bin"].join(delimiter);
+  const result = applyPathLedger(current, "", []);
+
+  assert.equal(result.path, current);
+  assert.equal(result.ledger, "");
+});
+
+test("applyPathLedger: preserves a leading empty PATH segment", () => {
+  const current = ["", "/usr/bin"].join(delimiter);
+  const result = applyPathLedger(current, "", []);
+
+  assert.equal(result.path, current);
+});
+
+test("applyPathLedger: preserves a trailing empty PATH segment", () => {
+  const current = ["/usr/bin", ""].join(delimiter);
+  const result = applyPathLedger(current, "", []);
+
+  assert.equal(result.path, current);
+});
+
+test("applyPathLedger: removes an owned entry while a neighboring empty segment survives", () => {
+  const current = ["/usr/bin", "", "/a/bin"].join(delimiter);
+  const result = applyPathLedger(current, "/a/bin", []);
+
+  assert.equal(result.path, ["/usr/bin", ""].join(delimiter));
+  assert.equal(result.ledger, "");
+});
+
+test("applyPathLedger: an empty PATH string is zero entries, so append never introduces a leading empty segment", () => {
+  const result = applyPathLedger("", "", ["/a/bin"]);
+
+  assert.equal(result.path, "/a/bin");
+  assert.equal(result.ledger, "/a/bin");
+});
+
+test("applyPathLedger: preserves an empty segment while appending a fresh dir", () => {
+  const current = ["/usr/bin", "", "/bin"].join(delimiter);
+  const result = applyPathLedger(current, "", ["/a/bin"]);
+
+  assert.equal(result.path, ["/usr/bin", "", "/bin", "/a/bin"].join(delimiter));
+});
+
 test("PATH_LEDGER_ENV is the pi-only bookkeeping var name", () => {
   assert.equal(PATH_LEDGER_ENV, "PI_CLAUDE_MARKETPLACE_PATH");
 });
