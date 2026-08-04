@@ -24,7 +24,7 @@ progress:
 Phase: 90 (session-environment-initialization) — COMPLETE (re-verification passed 20/20 after gap-closure rounds 90-02/90-03)
 Plan: 3 of 3 executed
 Status: All milestone v1.17 phases (90-94) complete — next: milestone audit/UAT, then /gsd-complete-milestone
-Last activity: 2026-08-04 — Phase 90 re-verified passed; UAT 3/3; G-90-3 and SURF-01 closed
+Last activity: 2026-08-04 — Completed quick task 260804-gcs: Fix applyPathLedger non-owned PATH stripping
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
@@ -100,6 +100,7 @@ locally, unrelated to this change.)
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260802-v2z | amend v1.17 env-parity planning docs per validation findings | 2026-08-02 | 1ce8f203 | [260802-v2z-amend-v1-17-env-parity-planning-docs-per](./quick/260802-v2z-amend-v1-17-env-parity-planning-docs-per/) |
+| 260804-gcs | Fix applyPathLedger non-owned PATH stripping | 2026-08-04 | aeef0882 | [260804-gcs-fix-applypathledger-non-owned-path-strip](./quick/260804-gcs-fix-applypathledger-non-owned-path-strip/) |
 
 ## Decisions
 
