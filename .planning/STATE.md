@@ -5,26 +5,26 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
 status: executing
-stopped_at: Completed 90-02-PLAN.md
-last_updated: "2026-08-04T01:59:29.601Z"
-last_activity: 2026-08-03
-last_activity_desc: Phase 90 execution started
+stopped_at: Planned 90-03-PLAN.md (gap closure round 2)
+last_updated: "2026-08-04T02:51:48.136Z"
+last_activity: 2026-08-04
+last_activity_desc: "Phase 90 replanned: 90-03 gap-closure plan (SURF-01 reason parity)"
 progress:
   total_phases: 5
   completed_phases: 5
-  total_plans: 8
+  total_plans: 9
   completed_plans: 8
-  percent: 100
+  percent: 89
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 90 (session-environment-initialization) — EXECUTING
-Plan: 2 of 2
+Phase: 90 (session-environment-initialization) — EXECUTING (gap closure round 2)
+Plan: 2 of 3 executed; 90-03 planned (SURF-01 cross-surface reason parity + live-Pi G-90-3 retest checkpoint)
 Status: Ready to execute
-Last activity: 2026-08-03 — Phase 90 execution: 90-02 gap-closure (G-90-3) complete
+Last activity: 2026-08-04 — Phase 90 replanned after re-verification (gaps_found 19/20): 90-03 gap-closure plan created
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
