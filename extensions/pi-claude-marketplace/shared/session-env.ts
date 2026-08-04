@@ -81,19 +81,31 @@ export const PATH_LEDGER_ENV = "PI_CLAUDE_MARKETPLACE_PATH";
  * exist on disk (no fs stat; Claude Code parity). The new ledger holds exactly
  * the dirs actually appended, so a repeated recompute is idempotent and a
  * plugin dropped between loads leaves no stale entry (D-90-01).
+ *
+ * Empty PATH segments (a leading `:`, trailing `:`, or `::` -- the POSIX
+ * implicit-current-directory form) are non-owned content and pass through
+ * byte-identical: only ledger-owned entries, which are always absolute and
+ * non-empty, are ever removed, so an empty segment can never match and always
+ * survives the split/join round-trip (PENV-01 non-interference). A whole-PATH
+ * empty string is treated as zero entries -- not one empty segment -- so
+ * appending a fresh dir onto an empty PATH never introduces a spurious leading
+ * empty segment.
  */
 export function applyPathLedger(
   currentPath: string,
   priorLedger: string,
   freshBinDirs: string[],
 ): { path: string; ledger: string } {
-  const split = (value: string): string[] =>
-    value.split(path.delimiter).filter((entry) => entry.length > 0);
-
-  const owned = new Set(split(priorLedger));
-  // Remove only the entries the extension previously appended; every other
-  // entry (including one that happens to equal a fresh bin dir) survives.
-  const base = split(currentPath).filter((entry) => !owned.has(entry));
+  // The ledger only ever records absolute, non-empty bin dirs; drop empties so
+  // an empty ledger string maps to the empty owned-set.
+  const owned = new Set(priorLedger.split(path.delimiter).filter((entry) => entry.length > 0));
+  // Split currentPath WITHOUT dropping empty segments so non-owned empties
+  // survive verbatim; a whole-PATH empty string is zero entries, not one empty
+  // segment. Remove only entries the extension previously appended; every other
+  // entry (including an empty segment or one equal to a fresh bin dir) survives.
+  const base = (currentPath === "" ? [] : currentPath.split(path.delimiter)).filter(
+    (entry) => !owned.has(entry),
+  );
 
   const seen = new Set(base);
   const appended: string[] = [];

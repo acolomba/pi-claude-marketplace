@@ -27,6 +27,11 @@ export type AbsolutePluginRoot = string & { readonly [__absolutePluginRootBrand]
  * with a descriptive message on any of:
  *   - empty string
  *   - null byte (POSIX/Windows path-truncation vector)
+ *   - contains `path.delimiter` -- the delimiter-joined
+ *     PI_CLAUDE_MARKETPLACE_PATH ledger cannot round-trip a segment
+ *     containing the delimiter, so such a root could not be
+ *     matched-and-removed on recompute and would leak a stale fragment
+ *     onto PATH on cleanup
  *   - not absolute (`path.isAbsolute` -- handles both `/` and `C:\` shapes)
  *
  * Idempotent: callers can wrap an already-branded value without effect.
@@ -43,6 +48,10 @@ export function asAbsolutePluginRoot(value: string): AbsolutePluginRoot {
 
   if (value.includes("\0")) {
     throw new Error("AbsolutePluginRoot: contains null byte");
+  }
+
+  if (value.includes(path.delimiter)) {
+    throw new Error(`AbsolutePluginRoot: contains PATH delimiter: ${value}`);
   }
 
   if (!path.isAbsolute(value)) {
