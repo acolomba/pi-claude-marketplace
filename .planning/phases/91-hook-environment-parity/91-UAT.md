@@ -3,7 +3,7 @@ status: complete
 phase: 91-hook-environment-parity
 source: [91-01-SUMMARY.md]
 started: 2026-08-04T00:00:00Z
-updated: 2026-08-05T00:35:00Z
+updated: 2026-08-05T01:15:00Z
 ---
 
 ## Current Test
@@ -19,9 +19,8 @@ note: "Verified live 2026-08-04 with disposable fixture tmp/henv-uat-mkt (plugin
 
 ### 2. Async-rewake hook lane env parity
 expected: A hook spawned through the async-rewake lane (e.g. a Stop hook re-armed asynchronously) sees the same three session env keys with the same values as a sync hook — no missing or stale keys on the async path (HENV-02).
-result: issue
-reported: "still absent" (no lane=async block in env.log after /reload + agent tool call; an asyncRewake:true PreToolUse handler in the same matcher group as the working sync handler never spawned its child)
-severity: major
+result: pass
+note: "Passed on retest 2026-08-04 21:08 after reinstall re-staged the fixture hooks.json: one tool call produced both blocks — lane=sync (marker unset) and lane=async (PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=c00ad146-…) — with identical CLAUDECODE=1 and current-session ids (HENV-02 parity live). Initial 'still absent' report was a stale staged copy (see gap G-91-2 root_cause), not a product defect."
 
 ### 3. Session-id snapshot freshness across /new
 expected: After starting a new session (/new), a triggered hook sees the NEW session id in both CLAUDE_CODE_SESSION_ID and CLAUDE_SESSION_ID — never a stale id left in process.env from the previous session (snapshot-wins precedence).
@@ -31,8 +30,8 @@ note: "Verified live 2026-08-04: after /new the newest lane=sync block shows the
 ## Summary
 
 total: 3
-passed: 2
-issues: 1
+passed: 3
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -41,12 +40,20 @@ blocked: 0
 
 - gap_id: G-91-2
   truth: "A hook handler declaring asyncRewake: true on a dispatchable event (e.g. PreToolUse) spawns its child through the async-rewake lane with Claude-Code-parity session env (HENV-02) in a live Pi session"
-  status: failed
+  status: resolved
+  resolved_by: "live retest after fixture re-stage (no code change; root cause was UAT procedure — stale staged hooks.json)"
+  resolved_at: 2026-08-04
   reason: "User reported: still absent — fixture plugin env-observe (tmp/henv-uat-mkt, sandbox home tmp/pi-uat) with a sync + asyncRewake:true handler pair on PreToolUse produced only the lane=sync block in env.log after /reload and an agent tool call; the async child never ran"
   severity: major
   test: 2
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "Stale staged hooks.json — NOT a product defect. The router hydrates hook configs from the install-time staged copy (<scope>/pi-claude-marketplace/hooks/<slug>/hooks.json, event-router.ts hydrateScopeFromState); /reload re-reads the staged copy, and only install/reinstall/update re-stage it. The UAT edited the marketplace source after install without re-staging, so the session still routed the first fixture attempt (async handler on Stop — inert by design, D-87-04). A throwaway seam test driving the real parse->cache->rebuild->dispatch path with the edited config spawns BOTH children with full HENV-02 env parity."
+  artifacts:
+    - path: "tmp/pi-uat/agent/pi-claude-marketplace/hooks/env-observe/hooks.json"
+      issue: "stale staged copy (first fixture attempt); mtime == installedAt, never re-staged after source edit"
+  missing:
+    - "Re-stage the fixture (reinstall env-observe@henv-uat-mkt) and re-run Test 2 live"
+    - "Optional docs note: plugin-source hooks.json edits require reinstall/update, not just /reload"
+  debug_session: ".planning/debug/async-rewake-lane-inert.md"
   notes: |
     Inline pre-diagnosis (all in current branch source, features/env-parity):
     - Stop + asyncRewake is inert BY DESIGN (collectBucketOutcomes degrades to
