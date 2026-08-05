@@ -126,9 +126,9 @@ MCP server names are left as-is. If another MCP config already uses that name, t
 
 Marketplaces and plugins can be installed in the user scope or in the current project's scope. The default is user scope.
 
-The user scope is inherited, so it is possible to install a plugin from a user scope marketplace in the project scope.
+The user scope is inherited, so you can install a plugin from a user scope marketplace in the project scope.
 
-It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
+You can also install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
 
 ### Partially available plugins
 
@@ -140,7 +140,7 @@ List partially available plugins.
 /claude:plugin list --partial
 ```
 
-Install a partially available plugin. Placing `--partial` first enables argument completion for partially available plugins, which are otherwise excluded from completion in absence of that flag.
+Install a partially available plugin. Placing `--partial` first enables argument completion for partially available plugins, which are otherwise excluded from completion when that flag is absent.
 
 ```text
 /claude:plugin install --partial hookify@claude-plugins-official
@@ -349,7 +349,7 @@ Repositories of remote plugins are lazily fetched, so `/claude:plugin info` will
 /claude:plugin info 2crunch-api-security-testing@claude-plugins-official --fetch
 ```
 
-The repository of a specific remote plugin, of all the plugins in a marketplace, or of all remote plugins across all marketplaces can also be be eagerly fetched:
+The repository of a specific remote plugin, of all the plugins in a marketplace, or of all remote plugins across all marketplaces can also be eagerly fetched:
 
 ```text
 /claude:plugin fetch 2crunch-api-security-testing@claude-plugins-official
@@ -357,7 +357,7 @@ The repository of a specific remote plugin, of all the plugins in a marketplace,
 /claude:plugin fetch
 ```
 
-Once fetched, plugins are determined to be available, partially-available or unavailable for installation.
+Once fetched, plugins are classified as available, partially available, or unavailable for installation.
 
 The `/claude:plugin install` command automatically fetches a remote plugin.
 
@@ -388,7 +388,7 @@ Import is a convenience command to import marketplaces and plugins already defin
 /claude:plugin import
 ```
 
-By default, marketplaces and plugins are added in accordance to the scope that they're defined in Claude Code. It's also possible to limit the import to a specific scope.
+By default, marketplaces and plugins are added to the same scope they have in Claude Code. You can also limit the import to a specific scope.
 
 ```text
 /claude:plugin import --scope user
