@@ -28,7 +28,7 @@ Instala complementos desde los mercados de complementos de Claude que contienen 
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Los complementos que contienen componentes no compatibles pueden instalarse parcialmente, pero es posible que no funcionen como se pretende.
+Los complementos que contienen componentes no compatibles pueden instalarse parcialmente, pero es posible que no funcionen según lo previsto.
 
 Los mercados y complementos de Claude se gestionan mediante un comando `/claude:plugin` similar a `/plugin` de Claude Code. Se mantiene una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` para instalaciones de complementos automatizadas y repetibles que pueden compartirse entre máquinas o miembros del equipo.
 
@@ -140,7 +140,7 @@ Lista los complementos parcialmente disponibles.
 /claude:plugin list --partial
 ```
 
-Instala un complemento parcialmente disponible. Colocar `--partial` primero habilita la finalización de argumentos para complementos parcialmente disponibles, los cuales de otro modo estarían excluidos de la finalización en ausencia de esa bandera.
+Instala un complemento parcialmente disponible. Colocar `--partial` primero habilita el autocompletado de argumentos para complementos parcialmente disponibles, los cuales de otro modo estarían excluidos del autocompletado en ausencia de esa opción.
 
 ```text
 /claude:plugin install --partial hookify@claude-plugins-official
@@ -183,7 +183,7 @@ En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json` para que l
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio principal; son personales y nunca se comparten.
+Los archivos de ámbito de usuario se encuentran en tu directorio de inicio; son personales y nunca se comparten.
 
 ## Referencia de comandos
 
@@ -262,7 +262,7 @@ Activa o desactiva las actualizaciones automáticas de complementos del mercado.
 
 ### Complemento
 
-Lista los complementos disponibles para instalar. Omite el nombre del mercado para listar a través de todos los mercados configurados.
+Lista los complementos disponibles para instalar. Omite el nombre del mercado para listar en todos los mercados configurados.
 
 ```text
 /claude:plugin list context7-marketplace --available
@@ -306,7 +306,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden incluir un modelo preferido para ejecutar el agente, por ejemplo, "sonnet", "opus", etc. Estos se descartan por defecto, pero la opción `--map-model` para `install` y `update` se puede usar para realizar un intento de mayor esfuerzo por mapear estos modelos a modelos de Pi.
+> Las definiciones de agente en los complementos pueden incluir un modelo preferido para ejecutar el agente, por ejemplo, "sonnet", "opus", etc. Estos se descartan por defecto, pero la opción `--map-model` para `install` y `update` se puede usar para intentar mapear estos modelos a modelos de Pi en la medida de lo posible.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
@@ -316,7 +316,7 @@ Reinstala un complemento instalado, todos los complementos instalados de un merc
 /claude:plugin reinstall
 ```
 
-Limita la reinstalación a un ámbito con `--scope user` o `--scope project`. La bandera puede aparecer antes o después del objetivo:
+Limita la reinstalación a un ámbito con `--scope user` o `--scope project`. La opción puede aparecer antes o después del objetivo:
 
 ```text
 /claude:plugin reinstall --scope project
@@ -349,7 +349,7 @@ Los repositorios de complementos remotos se obtienen de forma diferida (lazy), p
 /claude:plugin info 2crunch-api-security-testing@claude-plugins-official --fetch
 ```
 
-El repositorio de un complemento remoto específico, de todos los complementos en un mercado, o de todos los complementos remotos en todos los mercados también se pueden obtener de forma anticipada (eager):
+El repositorio de un complemento remoto específico, de todos los complementos en un mercado, o de todos los complementos remotos en todos los mercados también se puede obtener de forma anticipada (eager):
 
 ```text
 /claude:plugin fetch 2crunch-api-security-testing@claude-plugins-official
@@ -357,7 +357,7 @@ El repositorio de un complemento remoto específico, de todos los complementos e
 /claude:plugin fetch
 ```
 
-Una vez obtenidos, los complementos se determinan como disponibles, parcialmente disponibles o no disponibles para instalación.
+Una vez obtenidos, los complementos se clasifican como disponibles, parcialmente disponibles o no disponibles para instalación.
 
 El comando `/claude:plugin install` obtiene automáticamente un complemento remoto.
 
@@ -405,7 +405,7 @@ Consulta [CONTRIBUTING](CONTRIBUTING.md) y [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
 
 Este proyecto se desarrolla con prácticas de ingeniería de agentes de IA utilizando el sistema de desarrollo basado en especificaciones [Open GSD](https://www.opengsd.net/).
 
-El autor `vibe-coded` (programó intuitivamente) un prototipo hasta que fue completo en funcionalidades para un primer lanzamiento, luego extrajo y revisó un PRD a partir de la implementación.
+El autor `vibe-coded` (programó intuitivamente) un prototipo hasta que estuvo funcionalmente completo para un primer lanzamiento, luego extrajo y revisó un PRD a partir de la implementación.
 
 El PRD se utilizó luego para guiar a GSD a través de las fases de discusión, planificación e implementación de una nueva implementación.
 
