@@ -5,10 +5,10 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
 status: All phases complete — awaiting milestone close
-stopped_at: Phase 93 live-Pi UAT complete (7/7 passed); UAT done for phases 90-93
-last_updated: "2026-08-05T02:25:00.000Z"
+stopped_at: Phase 94 UAT complete (4/4 passed); UAT done for all phases 90-94
+last_updated: "2026-08-05T02:37:22.000Z"
 last_activity: 2026-08-04
-last_activity_desc: Phase 93 live-Pi UAT 7/7 passed (SUB-01/SUB-02 verified live at both scopes; 93-02 D1-D3 auto-covered by tests)
+last_activity_desc: Phase 94 doc-review UAT 4/4 passed (DOC-06/DOC-07 deliverables confirmed; D4 semantic spot-check approved)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -72,16 +72,16 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-05T02:25:00Z
-**Stopped at:** Phase 93 live-Pi UAT complete — 7/7 passed (93-UAT.md), zero issues.
-Fixture skill-probe@sub-uat-mkt (tmp/sub-uat-mkt, sandbox tmp/pi-uat + tmp/work):
-SUB-01 `${CLAUDE_SKILL_DIR}` resolved to the installed skill dir at both scopes
-(body + frontmatter description); SUB-02 skills arm scope-gated (`${CLAUDE_PROJECT_DIR}`
-= install cwd at project scope, literal at user scope, never empty string);
-unknown/non-CLAUDE tokens pass through byte-identical. Plan 93-02 deliverables
-D1-D3 (commands/agents/orchestrator threading) auto-covered by unit/e2e tests
-and user-confirmed. Phases 90-93 now have complete UAT; 94 is the docs phase
-(milestone audit already passed 14/14). Next: /gsd-complete-milestone v1.17.
+**Last session:** 2026-08-05T02:37:22Z
+**Stopped at:** Phase 94 doc-review UAT complete — 4/4 passed (94-UAT.md), zero
+issues. D1 (env-vars.md two-mechanism prose + overview matrix + bash-children
+table), D2 (per-surface tables + Divergences C-1..C-6 + Not-delivered), D3
+(hooks-compatibility.md env table reconciled + authority line), and D4 (semantic
+accuracy of matrix cells/divergence claims vs shipped code) all user-confirmed.
+Coverage note: 94-01-SUMMARY coverage block uses `kind: automated` (not in the
+allowed kind set), so D1-D3 fell back to human checkpoints — passed anyway.
+All phases 90-94 now have complete UAT; milestone audit passed 14/14.
+Next: /gsd-complete-milestone v1.17.
 **Resume file:** None
 
 Phase 90 gap-closure 90-03 is COMPLETE. Task 1 (SURF-01 / WR-01 Option 2): install's
