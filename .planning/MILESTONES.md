@@ -1,5 +1,23 @@
 # Milestones: pi-claude-marketplace
 
+## v1.17 env-parity (Shipped: 2026-08-05, target npm 0.13.0)
+
+**Phases completed:** 5 phases (90-94), 9 plans, 23 tasks
+
+**Driver:** Installed Claude plugins should see the same environment variables, delivered the same way, as under Claude Code — runtime env injection for session-scoped values, install-time textual substitution for install-stable per-plugin values — across all five component surfaces (skills, commands, agents, hooks, MCP servers). Ground truth verified against the Claude Code v2.1.212 binary and a live session env, not docs alone.
+
+**Key accomplishments:**
+
+- **Session env init (Phase 90):** at `session_start` the extension sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID=<Pi session id>`, and the pi-only `CLAUDE_SESSION_ID` alias on Pi's live `process.env` (tracking the active session across switch/`/reload`), and appends each installed enabled plugin's `<pluginRoot>/bin` to `PATH` via the `PI_CLAUDE_MARKETPLACE_PATH` env-var ledger — appended not prepended, deduplicated, idempotent, recomputed from install state (PENV-01). Gap-closure riders: `bin` reclassified install-by-default (D-90-06, Claude Code 2.1.212 parity) with the new `{unsupported component}` reason token (D-90-05, REASONS 37→38), and install's reason classifier made arm-aware so a structurally-unavailable plugin renders `{unsupported source}` byte-identically across install/list/info (SURF-01).
+- **Hook env parity (Phase 91):** both hook spawn lanes — `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and its deliberate hand-mirror `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`) — deliver the three session keys from the snapshotted `transCtx.sessionId` via a shared `claudeSessionEnvFor` producer, joining the existing four `CLAUDE_*` vars, pinned together by a behavioral drift-guard test (HENV-01/02).
+- **MCP staging parity (Phase 92):** `stampServers` no longer writes entries verbatim — the new deep-substitution engine (`bridges/mcp/substitute.ts`) replaces `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}`/(project-scope) `${CLAUDE_PROJECT_DIR}` throughout each server's `command`/`args`/`env` and injects `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (+ project-scope `CLAUDE_PROJECT_DIR`) into each stdio server's `env` with declared-keys-win precedence, `__proto__`-hardened via `safeSet` at all four parsed-key sinks; re-derived on every `update`/`reinstall` re-stage so a plugin-root change never leaves stale paths in `mcp.json` (MENV-01..04).
+- **Substitution completion (Phase 93):** `substituteClaudeVars` now resolves four variables in one alternation pass — `${CLAUDE_SKILL_DIR}` to the skill's installed dir and project-scope `${CLAUDE_PROJECT_DIR}` to the install cwd, threaded from all three orchestrators into every skills/commands/agents stage input — while user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched as a documented divergence (SUB-01/02).
+- **Environment-variable docs (Phase 94):** NEW authoritative `docs/env-vars.md` — the per-variable × per-surface matrix (Claude Code ground truth vs Pi delivery, S/E/—/✗ legend), the two-mechanism model, the six carrier divergences including the verified pi-mcp-adapter `resolveEnv` spread-then-override `process.env`-inheritance finding, and the not-delivered set — with the `docs/hooks-compatibility.md` env table reconciled against it under an explicit authority line (DOC-06/07).
+
+**Closeout:** override_closeout — 6 open artifacts acknowledged and deferred (5 pre-existing items re-acknowledged unchanged from the v1.14/v1.16 closes plus the concluded diagnose-only `async-rewake-lane-inert` debug session; see STATE.md Deferred Items); milestone audit passed 14/14 requirements, 9/9 integration seams, 5/5 E2E flows.
+
+---
+
 ## v1.16 stop-hooks (Shipped: 2026-07-31, target npm 0.12.0)
 
 **Phases completed:** 3 phases (87-89), 11 plans, 22 tasks

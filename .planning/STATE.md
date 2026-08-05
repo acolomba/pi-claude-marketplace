@@ -2,106 +2,55 @@
 gsd_state_version: 1.0
 milestone: v1.17
 milestone_name: env-parity
-current_phase: 90
-current_phase_name: session-environment-initialization
-status: "Milestone v1.17 shipped — PR #115 open (awaiting review, then milestone close on branch)"
-stopped_at: Phase 94 UAT complete (4/4 passed); UAT done for all phases 90-94
-last_updated: "2026-08-05T09:12:44.013Z"
+status: Awaiting next milestone
+stopped_at: Milestone v1.17 closed and archived (2026-08-05)
+last_updated: "2026-08-05T12:18:50.749Z"
 last_activity: 2026-08-05
+last_activity_desc: Milestone v1.17 completed and archived
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 9
   completed_plans: 9
   percent: 100
-last_activity_desc: Phase 94 doc-review UAT 4/4 passed (DOC-06/DOC-07 deliverables confirmed; D4 semantic spot-check approved)
+current_phase: 90
+current_phase_name: session-environment-initialization
 ---
 
 # Project State
 
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-08-05 after v1.17 close)
+
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
+and, after `/reload`, have every supported Claude plugin component appear as a
+working Pi-native artefact — atomically, recoverably, and with soft-dependency
+degradation that never blocks the install.
+**Current focus:** Planning next milestone. v1.17 env-parity shipped 2026-08-05;
+PR #115 (`features/env-parity`) carries the milestone and awaits review/merge;
+npm 0.13.0 releases via the v-tag CI publish path after the squash-merge.
+
 ## Current Position
 
-Phase: 90 (session-environment-initialization) — COMPLETE (re-verification passed 20/20 after gap-closure rounds 90-02/90-03)
-Plan: 3 of 3 executed
-Status: Milestone v1.17 shipped — PR #115 open (awaiting review, then milestone close on branch)
-Last activity: 2026-08-05
-Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
+Phase: Milestone v1.17 complete (Phases 90-94 archived to
+.planning/milestones/v1.17-phases/)
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-05 — Milestone v1.17 completed and archived
 
-## Roadmap Summary
+## Milestone Summary
 
-- 5 phases (Phases 90-94), continuing the global counter from Phase 89 (v1.16
-  stop-hooks). All 14 v1 requirements mapped, no orphans. Execution order:
-  90 → 91 (the hook lane leans on the session-env groundwork); 92 (MCP) and 93
-  (substitution) are independent of the env lane and of each other; 94 (docs)
-  LAST and sequential (non-worktree) so it documents shipped behavior.
+v1.17 env-parity shipped 2026-08-05 — 5 phases (90-94), 9 plans, 23 tasks,
+14/14 requirements satisfied; milestone audit passed (9/9 integration seams,
+5/5 E2E flows); all five phases UAT-confirmed. Full detail:
+.planning/milestones/v1.17-ROADMAP.md, .planning/milestones/v1.17-REQUIREMENTS.md,
+and the entry in .planning/MILESTONES.md.
 
-- **Phase 90 — Session environment initialization** (SENV-01, SENV-02, SENV-03, PENV-01): the shared runtime-injection groundwork. At session start the extension sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID=<Pi session id>`, and the pi-only `CLAUDE_SESSION_ID` alias on Pi's live `process.env`, and appends each installed enabled plugin's `<pluginRoot>/bin` to `process.env.PATH` (appended not prepended, deduplicated/idempotent, recomputed from install state, added even if absent — PENV-01). Pi's bash tool builds every child env fresh at each spawn: `getShellEnv()` spreads the full live `process.env` (its only mutation: prepends Pi's managed bin dir to `PATH`), then `resolveSpawnContext()` deletes and re-derives exactly five named keys (`PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`, `PI_REASONING_LEVEL`) — there is no `PI_*`-prefix scrub, so extension mutations of `process.env` reach every later bash child. The session-id value must track the active session (fresh after switch / `/reload`).
-
-- **Phase 91 — Hook environment parity** (HENV-01, HENV-02): `CLAUDECODE=1` +
-  `CLAUDE_CODE_SESSION_ID` (from the authoritative `transCtx.sessionId` snapshot,
-  not the `process.env` spread) join the existing `CLAUDE_PROJECT_DIR`/
-  `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set on BOTH hook spawn
-  lanes — `prepareEnv` (`bridges/hooks/dispatch-exec.ts`) and its deliberate
-  hand-mirror `prepareAsyncEnv` (`bridges/hooks/async-rewake/registry.ts`) — pinned
-  together by a drift-guard test so the mirror can't silently rot.
-
-- **Phase 92 — MCP staging parity** (MENV-01..04): the biggest gap —
-  `stampServers` (`bridges/mcp/stage.ts`) writes MCP entries to `mcp.json` verbatim
-  today. Substitute the set `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and — project-scope installs only — `${CLAUDE_PROJECT_DIR}` (user-scope `${CLAUDE_PROJECT_DIR}` a documented absence, unknowable at install time) in each server's
-  `command`/`args`/`env`, and inject `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus
-  `CLAUDE_PROJECT_DIR` for project-scope only — user-scope value varies per session)
-  into each server's `env`, plugin-declared keys winning over injected defaults
-  (Claude's spread order). Rationale: Claude Code substitutes all three at config load; pi-mcp-adapter does NOT interpolate `command`/`args` at all and replaces unknown `${VAR}` in env with the empty string — so stage-time substitution is the only delivery path for `command`/`args` and the only correct one for per-plugin `env` values. The `update`/`reinstall` re-stage paths re-derive so a
-  plugin-root change (e.g. a new sha-addressed clone dir) never leaves stale paths.
-  Atomic writes (NFR-1), containment (NFR-10) hold.
-
-- **Phase 93 — Substitution completion** (SUB-01, SUB-02): extend
-  `shared/vars.ts::substituteClaudeVars` (today only `${CLAUDE_PLUGIN_ROOT}`/
-  `${CLAUDE_PLUGIN_DATA}`) and its four call sites across the three bridges (skills stage ×2 — description augmentation and whole-file; commands stage; agents convert) so `${CLAUDE_SKILL_DIR}` resolves to the skill's installed dir and project-scope `${CLAUDE_PROJECT_DIR}` resolves to the project root; user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (documented divergence — Claude Code substitutes it at invoke time even for user-scope artefacts, so such an artefact works under Claude Code but stays literal under Pi; no env var rescues it, and Claude Code's own bash children carry no `CLAUDE_PROJECT_DIR` so Pi deliberately sets none; DOC-06 states the gap).
-
-- **Phase 94 — Environment-variable documentation** (DOC-06, DOC-07): NEW
-  `docs/env-vars.md` — the per-variable × per-surface matrix (Claude Code ground
-  truth vs Pi delivery), the two-mechanism model (install-time textual substitution
-  for install-stable per-plugin values vs runtime env injection for session-scoped
-  values), documented absences, and the resolved pi-mcp-adapter `process.env`-
-  inheritance answer; `docs/hooks-compatibility.md`'s env table reconciled against
-  it. Runs sequentially (non-worktree) per project convention for docs phases that
-  touch shared planning/state files.
-
-- **Verified finding (2026-08-02, documented in Phase 94)**: pi-mcp-adapter 2.10.0 `server-manager.ts::resolveEnv` spawns stdio servers with `{...process.env, ...interpolated(config.env)}` — full live `process.env` inheritance, config keys winning; `${VAR}`/`$env:VAR` interpolation applies to env values, cwd, headers, bearerToken (unknown var → empty string), NOT to command/args. Session vars set by Phase 90 reach MCP servers spawned afterward (matching Claude Code, whose stdio MCP spawn injects `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`); user-scope `CLAUDE_PROJECT_DIR` stays absent for Pi MCP servers (documented); DOC-06 records the spawn-order caveat (servers spawned before the session-start handler miss the session vars) and session-switch staleness (a running server keeps spawn-time env).
-
-## Session
-
-**Last session:** 2026-08-05T02:37:22Z
-**Stopped at:** Phase 94 doc-review UAT complete — 4/4 passed (94-UAT.md), zero
-issues. D1 (env-vars.md two-mechanism prose + overview matrix + bash-children
-table), D2 (per-surface tables + Divergences C-1..C-6 + Not-delivered), D3
-(hooks-compatibility.md env table reconciled + authority line), and D4 (semantic
-accuracy of matrix cells/divergence claims vs shipped code) all user-confirmed.
-Coverage note: 94-01-SUMMARY coverage block uses `kind: automated` (not in the
-allowed kind set), so D1-D3 fell back to human checkpoints — passed anyway.
-All phases 90-94 now have complete UAT; milestone audit passed 14/14.
-Next: /gsd-complete-milestone v1.17.
-**Resume file:** None
-
-Phase 90 gap-closure 90-03 is COMPLETE. Task 1 (SURF-01 / WR-01 Option 2): install's
-narrowResolverReasons is arm-aware (partialable discriminant) so a structural
-`unavailable` plugin carrying a `contains <non-carve-out-kind>` note renders
-`{unsupported source}` byte-identically across install/list/info; the partially-
-available per-kind `{unsupported component}` behavior (D-90-05) is unchanged;
-shared/probe-classifiers.ts untouched; REASONS length lock stays 38; npm unit
-suite + typecheck/lint/format green. Task 2 (blocking human-verify): the G-90-3
-live-Pi retest of 90-UAT.md Test 3 was performed by the operator and APPROVED —
-bin-only plugin installs by default, non-carve-out kind renders {unsupported
-component} on install/list/info, both-defects case renders byte-identical
-{unsupported source}. UAT Test 3 issue -> pass, G-90-3 resolved, debug session
-closed. Next: re-verify Phase 90 (/gsd-verify-work 90). (Pre-existing env failure
-noted in deferred-items.md: two pi-subagents global-peer integration tests fail
-locally, unrelated to this change.)
-
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| —    | —        | —     | —     |
+Known tech debt carried out of the milestone (recorded in
+milestones/v1.17-MILESTONE-AUDIT.md): Phase 90's VALIDATION.md was left at
+`status: draft` (coverage itself re-verified 20/20), and 91-01-SUMMARY.md
+predates review-fix commit 96cb08c5 (narrative staleness only).
 
 ### Quick Tasks Completed
 
@@ -112,25 +61,24 @@ locally, unrelated to this change.)
 
 ## Decisions
 
-Design decisions are pre-captured in the Roadmap Summary above and in
-PROJECT.md's "Current Milestone: v1.17 env-parity" section (ground truth verified
-2026-08-01 against the Claude Code v2.1.212 binary). Plan-phase and execution will
-record per-plan decisions here.
-
-- [Phase ?]: docs/env-vars.md is authoritative on env-var delivery; hooks-compatibility env table reconciled to it (DOC-06/07)
-- [Phase 90]: D-90-06: bin reclassified out of UNSUPPORTED_COMPONENT_KINDS -> bin-shipping plugin installs by default (PENV-01 PATH ledger honors it at runtime)
-- [Phase 90]: D-90-05: dropped non-carve-out component kinds render the new closed-set token 'unsupported component' (was 'unsupported source' fallback); REASONS grows to 38
+The v1.17 decision log is folded into PROJECT.md Key Decisions (D-90-05,
+D-90-06, and the docs/env-vars.md authority decision added at the close).
+No open decisions.
 
 ## Deferred Items
 
-Items acknowledged and deferred at the v1.14 milestone close on 2026-07-23 and
-re-acknowledged unchanged at the v1.16 close on 2026-07-31 (override_closeout,
-known verification overrides: 5). Cross-milestone carryover — none originate from
-v1.17 env-parity.
+Items acknowledged and deferred at the v1.14 milestone close on 2026-07-23,
+re-acknowledged unchanged at the v1.16 close on 2026-07-31, and re-acknowledged
+at the v1.17 close on 2026-08-05 (override_closeout, known deferred artifacts: 6).
+The one addition at the v1.17 close is the `async-rewake-lane-inert` debug
+session — a concluded diagnose-only investigation (root cause confirmed: the
+async-rewake lane is inert on Stop by design; no fix applied or intended).
+None of the carryover items originate from v1.17 env-parity.
 
 | Category | Item | Status |
 |----------|------|--------|
 | backlog | REASON-01 — unify all parse-error reasons under a `{malformed <feature>}` family | deferred |
+| debug | async-rewake-lane-inert | diagnosed (diagnose-only; by design) |
 | debug | knowledge-base | unknown |
 | quick_task | 260621-kmm-add-explicit-enabled-boolean-field-to-pl | unknown |
 | quick_task | 260718-tli-fix-pr-88-external-contribution-to-pass- | unknown |
@@ -139,23 +87,12 @@ v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd-plan-phase 90` (session environment
-  initialization — the shared groundwork the hook lane leans on).
-
-- Release npm 0.12.0 for v1.16 is complete (PR #109 squash-merged via v-tag CI
-  publish); no outstanding v1.16 release work.
+- Merge PR #115 (`gh pr merge --squash`) once review completes; npm 0.13.0
+  releases via the v-tag CI publish path.
+- Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
-| Phase 94 P01 | 12min | 3 tasks | 2 files |
-| Phase 90 P02 | ~45m | 3 tasks | 14 files |
-| Phase 90 P03 | ~15m | 2 tasks | 3 files |
-
-## Deferred Verification
-
-| Phase | State | Resume |
-|-------|-------|--------|
-| 90 | verification_deferred_human | /gsd-verify-work 90 |
