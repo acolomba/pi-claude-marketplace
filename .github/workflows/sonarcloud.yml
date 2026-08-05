@@ -4,9 +4,21 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "images/**"
+      - "demos/**"
+      - "COPYING"
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "images/**"
+      - "demos/**"
+      - "COPYING"
   workflow_dispatch:
 
 permissions:
