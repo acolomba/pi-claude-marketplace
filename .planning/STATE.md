@@ -5,10 +5,10 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
 status: All phases complete — awaiting milestone close
-stopped_at: Phase 92 live-Pi UAT complete (4/4 passed); UAT done for phases 90-92
-last_updated: "2026-08-05T02:10:00.000Z"
+stopped_at: Phase 93 live-Pi UAT complete (7/7 passed); UAT done for phases 90-93
+last_updated: "2026-08-05T02:25:00.000Z"
 last_activity: 2026-08-04
-last_activity_desc: Phase 92 live-Pi UAT 4/4 passed (MENV-01..04 verified against sandbox installs at both scopes)
+last_activity_desc: Phase 93 live-Pi UAT 7/7 passed (SUB-01/SUB-02 verified live at both scopes; 93-02 D1-D3 auto-covered by tests)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -72,15 +72,16 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-05T02:10:00Z
-**Stopped at:** Phase 92 live-Pi UAT complete — 4/4 passed (92-UAT.md), zero issues.
-Fixture mcp-probe@menv-uat-mkt (tmp/menv-uat-mkt, sandbox tmp/pi-uat): MENV-01
-deep substitution, MENV-02 injection + declared-wins + url-no-env, MENV-03 scope
-arms, MENV-04 reinstall idempotency + theirs-verbatim all verified live. Also
-observed designed MC-4 cross-slot collision (same names at both scopes from one
-cwd) failing clean, and uninstall cascade emptying the staged file. Phases 90,
-91, 92 now have complete UAT; 93/94 have none yet. Next: milestone audit
-(/gsd-audit-milestone), then /gsd-complete-milestone v1.17.
+**Last session:** 2026-08-05T02:25:00Z
+**Stopped at:** Phase 93 live-Pi UAT complete — 7/7 passed (93-UAT.md), zero issues.
+Fixture skill-probe@sub-uat-mkt (tmp/sub-uat-mkt, sandbox tmp/pi-uat + tmp/work):
+SUB-01 `${CLAUDE_SKILL_DIR}` resolved to the installed skill dir at both scopes
+(body + frontmatter description); SUB-02 skills arm scope-gated (`${CLAUDE_PROJECT_DIR}`
+= install cwd at project scope, literal at user scope, never empty string);
+unknown/non-CLAUDE tokens pass through byte-identical. Plan 93-02 deliverables
+D1-D3 (commands/agents/orchestrator threading) auto-covered by unit/e2e tests
+and user-confirmed. Phases 90-93 now have complete UAT; 94 is the docs phase
+(milestone audit already passed 14/14). Next: /gsd-complete-milestone v1.17.
 **Resume file:** None
 
 Phase 90 gap-closure 90-03 is COMPLETE. Task 1 (SURF-01 / WR-01 Option 2): install's
