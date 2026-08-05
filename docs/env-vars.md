@@ -14,7 +14,7 @@ Pi delivers these variables through three mechanisms. The overview matrix marks 
 
 ## Overview matrix
 
-Legend: **S** = install-time substitution · **E** = runtime env injection · **I** = install-time env injection (staged MCP `env` map) · **--** = not applicable · **✗** = documented absence. The **Claude Code** column marks whether the variable exists upstream (✓) or is Pi-only (--). Footnote markers on a cell point to the matching subsection under "Divergences and documented absences".
+Legend: **S** = install-time substitution · **E** = runtime env injection · **I** = install-time env injection (staged MCP `env` map) · **⚠** = partial / scope- or event-gated delivery (see the row's note) · **--** = not applicable · **✗** = documented absence. The **Claude Code** column marks whether the variable exists upstream (✓) or is Pi-only (--). Footnote markers on a cell point to the matching subsection under "Divergences and documented absences".
 
 | Variable                               | Claude Code | Skills | Commands | Agents | Bash | Hooks | MCP config | MCP env |
 | -------------------------------------- | ----------- | ------ | -------- | ------ | ---- | ----- | ---------- | ------- |
