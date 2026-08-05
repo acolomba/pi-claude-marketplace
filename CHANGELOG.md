@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0] - 2026-08-05
+
+- Session environment parity. At session start (and again after a session switch or `/reload`) the extension now sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, and the pi-only alias `CLAUDE_SESSION_ID` on Pi's live environment, so bash children and MCP servers spawned afterwards see the same session variables Claude Code provides. Each installed enabled plugin's `bin/` directory is appended to `PATH` (deduplicated, recomputed from install state on every session start), and the ledger only ever removes entries it added itself.
+- Hook environment parity. Both hook spawn lanes -- synchronous dispatch and async-rewake -- now carry `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` (from the authoritative session snapshot) alongside the existing `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`/`CLAUDE_ENV_FILE` set, with a drift-guard test pinning the two lanes together.
+- MCP staging parity. Staged `mcp.json` entries now have `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and -- for project-scope installs -- `${CLAUDE_PROJECT_DIR}` substituted in each server's `command`/`args`/`env`, and `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` (plus project-scope `CLAUDE_PROJECT_DIR`) injected into each server's `env` with plugin-declared keys winning. `update` and `reinstall` re-derive the staged values, so a plugin-root change never leaves stale paths behind.
+- Substitution completion. `${CLAUDE_SKILL_DIR}` now resolves to the skill's installed directory in materialized skill content, and `${CLAUDE_PROJECT_DIR}` resolves to the project root in project-scope skill/command/agent content; user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (a documented divergence -- its value is unknowable at install time).
+- New `docs/env-vars.md`: the authoritative per-variable × per-surface environment matrix, the install-time-substitution vs runtime-injection model, and the documented divergences (including the verified pi-mcp-adapter `process.env`-inheritance behavior). The `docs/hooks-compatibility.md` environment table is reconciled against it.
+
 ## [0.12.0] - 2026-07-31
 
 - Stop and StopFailure hooks are now bridged (#103). Both fire when the Pi agent settles: Stop on a normal ending with the final assistant message in `last_assistant_message`, StopFailure on `error`/`length` endings with the failure classified into a closed ten-value `error` vocabulary (`rate_limit`, `overloaded`, `billing_error`, ..., `unknown`) and Pi's rendered error text in `last_assistant_message`. A StopFailure matcher filters on the classified value by exact whole-string match (`""`/`"*"` match all); Stop admits only match-all matchers, and a non-empty Stop matcher is reported rather than silently ignored.
