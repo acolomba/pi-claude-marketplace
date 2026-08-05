@@ -186,6 +186,7 @@ export function settleHandlerFor(
           pi,
         );
         return;
+      case "pending":
       case "aborted":
       case "toolUse":
         return;
