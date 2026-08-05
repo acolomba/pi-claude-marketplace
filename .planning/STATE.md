@@ -4,17 +4,17 @@ milestone: v1.17
 milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
-status: All phases complete — awaiting milestone close
+status: "Milestone v1.17 shipped — PR #115 open (awaiting review, then milestone close on branch)"
 stopped_at: Phase 94 UAT complete (4/4 passed); UAT done for all phases 90-94
-last_updated: "2026-08-05T02:37:22.000Z"
-last_activity: 2026-08-04
-last_activity_desc: Phase 94 doc-review UAT 4/4 passed (DOC-06/DOC-07 deliverables confirmed; D4 semantic spot-check approved)
+last_updated: "2026-08-05T09:12:44.013Z"
+last_activity: 2026-08-05
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 9
   completed_plans: 9
   percent: 100
+last_activity_desc: Phase 94 doc-review UAT 4/4 passed (DOC-06/DOC-07 deliverables confirmed; D4 semantic spot-check approved)
 ---
 
 # Project State
@@ -23,8 +23,8 @@ progress:
 
 Phase: 90 (session-environment-initialization) — COMPLETE (re-verification passed 20/20 after gap-closure rounds 90-02/90-03)
 Plan: 3 of 3 executed
-Status: All milestone v1.17 phases (90-94) complete — next: milestone audit/UAT, then /gsd-complete-milestone
-Last activity: 2026-08-04 — Completed quick task 260804-gcs: Fix applyPathLedger non-owned PATH stripping
+Status: Milestone v1.17 shipped — PR #115 open (awaiting review, then milestone close on branch)
+Last activity: 2026-08-05
 Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 added; MENV-01 extended; pi-mcp-adapter question resolved)
 
 ## Roadmap Summary
