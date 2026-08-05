@@ -2,6 +2,7 @@
 /.claude/*
 !/.claude/settings.json
 !/.claude/rules/
+!/.claude/skills/
 /.codex
 /.opencode
 /.pi/
