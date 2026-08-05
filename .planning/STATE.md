@@ -5,10 +5,10 @@ milestone_name: env-parity
 current_phase: 90
 current_phase_name: session-environment-initialization
 status: All phases complete — awaiting milestone close
-stopped_at: Phase 90 re-verification passed (20/20); milestone v1.17 phases 90-94 all complete
-last_updated: "2026-08-04T13:05:55.100Z"
+stopped_at: Phase 92 live-Pi UAT complete (4/4 passed); UAT done for phases 90-92
+last_updated: "2026-08-05T02:10:00.000Z"
 last_activity: 2026-08-04
-last_activity_desc: Phase 90 verified passed after 90-03 gap closure; milestone v1.17 execution complete
+last_activity_desc: Phase 92 live-Pi UAT 4/4 passed (MENV-01..04 verified against sandbox installs at both scopes)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -72,8 +72,15 @@ Amended: Requirements/roadmap amended 2026-08-02 after validation pass (PENV-01 
 
 ## Session
 
-**Last session:** 2026-08-04T12:48:55Z
-**Stopped at:** 90-03 complete; all 3 Phase 90 plans executed; awaiting phase re-verification
+**Last session:** 2026-08-05T02:10:00Z
+**Stopped at:** Phase 92 live-Pi UAT complete — 4/4 passed (92-UAT.md), zero issues.
+Fixture mcp-probe@menv-uat-mkt (tmp/menv-uat-mkt, sandbox tmp/pi-uat): MENV-01
+deep substitution, MENV-02 injection + declared-wins + url-no-env, MENV-03 scope
+arms, MENV-04 reinstall idempotency + theirs-verbatim all verified live. Also
+observed designed MC-4 cross-slot collision (same names at both scopes from one
+cwd) failing clean, and uninstall cascade emptying the staged file. Phases 90,
+91, 92 now have complete UAT; 93/94 have none yet. Next: milestone audit
+(/gsd-audit-milestone), then /gsd-complete-milestone v1.17.
 **Resume file:** None
 
 Phase 90 gap-closure 90-03 is COMPLETE. Task 1 (SURF-01 / WR-01 Option 2): install's
