@@ -110,9 +110,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
             `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
             "warning",
           );
-        } catch {
+        } catch (notifyErr) {
           // A notify failure must never propagate past resources_discover
-          // (NFR-2 boundary preservation).
+          // (NFR-2 boundary preservation); record it on the debug seam so the
+          // skipped-scope warning does not vanish without a trace.
+          hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
         }
       }
     } catch (err) {

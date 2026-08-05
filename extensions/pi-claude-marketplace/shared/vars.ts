@@ -31,8 +31,9 @@ export interface ClaudePluginVars {
 }
 
 // Maps each substitutable token name to the field on `ClaudePluginVars` that
-// supplies its value. The alternation below is built from these keys, so a
-// token added here is substitutable without touching the pattern.
+// supplies its value. The alternation below is built from these keys (each
+// regex-escaped), so a token added here is substitutable without touching the
+// pattern -- even one that carried a regex metacharacter.
 const TOKEN_TO_FIELD = {
   CLAUDE_PLUGIN_ROOT: "pluginRoot",
   CLAUDE_PLUGIN_DATA: "pluginData",
@@ -41,7 +42,9 @@ const TOKEN_TO_FIELD = {
 } as const satisfies Record<string, keyof ClaudePluginVars>;
 
 const CLAUDE_VAR_PATTERN = new RegExp(
-  String.raw`\$\{(${Object.keys(TOKEN_TO_FIELD).join("|")})\}`,
+  String.raw`\$\{(${Object.keys(TOKEN_TO_FIELD)
+    .map((key) => key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`))
+    .join("|")})\}`,
   "g",
 );
 

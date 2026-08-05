@@ -31,7 +31,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 | `CLAUDE_CODE_REMOTE`                   | ✓           | --     | --       | --     | --   | ✗     | --         | --      |
 
 - **†** -- project-scope installs only. User-scope `${CLAUDE_PROJECT_DIR}` stays literal and no env key is injected; Pi sets none in bash children as deliberate parity. See "User-scope `${CLAUDE_PROJECT_DIR}` pass-through".
-- **‡** -- reaches MCP servers only through Pi's live `process.env` at spawn time, subject to the spawn-order and session-switch caveats. See "MCP runtime env inheritance".
+- **‡** -- reaches MCP servers only through Pi's live `process.env` at spawn time, subject to the spawn-order caveat (all rows) and, for the session vars only, session-switch staleness -- the `PATH` rows do not change on a session switch. See "MCP runtime env inheritance".
 - **§** -- exposed on the SessionStart hook event only, and Pi does not source the file back. See "`CLAUDE_ENV_FILE` is exposed but not sourced".
 
 ## Per-surface delivery
