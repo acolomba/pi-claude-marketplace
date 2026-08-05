@@ -1,5 +1,3 @@
-
-
 <!-- markdownlint-disable MD033 MD041 -->
 
 <p align="center">
@@ -102,27 +100,27 @@ Los nombres de comandos y habilidades se prefijan con el nombre del complemento.
 
 Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
 
-| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi    |
-| ----------- | --------------------- | ---------- |
-| `foo`       | `bar`                 | `/foo:bar` |
-| `foo`       | `foo-bar`             | `/foo:bar` |
-| `foo`       | `foo`                 | `/foo:foo` |
+| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi |
+| ---------------------- | ------------------------------ | ------------ |
+| `foo`                  | `bar`                          | `/foo:bar`   |
+| `foo`                  | `foo-bar`                      | `/foo:bar`   |
+| `foo`                  | `foo`                          | `/foo:foo`   |
 
 Las habilidades también se registran con nombres separados por guiones después del prefijo `/skill:`:
 
-| Nombre del complemento | Nombre de la habilidad | Nombre en Pi          |
-| ----------- | ---------- | ---------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` |
-| `foo`       | `foo`      | `/skill:foo`     |
+| Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
+| ---------------------- | ---------------------- | ---------------- |
+| `foo`                  | `bar`                  | `/skill:foo-bar` |
+| `foo`                  | `foo-bar`              | `/skill:foo-bar` |
+| `foo`                  | `foo`                  | `/skill:foo`     |
 
 Los nombres de los servidores MCP se mantienen sin cambios. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 
-| Nombre del complemento | Clave de `mcpServers` | Nombre del servidor MCP en Pi                 |
-| ----------- | ---------------- | ---------------------------------- |
-| `foo`       | `api`            | `api`                              |
-| `foo`       | `foo-api`        | `foo-api`                          |
-| `bar`       | `api`            | _conflicto si `api` ya existe_ |
+| Nombre del complemento | Clave de `mcpServers` | Nombre del servidor MCP en Pi  |
+| ---------------------- | --------------------- | ------------------------------ |
+| `foo`                  | `api`                 | `api`                          |
+| `foo`                  | `foo-api`             | `foo-api`                      |
+| `bar`                  | `api`                 | _conflicto si `api` ya existe_ |
 
 ### Ámbito (Scoping)
 
@@ -152,7 +150,7 @@ Instala un complemento parcialmente disponible. Colocar `--partial` primero habi
 
 Cada ámbito almacena su configuración declarativa de mercado y complemento en `claude-plugins.json` bajo la raíz del ámbito.
 
-| Ámbito     | Ruta del archivo                         |
+| Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
@@ -163,7 +161,7 @@ Este archivo es el registro definitivo de qué mercados y complementos están in
 
 Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base.
 
-| Ámbito     | Ruta del archivo                               |
+| Ámbito    | Ruta del archivo                        |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
