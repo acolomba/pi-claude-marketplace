@@ -52,19 +52,21 @@ const mcpReplacementInternals = new WeakMap<
 
 /**
  * Read the scoped `mcp.json` document. ENOENT/ENOTDIR -> empty doc.
- * Top-level non-object (array / primitive) is treated as empty so a
- * malformed scoped doc cannot poison the ours/theirs partition; the
- * subsequent commit will overwrite it with a well-formed document.
+ * Top-level non-object (array / primitive) or unparseable JSON is treated as
+ * empty so a malformed scoped doc cannot poison the ours/theirs partition;
+ * the subsequent commit will overwrite it with a well-formed document.
+ * `malformed` reports that tolerance so the staged branch can surface a
+ * warning naming the file before its foreign content is dropped.
  * Other I/O errors propagate.
  */
-async function readScopedDoc(filePath: string): Promise<RawMcpDoc> {
+async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malformed: boolean }> {
   let text: string;
   try {
     text = await readFile(filePath, "utf8");
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
-      return {};
+      return { doc: {}, malformed: false };
     }
 
     throw err;
@@ -75,16 +77,16 @@ async function readScopedDoc(filePath: string): Promise<RawMcpDoc> {
     parsed = JSON.parse(text);
   } catch {
     // Tolerate malformed scoped doc -- treat as empty. The user's existing
-    // foreign entries (if any) are lost on commit, which is acceptable
-    // because a malformed mcp.json was already broken before we showed up.
-    return {};
+    // foreign entries (if any) are lost on commit; the staged branch surfaces
+    // that as a warning rather than silently.
+    return { doc: {}, malformed: true };
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return {};
+    return { doc: {}, malformed: true };
   }
 
-  return parsed as RawMcpDoc;
+  return { doc: parsed as RawMcpDoc, malformed: false };
 }
 
 /** Extract the `mcpServers` map. Missing/malformed -> {}. */
@@ -146,29 +148,53 @@ async function assertNoMcpCollisions(input: {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function stampServers(
   servers: Record<string, unknown>,
   pluginName: string,
   marketplaceName: string,
   subCtx: McpSubstitutionContext,
-): Record<string, unknown> {
+): { stamped: Record<string, unknown>; warnings: string[] } {
   const marker = buildMarker(pluginName, marketplaceName);
   const stamped: Record<string, unknown> = {};
+  const warnings: string[] = [];
   for (const [name, entry] of Object.entries(servers)) {
     // Deep-substitute + inject env BEFORE the marker is spread on, so the
     // marker never enters the walk (MENV-01/02, D-92-01/02). Non-object
-    // entries keep the existing `{}` tolerance -- no substitution attempted.
-    const entryObj =
-      typeof entry === "object" && entry !== null && !Array.isArray(entry)
-        ? substituteAndInject(entry as Record<string, unknown>, subCtx)
-        : {};
+    // entries keep the existing `{}` tolerance -- no substitution attempted --
+    // but each normalization is surfaced as a warning instead of silently
+    // reporting a dead entry as staged.
+    let entryObj: Record<string, unknown>;
+    if (isPlainObject(entry)) {
+      // A malformed declared env on a stdio entry is discarded by the
+      // injection step (injected defaults only); say so instead of leaving
+      // the plugin author to diff mcp.json against their source.
+      if (
+        typeof entry.command === "string" &&
+        entry.env !== undefined &&
+        !isPlainObject(entry.env)
+      ) {
+        warnings.push(
+          `mcp server "${name}": declared env is not an object; it was ignored (injected defaults only)`,
+        );
+      }
+
+      entryObj = substituteAndInject(entry, subCtx);
+    } else {
+      warnings.push(`mcp server "${name}": entry is not an object; staged as an empty entry`);
+      entryObj = {};
+    }
+
     // safeSet copies a plugin-declared server literally named `__proto__` as an
     // own key so it is stamped and written rather than dropped via the
     // inherited setter (which would diverge state.json from disk) -- WR-01.
     safeSet(stamped, name, { ...entryObj, [CLAUDE_MARKETPLACE_MARKER_KEY]: marker });
   }
 
-  return stamped;
+  return { stamped, warnings };
 }
 
 /**
@@ -185,7 +211,7 @@ function stampServers(
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
   const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
 
-  const doc = await readScopedDoc(locations.mcpJsonPath);
+  const { doc, malformed } = await readScopedDoc(locations.mcpJsonPath);
   const existing = getMcpServers(doc);
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
@@ -215,15 +241,29 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   }
 
   // MC-5 marker stamp -- every new entry carries `_piClaudeMarketplace`.
-  // Scope drives the CLAUDE_PROJECT_DIR arm (project scope only, MENV-03);
-  // CLAUDE_PROJECT_DIR resolves to the project root `cwd`, NOT scopeRoot.
+  // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
+  // resolves it to the project root `cwd` (NOT scopeRoot); user scope carries
+  // `undefined` so neither substitution nor injection can emit it.
   const subCtx: McpSubstitutionContext = {
     pluginRoot,
     pluginData,
-    scope: locations.scope,
-    cwd,
+    projectDir: locations.scope === "project" ? cwd : undefined,
   };
-  const stamped = stampServers(servers, pluginName, marketplaceName, subCtx);
+  const { stamped, warnings: stampWarnings } = stampServers(
+    servers,
+    pluginName,
+    marketplaceName,
+    subCtx,
+  );
+
+  // The commit overwrite is what actually destroys a malformed doc's foreign
+  // entries, and only the staged branch commits -- so the warning lives here,
+  // not on the AS-8 noop branch (which writes nothing).
+  const docWarnings = malformed
+    ? [
+        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
+      ]
+    : [];
 
   // Merge: keep theirs verbatim; replace ours with stamped (or drop if
   // no new servers but ours.size > 0).
@@ -245,7 +285,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...newNames]),
     recorded,
-    warnings: Object.freeze<string[]>([]),
+    warnings: Object.freeze([...docWarnings, ...stampWarnings]),
   };
 
   return {

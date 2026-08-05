@@ -764,6 +764,143 @@ test("D-92-02 url-type entry keeps declared env untouched and gains no env; stri
 });
 
 // ---------------------------------------------------------------------------
+// Staging warnings -- silent normalizations surface on result.warnings
+// ---------------------------------------------------------------------------
+
+test("staging warnings: malformed declared env on a stdio entry surfaces a warning", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { bad: { command: "y", env: "not-an-object" } },
+    });
+
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepEqual(
+      [...prepared.result.warnings],
+      ['mcp server "bad": declared env is not an object; it was ignored (injected defaults only)'],
+    );
+  });
+});
+
+test("staging warnings: non-object server entry surfaces a warning and stages as an empty entry", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { broken: "just-a-string" },
+    });
+
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepEqual(
+      [...prepared.result.warnings],
+      ['mcp server "broken": entry is not an object; staged as an empty entry'],
+    );
+
+    // The existing `{}` tolerance is unchanged: the entry still commits as an
+    // empty (marker-stamped) object.
+    await commitPreparedMcp(prepared);
+    const broken = (await readCommittedServers(locations.mcpJsonPath)).broken!;
+    assert.deepEqual(Object.keys(broken), [CLAUDE_MARKETPLACE_MARKER_KEY]);
+  });
+});
+
+test("staging warnings: a pre-existing malformed mcp.json surfaces a replacement warning on the staged branch", async () => {
+  // Unparseable JSON.
+  await withTmpScope(async ({ cwd, locations }) => {
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, "{ not valid json", "utf8");
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { a: { command: "x" } },
+    });
+
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepEqual(
+      [...prepared.result.warnings],
+      [
+        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
+      ],
+    );
+  });
+
+  // Non-object top level (array) is the same malformed arm.
+  await withTmpScope(async ({ cwd, locations }) => {
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, JSON.stringify(["not", "an", "object"]), "utf8");
+
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { a: { command: "x" } },
+    });
+
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepEqual(
+      [...prepared.result.warnings],
+      [
+        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,
+      ],
+    );
+  });
+});
+
+test("staging warnings: a clean staging produces warnings: []", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: MP,
+      pluginName: PLUGIN,
+      pluginRoot: PLUGIN_ROOT,
+      pluginData: PLUGIN_DATA,
+      servers: { a: { command: "x", env: { FOO: "bar" } }, b: { url: "https://y" } },
+    });
+
+    assert.equal(prepared.kind, "staged");
+    if (prepared.kind !== "staged") {
+      return;
+    }
+
+    assert.deepEqual([...prepared.result.warnings], []);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // MENV-03 -- project vs user CLAUDE_PROJECT_DIR scope arms
 // ---------------------------------------------------------------------------
 

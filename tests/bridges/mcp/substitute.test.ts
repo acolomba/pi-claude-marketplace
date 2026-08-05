@@ -210,14 +210,12 @@ test("deepSubstitute never throws on a primitive leaf at the boundary", () => {
 const projectCtx: McpSubstitutionContext = {
   pluginRoot: ROOT,
   pluginData: DATA,
-  scope: "project",
-  cwd: PROJ,
+  projectDir: PROJ,
 };
 const userCtx: McpSubstitutionContext = {
   pluginRoot: ROOT,
   pluginData: DATA,
-  scope: "user",
-  cwd: "/ignored",
+  projectDir: undefined,
 };
 
 test("MENV-02 stdio entry gets injected env with plugin-declared keys winning", () => {

@@ -1082,6 +1082,10 @@ export async function runInstallLedger(
       c.mcpPrep = prep;
       const result = await commitPreparedMcp(prep);
       c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
+      // MCP staging soft warnings (malformed declared env, non-object entry,
+      // malformed pre-existing mcp.json) ride the same bridgeWarnings channel
+      // as the other bridges' leak strings instead of being dropped.
+      c.bridgeWarnings.push(...result.warnings);
     },
     undo: async (c) => {
       if (c.mcpPrep === undefined) {

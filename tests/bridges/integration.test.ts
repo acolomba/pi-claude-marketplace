@@ -101,6 +101,7 @@ describe("integration: full-plugin staging", () => {
     const resolved = makeResolved();
     const prep = await prepareStageSkills({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,
@@ -148,6 +149,7 @@ describe("integration: full-plugin staging", () => {
     const resolved = makeResolved();
     const prep = await prepareStageCommands({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,
@@ -186,6 +188,7 @@ describe("integration: full-plugin staging", () => {
     const resolved = makeResolved();
     const prep = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,
@@ -295,6 +298,7 @@ describe("integration: full-plugin staging", () => {
     // Re-stage skills -- pass previous names so commit removes-and-renames cleanly.
     const prep2 = await prepareStageSkills({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,

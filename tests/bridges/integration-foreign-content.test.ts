@@ -122,6 +122,7 @@ describe("integration: foreign content preservation", () => {
     const resolved = makeResolved();
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,
@@ -184,6 +185,7 @@ describe("integration: foreign content preservation", () => {
     const resolved = makeResolved();
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: MARKETPLACE_NAME,
       pluginName: PLUGIN_NAME,
       pluginRoot: FIXTURE_PLUGIN,

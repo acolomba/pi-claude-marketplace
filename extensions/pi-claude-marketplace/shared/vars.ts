@@ -20,7 +20,8 @@
  * so only the skills bridge supplies it and only for skill content. `projectDir`
  * (SUB-02) is the install cwd (the project root); it is supplied only for
  * project-scope installs. Both are optional: an absent value leaves its token
- * literal in the output (never an empty string, per NFR-10 containment intent).
+ * literal in the output, never an empty string (SUB-01/SUB-02 pass-through
+ * contract).
  */
 export interface ClaudePluginVars {
   readonly pluginRoot: string;
@@ -30,8 +31,8 @@ export interface ClaudePluginVars {
 }
 
 // Maps each substitutable token name to the field on `ClaudePluginVars` that
-// supplies its value. The alternation in `substituteClaudeVars` is derived from
-// these keys, so the two stay in lockstep.
+// supplies its value. The alternation below is built from these keys, so a
+// token added here is substitutable without touching the pattern.
 const TOKEN_TO_FIELD = {
   CLAUDE_PLUGIN_ROOT: "pluginRoot",
   CLAUDE_PLUGIN_DATA: "pluginData",
@@ -39,8 +40,10 @@ const TOKEN_TO_FIELD = {
   CLAUDE_PROJECT_DIR: "projectDir",
 } as const satisfies Record<string, keyof ClaudePluginVars>;
 
-const CLAUDE_VAR_PATTERN =
-  /\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_SKILL_DIR|CLAUDE_PROJECT_DIR)\}/g;
+const CLAUDE_VAR_PATTERN = new RegExp(
+  String.raw`\$\{(${Object.keys(TOKEN_TO_FIELD).join("|")})\}`,
+  "g",
+);
 
 /**
  * Replace every literal `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`,

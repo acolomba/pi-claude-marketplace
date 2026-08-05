@@ -38,12 +38,14 @@ export interface StageSkillsInput {
    */
   readonly previousSkillNames?: readonly string[];
   /**
-   * Project-scope install cwd (the project root), substituted for
-   * `${CLAUDE_PROJECT_DIR}` in skill content (SUB-02). Optional: user-scope
-   * and un-threaded callers omit it, leaving the token literal (pass-through).
-   * Unlike the MCP bridge's required `cwd`, this feeds substitution only.
+   * Install cwd (the project root for project-scope installs), substituted for
+   * `${CLAUDE_PROJECT_DIR}` in skill content (SUB-02). Required so a
+   * project-scope caller cannot silently omit it and ship the token literal.
+   * The BRIDGE gates by scope: user-scope installs ignore the value and the
+   * token passes through untouched. Unlike the MCP bridge's `cwd`, this feeds
+   * substitution only.
    */
-  readonly cwd?: string;
+  readonly cwd: string;
 }
 
 /**

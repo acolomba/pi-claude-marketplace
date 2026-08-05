@@ -216,6 +216,27 @@ test("applyPathLedger: preserves an empty segment while appending a fresh dir", 
   assert.equal(result.path, ["/usr/bin", "", "/bin", "/a/bin"].join(delimiter));
 });
 
+test("applyPathLedger: duplicate dirs within freshBinDirs land once on PATH and once in the ledger", () => {
+  // Two scopes can derive the same bin dir; the append dedupes against itself,
+  // so a doubled fresh dir produces exactly one PATH entry and one ledger entry.
+  const result = applyPathLedger("/usr/bin", "", ["/a/bin", "/a/bin"]);
+
+  assert.equal(result.path, ["/usr/bin", "/a/bin"].join(delimiter));
+  assert.equal(result.ledger, "/a/bin");
+});
+
+test("applyPathLedger: a relative prior-ledger entry is not owned and is never removed from PATH", () => {
+  // The ledger's write side only records absolute dirs, so a relative entry
+  // means tampering/corruption. The read side filters owned entries to
+  // absolute paths: the matching relative PATH segment survives verbatim and
+  // the corrupt ledger entry does not carry forward.
+  const current = ["/usr/bin", "rel/bin"].join(delimiter);
+  const result = applyPathLedger(current, "rel/bin", []);
+
+  assert.equal(result.path, current);
+  assert.equal(result.ledger, "");
+});
+
 test("PATH_LEDGER_ENV is the pi-only bookkeeping var name", () => {
   assert.equal(PATH_LEDGER_ENV, "PI_CLAUDE_MARKETPLACE_PATH");
 });
@@ -315,7 +336,7 @@ test("recomputePluginPath: appends both user and project scope bin dirs, records
   }
 });
 
-test("recomputePluginPath: a malformed state.json throws (caller must swallow)", async () => {
+test("recomputePluginPath: a malformed user state.json is reported as skipped; the healthy project scope still contributes", async () => {
   const snapshot = snapshotPathEnv();
   const userRoot = await mkdtemp(join(tmpdir(), "senv-bad-"));
   const projRoot = await mkdtemp(join(tmpdir(), "senv-badproj-"));
@@ -323,12 +344,85 @@ test("recomputePluginPath: a malformed state.json throws (caller must swallow)",
   try {
     process.env.PI_CODING_AGENT_DIR = userRoot;
     process.env.HOME = userRoot;
+    process.env.PATH = "/usr/bin";
+    delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
 
     const extRoot = join(userRoot, "pi-claude-marketplace");
     await mkdir(extRoot, { recursive: true });
     await writeFile(join(extRoot, "state.json"), "{ not valid json", "utf8");
 
-    await assert.rejects(() => recomputePluginPath(projRoot));
+    await seedState(
+      join(projRoot, ".pi", "pi-claude-marketplace"),
+      makeState({ projplug: { resolvedSource: "/plugins/projplug", enabled: true } }, "/plugins"),
+    );
+
+    const { skipped } = await recomputePluginPath(projRoot);
+
+    // Scope isolation: the corrupt user scope is reported, not thrown, and the
+    // healthy project scope's bin dir still lands on PATH.
+    assert.equal(skipped.length, 1);
+    assert.equal(skipped[0]!.scope, "user");
+    assert.ok(skipped[0]!.reason.length > 0, "skipped scope carries a non-empty reason");
+    const entries = (process.env.PATH ?? "").split(delimiter);
+    assert.deepEqual(entries, ["/usr/bin", join("/plugins/projplug", "bin")]);
+  } finally {
+    restorePathEnv(snapshot);
+    await rm(userRoot, { recursive: true, force: true });
+    await rm(projRoot, { recursive: true, force: true });
+  }
+});
+
+test("recomputePluginPath: a malformed project state.json is reported as skipped; the healthy user scope still contributes", async () => {
+  const snapshot = snapshotPathEnv();
+  const userRoot = await mkdtemp(join(tmpdir(), "senv-gooduser-"));
+  const projRoot = await mkdtemp(join(tmpdir(), "senv-badproj2-"));
+
+  try {
+    process.env.PI_CODING_AGENT_DIR = userRoot;
+    process.env.HOME = userRoot;
+    process.env.PATH = "/usr/bin";
+    delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+
+    await seedState(
+      join(userRoot, "pi-claude-marketplace"),
+      makeState({ userplug: { resolvedSource: "/plugins/userplug", enabled: true } }, "/plugins"),
+    );
+
+    const projExtRoot = join(projRoot, ".pi", "pi-claude-marketplace");
+    await mkdir(projExtRoot, { recursive: true });
+    await writeFile(join(projExtRoot, "state.json"), "{ not valid json", "utf8");
+
+    const { skipped } = await recomputePluginPath(projRoot);
+
+    assert.equal(skipped.length, 1);
+    assert.equal(skipped[0]!.scope, "project");
+    assert.ok(skipped[0]!.reason.length > 0, "skipped scope carries a non-empty reason");
+    const entries = (process.env.PATH ?? "").split(delimiter);
+    assert.deepEqual(entries, ["/usr/bin", join("/plugins/userplug", "bin")]);
+  } finally {
+    restorePathEnv(snapshot);
+    await rm(userRoot, { recursive: true, force: true });
+    await rm(projRoot, { recursive: true, force: true });
+  }
+});
+
+test("recomputePluginPath: no plugins + empty prior ledger leaves a previously-unset PATH unset", async () => {
+  const snapshot = snapshotPathEnv();
+  const userRoot = await mkdtemp(join(tmpdir(), "senv-nopath-"));
+  const projRoot = await mkdtemp(join(tmpdir(), "senv-nopathproj-"));
+
+  try {
+    process.env.PI_CODING_AGENT_DIR = userRoot;
+    process.env.HOME = userRoot;
+    // A previously-unset PATH must not be materialized as an empty string.
+    delete process.env.PATH;
+    delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+
+    const { skipped } = await recomputePluginPath(projRoot);
+
+    assert.deepEqual(skipped, []);
+    assert.equal(process.env.PATH, undefined);
+    assert.equal(process.env.PI_CLAUDE_MARKETPLACE_PATH, undefined);
   } finally {
     restorePathEnv(snapshot);
     await rm(userRoot, { recursive: true, force: true });

@@ -110,6 +110,7 @@ describe("integration: materialization gate", () => {
 
       const prep = await prepareStagePluginAgents({
         locations,
+        cwd: locations.scopeRoot,
         marketplaceName: "test-mp",
         pluginName: "empty-agents",
         pluginRoot: FIXTURE_EMPTY_AGENTS,

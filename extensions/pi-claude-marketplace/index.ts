@@ -97,13 +97,26 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
     // AFTER applyReconcile has settled install state and BEFORE resource
-    // aggregation. Wrapped so a malformed-state throw from loadState is
-    // swallowed + debug-logged and never propagates past resources_discover
-    // (NFR-2) -- a bad state.json must never block Pi load.
+    // aggregation. Scope failures are isolated inside recomputePluginPath and
+    // reported back; each skipped scope surfaces as a warning notify (load
+    // carried out, PATH parity short for that scope). The outer wrap is the
+    // NFR-2 backstop -- a throw must never propagate past resources_discover,
+    // and a notify failure must not either.
     try {
-      await recomputePluginPath(event.cwd);
+      const pathResult = await recomputePluginPath(event.cwd);
+      for (const skip of pathResult.skipped) {
+        try {
+          makeRawNotifyFn(ctx)(
+            `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
+            "warning",
+          );
+        } catch {
+          // A notify failure must never propagate past resources_discover
+          // (NFR-2 boundary preservation).
+        }
+      }
     } catch (err) {
-      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`);
+      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
     }
 
     const discovered = await aggregateDiscoveredResources(
@@ -129,7 +142,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     try {
       applySessionEnv(ctx.sessionManager.getSessionId());
     } catch (err) {
-      hookDebugLog(`session env apply skipped: ${errorMessage(err)}`);
+      hookDebugLog(`session env apply skipped: ${errorMessage(err)}`, "env");
     }
   });
 

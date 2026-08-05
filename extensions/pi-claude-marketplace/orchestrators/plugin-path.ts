@@ -14,6 +14,8 @@ import path from "node:path";
 import { asAbsolutePluginRoot } from "../domain/plugin-root.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 import { applyPathLedger, PATH_LEDGER_ENV } from "../shared/session-env.ts";
 
 import type { ExtensionState } from "../persistence/state-io.ts";
@@ -32,8 +34,8 @@ import type { ExtensionState } from "../persistence/state-io.ts";
  */
 export function collectBinDirs(state: ExtensionState): string[] {
   const dirs: string[] = [];
-  for (const mp of Object.values(state.marketplaces)) {
-    for (const rec of Object.values(mp.plugins)) {
+  for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+    for (const [pluginName, rec] of Object.entries(mp.plugins)) {
       if (!rec.enabled) {
         continue;
       }
@@ -41,8 +43,14 @@ export function collectBinDirs(state: ExtensionState): string[] {
       try {
         const root = asAbsolutePluginRoot(rec.resolvedSource);
         dirs.push(path.join(root, "bin"));
-      } catch {
+      } catch (err) {
         // WR-01: empty/relative/traversal resolvedSource must never reach PATH.
+        // Log the drop (mirroring the hooks-hydrate guard's logging) so a
+        // plugin whose bin dir vanished from PATH is diagnosable.
+        hookDebugLog(
+          `plugin PATH: dropped invalid resolvedSource for ${mpName}/${pluginName}: ${errorMessage(err)}`,
+          "env",
+        );
       }
     }
   }
@@ -50,26 +58,55 @@ export function collectBinDirs(state: ExtensionState): string[] {
   return dirs;
 }
 
+/** A scope whose install state could not be read during a PATH recompute. */
+export interface SkippedPathScope {
+  readonly scope: "user" | "project";
+  readonly reason: string;
+}
+
 /**
  * PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH from install state and
  * apply it to `process.env`. "At session start" is read as "at load time" --
  * the caller wires this into `resources_discover` after `applyReconcile`.
  *
- * Both scopes contribute (user before project, D-90-04). `loadState` returns
- * DEFAULT_STATE on a missing file but THROWS on malformed/schema-invalid
- * state -- this shell does NOT catch it; the caller must swallow so a bad
- * state.json never blocks Pi load (NFR-2).
+ * Both scopes contribute (user before project, D-90-04), and each scope is
+ * isolated: `loadState` returns DEFAULT_STATE on a missing file but THROWS on
+ * malformed/schema-invalid state, and a throw from one scope must not zero the
+ * other scope's PATH contribution. A failed scope contributes no bin dirs --
+ * its previously-appended entries are removed by the ledger (fail-safe: an
+ * entry that cannot be re-derived from state is not kept, WR-01 posture) --
+ * and is reported in `skipped` so the caller can surface a warning.
+ *
+ * When there is nothing to append and nothing owned to remove, `process.env`
+ * is left untouched, so a previously-unset PATH is never materialized as an
+ * empty string.
  */
-export async function recomputePluginPath(cwd: string): Promise<void> {
+export async function recomputePluginPath(cwd: string): Promise<{
+  skipped: SkippedPathScope[];
+}> {
   const priorLedger = process.env[PATH_LEDGER_ENV] ?? "";
 
+  const skipped: SkippedPathScope[] = [];
+  const freshBinDirs: string[] = [];
   // user scope ignores cwd (getAgentDir()); pass homedir() for symmetry.
-  const userState = await loadState(locationsFor("user", homedir()).extensionRoot);
-  const projState = await loadState(locationsFor("project", cwd).extensionRoot);
+  const scopeRoots = [
+    { scope: "user", extensionRoot: locationsFor("user", homedir()).extensionRoot },
+    { scope: "project", extensionRoot: locationsFor("project", cwd).extensionRoot },
+  ] as const;
+  for (const { scope, extensionRoot } of scopeRoots) {
+    try {
+      freshBinDirs.push(...collectBinDirs(await loadState(extensionRoot)));
+    } catch (err) {
+      skipped.push({ scope, reason: errorMessage(err) });
+    }
+  }
 
-  const freshBinDirs = [...collectBinDirs(userState), ...collectBinDirs(projState)];
+  if (freshBinDirs.length === 0 && priorLedger === "") {
+    return { skipped };
+  }
 
   const result = applyPathLedger(process.env.PATH ?? "", priorLedger, freshBinDirs);
   process.env.PATH = result.path;
   process.env[PATH_LEDGER_ENV] = result.ledger;
+  return { skipped };
 }

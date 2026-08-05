@@ -4501,3 +4501,89 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
     }
   });
 });
+
+test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json when the plugin root changes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-menv04-proj-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasMcp: true,
+            rawSourceOverride: "./plugins/hello-OLDROOT",
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // Relocate the seeded plugin tree to the distinctively-named root the
+      // manifest entry points at, and give its .mcp.json a
+      // ${CLAUDE_PLUGIN_ROOT}-bearing command + args. The first
+      // materialization is the update itself (seedPathMarketplace only seeds
+      // a state record).
+      const oldRoot = path.join(seeded.marketplaceRoot, "plugins", "hello-OLDROOT");
+      await cp(path.join(seeded.marketplaceRoot, "plugins", "hello"), oldRoot, {
+        recursive: true,
+      });
+      const mcpSource = JSON.stringify({
+        mcpServers: {
+          server1: {
+            command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
+            args: ["${CLAUDE_PLUGIN_ROOT}/lib"],
+          },
+        },
+      });
+      await writeFile(path.join(oldRoot, ".mcp.json"), mcpSource);
+
+      const first = makeCtx();
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      const firstErrs = first.notifications.filter((n) => n.severity === "error");
+      assert.equal(firstErrs.length, 0, `unexpected errors: ${JSON.stringify(firstErrs)}`);
+      const afterFirst = await readFile(locations.mcpJsonPath, "utf8");
+      assert.ok(afterFirst.includes(oldRoot), "first update materializes the old root");
+
+      // Swap the source dir: copy the tree to a new root, bump its version,
+      // and point the manifest entry at it -- the plugin root CHANGES.
+      const newRoot = path.join(seeded.marketplaceRoot, "plugins", "hello-NEWROOT");
+      await cp(oldRoot, newRoot, { recursive: true });
+      await writeFile(
+        path.join(newRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "1.0.2" }),
+      );
+      await rewriteManifest(seeded.manifestPath, "mp", {
+        hello: { version: "1.0.2", rawSourceOverride: "./plugins/hello-NEWROOT" },
+      });
+
+      const second = makeCtx();
+      await updatePlugins({
+        ctx: second.ctx,
+        pi: second.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      const secondErrs = second.notifications.filter((n) => n.severity === "error");
+      assert.equal(secondErrs.length, 0, `unexpected errors: ${JSON.stringify(secondErrs)}`);
+
+      // Substitution re-derives from the resolver's source, never from a
+      // read-back of the prior mcp.json: the new root lands and no substring
+      // of the old root survives anywhere in the raw file bytes.
+      const onDisk = await readFile(locations.mcpJsonPath, "utf8");
+      assert.ok(onDisk.includes(newRoot), "new root must be present");
+      assert.equal(onDisk.includes("OLDROOT"), false, "no substring of the old root may survive");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

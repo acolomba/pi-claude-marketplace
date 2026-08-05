@@ -96,9 +96,13 @@ export function applyPathLedger(
   priorLedger: string,
   freshBinDirs: string[],
 ): { path: string; ledger: string } {
-  // The ledger only ever records absolute, non-empty bin dirs; drop empties so
-  // an empty ledger string maps to the empty owned-set.
-  const owned = new Set(priorLedger.split(path.delimiter).filter((entry) => entry.length > 0));
+  // The ledger only ever records absolute, non-empty bin dirs (write-side
+  // invariant). Re-enforce it on read: drop empties AND relative entries, so a
+  // tampered/corrupted ledger cannot make the removal step strip a non-owned
+  // relative or empty PATH segment (the ledger's only power is removal).
+  const owned = new Set(
+    priorLedger.split(path.delimiter).filter((entry) => path.isAbsolute(entry)),
+  );
   // Split currentPath WITHOUT dropping empty segments so non-owned empties
   // survive verbatim; a whole-PATH empty string is zero entries, not one empty
   // segment. Remove only entries the extension previously appended; every other

@@ -66,6 +66,7 @@ test("AG-1 commitPreparedAgents lands files at <scopeRoot>/agents/pi-claude-mark
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -100,6 +101,7 @@ test("AG-2 saveAgentsIndex called with schemaVersion:1 and 2 rows (happy path)",
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -152,6 +154,7 @@ test("AG-3 re-staging plugin X in mp1 leaves plugin X in mp2 rows untouched", as
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -203,6 +206,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -252,6 +256,7 @@ test("AG-5 prepare SURFACES foreign content via result.failed[] when previous ta
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -299,6 +304,7 @@ test("AG-5 commit preserves foreign target on disk byte-identical when previous 
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -344,6 +350,7 @@ test("AG-5 commit preserves foreign-content index row in agents:", async () => {
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -370,6 +377,7 @@ test("PRL-10 replacePreparedAgents can rollback files and agents-index", async (
 
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -386,6 +394,7 @@ test("PRL-10 replacePreparedAgents can rollback files and agents-index", async (
 
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -436,6 +445,7 @@ test("PRL-10 replacePreparedAgents blocks foreign previous content by default", 
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -491,6 +501,7 @@ test("PRL-10 replacePreparedAgents force overwrites foreign previous content and
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -517,6 +528,7 @@ test("PRL-10 noop agent replacements rollback and finalize without leaks", async
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -562,6 +574,7 @@ test("AG-9/RN-4 prepare throws AgentOwnershipConflictError on cross-(mp,plugin) 
       () =>
         prepareStagePluginAgents({
           locations,
+          cwd: locations.scopeRoot,
           marketplaceName: "mp1",
           pluginName: "acme",
           pluginRoot,
@@ -588,6 +601,7 @@ test("AS-9 prepare returns kind:'noop' when agentsSourceDir is '' AND no previou
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -609,6 +623,7 @@ test("AS-9 commit on noop is a no-op (no agents/ dir created, no agents-index.js
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -633,6 +648,7 @@ test("AS-9 prepare with discovered agents but no previous entries returns kind:'
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -651,6 +667,7 @@ test("AG-7 staged file content includes substituted ${CLAUDE_PLUGIN_ROOT}", asyn
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -677,6 +694,7 @@ test("AG-5 staged file basename starts with pi-claude-marketplace-", async () =>
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -699,6 +717,7 @@ test("AG-5 staged file carries the GENERATED_AGENT_MARKER substring", async () =
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -723,6 +742,7 @@ test("commit re-stage path: rm previous targets first, then rename staged", asyn
     // First install.
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -741,6 +761,7 @@ test("commit re-stage path: rm previous targets first, then rename staged", asyn
     // marker (idempotent re-stage).
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -762,6 +783,7 @@ test("abort cleans up staging dir without touching target dir", async () => {
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -814,6 +836,7 @@ test("PRL-10 replacePreparedAgents internal rename failure rolls back and propag
 
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -825,6 +848,7 @@ test("PRL-10 replacePreparedAgents internal rename failure rolls back and propag
 
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -863,6 +887,7 @@ test("AG-1 prepare/replace skips backup loop entries that vanish between prepare
 
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -874,6 +899,7 @@ test("AG-1 prepare/replace skips backup loop entries that vanish between prepare
 
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -904,6 +930,7 @@ test("PRL-10 replacePreparedAgents rollback removes new agents-index when none e
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -943,6 +970,7 @@ test("PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePrepar
 
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -954,6 +982,7 @@ test("PRL-10 readOptionalText (non-ENOENT) -> rethrows from inside replacePrepar
 
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -990,6 +1019,7 @@ test("formatAgentWarnings emits dropped-fields line when agent has unknown front
     const resolved = makeResolved("acme", tmpPluginRoot);
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot: tmpPluginRoot,
@@ -1023,6 +1053,7 @@ test("formatAgentWarnings emits dropped-tools line when agent has unmapped tool 
     const resolved = makeResolved("acme", tmpPluginRoot);
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot: tmpPluginRoot,
@@ -1048,6 +1079,7 @@ test("abortPreparedAgents returns undefined immediately for noop prepared result
     // Empty agentsSourceDir and no prior index entries -> noop.
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1070,6 +1102,7 @@ test("replacePreparedAgents throws when staged target path already exists with n
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1120,6 +1153,7 @@ test("PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fail
 
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1131,6 +1165,7 @@ test("PRL-10 rollbackAgentsReplacement records leak when restoreAgentsIndex fail
 
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1172,6 +1207,7 @@ test("TR-01 commitPreparedAgents sequential commit rolls back completed renames 
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1252,6 +1288,7 @@ test("TR-01 commitPreparedAgents rollback rename failure surfaces via appendLeak
 
     const prepared = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1342,6 +1379,7 @@ test("TR-06 replacePreparedAgents tolerates owned orphan file from prior partial
     // exist on disk and the index lists their entries.
     const first = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1371,6 +1409,7 @@ test("TR-06 replacePreparedAgents tolerates owned orphan file from prior partial
     // lands; orphan bytes are gone.
     const second = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1416,6 +1455,7 @@ test("TR-07 commitPreparedAgents step-1 ENOENT-tolerance enables retry-safe self
     // Cycle 1: full prepare + commit.
     const prepared1 = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,
@@ -1437,6 +1477,7 @@ test("TR-07 commitPreparedAgents step-1 ENOENT-tolerance enables retry-safe self
     // already-gone target; the ENOENT swallow lets step 2 proceed.
     const prepared2 = await prepareStagePluginAgents({
       locations,
+      cwd: locations.scopeRoot,
       marketplaceName: "mp1",
       pluginName: "acme",
       pluginRoot,

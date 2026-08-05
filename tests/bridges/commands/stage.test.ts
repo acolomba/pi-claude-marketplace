@@ -76,6 +76,7 @@ test("CM-1 commitPreparedCommands lands files at <extensionRoot>/resources/promp
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -106,6 +107,7 @@ test("CM-3 substituted body has no remaining ${CLAUDE_PLUGIN_ROOT} or ${CLAUDE_P
     const pluginDataDir = "/tmp/pi-data/test-mp/acme";
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -151,6 +153,7 @@ test("CM-3 substituted body contains the resolved pluginDataDir", async () => {
     const pluginDataDir = "/tmp/pi-data/test-mp/acme";
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -188,6 +191,7 @@ test('prepareStageCommands returns kind:"noop" when no commands AND no previousC
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "noop-plugin",
       pluginRoot: FIXTURE_EMPTY_MCP_ROOT,
@@ -278,6 +282,7 @@ test("commitPreparedCommands removes previous-named files (re-stage path)", asyn
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -308,6 +313,7 @@ test("PRL-10 replacePreparedCommands can rollback to previous prompt bytes", asy
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -340,6 +346,7 @@ test("PRL-10 finalizeCommandsReplacement removes backups and keeps staged conten
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -374,6 +381,7 @@ test("PRL-10 replacePreparedCommands restores backups if unrelated prompt blocks
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -396,6 +404,7 @@ test("PRL-10 noop command replacements rollback and finalize without leaks", asy
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "noop-plugin",
       pluginRoot: FIXTURE_EMPTY_MCP_ROOT,
@@ -418,6 +427,7 @@ test("commitPreparedCommands tolerates missing previous-named file (ENOENT silen
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -444,6 +454,7 @@ test("abortPreparedCommands cleans up staging dir", async () => {
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -498,6 +509,7 @@ test("prepareStageCommands surfaces appendLeakToError when readFile fails (POSIX
     await assert.rejects(
       prepareStageCommands({
         locations: scope.loc,
+        cwd: scope.loc.scopeRoot,
         marketplaceName: "test-mp",
         pluginName: "acme",
         pluginRoot,
@@ -543,6 +555,7 @@ test("staged file basenames contain literal colon character (POSIX-only)", async
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -569,6 +582,7 @@ test("StageCommandsCommitResult.recorded captures sourcePath + targetPath per co
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -608,6 +622,7 @@ test("PRL-10 replacePreparedCommands skips backup when previous command file van
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -638,6 +653,7 @@ test("TR-05 commitPreparedCommands sequential commit rolls back completed rename
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -703,6 +719,7 @@ test("TR-05 commitPreparedCommands rollback rename failure surfaces via appendLe
   try {
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -786,6 +803,7 @@ test("TR-06 replacePreparedCommands tolerates owned orphan file from prior parti
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: FIXTURE_PLUGIN_ROOT,
@@ -819,6 +837,7 @@ test("CMD-01 / PARSE-01 unparseable command source -> neutralized (whole frontma
     const pluginRoot = FIXTURE_UNPARSEABLE_COMMAND_ROOT;
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot,
@@ -880,6 +899,7 @@ test("NREG-01 valid command is staged byte-for-byte identical except variable su
     const pluginRoot = FIXTURE_PLUGIN_ROOT;
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot,
@@ -921,6 +941,7 @@ test("CMD-01 lone-CR (\\r-only) unparseable command source degrades instead of h
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: srcRoot,
@@ -961,6 +982,7 @@ test("CMD-01 command whose body opens with a SECOND malformed block degrades (lo
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: srcRoot,
@@ -1003,6 +1025,7 @@ test("CMD-01 frontmatter-only malformed command with no trailing newline neutral
 
     const prepared = await prepareStageCommands({
       locations: scope.loc,
+      cwd: scope.loc.scopeRoot,
       marketplaceName: "test-mp",
       pluginName: "acme",
       pluginRoot: srcRoot,

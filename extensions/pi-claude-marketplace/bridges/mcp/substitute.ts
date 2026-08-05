@@ -11,20 +11,20 @@
 
 import { safeSet } from "./safe-set.ts";
 
-import type { Scope } from "../../shared/types.ts";
-
 /**
  * Resolution context for one staged entry. `pluginRoot` / `pluginData` are the
  * real install paths substituted for `${CLAUDE_PLUGIN_ROOT}` /
- * `${CLAUDE_PLUGIN_DATA}`; `scope` gates the `CLAUDE_PROJECT_DIR` arm (MENV-03 --
- * project scope only); `cwd` is the project root that `${CLAUDE_PROJECT_DIR}`
- * resolves to (mirrors the hook lane's `CLAUDE_PROJECT_DIR = cwd`).
+ * `${CLAUDE_PLUGIN_DATA}`. `projectDir` carries the `CLAUDE_PROJECT_DIR` arm
+ * (MENV-03): the construction site computes it ONCE as "project scope -> cwd,
+ * user scope -> undefined", so a user-scope context structurally cannot carry
+ * a usable project dir and the substitution and injection arms cannot drift.
+ * The field is required (not optional) so every construction site states the
+ * decision explicitly.
  */
 export interface McpSubstitutionContext {
   readonly pluginRoot: string;
   readonly pluginData: string;
-  readonly scope: Scope;
-  readonly cwd: string;
+  readonly projectDir: string | undefined;
 }
 
 // Single-pass alternation over the three MCP staging vars. The function replacer
@@ -78,11 +78,12 @@ function buildVarMap(ctx: McpSubstitutionContext): ReadonlyMap<string, string> {
     ["CLAUDE_PLUGIN_ROOT", ctx.pluginRoot],
     ["CLAUDE_PLUGIN_DATA", ctx.pluginData],
   ]);
-  // MENV-03: project-scope installs resolve ${CLAUDE_PROJECT_DIR} to the project
-  // root (cwd). User scope omits the key entirely, so ${CLAUDE_PROJECT_DIR}
-  // falls through the undefined branch untouched (documented user-scope absence).
-  if (ctx.scope === "project") {
-    map.set("CLAUDE_PROJECT_DIR", ctx.cwd);
+  // MENV-03: project-scope installs resolve ${CLAUDE_PROJECT_DIR} to the
+  // project root (`projectDir` = cwd). User scope constructs the context with
+  // `projectDir: undefined`, so the key is omitted and ${CLAUDE_PROJECT_DIR}
+  // falls through the undefined branch untouched (documented absence).
+  if (ctx.projectDir !== undefined) {
+    map.set("CLAUDE_PROJECT_DIR", ctx.projectDir);
   }
 
   return map;
@@ -113,7 +114,7 @@ export function substituteAndInject(
   const injected: Record<string, string> = {
     CLAUDE_PLUGIN_ROOT: ctx.pluginRoot,
     CLAUDE_PLUGIN_DATA: ctx.pluginData,
-    ...(ctx.scope === "project" ? { CLAUDE_PROJECT_DIR: ctx.cwd } : {}),
+    ...(ctx.projectDir !== undefined ? { CLAUDE_PROJECT_DIR: ctx.projectDir } : {}),
   };
   const declared = isPlainObject(substituted.env) ? substituted.env : {};
 
