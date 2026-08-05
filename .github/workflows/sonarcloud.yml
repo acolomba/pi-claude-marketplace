@@ -9,6 +9,7 @@ on:
       - "docs/**"
       - "images/**"
       - "demos/**"
+      - ".planning/**"
       - "COPYING"
   pull_request:
     branches:
@@ -18,6 +19,7 @@ on:
       - "docs/**"
       - "images/**"
       - "demos/**"
+      - ".planning/**"
       - "COPYING"
   workflow_dispatch:
 
