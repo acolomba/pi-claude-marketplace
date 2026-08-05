@@ -2,6 +2,47 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.17 -- env-parity
+
+**Shipped:** 2026-08-05 (target npm 0.13.0; release pending PR #115 merge)
+**Phases:** 5 (90-94) | **Plans:** 9 | **Tasks:** 23 | **Requirements:** 14/14 (SENV-01..03, PENV-01, HENV-01/02, MENV-01..04, SUB-01/02, DOC-06/07) | **Tests:** full unit suite green + live-Pi UAT on all five phases | **Audit:** passed (9/9 integration seams, 5/5 E2E flows)
+
+### What Was Built
+- Session env init: `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, and the pi-only `CLAUDE_SESSION_ID` alias set on Pi's live `process.env` at `session_start` (fresh across session switch/`/reload`), plus the PENV-01 plugin-bin PATH ledger (`PI_CLAUDE_MARKETPLACE_PATH`): each installed enabled plugin's `<pluginRoot>/bin` appended, deduplicated, idempotent, recomputed from install state.
+- Hook env parity: both spawn lanes (`prepareEnv` + hand-mirror `prepareAsyncEnv`) deliver the three session keys from the snapshotted `transCtx.sessionId` via one shared `claudeSessionEnvFor` producer, pinned by a behavioral drift-guard test.
+- MCP staging parity: `bridges/mcp/substitute.ts` deep-substitutes `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}`/(project-scope) `${CLAUDE_PROJECT_DIR}` through `command`/`args`/`env` and injects the same set into stdio servers' `env` (declared-keys-win, `safeSet` `__proto__`-hardened), re-derived on every `update`/`reinstall` re-stage.
+- Substitution completion: `substituteClaudeVars` resolves four variables in one alternation pass; all three orchestrators thread the install cwd into every skills/commands/agents stage input; user-scope `${CLAUDE_PROJECT_DIR}` passes through untouched (documented divergence).
+- Docs: authoritative `docs/env-vars.md` (per-variable × per-surface matrix, two-mechanism model, six carrier divergences incl. the verified pi-mcp-adapter `resolveEnv` finding) with the `docs/hooks-compatibility.md` env table reconciled under an authority line.
+- Riders from Phase 90 gap closure: `bin` install-by-default (D-90-06), the `{unsupported component}` reason token (D-90-05, REASONS 37→38), and the SURF-01 arm-aware install reason classifier.
+
+### What Worked
+- **Binary-and-live-env ground truth before design.** Verifying against the Claude Code v2.1.212 binary (string-literal extraction of the env builders) plus a live session env — not docs — settled the contested facts up front: `CLAUDE_CODE_SESSION_ID` is real but undocumented, `CLAUDE_WORKING_DIR` does not exist, Claude's bash children carry no `CLAUDE_PROJECT_DIR`, and Pi has no `PI_*`-prefix scrub. Every phase built on settled facts instead of relitigating them.
+- **The pi-mcp-adapter `resolveEnv` verification decided the design.** Reading 2.10.0 source proved `command`/`args` are never interpolated and unknown `${VAR}` env values become empty strings — making stage-time substitution the only correct delivery path, before any code was written.
+- **The two-mechanism model kept every variable on exactly one delivery path.** Install-stable values substitute at stage time; session-scoped values inject at runtime; anything neither mechanism can honestly deliver became a *documented absence* rather than an approximation.
+- **The UAT → debug → inserted-gap-closure loop closed Phase 90 honestly.** Live-Pi UAT Test 3 exposed the bin-plugin misclassification; two inserted plans (90-02, 90-03) landed the reclassification and the arm-aware classifier, and re-verification passed 20/20 with an operator retest.
+
+### What Was Inefficient
+- **Phase 90 needed two gap-closure rounds after its first verification pass** — the `bin`-component reclassification and the cross-surface reason-parity fix only surfaced at live-Pi UAT, not in the mocked suites.
+- **VALIDATION.md left in draft again** (Phase 90; same recurring miss as v1.15's Phase 86 and v1.16's Phases 88/89) — coverage is real but `/gsd-validate-phase` was never run to promote the file.
+- **Plan 93-02 had to be recovered from an interrupted executor worktree** and completed by a continuation executor — the pause-handoff inventory pattern earned its keep, but the interruption cost a round trip.
+- **Narrative staleness slipped through twice:** 91-01-SUMMARY predates its own review-fix commit (96cb08c5), and 94-01-SUMMARY's coverage block used an out-of-vocabulary `kind: automated`, silently downgrading D1-D3 UAT to human checkpoints.
+
+### Patterns Established
+- **Env-var ledger for idempotent PATH mutation.** Record the extension-owned PATH segment in its own env var (`PI_CLAUDE_MARKETPLACE_PATH`), strip exactly that segment, recompute from install state, re-append — repeated `session_start` events converge and non-owned PATH entries are never touched (hardened by quick task 260804-gcs).
+- **Shared producer + drift guard for hand-mirrored spawn sites.** When two env-building lanes must stay identical, extract the shared piece (`claudeSessionEnvFor`) AND pin the lanes with a behavioral test — structure plus enforcement, not either alone.
+- **Documented absence over wrong approximation.** User-scope `${CLAUDE_PROJECT_DIR}` is unknowable at install time; shipping nothing and stating the gap in `docs/env-vars.md` beats baking a per-session value into per-install artefacts.
+- **`safeSet` at every parsed-key sink.** Any write of a manifest-derived key into an object goes through the `__proto__`-hardened setter.
+
+### Key Lessons
+1. **Docs lie by omission; binaries don't.** Two load-bearing facts (`CLAUDE_CODE_SESSION_ID`, the absent `PI_*` scrub) were invisible or wrong in documentation and only settled by binary extraction + live-env inspection. For parity milestones, make ground-truth verification its own explicit step before requirements freeze.
+2. **Mocked verification can pass while live UAT fails on classification behavior.** Phase 90's gap was not in the env code but in which plugins were allowed to install at all — a resolver-policy interaction only a live install surfaced. Budget UAT for policy edges, not just happy paths.
+3. **Out-of-vocabulary frontmatter degrades silently.** The `kind: automated` coverage block fell back to human checkpoints without an error; closed-set frontmatter fields need the same normalization discipline as REASONS tokens (same lesson family as `verification.status` normalization).
+
+### Cost Observations
+- Model mix: opus for researcher/planner/executors/reviewer, sonnet for plan-checker/verifier (config `model_profile: quality`).
+- 159 commits over 5 days (2026-08-01 → 2026-08-05); 30 non-planning files, +3198/−91 across src/tests/docs.
+- The two pre-existing pi-subagents global-peer integration failures stayed red throughout — documented environment condition, not a milestone regression.
+
 ## Milestone: v1.16 -- stop-hooks
 
 **Shipped:** 2026-07-31 (target npm 0.12.0; release pending)
@@ -38,7 +79,7 @@
 - 94 commits over 2 days (2026-07-29 → 2026-07-31); 39 non-planning files, +3668/−429.
 - The two pre-existing environmental `skill-path-resolution` integration failures (global-peer drift) stayed red throughout — documented environment condition, not a milestone regression.
 
-
+## Milestone: v1.15 -- frontmatter-compliance
 
 **Shipped:** 2026-07-27 (npm 0.11.1)
 **Phases:** 1 (Phase 86) | **Plans:** 5 | **Tasks:** 9 | **Requirements:** 11/11 (PARSE-01/02, SKILL-01/02/03, WTU-01/02, CMD-01, WARN-01, CLASS-01, NREG-01) | **Tests:** unit suite green (~3049) + degrade-helper / two-gate / neutralize / NREG byte-equality cases
