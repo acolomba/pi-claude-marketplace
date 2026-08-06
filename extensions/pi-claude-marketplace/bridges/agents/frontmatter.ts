@@ -284,7 +284,7 @@ export function emitGeneratedAgentFile(input: {
   if (frontmatter.skills.length > 0) {
     // D-84-04: skillPath is a fixed, agent-local search root so pi-subagents
     // resolves the emitted skill names against the bridged skills directory
-    // instead of only its own scan roots (pi-subagents 0.35.0, PR #428).
+    // instead of only its own scan roots (pi-subagents 0.35.0, PR #470).
     lines.push(
       `skills: ${frontmatter.skills.join(",")}`,
       "skillPath: ../pi-claude-marketplace/resources/skills",
