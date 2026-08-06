@@ -30,7 +30,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
-The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. A desired-state configuration in `[~/].pi/agent/claude-plugins[.local].json` files makes make plugin installations automatic and repeatable. You can share these files across machines or team members.
+The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. A desired-state configuration in `[~/].pi/agent/claude-plugins[.local].json` files makes plugin installations automatic and repeatable. You can share these files across machines or team members.
 
 ## Prerequisites
 
