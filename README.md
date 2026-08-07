@@ -20,7 +20,7 @@ Access Claude plugin marketplaces from [Pi Coding Agent](https://pi.dev).
 
 ## Features
 
-Installs plugins from Claude plugin marketplaces that contain these components:
+This extension installs plugins from Claude plugin marketplaces that contain these components:
 
 - Commands.
 - Skills.
@@ -28,9 +28,9 @@ Installs plugins from Claude plugin marketplaces that contain these components:
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Plugins that contain unsupported components can be partially installed, but may not function as intended.
+Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
-Claude marketplaces and plugins are managed via a `/claude:plugin` command similar to Claude Code's `/plugin`. A desired-state configuration is kept in `[~/].pi/agent/claude-plugins[.local].json` files for automated, repeatable plugin installations that may be shared across machines or team members.
+The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. A desired-state configuration in `[~/].pi/agent/claude-plugins[.local].json` files makes plugin installations automatic and repeatable. You can share these files across machines or team members.
 
 ## Prerequisites
 
@@ -96,7 +96,7 @@ Run a plugin:
 
 ### Name mapping
 
-Command and skill names are prefixed with the plugin name. If the command or skill is already prefixed with the plugin name plus `-`, that common part is elided.
+This extension prefixes command and skill names with the plugin name. If the name already starts with the plugin name and `-`, this extension removes that common part.
 
 Commands and skill names use Pi's colon form:
 
@@ -106,7 +106,7 @@ Commands and skill names use Pi's colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-Skills are also registered with hyphenated names after the `/skill:` prefix:
+This extension also registers skills with hyphenated names after the `/skill:` prefix:
 
 | Plugin name | Skill name | Pi name          |
 | ----------- | ---------- | ---------------- |
@@ -114,7 +114,7 @@ Skills are also registered with hyphenated names after the `/skill:` prefix:
 | `foo`       | `foo-bar`  | `/skill:foo-bar` |
 | `foo`       | `foo`      | `/skill:foo`     |
 
-MCP server names are left as-is. If another MCP config already uses that name, the plugin install or update fails.
+MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
 
 | Plugin name | `mcpServers` key | Pi MCP server name                 |
 | ----------- | ---------------- | ---------------------------------- |
@@ -124,15 +124,15 @@ MCP server names are left as-is. If another MCP config already uses that name, t
 
 ### Scoping
 
-Marketplaces and plugins can be installed in the user scope or in the current project's scope. The default is user scope.
+You can install marketplaces and plugins in the user scope or the project scope. The default is user scope.
 
-The user scope is inherited, so it is possible to install a plugin from a user scope marketplace in the project scope.
+The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope.
 
-It is also possible to install the same plugin in both user and project scopes; the plugin in the user scope takes precedence.
+You can also install the same plugin in both the user and project scopes. Then the user-scope plugin takes precedence.
 
 ### Partially available plugins
 
-Plugins that contain unsupported components, such as an unmappable hook, an LSP server, or a theme, can be partially installed or updated by passing the `--partial` option. The supported components are installed and the unsupported ones are ignored.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, or a theme. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -140,7 +140,7 @@ List partially available plugins.
 /claude:plugin list --partial
 ```
 
-Install a partially available plugin. Placing `--partial` first enables argument completion for partially available plugins, which are otherwise excluded from completion in absence of that flag.
+Install a partially available plugin. Put `--partial` first to enable argument completion for partially available plugins. Without that flag, completion excludes them.
 
 ```text
 /claude:plugin install --partial hookify@claude-plugins-official
@@ -148,14 +148,14 @@ Install a partially available plugin. Placing `--partial` first enables argument
 
 ## Configuration files
 
-Each scope stores its declarative marketplace and plugin configuration in `claude-plugins.json` under the scope root.
+Each scope stores its declarative configuration for marketplaces and plugins in `claude-plugins.json`, under the scope root.
 
 | Scope     | File path                         |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-This file is the authoritative record of which marketplaces and plugins are installed. Pi applies its contents at extension load (`/reload`).
+These files are the authoritative record of the installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
 
 ### Local configuration files
 
@@ -166,7 +166,7 @@ Each scope can also have a `claude-plugins.local.json` file alongside the base f
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local file overrides individual entries from the base file: a marketplace or plugin entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` wholesale.
+The local file overrides individual entries from the base file. An entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` completely.
 
 Pass `--local` to any mutating command to target the local file only.
 
@@ -177,17 +177,17 @@ Pass `--local` to any mutating command to target the local file only.
 
 ### Gitignore convention
 
-In the project scope, commit `claude-plugins.json` so collaborators install the same marketplaces and plugins, but keep `claude-plugins.local.json` out of version control. Add the following to your project's `.gitignore`.
+In the project scope, commit `claude-plugins.json`. Then your collaborators install the same marketplaces and plugins. Keep `claude-plugins.local.json` out of version control. Add this line to your project's `.gitignore`:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-User-scope files live in your home directory; they are personal and never shared.
+User-scope files live in your home directory. They are personal and never shared.
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations, then run `/reload` after installing, uninstalling, updating, or reinstalling plugins so Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources.
 
 ### Marketplace
 
@@ -198,7 +198,7 @@ Add a marketplace from a GitHub repository `owner/repo` shorthand.
 ```
 
 > [!NOTE]
-> Private repositories may trigger a Device Flow authentication if Git is not already authenticated.
+> If Git is not already authenticated, a private repository will trigger Device Flow authentication.
 
 Add the same marketplace from a GitHub URL.
 
@@ -212,7 +212,7 @@ Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix.
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
-Add a marketplace from the local filesystem. The path may be a directory containing `.claude-plugin/marketplace.json` or a direct path to a `marketplace.json` file.
+Add a marketplace from the local filesystem. The path can be a directory with `.claude-plugin/marketplace.json`, or a direct path to a `marketplace.json` file.
 
 ```text
 /claude:plugin marketplace add ~/my-marketplace
@@ -239,7 +239,7 @@ Show details for one marketplace.
 /claude:plugin marketplace info context7-marketplace --scope user
 ```
 
-Update one marketplace, or all marketplaces if a name is omitted.
+Update one marketplace. If you omit the name, the command updates all marketplaces.
 
 ```text
 /claude:plugin marketplace update context7-marketplace
@@ -253,7 +253,7 @@ Remove a marketplace and all plugins installed from it.
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Toggle marketplace plugin auto-updates. When the marketplace is updated manually, installed plugins are automatically updated.
+Toggle marketplace plugin auto-updates. When you update the marketplace manually, this extension also updates the installed plugins.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
@@ -285,7 +285,7 @@ Show details for one plugin.
 /claude:plugin info context7-plugin@context7-marketplace
 ```
 
-Install a plugin, using the `<plugin>@<marketplace>` format.
+Install a plugin with the `<plugin>@<marketplace>` format.
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace
@@ -306,7 +306,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins may include a preferred model for running the agent, e.g. "sonnet", "opus", etc. These are discarded by default, but the `--map-model` option for `install` and `update` can be used to make a best-effort attempt at mapping these models to Pi models.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
@@ -337,19 +337,19 @@ Reload Pi after changes.
 
 #### Remote plugins
 
-Marketplaces can declare remote plugins hosted in a different Git repository. They can be listed with the `--remote` option.
+Marketplaces can declare remote plugins hosted in a different Git repository. You can list them with the `--remote` option.
 
 ```text
 /claude:plugin list --remote
 ```
 
-Repositories of remote plugins are lazily fetched, so `/claude:plugin info` will not resolve their components. The `--fetch` option can be passed to fetch the repository of a specific plugin.
+This extension fetches remote plugin repositories only when needed. So `/claude:plugin info` does not resolve their components. To fetch the repository of one plugin, pass the `--fetch` option.
 
 ```text
 /claude:plugin info 2crunch-api-security-testing@claude-plugins-official --fetch
 ```
 
-The repository of a specific remote plugin, of all the plugins in a marketplace, or of all remote plugins across all marketplaces can also be be eagerly fetched:
+You can also fetch repositories ahead of time. Fetch one remote plugin, all plugins in one marketplace, or all remote plugins across all marketplaces:
 
 ```text
 /claude:plugin fetch 2crunch-api-security-testing@claude-plugins-official
@@ -357,7 +357,7 @@ The repository of a specific remote plugin, of all the plugins in a marketplace,
 /claude:plugin fetch
 ```
 
-Once fetched, plugins are determined to be available, partially-available or unavailable for installation.
+After the fetch, each plugin is available, partially available, or unavailable to install.
 
 The `/claude:plugin install` command automatically fetches a remote plugin.
 
@@ -367,13 +367,13 @@ The `/claude:plugin install` command automatically fetches a remote plugin.
 
 ### Bootstrap
 
-Bootstrap is a convenience one-shot setup of the official Anthropic marketplace in the user scope with autoupdate enabled.
+Bootstrap is a one-step setup. It adds the official Anthropic marketplace in the user scope and enables autoupdate.
 
 ```text
 /claude:plugin bootstrap
 ```
 
-This is equivalent to running.
+It runs these commands:
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-official
@@ -382,35 +382,35 @@ This is equivalent to running.
 
 ### Import
 
-Import is a convenience command to import marketplaces and plugins already defined in Claude Code settings.
+The `import` command adds marketplaces and plugins already defined in Claude Code settings.
 
 ```text
 /claude:plugin import
 ```
 
-By default, marketplaces and plugins are added in accordance to the scope that they're defined in Claude Code. It's also possible to limit the import to a specific scope.
+By default, the import adds each marketplace and plugin to the same scope it has in Claude Code. You can also limit the import to a specific scope.
 
 ```text
 /claude:plugin import --scope user
 /claude:plugin import --scope project
 ```
 
-Plugins that are not available for installation in Pi because of unsupported components are skipped with a warning.
+The import skips plugins that Pi cannot install because of unsupported components. It shows a warning for each one.
 
 ## Contributing
 
-Refer to [CONTRIBUTING](CONTRIBUTING.md) and [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md).
+Read [CONTRIBUTING](CONTRIBUTING.md) and [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md).
 
 ## AI disclaimer
 
-This project is developed with AI agent engineering practices using the [Open GSD](https://www.opengsd.net/) spec-driven development system.
+The author developed this project with AI agent engineering practices. It uses the [Open GSD](https://www.opengsd.net/) spec-driven development system.
 
 The author vibe-coded a prototype until it was feature-complete for a first release, then extracted and reviewed a PRD from the implementation.
 
-The PRD was then used to guide GSD through discussion, planning and implementation phases of a new implementation.
+The PRD then guided GSD through the discussion, planning, and implementation phases of a new implementation.
 
 ## License
 
-This project is licensed under the MIT License. See the [COPYING](COPYING) file for details.
+The MIT License covers this project. For details, read the [COPYING](COPYING) file.
 
 Copyright 2026 [Alessandro Colomba](https://github.com/acolomba)

@@ -96,8 +96,10 @@ async function withHermeticHome<T>(
       process.env.HOME = originalHome;
     }
 
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
+    // Retry rmdir: a recursive rm can race a lingering async write (a probe
+    // or clone-cache op) and hit ENOTEMPTY on rmdir; retry until it settles.
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

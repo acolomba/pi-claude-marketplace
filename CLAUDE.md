@@ -7,7 +7,7 @@
 - NEVER commit to the main branch.
 - Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
 - Worktrees are preferred for new feature work; create them under `.worktrees/`.
-- Git commit messages: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters.
+- Git commit messages and PR titles: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters.
 - Run `pre-commit run --all-files` (or `pre-commit run --files <changed files>`) **before** attempting `git commit`. Fix any failures, restage, and re-run until clean. Do not commit and recover from hook failures after the fact -- a failed pre-commit hook means the commit did NOT happen, so iterating with `--amend` is wrong (it would alter the previous commit).
 - NEVER use `--no-verify` to skip the hooks.
 - NEVER rebase, never rewrite history. Update branches by merging.

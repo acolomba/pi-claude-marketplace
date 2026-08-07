@@ -1,7 +1,5 @@
 # ai harnesses
-/.claude/*
-!/.claude/settings.json
-!/.claude/rules/
+**/.claude/settings.local.json
 /.codex
 /.opencode
 /.pi/
@@ -10,9 +8,18 @@
 /.serena
 
 # gsd
-/.agent/
-/.planning/active-workstream
-/.planning/workstreams/*/config.json
+/.claude/.gsd-profile
+/.claude/agents/gsd-*
+/.claude/commands/gsd-*
+/.claude/gsd-core/*
+/.claude/gsd-file-manifest.json
+/.claude/gsd-install-state.json
+/.claude/gsd-migration-journal/*
+/.claude/hooks/gsd-*
+/.claude/hooks/lib/
+/.claude/hooks/managed-hooks-registry.cjs
+/.claude/package.json
+/.claude/scripts/*
 
 # build output
 /dist/
