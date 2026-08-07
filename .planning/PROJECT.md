@@ -10,6 +10,20 @@ Nineteen milestones have shipped: v1.0 (PRD-derived successor architecture), v1.
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07)
+
+**Goal:** Installed plugins remain accurately inspectable and manageable when their entry disappears from a successfully loaded marketplace manifest.
+
+**Target features:**
+
+- **Truthful installed inventory** — `plugin list` renders an enabled recorded plugin absent from a valid manifest as `● <plugin> v<version> (installed) {not in manifest}` and includes it in `--installed`; disabled records remain `(disabled)` without the reason.
+- **Ledger-backed plugin info** — `plugin info` consults the installation record when the valid manifest lacks the requested plugin, reports `(installed) {not in manifest}`, and reconstructs installed component structure from the persisted resources ledger plus the materialized hooks configuration.
+- **Failure-boundary preservation** — unknown non-installed names remain `(failed) {not in manifest}`; a missing, unreadable, or invalid manifest retains the existing manifest-read failure behavior rather than being misclassified as entry absence.
+- **Lifecycle non-regression** — uninstall remains state-ledger-driven and works after manifest removal; plugin update and marketplace autoupdate retain `(skipped) {not in manifest}` behavior.
+- **Contract and regression coverage** — update `docs/output-catalog.md` and the PRD, with byte-level list/info coverage plus uninstall/update lifecycle regression tests.
+
+**Key context:** This is a derived read-surface condition, not new persisted state. No orphan status, orphan flag, manifest snapshot, schema migration, or new reason token is introduced. The existing `installed` status and existing `{not in manifest}` reason are composed only after a manifest loads successfully and the entry lookup misses. List/info stay network-free (NFR-5), while uninstall continues to use the installation ownership ledger.
+
 ## Previous Milestone: v1.17 env-parity — Claude Code Environment Variable Parity (branch: features/env-parity, shipped 2026-08-05, target npm 0.13.0)
 
 **Goal:** Installed Claude plugins see the same environment variables, delivered the same way, as they would under Claude Code — runtime env injection for session-scoped values, install-time textual substitution for install-stable per-plugin values — across all five component surfaces (skills, commands, agents, hooks, MCP servers).
@@ -184,13 +198,15 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**Just shipped:** v1.17 env-parity (2026-08-05, Phases 90-94, 9 plans, 23 tasks; audit passed 14/14 requirements, 9/9 integration seams, 5/5 E2E flows; archived to `.planning/milestones/v1.17-*`). Installed Claude plugins now see Claude Code's environment delivered Pi-natively: Phase 90 session env init (`CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` on live `process.env` at `session_start` + the PENV-01 plugin-bin PATH ledger via `PI_CLAUDE_MARKETPLACE_PATH`, with gap-closure riders D-90-06 bin install-by-default, D-90-05 `{unsupported component}` token, and the SURF-01 arm-aware install classifier; live-Pi UAT 3/3). Phase 91 hook env parity (three session keys from the `transCtx.sessionId` snapshot on BOTH spawn lanes via the shared `claudeSessionEnvFor` producer, behavioral drift guard). Phase 92 MCP staging parity (`bridges/mcp/substitute.ts` whole-entry deep three-var substitution + stdio-only env injection with declared-wins precedence, `safeSet` `__proto__`-hardening, re-derived on every re-stage). Phase 93 substitution completion (`${CLAUDE_SKILL_DIR}` + project-scope `${CLAUDE_PROJECT_DIR}` in one alternation pass across all skills/commands/agents stage inputs). Phase 94 docs (`docs/env-vars.md` authoritative matrix + two-mechanism model; hooks-compatibility env table reconciled). PR #115 open; npm `0.13.0` releases on squash-merge via the v-tag CI publish path.
+**In progress:** milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07) — defining requirements. The milestone makes list/info derive installed truth from the persisted installation ledger when a valid marketplace manifest no longer contains the plugin entry, without introducing persisted orphan state or changing update semantics.
+
+**Just shipped:** v1.17 env-parity (2026-08-05, Phases 90-94, 9 plans, 23 tasks; audit passed 14/14 requirements, 9/9 integration seams, 5/5 E2E flows; archived to `.planning/milestones/v1.17-*`). Installed Claude plugins now see Claude Code's environment delivered Pi-natively: Phase 90 session env init (`CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_SESSION_ID` on live `process.env` at `session_start` + the PENV-01 plugin-bin PATH ledger via `PI_CLAUDE_MARKETPLACE_PATH`, with gap-closure riders D-90-06 bin install-by-default, D-90-05 `{unsupported component}` token, and the SURF-01 arm-aware install classifier; live-Pi UAT 3/3). Phase 91 hook env parity (three session keys from the `transCtx.sessionId` snapshot on BOTH spawn lanes via the shared `claudeSessionEnvFor` producer, behavioral drift guard). Phase 92 MCP staging parity (`bridges/mcp/substitute.ts` whole-entry deep three-var substitution + stdio-only env injection with declared-wins precedence, `safeSet` `__proto__`-hardening, re-derived on every re-stage). Phase 93 substitution completion (`${CLAUDE_SKILL_DIR}` + project-scope `${CLAUDE_PROJECT_DIR}` in one alternation pass across all skills/commands/agents stage inputs). Phase 94 docs (`docs/env-vars.md` authoritative matrix + two-mechanism model; hooks-compatibility env table reconciled).
 
 **Previously shipped:** v1.16 stop-hooks (2026-07-31, Phases 87-89, 11 plans, 22 tasks). `Stop` + `StopFailure` promoted into bucket-A (8→10 events) at full hook-observable fidelity: admission with per-event matcher dispositions and the `>=0.80.5` peer floor (Phase 87); the `agent_settled` dispatcher gated on the final assistant message's `stopReason` with the complete Stop decision contract, `stop_hook_active` + shared-lane 8-re-entry cap, and the observation-only StopFailure classifier (Phase 88, live-UAT 4/4 on pi 0.80.10); docs reconciled version-neutral with the timing-shift divergence documented (Phase 89). Milestone audit passed 15/15; `ralph-wiggum` and `hookify` now install fully (first-party 12/13).
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** merge PR #115 (squash) and let the v-tag CI publish cut npm `0.13.0`, then plan the next milestone via `/gsd-new-milestone`. Workstream `milestone` (force-install closeout) remains open.
+**Next:** define v1.18 requirements, map them to phases continuing after Phase 94, then implement through TDD on `features/manifest-independent-plugin-info`. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
@@ -301,6 +317,14 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 - ✓ v1.3 Drift Guard & Test Alignment (Phase 14, CMC-16/CMC-34/CMC-38): 34-rule ESLint drift-guard plugin (16 meta-assertion + 18 full-impl) under `tests/lint-rules/` wired into `eslint.config.js` with per-rule scoping and composer-file ignores; shared YAML frontmatter loader at `tests/lint-rules/lib/frontmatter.js` reads `docs/messaging-style-guide.md` as the sole binding contract for 4 closed sets (`status_tokens` / `reasons` / `markers` / `pattern_classes`); `tests/architecture/grammar-frontmatter.test.ts` extended to 4-key set-equality; `tests/architecture/msg-rule-registry.test.ts` 4-way parity test ties style-guide body + rule files + ESLint wiring + plugin module. CMC-16 production wiring of `renderManualRecovery` into `orchestrators/plugin/reinstall.ts` with dead-code seam removed from `orchestrators/marketplace/remove.ts` (audit BLOCKER closed); CMC-34 mechanical migration of 13 callsites across 6 edge handlers from `notifyError(ctx, msg + USAGE)` to `notifyUsageError(ctx, reason, USAGE)` (audit BLOCKER closed; `\n\n` separator now MSG-NC-2 / MSG-SR-7 conformant). WARNING-level closures: `transaction/rollback.ts` orchestrator-owns-rendering refactor with `composeRollbackPartialChildren` extracted to `presentation/rollback-partial.ts` (D-14-04 / Pitfall 6); `MARKETPLACE_LABEL_PROBE` deduplicated from 3 inline definitions into `shared/constants/marketplace-label-probe.ts`. `npm run check` GREEN at 1245/1245 tests with all 34 drift-guard rules active in lint; the v1.3 user-contract is now structurally enforced -- no future commit can silently drift on tokens, reasons, markers, pattern-classes, or MSG-* grammar.
 
 ### Active
+
+<!-- Milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07). -->
+
+- [ ] `plugin list` includes enabled installation records missing from a valid manifest as `(installed) {not in manifest}`, including under `--installed`; disabled records remain `(disabled)`
+- [ ] `plugin info` reports an installed manifest-absent plugin as `(installed) {not in manifest}` and reconstructs its component inventory from local installation data
+- [ ] Manifest-read failures and unknown non-installed names keep their existing distinct failure behavior
+- [ ] Uninstall remains successful and update/autoupdate behavior remains `(skipped) {not in manifest}` after entry removal
+- [ ] Output catalog and PRD describe the manifest-independent installed-plugin contract
 
 <!-- Milestone v1.17 env-parity (started 2026-08-01, shipped 2026-08-05). Claude Code environment variable parity across all five component surfaces. -->
 
@@ -459,6 +483,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ______________________________________________________________________
+
+*Last updated: 2026-08-07 after milestone v1.18 Manifest-Independent Installed Plugin Info started (goals confirmed, defining requirements). Installed truth on list/info derives from a valid manifest plus the local installation ledger: enabled state-only records render `(installed) {not in manifest}`, info reconstructs components locally, disabled/unknown/manifest-read/update behaviors stay distinct, and uninstall remains ledger-driven. No persisted orphan state or new token. Prior updates below.*
 
 *Last updated: 2026-08-05 after milestone v1.17 env-parity shipped (Phases 90-94 complete, audit passed 14/14, archived to `.planning/milestones/v1.17-*`). Claude Code environment-variable parity across all five component surfaces: session vars + the PENV-01 plugin-bin PATH ledger on Pi's live `process.env` at `session_start`, both hook spawn lanes fed from the `transCtx.sessionId` snapshot with a drift guard, MCP stage-time three-var substitution + stdio env injection (declared-wins, re-derived on re-stage), `${CLAUDE_SKILL_DIR}` + project-scope `${CLAUDE_PROJECT_DIR}` content substitution, and the authoritative `docs/env-vars.md` matrix with the hooks-compatibility env table reconciled. Riders: D-90-06 bin install-by-default, D-90-05 `{unsupported component}` token (REASONS 38), SURF-01 arm-aware install classifier. PR #115 open; npm 0.13.0 release pending. Prior updates below.*
 

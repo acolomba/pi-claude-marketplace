@@ -1,56 +1,59 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.17
-milestone_name: env-parity
-status: Awaiting next milestone
-stopped_at: Milestone v1.17 closed and archived (2026-08-05)
-last_updated: "2026-08-05T12:18:50.749Z"
-last_activity: 2026-08-05
-last_activity_desc: Milestone v1.17 completed and archived
+milestone: v1.18
+milestone_name: manifest-independent-installed-plugin-info
+status: planning
+stopped_at: Defining milestone requirements
+last_updated: "2026-08-07T10:21:27Z"
+last_activity: 2026-08-07
+last_activity_desc: Milestone v1.18 started; goals confirmed
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
-current_phase: 90
-current_phase_name: session-environment-initialization
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-05 after v1.17 close)
+See: .planning/PROJECT.md (updated 2026-08-07 for v1.18 start)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artefact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Planning next milestone. v1.17 env-parity shipped 2026-08-05;
-PR #115 (`features/env-parity`) carries the milestone and awaits review/merge;
-npm 0.13.0 releases via the v-tag CI publish path after the squash-merge.
+**Current focus:** v1.18 Manifest-Independent Installed Plugin Info. Make
+list/info derive installed truth from the local installation ledger when a valid
+marketplace manifest no longer contains the plugin entry, without persistence or
+update-semantics changes.
 
 ## Current Position
 
-Phase: Milestone v1.17 complete (Phases 90-94 archived to
-.planning/milestones/v1.17-phases/)
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-05 — Milestone v1.17 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-07 — Milestone v1.18 started; goals confirmed
 
-## Milestone Summary
+## Milestone Context
 
-v1.17 env-parity shipped 2026-08-05 — 5 phases (90-94), 9 plans, 23 tasks,
-14/14 requirements satisfied; milestone audit passed (9/9 integration seams,
-5/5 E2E flows); all five phases UAT-confirmed. Full detail:
-.planning/milestones/v1.17-ROADMAP.md, .planning/milestones/v1.17-REQUIREMENTS.md,
-and the entry in .planning/MILESTONES.md.
+v1.18 starts from a derived-state design: after a marketplace manifest loads
+successfully, an enabled plugin present only in `state.json` is still installed
+and renders with the existing `{not in manifest}` reason. `plugin info`
+reconstructs components from the persisted resources ledger and materialized
+hooks config. Disabled records, unknown non-installed names, manifest-read
+failures, update/autoupdate behavior, and the ledger-driven uninstall path retain
+their existing semantics. No persisted orphan marker, schema migration, status,
+or reason token is added.
 
-Known tech debt carried out of the milestone (recorded in
-milestones/v1.17-MILESTONE-AUDIT.md): Phase 90's VALIDATION.md was left at
-`status: draft` (coverage itself re-verified 20/20), and 91-01-SUMMARY.md
-predates review-fix commit 96cb08c5 (narrative staleness only).
+The feature branch is `features/manifest-independent-plugin-info` in the managed
+worktree `.worktrees/manifest-independent-plugin-info`. Baseline `npm run check`
+is green when `PI_SUBAGENTS_ROOT` points at Pi's active managed `pi-subagents`
+0.42.1. The unqualified local fallback finds stale global 0.24.3, below the
+project's `>=0.35.0` optional-peer floor; CI has no global peer and skips those
+two integration checks.
 
 ### Quick Tasks Completed
 
@@ -61,9 +64,14 @@ predates review-fix commit 96cb08c5 (narrative staleness only).
 
 ## Decisions
 
-The v1.17 decision log is folded into PROJECT.md Key Decisions (D-90-05,
-D-90-06, and the docs/env-vars.md authority decision added at the close).
-No open decisions.
+- Keep the public status `(installed)`; do not add `orphaned` or
+  `orphaned-installed`.
+- Reuse `{not in manifest}` and emit it only after a successful manifest load
+  whose plugin lookup misses.
+- Reconstruct info from local installation data; do not persist a manifest
+  snapshot or orphan flag.
+- Keep disabled, unknown-name, manifest-read, update/autoupdate, and uninstall
+  semantics unchanged.
 
 ## Deferred Items
 
@@ -87,9 +95,9 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Merge PR #115 (`gh pr merge --squash`) once review completes; npm 0.13.0
-  releases via the v-tag CI publish path.
-- Start the next milestone with /gsd-new-milestone
+- Define v1.18 testable requirements and coverage boundaries.
+- Create the roadmap with phase numbering continuing after Phase 94.
+- Implement through TDD in the isolated feature worktree.
 
 ## Performance Metrics
 
