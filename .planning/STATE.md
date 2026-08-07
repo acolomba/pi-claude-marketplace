@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: manifest-independent-installed-plugin-info
 status: planning
-stopped_at: Defining milestone requirements
+stopped_at: Roadmap approved; awaiting Phase 95 planning
 last_updated: "2026-08-07T10:21:27Z"
 last_activity: 2026-08-07
-last_activity_desc: Milestone v1.18 started; goals confirmed
+last_activity_desc: v1.18 roadmap approved; 15/15 requirements mapped
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -32,10 +32,25 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap created — Phases 95-97 mapped)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-08-07 — Milestone v1.18 started; goals confirmed
+Status: Roadmap approved, awaiting phase planning
+Last activity: 2026-08-07 — v1.18 roadmap approved
+
+## Roadmap Summary
+
+- 3 sequential phases (95-97), continuing the global counter from Phase 94.
+  All 15 v1 requirements map exactly once; no orphans.
+- **Phase 95 — Manifest-independent installed inventory** (INV-01..04):
+  union valid-manifest entries with current installation records, preserving
+  fully installed, partially-installed, disabled, and `--installed` behavior.
+- **Phase 96 — Installation-record-backed plugin info** (INFO-09..12,
+  BOUND-01/02): reorder the valid-manifest miss path, reconstruct local
+  component structure, preserve partial compatibility, stay network-free, and
+  lock read-failure versus unknown-name boundaries.
+- **Phase 97 — Lifecycle regression and contract documentation** (LIFE-04..06,
+  COMPAT-01, DOC-08): prove uninstall/update/autoupdate non-regression, assert no
+  persistence/token/network expansion, and reconcile the output catalog + PRD.
 
 ## Milestone Context
 
@@ -99,9 +114,9 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Define v1.18 testable requirements and coverage boundaries.
-- Create the roadmap with phase numbering continuing after Phase 94.
+- Discuss and plan Phase 95: manifest-independent installed inventory.
 - Implement through TDD in the isolated feature worktree.
+- Verify each phase against its mapped requirements before transition.
 
 ## Performance Metrics
 

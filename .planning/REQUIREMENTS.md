@@ -58,33 +58,33 @@ None identified for this milestone.
 
 ## Traceability
 
-Which phases cover which requirements. Populated during roadmap creation.
+Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 | --- | --- | --- |
-| INV-01 | TBD | Pending |
-| INV-02 | TBD | Pending |
-| INV-03 | TBD | Pending |
-| INV-04 | TBD | Pending |
-| INFO-09 | TBD | Pending |
-| INFO-10 | TBD | Pending |
-| INFO-11 | TBD | Pending |
-| INFO-12 | TBD | Pending |
-| BOUND-01 | TBD | Pending |
-| BOUND-02 | TBD | Pending |
-| LIFE-04 | TBD | Pending |
-| LIFE-05 | TBD | Pending |
-| LIFE-06 | TBD | Pending |
-| COMPAT-01 | TBD | Pending |
-| DOC-08 | TBD | Pending |
+| INV-01 | Phase 95 | Pending |
+| INV-02 | Phase 95 | Pending |
+| INV-03 | Phase 95 | Pending |
+| INV-04 | Phase 95 | Pending |
+| INFO-09 | Phase 96 | Pending |
+| INFO-10 | Phase 96 | Pending |
+| INFO-11 | Phase 96 | Pending |
+| INFO-12 | Phase 96 | Pending |
+| BOUND-01 | Phase 96 | Pending |
+| BOUND-02 | Phase 96 | Pending |
+| LIFE-04 | Phase 97 | Pending |
+| LIFE-05 | Phase 97 | Pending |
+| LIFE-06 | Phase 97 | Pending |
+| COMPAT-01 | Phase 97 | Pending |
+| DOC-08 | Phase 97 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15
+- Mapped to phases: 15
+- Unmapped: 0 ✓
 
 ---
 
 _Requirements defined: 2026-08-07_
-_Last updated: 2026-08-07 after milestone scope confirmation_
+_Last updated: 2026-08-07 after roadmap creation (15/15 requirements mapped)_

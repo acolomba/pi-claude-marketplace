@@ -2,12 +2,25 @@
 
 ## Milestones
 
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-97 (planned) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
 - ✅ **v1.14 mcp-string-refs** — Phase 85 (shipped 2026-07-23) — full detail: `milestones/v1.14-ROADMAP.md`
 
 ## Phases
+
+### In progress v1.18 Manifest-Independent Installed Plugin Info
+
+**Phase Numbering:**
+
+- Integer phases (95-97): planned milestone work continuing the global counter
+  from Phase 94, the final v1.17 phase.
+- Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
+
+- [ ] **Phase 95: Manifest-independent installed inventory** — construct list inventory from the union of a successfully loaded manifest and existing installation records; fully supported state-only records render `(installed) {not in manifest}`, partial records preserve `(partially-installed)` plus unsupported-kind reasons, disabled records remain unchanged, and `--installed` includes both enabled forms. (INV-01, INV-02, INV-03, INV-04)
+- [ ] **Phase 96: Installation-record-backed plugin info** — reorder info lookup after successful manifest load, reconstruct installed component structure from existing resource fields and materialized hook config, preserve installed/partial compatibility, remain network-free even with `--fetch`, and lock the unknown-name versus manifest-read failure boundary. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
+- [ ] **Phase 97: Lifecycle regression and contract documentation** — prove uninstall remains installation-record-driven, update and marketplace autoupdate retain manifest-absent skips, assert no persistence/token/network expansion, and reconcile the output catalog and PRD. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
 
 <details>
 <summary>✅ v1.17 env-parity (Phases 90-94) — SHIPPED 2026-08-05</summary>
@@ -100,10 +113,66 @@
 
 </details>
 
+## Phase Details
+
+### Phase 95: Manifest-independent installed inventory
+
+**Goal:** Users see every installed plugin represented truthfully in list output after a valid marketplace manifest drops its entry, without flattening partial or disabled state.
+
+**Depends on:** Nothing; this is the first v1.18 phase and touches the list inventory/classification path only.
+
+**Requirements:** INV-01, INV-02, INV-03, INV-04
+
+**Success Criteria:**
+
+1. The default list renders a fully supported enabled state-only record as `● <plugin> v<recorded-version> (installed) {not in manifest}` under its marketplace. (INV-01)
+2. A state-only record with persisted unsupported kinds retains `(partially-installed)`, with `not in manifest` followed by the existing unsupported-kind reasons. (INV-02)
+3. `list --installed` includes both enabled forms; they do not leak into unrelated availability filters. (INV-03)
+4. A disabled state-only record remains `(disabled)` with no `{not in manifest}` reason. (INV-04)
+
+**Plans:** 0 plans
+
+### Phase 96: Installation-record-backed plugin info
+
+**Goal:** Users can inspect a manifest-absent installation from current local installation data while retaining accurate partial-state and failure-boundary semantics.
+
+**Depends on:** Phase 95, whose state-only classification establishes the shared public inventory semantics that info must match.
+
+**Requirements:** INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02
+
+**Success Criteria:**
+
+1. Info reports a fully supported state-only record as `(installed) {not in manifest}` with its recorded version, while a record with unsupported kinds remains `(partially-installed)` with both reason classes. (INFO-09, INFO-10)
+2. Info renders sorted installed skills, commands, agents, MCP server names, and hook entries reconstructed from existing resources and the materialized hook configuration. (INFO-11)
+3. Missing, unreadable, malformed, and invalid manifests retain their current read-failure results, while a name absent from both a valid manifest and installation state remains `(failed) {not in manifest}`. (BOUND-01, BOUND-02)
+4. Bare info and `info --fetch` perform no network operation for the state-only fallback. (INFO-12)
+
+**Plans:** 0 plans
+
+### Phase 97: Lifecycle regression and contract documentation
+
+**Goal:** The new read behavior ships without mutation, persistence, network, or public-contract regressions.
+
+**Depends on:** Phases 95 and 96; lifecycle and documentation coverage describe and verify the completed list/info behavior.
+
+**Requirements:** LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08
+
+**Success Criteria:**
+
+1. Uninstall after manifest-entry removal removes every owned resource and the installation record through the existing path. (LIFE-04)
+2. Targeted/bulk plugin update and marketplace autoupdate continue to render `(skipped) {not in manifest}` for the state-only record. (LIFE-05, LIFE-06)
+3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. (COMPAT-01)
+4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior. (DOC-08)
+
+**Plans:** 0 plans
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
+| 95. Manifest-independent installed inventory | v1.18 | 0/0 | Not started | — |
+| 96. Installation-record-backed plugin info | v1.18 | 0/0 | Not started | — |
+| 97. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
