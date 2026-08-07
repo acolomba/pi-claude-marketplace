@@ -202,7 +202,7 @@ strict single-source-of-truth over zero runtime I/O.
 but the precise wiring is the **`resources_discover` event**, not `session_start`. In
 `index.ts:56`, the extension registers `onResourcesDiscover("resources_discover", ...)`
 and calls `await applyReconcile({ ctx, pi, cwd: event.cwd })` at index.ts:77, *before*
-`aggregateDiscoveredResources` so newly-materialized artefacts are picked up on the SAME
+`aggregateDiscoveredResources` so newly-materialized artifacts are picked up on the SAME
 load. `apply.ts:34` documents why: Pi fires `resources_discover` AFTER `session_start` and
 after all extension factories return, so soft-dep status is stable at apply time. Backfill
 inherits this entry — no new event registration needed.

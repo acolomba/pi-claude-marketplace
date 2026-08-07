@@ -23,7 +23,7 @@ current_phase_name: Fetch verb & info --fetch
 
 See: .planning/PROJECT.md (## Current Milestone: fetch-plugin, updated 2026-07-13)
 
-**Core value:** A Pi user can `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, with soft-dependency degradation that never blocks the install.
+**Core value:** A Pi user can `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact — atomically, recoverably, with soft-dependency degradation that never blocks the install.
 **Current focus:** Milestone fetch-plugin lifecycle close — all phases complete; next is workstream completion + milestone audit/close
 
 ## Deferred Items

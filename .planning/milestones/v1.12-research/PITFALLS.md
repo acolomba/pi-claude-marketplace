@@ -32,7 +32,7 @@ Full-declarative reconciliation treats the merged config as authoritative desire
 - The file exists but fails to parse (truncated, invalid JSON, hand-edit typo) and the reconciler treats parse-failure as "empty desired state."
 - The `--local` override file is present but the base file is missing, and the merge collapses to an empty base.
 
-Any of these silently triggers a mass uninstall of working artefacts on a routine Pi startup.
+Any of these silently triggers a mass uninstall of working artifacts on a routine Pi startup.
 
 **Why it happens:**
 "Desired state = file contents" is the whole point of declarative config, so the empty case looks like a legitimate instruction rather than a missing-input error. The IaC ecosystem learned this the hard way: ArgoCD ships `prune: false` by default and Flux/kubebuilder gate pruning behind an explicit ownership label precisely so that an empty manifest set cannot delete live resources by default.
@@ -40,7 +40,7 @@ Any of these silently triggers a mass uninstall of working artefacts on a routin
 **How to avoid:**
 - **Migration-first ordering, fail-closed:** on first load with no config file, GENERATE the file from `state.json` and reconcile against the generated content — never reconcile against absence. Migration must complete (and atomically land the file) before any prune decision is computed.
 - **Distinguish "absent" from "empty-on-purpose" from "unparseable":** a missing file -> migrate-then-reconcile; an unparseable file -> abort reconcile, surface a loud error, change NOTHING (do not interpret a parse error as empty desired state); a genuinely empty-but-valid file -> still gate the prune (see below).
-- **Ownership/cache guard on prune:** only uninstall things this extension materialized (already tracked in the internal bookkeeping file). Combined with full-declarative this still removes undeclared-but-owned items — which is correct — but it prevents nuking artefacts the extension never owned.
+- **Ownership/cache guard on prune:** only uninstall things this extension materialized (already tracked in the internal bookkeeping file). Combined with full-declarative this still removes undeclared-but-owned items — which is correct — but it prevents nuking artifacts the extension never owned.
 - **Empty-prune sanity threshold:** if reconcile would prune the entire installed set against a valid-but-empty config, treat that as suspicious and require the empty file to be unambiguous (e.g. an explicit empty `{ "marketplaces": {}, "plugins": {} }` vs a zero-byte file), refusing the mass-prune for the latter.
 
 **Warning signs:**
@@ -58,7 +58,7 @@ First-load migration reads `state.json` and writes `claude-plugins.json`. Three 
 
 - It overwrites or truncates `state.json` (or the new internal file) before the generated config has atomically landed, so a crash mid-migration leaves neither a usable config nor intact legacy state.
 - It writes a config that omits some installed plugins (e.g. plugins in an `unavailable`/soft-degraded state, or non-local sources surfaced as `unavailable`) — the very next reconcile then prunes them as undeclared.
-- It bakes machine bookkeeping (resolved versions, materialized artefact records) INTO the user-facing config, so the "state split" is violated from birth and every later hand-edit fights the machine fields.
+- It bakes machine bookkeeping (resolved versions, materialized artifact records) INTO the user-facing config, so the "state split" is violated from birth and every later hand-edit fights the machine fields.
 
 Because migration runs exactly once and replaces the authority model, a wrong migration is not a transient bug — it is the new ground truth.
 
@@ -69,11 +69,11 @@ Migration is treated as a mechanical dump rather than a lossless, atomic, idempo
 - **Atomic, write-new-before-touch-old:** generate config -> atomic write (tmp+rename, NFR-1) -> only then create/repoint the internal bookkeeping file. Never mutate `state.json` until the config exists on disk.
 - **Idempotent and re-runnable:** if a config already exists, migration is a no-op (NFR-3). Detect "already migrated" by file presence, not by a flag inside `state.json` that a crash could leave half-set.
 - **Lossless coverage audit:** every installed entry in `state.json` MUST appear in the generated config, INCLUDING soft-degraded / `unavailable`-source plugins, or the first reconcile prunes them. Add a test: migrate a populated `state.json`, immediately reconcile, assert zero net change.
-- **Respect the state split at generation time:** generated config contains ONLY desired state (source, autoupdate, enabled) and user settings — resolved versions / artefact records go to the internal file.
+- **Respect the state split at generation time:** generated config contains ONLY desired state (source, autoupdate, enabled) and user settings — resolved versions / artifact records go to the internal file.
 - **Keep a recovery path:** do not delete `state.json` at migration; the recovery model says `/reload` must suffice (NFR-2), so leaving the legacy file intact lets a botched migration be re-derived.
 
 **Warning signs:**
-Post-migration first reconcile shows ANY prune or install. Plugins present before upgrade are `unavailable` or gone after. The config file contains `hash-<…>` resolved versions or artefact paths (state-split leak).
+Post-migration first reconcile shows ANY prune or install. Plugins present before upgrade are `unavailable` or gone after. The config file contains `hash-<…>` resolved versions or artifact paths (state-split leak).
 
 **Phase to address:**
 Migration phase — with an explicit "migrate-then-reconcile = no-op" integration test as the phase exit gate.
@@ -121,7 +121,7 @@ The reload hint was designed for interactive commands where a human reads it and
 **How to avoid:**
 - **Reconcile must converge to a fixed point and prove it:** after a reconcile pass applies changes, a second immediate reconcile against the same config MUST be a no-op. Add a "reconcile twice, second pass is empty" invariant test.
 - **Reconcile NEVER emits a reload hint and NEVER triggers a reload.** The reload hint is a command-surface concept; reconcile is already running at load. Route reconcile output through a distinct path that cannot enqueue reload.
-- **Reconcile writes back ONLY to the internal bookkeeping file, never to the user config**, except the one-time migration generation. Resolved versions / artefact records are internal — writing them back to the user config is what re-dirties it each pass.
+- **Reconcile writes back ONLY to the internal bookkeeping file, never to the user config**, except the one-time migration generation. Resolved versions / artifact records are internal — writing them back to the user config is what re-dirties it each pass.
 - **Reentrancy guard:** an in-process flag (or the existing state lock) ensures a reconcile cannot start while one is running, so a reload fired mid-reconcile cannot stack.
 
 **Warning signs:**
@@ -209,11 +209,11 @@ Notification phase — catalog amendment + byte-UAT coverage for reconcile, with
 ### Pitfall 8: enable/disable confused with uninstall, and with the soft-dependency degradation model
 
 **What goes wrong:**
-`disable` keeps the config entry + version pin but removes materialized artefacts; `enable` re-materializes from cache with no network. Two confusions corrupt this:
+`disable` keeps the config entry + version pin but removes materialized artifacts; `enable` re-materializes from cache with no network. Two confusions corrupt this:
 
 - **Disable treated as uninstall:** the config entry or version pin is dropped, so re-enable can't reconstruct from cache and silently needs the network (violating "re-enable from cache, no network") or loses the pinned version.
 - **Disabled vs soft-degraded `unavailable` conflated:** the existing model surfaces missing-companion-extension plugins as soft-degraded `unavailable`. A `disabled` plugin (deliberate) and an `unavailable` plugin (degraded because a companion extension is absent) are different states with different list/info presentation and different reconcile behavior. If reconcile or the renderer treats `disabled` as `unavailable` (or vice-versa), the user can't tell "I turned this off" from "this broke," and reconcile may try to re-materialize a deliberately-disabled plugin or fail to flag a genuinely-degraded one.
-- **Reconcile re-enables disabled entries:** because the entry is still declared, a reconciler that keys only on "declared -> must be installed" will re-materialize artefacts the user explicitly disabled. The `enabled: false` bit must be part of desired state, so reconcile's desired-materialized set EXCLUDES disabled entries while KEEPING their entry + pin.
+- **Reconcile re-enables disabled entries:** because the entry is still declared, a reconciler that keys only on "declared -> must be installed" will re-materialize artifacts the user explicitly disabled. The `enabled: false` bit must be part of desired state, so reconcile's desired-materialized set EXCLUDES disabled entries while KEEPING their entry + pin.
 
 **Why it happens:**
 Disable is a third state between installed and uninstalled, and the existing system only had two (present / absent) plus the orthogonal soft-degraded marker. Adding a deliberate-off state that still occupies the config and cache, distinct from degraded-off, is easy to under-model.

@@ -23,9 +23,9 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 
 ## Project
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artefacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artefacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
-**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
 ### Constraints
 
@@ -52,7 +52,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 
 - TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`tests/`)
 - YAML - Claude plugin manifests and marketplace metadata parsed via the `yaml` package
-- Markdown - documentation, agent/skill/command definitions consumed as plugin artefacts
+- Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime
 
@@ -66,7 +66,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
 - `@earendil-works/pi-coding-agent` (peer dep `>=0.80.5`, dev dep `^0.83.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
 - `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.82.1`) - Pi terminal UI primitives
-- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artefact rendering; degrades gracefully when absent
+- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 - `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,docs,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`
 - `memfs` `^4.57.2` - in-memory filesystem mocking for platform/persistence tests
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`, `integration`, `e2e` reports feeding SonarCloud
@@ -187,7 +187,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 | Orchestrators (marketplace) | add/remove/list/info/update/autoupdate for marketplaces                                                                                      | `extensions/pi-claude-marketplace/orchestrators/marketplace/*.ts`                    |
 | Orchestrators (import)      | Bulk cascade-install of an entire Claude Code `claude-plugins.json` config                                                                   | `extensions/pi-claude-marketplace/orchestrators/import/*.ts`                         |
 | Orchestrators (reconcile)   | Load-time diffing of desired vs. on-disk state; drives `resources_discover` self-healing                                                     | `extensions/pi-claude-marketplace/orchestrators/reconcile/*.ts`                      |
-| Bridges                     | Translate one Claude-plugin component kind (skills/commands/agents/mcp/hooks) into its Pi-native artefact via a stage/commit/unstage triplet | `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/*.ts`   |
+| Bridges                     | Translate one Claude-plugin component kind (skills/commands/agents/mcp/hooks) into its Pi-native artifact via a stage/commit/unstage triplet | `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/*.ts`   |
 | Domain                      | Pure resolution/validation logic: plugin manifest parsing, source-URL parsing, discriminated `installable` resolver, version derivation      | `extensions/pi-claude-marketplace/domain/*.ts`                                       |
 | Transaction                 | Generic 5-phase do/undo ledger primitive + cross-process state-lock guard + rollback composition                                             | `extensions/pi-claude-marketplace/transaction/*.ts`                                  |
 | Persistence                 | Atomic reads/writes of `state.json`, `claude-plugins.json`, `agents-index.json`; scope-rooted path bundle                                    | `extensions/pi-claude-marketplace/persistence/*.ts`                                  |
@@ -214,7 +214,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 - Contains: per-verb files (`install.ts`, `uninstall.ts`, ...) each paired with a `*.messaging.ts` file holding its notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
 - Depends on: bridges/, domain/, transaction/, persistence/, platform/ (auth only), shared/
 - Used by: edge/handlers/\*, orchestrators/import/ (cascades plugin orchestrator calls), index.ts (`applyReconcile`, `updateSinglePlugin`)
-- Purpose: one bridge per Claude-plugin component kind; each exposes `discover` (enumerate source artefacts + generated names), `stage`/`prepareStage*` (write into a staging dir or compute a prepared write), `commit*` (atomic rename/write into the live location), and `unstage*` (rollback removal)
+- Purpose: one bridge per Claude-plugin component kind; each exposes `discover` (enumerate source artifacts + generated names), `stage`/`prepareStage*` (write into a staging dir or compute a prepared write), `commit*` (atomic rename/write into the live location), and `unstage*` (rollback removal)
 - Location: `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/`
 - Contains: kind-specific `types.ts`, `discover.ts`, `stage.ts`, `unstage.ts`, plus bridge-local helpers (e.g. `agents/frontmatter.ts`, `agents/index-mutation.ts`, `mcp/substitute.ts` for `${CLAUDE_PLUGIN_DATA}` variable substitution, `hooks/if-field/*` for the `if:` predicate compiler, `hooks/async-rewake/*` for hook-async resume state)
 - Depends on: domain/ (name generation, manifest types), persistence/ (locations), shared/
@@ -229,7 +229,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 - Contains: `phase-ledger.ts` (`runPhases<C>`, `Phase<C>`, `RollbackPartial`), `with-state-guard.ts` (`withLockedStateTransaction`, `proper-lockfile`-backed), `rollback.ts`
 - Depends on: persistence/ (state-io), shared/errors.ts
 - Used by: orchestrators/plugin/*, orchestrators/marketplace/* (any operation needing atomic multi-subsystem materialization)
-- Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artefact the extension owns
+- Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artifact the extension owns
 - Location: `extensions/pi-claude-marketplace/persistence/`
 - Contains: `locations.ts` (branded `ScopedLocations` bundle -- the single source of every writable path), `state-io.ts` (`state.json` load/save/migrate), `config-io.ts`/`config-merge.ts`/`config-write-back.ts` (`claude-plugins.json` / `.local.json`), `agents-index-io.ts`/`agents-index-schema.ts` (pi-subagents index file), `migrate.ts`/`migrate-config.ts` (schema-version upgrades)
 - Depends on: domain/name.ts (safe-name assertion), platform/pi-api.ts (`getAgentDir`), shared/path-safety.ts

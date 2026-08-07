@@ -164,7 +164,7 @@ The phase 63 UAT loop has closed with deferrals. Next steps are the developer's 
 
 ## Threat Flags
 
-None. README.md is a docs surface with no execution semantics. 63-UAT.md is a planning artefact; the `reported_pre_fix:` field renaming preserves lineage without altering any production behavior. The Stop-event deferral is a closed-set membership decision -- no new attack surface is introduced or expanded.
+None. README.md is a docs surface with no execution semantics. 63-UAT.md is a planning artifact; the `reported_pre_fix:` field renaming preserves lineage without altering any production behavior. The Stop-event deferral is a closed-set membership decision -- no new attack surface is introduced or expanded.
 
 ## Self-Check
 

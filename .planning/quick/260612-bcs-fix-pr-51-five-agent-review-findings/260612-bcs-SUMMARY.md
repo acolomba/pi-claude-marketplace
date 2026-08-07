@@ -32,7 +32,7 @@ Per-sub-plan details in `260612-bcs-NN-SUMMARY.md` (01-07).
 
 - **D-UPD**: `plugin update`/autoupdate refresh a disabled plugin's
   record (version/source pin) but keep it disabled — no silent
-  re-enable (was: re-materialized artefacts until next reload).
+  re-enable (was: re-materialized artifacts until next reload).
 - **D-NCF**: `marketplace/remove.ts` cascade classifier aligned to
   ATTR-09 — `AgentsUnstageFailureError` → `"source mismatch"`.
 - **D-MIG**: first-run config migration stays silent (NFR-2);

@@ -327,12 +327,12 @@ note: |
 ### 8. A hooks-only installed plugin renders `(installed)` -- not `(disabled)` -- on `/claude:plugin list`
 expected: |
   Test added during post-code-review UAT re-run on 2026-06-16. Pick a
-  plugin from `claude-plugins-official` whose only declared artefacts are
+  plugin from `claude-plugins-official` whose only declared artifacts are
   hooks AND whose declared events are all v1.13 bucket-A (i.e. NOT `Stop`,
   `Notification`, `SubagentStop`). `learning-output-style` matches: it
   declares only `SessionStart` (bucket-A), its hooks/hooks.json uses the
   wrapped form, and the source tree contains no skills / commands / agents /
-  mcp/ artefacts.
+  mcp/ artifacts.
 
   In the Pi REPL launched against the pi-uat sandbox:
 

@@ -9,7 +9,7 @@ overrides_applied: 0
 # Phase 54: Enable/Disable Commands Verification Report
 
 **Phase Goal:** A Pi user can disable a plugin to keep its config entry and version pin while removing
-its Pi artefacts, and re-enable it from cache with no network -- with disabled status rendered as a
+its Pi artifacts, and re-enable it from cache with no network -- with disabled status rendered as a
 distinct, deliberate fact separate from soft-degraded unavailability.
 
 **Verified:** 2026-06-10T20:59:19Z
@@ -25,7 +25,7 @@ distinct, deliberate fact separate from soft-degraded unavailability.
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
 | 1 | User can run `enable`/`disable` in the autoupdate/noautoupdate command shape, with `--scope` and `--local` handling; change written to config (ENBL-01) | VERIFIED | `setPluginEnabled` orchestrator at `orchestrators/plugin/enable-disable.ts`; `makeEnableDisableHandler` at `edge/handlers/plugin/enable-disable.ts`; router/register wiring confirmed; ENBL-01 tests (base + --local file isolation) pass 2/2 |
-| 2 | After `disable` and reload, plugin keeps config entry and version pin but Pi artefacts are not materialized; reconcile never re-materializes a disabled entry (ENBL-02) | VERIFIED | `runDisableBranch` resets `resources.*` to `[]` while preserving `version`/`resolvedSource`/`compatibility`/`installedAt`; `isRecordedButDisabled` predicate gates planner's `pluginsToEnable` bucket; ENBL-02 version-pin test passes; WR-05 convergence tests (2 variants) pass |
+| 2 | After `disable` and reload, plugin keeps config entry and version pin but Pi artifacts are not materialized; reconcile never re-materializes a disabled entry (ENBL-02) | VERIFIED | `runDisableBranch` resets `resources.*` to `[]` while preserving `version`/`resolvedSource`/`compatibility`/`installedAt`; `isRecordedButDisabled` predicate gates planner's `pluginsToEnable` bucket; ENBL-02 version-pin test passes; WR-05 convergence tests (2 variants) pass |
 | 3 | `enable` re-materializes from cached marketplace clone with no network; version pin preserved (ENBL-03, NFR-5) | VERIFIED | `runEnableBranch` delegates to `runInstallLedger` with `pinVersionOverride: installed.version`; FORBIDDEN_TARGETS architectural gate GREEN with the new file present (0 platform/git imports); CR-01 fresh-enable end-to-end test passes on real on-disk marketplace, network-free |
 | 4 | `list` and `info` render disabled plugin distinctly from soft-degraded `unavailable`; three orthogonal facts preserved (ENBL-04); `(disabled)` token + catalog + byte-UAT in lockstep | VERIFIED | `PluginDisabledMessage` variant (no reasons/cause/dependencies); `case "disabled":` arm in `renderPluginRow`; `isRecordedButDisabled` imported and called in `list.ts` at line 254; catalog-uat FIXTURES (10 entries incl. disabled-inventory, enable-fresh, disable-fresh, idempotent variants) byte-equal GREEN; notify-grammar-invariant subject-first proof GREEN |
 | 5 | `(disabled)` is a NEW closed-set `PluginStatus` token distinct from `(unavailable)` (D-54-01, CR-02) | VERIFIED | `PLUGIN_STATUSES` length 16 confirmed (length-lock `_l1` passes); `STATUS_TOKENS` length 22 (`_l1s` passes); `PluginDisabledMessage` interface distinct from `PluginUnavailableMessage` (no reasons field); notify-types.test.ts GREEN including negative-presence proofs |
@@ -110,7 +110,7 @@ No probes declared or discovered for this phase.
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
 | ENBL-01 | 54-02-PLAN.md | `enable`/`disable` commands with `--scope`/`--local` + config write-back | SATISFIED | `setPluginEnabled` + `makeEnableDisableHandler` fully wired; ENBL-01 tests (base + `--local` file isolation) pass |
-| ENBL-02 | 54-01-PLAN.md + 54-02-PLAN.md | Disabled plugin keeps config entry and version pin; Pi artefacts not materialized | SATISFIED | `runDisableBranch` preserves pin; `isRecordedButDisabled` gates planner bucket; WR-05 convergence proven |
+| ENBL-02 | 54-01-PLAN.md + 54-02-PLAN.md | Disabled plugin keeps config entry and version pin; Pi artifacts not materialized | SATISFIED | `runDisableBranch` preserves pin; `isRecordedButDisabled` gates planner bucket; WR-05 convergence proven |
 | ENBL-03 | 54-02-PLAN.md | `enable` re-materializes from cache, no network; version pin preserved | SATISFIED | `runInstallLedger` with `pinVersionOverride`; FORBIDDEN_TARGETS gate active; CR-01 end-to-end test passes |
 | ENBL-04 | 54-02-PLAN.md | Disabled status distinct from `unavailable`; three orthogonal facts | SATISFIED | Structurally distinct `PluginDisabledMessage` variant (no reasons); `(disabled)` vs `(unavailable)` byte forms differ; catalog + length-lock gates GREEN |
 

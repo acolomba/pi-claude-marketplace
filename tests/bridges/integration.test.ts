@@ -3,7 +3,7 @@
 // Multi-bridge happy-path end-to-end test.
 //
 // Exercises all four bridges (skills, commands, agents, MCP) in sequence
-// against the full-plugin fixture: every supported artefact lands at its
+// against the full-plugin fixture: every supported artifact lands at its
 // PRD-specified path with the correct generated name and
 // ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA} substituted in bodies. Also
 // exercises idempotency (re-stage produces the same on-disk state).

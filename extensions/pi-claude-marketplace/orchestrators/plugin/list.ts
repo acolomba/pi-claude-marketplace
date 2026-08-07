@@ -363,7 +363,7 @@ async function installedRowMessage(
   // disable orchestrator writes) renders the `(disabled)` inventory token,
   // NOT `(installed)`. Checked BEFORE the upgradable branch: the version pin
   // is frozen while disabled (ENBL-02), so a manifest-version drift must not
-  // surface a misleading `(upgradable)` on a plugin with no artefacts.
+  // surface a misleading `(upgradable)` on a plugin with no artifacts.
   if (isRecordedButDisabled(record)) {
     return {
       // D-03/D-06: a disabled INVENTORY row (list surface) is steady state,

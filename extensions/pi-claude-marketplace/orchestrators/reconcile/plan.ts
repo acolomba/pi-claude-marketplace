@@ -332,12 +332,12 @@ function classifyDeclaredPlugin(
     // divergence -- pushing a disable for it would render
     // `(will disable)` forever and make the apply path re-run a
     // no-op disable on every reload. Only a recorded record that is NOT
-    // already disabled (artefacts still materialised) needs the action --
+    // already disabled (artifacts still materialised) needs the action --
     // symmetric with the enable branch's "recorded + populated + enabled"
     // steady state below.
     const record = state.marketplaces[marketplace]?.plugins[plugin];
     if (recorded && record !== undefined && !isRecordedButDisabled(record)) {
-      // Declared-disabled but still materialised: drop artefacts without
+      // Declared-disabled but still materialised: drop artifacts without
       // removing the version pin (D-04 / ENBL-02).
       acc.disable.push({ scope, plugin, marketplace });
     }

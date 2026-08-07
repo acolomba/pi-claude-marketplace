@@ -132,7 +132,7 @@ function makePluginRecord(
  * D-UPD test helper: seeded record with `enabled: false` -- the ENBL-02
  * disabled marker that `isRecordedButDisabled` reads. The `update`
  * orchestrator must refresh the version/source pin but keep the record
- * disabled (artefacts re-materialize on the next `enable`).
+ * disabled (artifacts re-materialize on the next `enable`).
  */
 function makeDisabledPluginRecord(version: string): PluginRecord {
   return makePluginRecord(version, {
@@ -2861,7 +2861,7 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
 
       // D-UPD: rendered status reuses the existing `unchanged` byte form
       // (`(skipped) {up-to-date}`) -- no new catalog token introduced. The
-      // user-visible artefact state really IS unchanged (no re-materialization).
+      // user-visible artifact state really IS unchanged (no re-materialization).
       assert.equal(notifications.length, 1);
       assert.match(notifications[0]!.message, /\(skipped\) \{up-to-date\}/);
 

@@ -225,7 +225,7 @@ Audit `reinstall.ts` and `update.ts` to verify they route through `uninstall.ts`
 - Forbidden: `Phase NN`, `Plan NN`, `Wave N`, `Task N`, `milestone vX.Y`, `(Phase NN review)`, bare `Pitfall N` / `Pattern N` (single-digit unqualified).
 - Allowed (and encouraged): `D-59-01`, `DISP-01`, `OBS-01`, `NFR-2`, `IL-2`, `IL-3`, GitHub `#NNN`.
 
-The skeleton snippets in RESEARCH.md include phase-citing comments — strip those refs before pasting. Existing in-file phase refs that are PRESERVED (`Phase 2: remove old target files` in `bridges/agents/stage.ts`) are domain language, not GSD history. Only GSD planning artefact citations are forbidden.
+The skeleton snippets in RESEARCH.md include phase-citing comments — strip those refs before pasting. Existing in-file phase refs that are PRESERVED (`Phase 2: remove old target files` in `bridges/agents/stage.ts`) are domain language, not GSD history. Only GSD planning artifact citations are forbidden.
 
 ### ESLint zone rules (cross-cutting)
 

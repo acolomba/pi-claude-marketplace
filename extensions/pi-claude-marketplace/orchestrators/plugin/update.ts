@@ -1561,10 +1561,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
 
   // D-UPD: a disabled-but-recorded plugin (empty resources.* + installable=true,
   // the same marker the planner reads via isRecordedButDisabled) must NOT
-  // re-materialize artefacts; an `enable` after the update is the rematerialization
+  // re-materialize artifacts; an `enable` after the update is the rematerialization
   // surface. Refresh the record's version + resolvedSource so a future enable
   // reads the current pin, but keep `resources.*` empty. Renders the existing
-  // `unchanged` byte form -- the artefact state really is unchanged.
+  // `unchanged` byte form -- the artifact state really is unchanged.
   if (isRecordedButDisabled(preflight.record)) {
     await refreshDisabledRecord(args, preflight);
     return {
@@ -1835,7 +1835,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // S5: an invalid config file silently skipped the write-back while the
   // success notify proceeded. Direct-path callers now surface the abort as a
   // separate warning notification AFTER the success row so the user knows
-  // the on-disk artefacts were updated but the config entry was not written.
+  // the on-disk artifacts were updated but the config entry was not written.
   // The cascade path never calls the write-back (gated by `!args.cascade`),
   // so it is structurally unaffected.
   if (

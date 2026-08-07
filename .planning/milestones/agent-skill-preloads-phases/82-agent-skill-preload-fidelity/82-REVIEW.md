@@ -218,7 +218,7 @@ allowed anchors are decision/requirement IDs (D-82-xx, AGSK-NN, SC-N,
 #86 -- all used correctly elsewhere in these files); phase-qualified
 planning-artifact row IDs like `T-82-12` are the class the policy
 forbids ("phrasing whose only purpose is to record which planning
-artefact authored the line").
+artifact authored the line").
 **Fix:** Drop the parenthetical; the surrounding sentence already carries
 the invariant.
 

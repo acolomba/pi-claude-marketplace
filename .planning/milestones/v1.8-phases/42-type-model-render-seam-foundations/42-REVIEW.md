@@ -40,7 +40,7 @@ fix_commits:
 
 ## Summary
 
-The atomic-supersession commit delivers the contract artefacts (3-arm
+The atomic-supersession commit delivers the contract artifacts (3-arm
 discriminated `NotificationMessage`, new `"not added"` REASON, file-private
 `wrapDescription` / `renderMarketplaceInfo` / `renderPluginInfo`, first
 catalog state + UAT fixture, type-level proofs + per-status tests). Byte

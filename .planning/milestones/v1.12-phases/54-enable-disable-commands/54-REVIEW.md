@@ -100,7 +100,7 @@ the lock and will surface one at a time if only the lock is fixed:
    (with re-populated `resources.*`), after which the OUTER
    `withStateGuard` saves the snapshot it loaded **before** the install
    — re-emptying the resources arrays and leaving state.json marked
-   disabled while artefacts exist on disk (state/disk drift, violating
+   disabled while artifacts exist on disk (state/disk drift, violating
    the ST-7/D-06 single-writer model).
 
 **Fix:** Restructure the enable branch so exactly one guard owns the
@@ -248,7 +248,7 @@ disable action and `/claude:plugin preview` shows
 `emptyReconcilePlan` for a disabled plugin, and the Phase 55 apply path
 will re-run a no-op disable on every reload.
 `tests/orchestrators/reconcile/plan.test.ts` ENBL-02(c) ratifies this
-("Phase 55's apply path makes this a no-op at the artefact level"), but
+("Phase 55's apply path makes this a no-op at the artifact level"), but
 a converged disabled state is not a config↔state divergence — the
 symmetric enable case correctly treats "recorded + populated +
 enabled" as steady state.

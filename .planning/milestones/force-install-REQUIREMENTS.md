@@ -10,7 +10,7 @@ For current requirements, see `.planning/REQUIREMENTS.md`.
 # Requirements: pi-claude-marketplace — force-install
 
 **Defined:** 2026-06-26
-**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. `--force` extends this to *partially*-supported plugins: install the supported components, degrade the unsupported ones, never block.
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install. `--force` extends this to *partially*-supported plugins: install the supported components, degrade the unsupported ones, never block.
 
 ## Milestone Requirements
 

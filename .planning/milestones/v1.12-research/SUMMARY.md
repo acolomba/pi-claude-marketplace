@@ -29,7 +29,7 @@ The dominant risk is **safety** around destructive reconciliation. Three non-neg
 be engineered before the reconciler can run any prune: (1) migration-first ordering so an
 existing install is never reconciled against absence; (2) an absent/unparseable/empty config
 trichotomy that aborts reconciliation on bad input rather than interpreting it as "uninstall
-everything"; and (3) provenance-scoped removal so the reconciler only prunes artefacts this
+everything"; and (3) provenance-scoped removal so the reconciler only prunes artifacts this
 extension materialized, mirroring ArgoCD's ownership guard. The secondary risk cluster is
 behavioral integrity: reconcile convergence (fixed-point invariant), notification catalog
 compliance (byte-locked UAT), and cross-process lock coverage for the new internal bookkeeping
@@ -198,7 +198,7 @@ merge matrix unit-tested in isolation).
 no downstream code is written against a transitional shape.
 
 **Delivers:** `autoupdate` and `enabled` intent moved from `STATE_SCHEMA` to `CONFIG_SCHEMA`;
-`state.json` retains only machine bookkeeping (resolved versions, artefact records, timestamps).
+`state.json` retains only machine bookkeeping (resolved versions, artifact records, timestamps).
 `schemaVersion` bump decision confirmed.
 
 **Addresses:** State-split correctness; enables provenance-scoped removal (Pitfall 1 ownership
@@ -376,7 +376,7 @@ Phases with well-documented patterns (standard implementation, skip dedicated re
 
 ### Secondary (MEDIUM confidence — ecosystem signal)
 
-- Homebrew/brew#22450 — `brew bundle cleanup` uninstalling unmanaged artefacts (provenance-scoped
+- Homebrew/brew#22450 — `brew bundle cleanup` uninstalling unmanaged artifacts (provenance-scoped
   removal evidence)
 - nix-community/home-manager docs — authoritative-pole semantics, silent-drop on declaration
   removal

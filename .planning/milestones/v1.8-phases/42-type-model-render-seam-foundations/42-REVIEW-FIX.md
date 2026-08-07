@@ -50,7 +50,7 @@ hypothetical union) confirmed the gate fires with TS2345 ("Argument of
 type 'FooInfo' is not assignable to parameter of type 'never'") when a
 4th `kind` literal is added; the existing 3-variant union compiles
 cleanly. Probe was discarded after verification -- production code is
-the only artefact.
+the only artifact.
 
 ### WR-01: INFO-04 carve-out predicate matches over-broadly
 

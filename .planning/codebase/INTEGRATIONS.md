@@ -24,7 +24,7 @@
 **File Storage:**
 - Local filesystem only. All state is persisted as JSON/YAML/Markdown files under:
   - `<scopeRoot>/pi-claude-marketplace/` (marketplace/plugin state, staging directories for atomic commits)
-  - `<scopeRoot>/agents/` (rendered agent artefacts)
+  - `<scopeRoot>/agents/` (rendered agent artifacts)
   - `<scopeRoot>/mcp.json` (MCP server registrations, written via the four-slot pi-mcp-adapter contract in `extensions/pi-claude-marketplace/bridges/mcp/`)
   - `<scopeRoot>/claude-plugins.json` / `<scopeRoot>/claude-plugins.local.json` (plugin/marketplace registry)
   - Two scopes only: `user` (defaults to `~/.pi/agent/`, overridable via `PI_CODING_AGENT_DIR`) and `project` (`<cwd>/.pi/`)

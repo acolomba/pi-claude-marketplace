@@ -31,7 +31,7 @@ in the same phase surface that a follow-up `--fix all` run would catch.
 
 **Files modified:** `extensions/pi-claude-marketplace/domain/components/hook-events.ts`
 **Commit:** bb1800ba
-**Applied fix:** Removed the `per 87 research` planning-artefact citation from
+**Applied fix:** Removed the `per 87 research` planning-artifact citation from
 the `StopFailure` field-label docstring (line 170). The `[ASSUMED -- field-name
 label]` marker and the mechanism rationale ("the label is non-load-bearing...")
 were retained as the policy-allowed anchor, matching the fix guidance in

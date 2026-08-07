@@ -44,7 +44,7 @@ catalog-uat byte gate GREEN with NO `docs/output-catalog.md` edit.
   `update.ts:maybeWritePluginConfigBackUpdate` now return
   `{invalidConfig}` instead of silently dropping the abort. The direct
   path emits a separate `(failed) {invalid manifest}` warning row
-  alongside the success row so the user knows the on-disk artefacts
+  alongside the success row so the user knows the on-disk artifacts
   landed but the config entry was not written. Cascade path unchanged
   (it never calls the write-back; gated by `!args.cascade`).
 - **D-UPD (LOCKED)** -- `runThreePhaseUpdate` short-circuits on
@@ -100,7 +100,7 @@ catalog-uat byte gate GREEN with NO `docs/output-catalog.md` edit.
   test pins that the flag-flip never disturbs a disabled record.
 - **S5 chose warning-row over throw** -- throwing from
   `maybeWritePluginConfigBack` would abort the `withStateGuard` save and
-  lose the version bump while the on-disk artefacts already swapped --
+  lose the version bump while the on-disk artifacts already swapped --
   a worse correctness outcome. Threading `{invalidConfig: boolean}` up
   to the direct-path notify site so a second warning row surfaces
   alongside the success row was the smallest defensible fix.

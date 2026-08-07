@@ -62,7 +62,7 @@
 | Orchestrators (marketplace) | add/remove/list/info/update/autoupdate for marketplaces | `extensions/pi-claude-marketplace/orchestrators/marketplace/*.ts` |
 | Orchestrators (import) | Bulk cascade-install of an entire Claude Code `claude-plugins.json` config | `extensions/pi-claude-marketplace/orchestrators/import/*.ts` |
 | Orchestrators (reconcile) | Load-time diffing of desired vs. on-disk state; drives `resources_discover` self-healing | `extensions/pi-claude-marketplace/orchestrators/reconcile/*.ts` |
-| Bridges | Translate one Claude-plugin component kind (skills/commands/agents/mcp/hooks) into its Pi-native artefact via a stage/commit/unstage triplet | `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/*.ts` |
+| Bridges | Translate one Claude-plugin component kind (skills/commands/agents/mcp/hooks) into its Pi-native artifact via a stage/commit/unstage triplet | `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/*.ts` |
 | Domain | Pure resolution/validation logic: plugin manifest parsing, source-URL parsing, discriminated `installable` resolver, version derivation | `extensions/pi-claude-marketplace/domain/*.ts` |
 | Transaction | Generic 5-phase do/undo ledger primitive + cross-process state-lock guard + rollback composition | `extensions/pi-claude-marketplace/transaction/*.ts` |
 | Persistence | Atomic reads/writes of `state.json`, `claude-plugins.json`, `agents-index.json`; scope-rooted path bundle | `extensions/pi-claude-marketplace/persistence/*.ts` |
@@ -71,7 +71,7 @@
 
 ## Pattern Overview
 
-**Overall:** Layered architecture with strict one-directional import boundaries (edge → orchestrators → {bridges, domain, transaction, persistence} → {platform, shared}), organized around a **command/resource translation pipeline**: Claude plugin artefacts on disk are resolved (domain), staged, and committed (bridges) into Pi-native equivalents under transactional control (transaction), with all disk mutation funneled through a single path-containment chokepoint (shared/path-safety.ts) and a single atomic-write primitive (shared/atomic-json.ts / write-file-atomic).
+**Overall:** Layered architecture with strict one-directional import boundaries (edge → orchestrators → {bridges, domain, transaction, persistence} → {platform, shared}), organized around a **command/resource translation pipeline**: Claude plugin artifacts on disk are resolved (domain), staged, and committed (bridges) into Pi-native equivalents under transactional control (transaction), with all disk mutation funneled through a single path-containment chokepoint (shared/path-safety.ts) and a single atomic-write primitive (shared/atomic-json.ts / write-file-atomic).
 
 **Key Characteristics:**
 - Every mutating operation (install/uninstall/update/enable/disable) is a named 5-phase ledger (`transaction/phase-ledger.ts`) with symmetric `do`/`undo` per phase, guaranteeing all-or-nothing materialization across 5 independently-persisted subsystems (skills, commands, agents, hooks, mcp).
@@ -97,7 +97,7 @@
 - Used by: edge/handlers/*, orchestrators/import/ (cascades plugin orchestrator calls), index.ts (`applyReconcile`, `updateSinglePlugin`)
 
 **bridges/:**
-- Purpose: one bridge per Claude-plugin component kind; each exposes `discover` (enumerate source artefacts + generated names), `stage`/`prepareStage*` (write into a staging dir or compute a prepared write), `commit*` (atomic rename/write into the live location), and `unstage*` (rollback removal)
+- Purpose: one bridge per Claude-plugin component kind; each exposes `discover` (enumerate source artifacts + generated names), `stage`/`prepareStage*` (write into a staging dir or compute a prepared write), `commit*` (atomic rename/write into the live location), and `unstage*` (rollback removal)
 - Location: `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks}/`
 - Contains: kind-specific `types.ts`, `discover.ts`, `stage.ts`, `unstage.ts`, plus bridge-local helpers (e.g. `agents/frontmatter.ts`, `agents/index-mutation.ts`, `mcp/substitute.ts` for `${CLAUDE_PLUGIN_DATA}` variable substitution, `hooks/if-field/*` for the `if:` predicate compiler, `hooks/async-rewake/*` for hook-async resume state)
 - Depends on: domain/ (name generation, manifest types), persistence/ (locations), shared/
@@ -118,7 +118,7 @@
 - Used by: orchestrators/plugin/*, orchestrators/marketplace/* (any operation needing atomic multi-subsystem materialization)
 
 **persistence/:**
-- Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artefact the extension owns
+- Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artifact the extension owns
 - Location: `extensions/pi-claude-marketplace/persistence/`
 - Contains: `locations.ts` (branded `ScopedLocations` bundle — the single source of every writable path), `state-io.ts` (`state.json` load/save/migrate), `config-io.ts`/`config-merge.ts`/`config-write-back.ts` (`claude-plugins.json` / `.local.json`), `agents-index-io.ts`/`agents-index-schema.ts` (pi-subagents index file), `migrate.ts`/`migrate-config.ts` (schema-version upgrades)
 - Depends on: domain/name.ts (safe-name assertion), platform/pi-api.ts (`getAgentDir`), shared/path-safety.ts
@@ -153,7 +153,7 @@
 ### Load-Time Reconcile Flow (`resources_discover`)
 
 1. Pi fires `resources_discover` on every session start/reload; `index.ts` handler first calls `hydrateProjectScopeForCwd` (`bridges/hooks/index.ts`) to populate the per-project hook-routing cache
-2. `applyReconcile` (`orchestrators/reconcile/apply.ts`) diffs the desired state (from `state.json`) against on-disk artefacts (`orchestrators/reconcile/plan.ts`) and re-materializes anything missing — this is the self-healing mechanism that lets `/reload` alone recover from a partial or externally-deleted install (NFR-2)
+2. `applyReconcile` (`orchestrators/reconcile/apply.ts`) diffs the desired state (from `state.json`) against on-disk artifacts (`orchestrators/reconcile/plan.ts`) and re-materializes anything missing — this is the self-healing mechanism that lets `/reload` alone recover from a partial or externally-deleted install (NFR-2)
 3. `recomputePluginPath` (`orchestrators/plugin-path.ts`) rebuilds the `PATH`-equivalent routing table for both scopes
 4. `aggregateDiscoveredResources` (`orchestrators/discover.ts`) walks both scope `locationsFor(...)` bundles and returns `{ skillPaths, promptPaths }` to Pi
 

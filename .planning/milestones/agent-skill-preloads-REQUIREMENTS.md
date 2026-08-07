@@ -1,7 +1,7 @@
 # Requirements: agent-skill-preloads (milestone, target npm 0.10.0)
 
 **Defined:** 2026-07-19
-**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 **Driver:** GitHub issue #86 — Generated Pi agents drop required Claude skill preloads.
 
 ## v1 Requirements

@@ -72,7 +72,7 @@ implementation). No REFACTOR cycle was needed -- the implementations
 landed close enough to the plan sketches that no clean-up commit
 followed.
 
-## Artefacts delivered
+## Artifacts delivered
 
 ### `bridges/hooks/async-rewake/ring-buffer.ts` (149 LoC)
 

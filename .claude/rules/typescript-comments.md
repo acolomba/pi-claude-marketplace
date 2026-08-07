@@ -26,7 +26,7 @@ wave, or task produced the code. Git history owns process history.
   requirement/decision IDs) carry the anchor. Phase-qualified forms
   (`Pitfall NN-N`, `RESEARCH Pitfall N`) are already covered by the
   planning-artifact clause above.
-- Any other phrasing whose only purpose is to record which planning artefact
+- Any other phrasing whose only purpose is to record which planning artifact
   authored the line.
 
 ## Allowed (and encouraged) as traceability anchors

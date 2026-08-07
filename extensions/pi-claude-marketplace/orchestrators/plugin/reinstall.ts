@@ -259,7 +259,7 @@ interface LockedSuccess {
    * S5: when the config-back loadConfig returned `invalid`, the write-back
    * was skipped while the success notify proceeded. The single-plugin caller
    * surfaces this as a separate warning row AFTER the reinstall success row
-   * so the user knows the on-disk artefacts were reinstalled but the config
+   * so the user knows the on-disk artifacts were reinstalled but the config
    * entry was not written.
    */
   readonly invalidConfigWriteBack?: boolean;
@@ -363,7 +363,7 @@ export async function reinstallPlugin(
   ]);
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
-  // separate warning row so the user sees that the on-disk artefacts were
+  // separate warning row so the user sees that the on-disk artifacts were
   // reinstalled but the config entry was not written. Pre-S5 this arm
   // silently dropped the warning while the success notify proceeded.
   if (locked.invalidConfigWriteBack === true) {
@@ -1611,7 +1611,7 @@ interface HooksReplaceArgs {
  * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
  * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
  * When the resolved plugin has no hooks, remove any stale subtree (defensive
- * cleanup of an artefact a prior install left behind).
+ * cleanup of an artifact a prior install left behind).
  */
 async function commitHooks(args: HooksReplaceArgs): Promise<void> {
   const { locations, cwd, plugin, installable } = args;

@@ -66,7 +66,7 @@ required by this milestone.
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
 | Reuse `atomicWriteJson` (write-file-atomic) | Hand-rolled `writeFile(tmp)` + `rename` | Only if the config write needs behavior the lib lacks (it does not). The lib already fsyncs + serializes concurrent writes; rolling your own re-introduces the EXDEV/half-write bugs NFR-1 forbids. |
-| One TypeBox schema per file shape | Reuse `STATE_SCHEMA` for the config | Do NOT reuse. The config file is a *Pi-native desired-state* shape (locked decision: NOT Claude's `settings.json`, NOT state.json's machine-bookkeeping shape). It has `enabled` flags and lacks materialized-artefact records. A distinct `CONFIG_SCHEMA` keeps the desired-state/bookkeeping split honest. |
+| One TypeBox schema per file shape | Reuse `STATE_SCHEMA` for the config | Do NOT reuse. The config file is a *Pi-native desired-state* shape (locked decision: NOT Claude's `settings.json`, NOT state.json's machine-bookkeeping shape). It has `enabled` flags and lacks materialized-artifact records. A distinct `CONFIG_SCHEMA` keeps the desired-state/bookkeeping split honest. |
 | Explicit domain merge for base+local | `deepmerge` / `lodash.merge` | Never here. Override is entry-level (per `plugin@marketplace` / per marketplace name), not arbitrary deep-merge; a recursive merge would silently merge arrays/objects the spec says should be replaced. |
 | Validate-on-load, reconcile-on-load | `chokidar` / `fs.watch` live file watching | Never here. The locked decision is reconcile *at extension load only* (Pi startup + reload). A watcher adds a long-lived handle, debounce complexity, and a second reconcile trigger that the design explicitly excludes. |
 

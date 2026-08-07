@@ -120,7 +120,7 @@ still hit.
 ### Working tree state
 
 `README.md` and `docs/hooks.md` remain modified-unstaged after the commit, as
-required. The new untracked artefacts `.bg-shell/`, `.gsd/`,
+required. The new untracked artifacts `.bg-shell/`, `.gsd/`,
 `.playwright-mcp/`, `link-row-overview.png` were pre-existing and untouched.
 
 ## Commit

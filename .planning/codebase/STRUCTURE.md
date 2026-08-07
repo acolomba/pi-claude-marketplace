@@ -17,7 +17,7 @@ pi-claude-marketplace/
 │   │   ├── marketplace/                # add/remove/list/info/update/autoupdate
 │   │   ├── import/                     # bulk cascade-install from claude-plugins.json
 │   │   └── reconcile/                  # load-time self-heal diff/apply
-│   ├── bridges/                        # Claude-artefact -> Pi-artefact translators
+│   ├── bridges/                        # Claude-artifact -> Pi-artifact translators
 │   │   ├── skills/ commands/ agents/   # one dir per component kind
 │   │   ├── mcp/ hooks/                 # (hooks/ also owns Claude-Code hook dispatch)
 │   ├── domain/                         # Pure resolution/validation, no disk writes
@@ -128,7 +128,7 @@ pi-claude-marketplace/
 - Orchestrator: `extensions/pi-claude-marketplace/orchestrators/plugin/<verb>.ts` + `<verb>.messaging.ts`, following the `runInstallLedger`/`withLockedStateTransaction` pattern if it mutates state
 - Tests: `tests/edge/handlers/plugin/<verb>.test.ts`, `tests/orchestrators/plugin/<verb>.test.ts`
 
-**New Claude-artefact component kind (new bridge):**
+**New Claude-artifact component kind (new bridge):**
 - Implementation: `extensions/pi-claude-marketplace/bridges/<kind>/` with `discover.ts`, `stage.ts`, `unstage.ts`, `types.ts`, `index.ts` matching the existing 5-bridge triplet convention
 - Wire a new `Phase<InstallCtx>` into `orchestrators/plugin/install.ts` (and the symmetric uninstall/update/reinstall ledgers)
 - Tests: `tests/bridges/<kind>/`

@@ -90,7 +90,7 @@ must_haves:
     - "setPluginEnabled honors its never-rethrows contract even when state.json is corrupt in either scope (edge handler emits a notify row, not a raw throw)."
     - "Orchestrated partial marketplace-remove cascades render every successfully-uninstalled plugin row and every per-plugin failure, not just the first failure."
     - "Autoupdate write-back skips are surfaced as failed/skipped rows; no name in finalResult.changed renders success when its write-back was silently skipped."
-    - "Disable cascade partial failure folds dropped artefacts into state before surfacing the failure (state.json never claims artefacts that are gone)."
+    - "Disable cascade partial failure folds dropped artifacts into state before surfacing the failure (state.json never claims artifacts that are gone)."
     - "Enable failure renders rollback-partial recovery rows by threading InstallFailureCapture through runInstallLedger."
     - "loadConfig diagnostic detail (EACCES / JSON-parse / schema-key) reaches the rendered row's cause trailer instead of being flattened to {invalid manifest}, with absolute paths stripped (T-53-02-02)."
     - "reconcile apply classifies StateLockHeldError to 'lock held' and PluginShapeError to kind-mapped reasons (not-in-manifest / already-installed / unsupported), not {unreadable}."
@@ -262,10 +262,10 @@ lockstep with any row-byte change.
       catalog-uat fixtures in THIS commit per the closed-set rule).
       Pin: skip path renders a row, not silent success.
     - I3 (disable partial cascade fold): when `cascade.dropped` is non-empty on disable
-      partial failure (`enable-disable.ts:252-259`), fold the dropped artefacts into the
+      partial failure (`enable-disable.ts:252-259`), fold the dropped artifacts into the
       record, save the shrunken record, THEN surface the failure -- mirror the TR-03
       fold from `uninstall.ts:468-484`. Pin: after a partial disable cascade failure,
-      state.json no longer references the dropped artefacts AND the failed row still
+      state.json no longer references the dropped artifacts AND the failed row still
       renders.
     - I4 (enable threads InstallFailureCapture): pass a fresh `InstallFailureCapture`
       as the 4th arg to `runInstallLedger` on the enable branch (`enable-disable.ts:206-213`)
@@ -322,7 +322,7 @@ lockstep with any row-byte change.
     - In `plugin/update.ts` and the autoupdate cascade path, when the target plugin is
       currently disabled (`isCurrentlyDisabled`: populated config entry + empty
       resources.*), refresh the record (version pin / source pin) but DO NOT
-      re-materialize artefacts; `resources.*` stay empty. Render the existing
+      re-materialize artifacts; `resources.*` stay empty. Render the existing
       success-shape token (no new token if avoidable). Pin in
       `tests/orchestrators/plugin/update.test.ts` (seed disabled record per CONTEXT.md
       decision text) + an autoupdate cascade test.
@@ -648,7 +648,7 @@ lockstep with any row-byte change.
        (`PRL-NN`, `AUTH-NN`, `DIFF-NN`, `ATTR-NN`, `RECON-NN`, `ENBL-NN`, `SPLIT-NN`,
        `WR-NN`, `CR-NN`, `UAT-NN`, `SNM-NN`, `TYPE-NN`, `SC-N`, `NFR-N`, `D-XX-NN`,
        `Mxx`). STRIP Phase/Plan/Wave/Task IDs and unresolvable Pitfall-N / Pattern-N /
-       RESEARCH-* labels. The rule: planning artefact -> strip; specification anchor ->
+       RESEARCH-* labels. The rule: planning artifact -> strip; specification anchor ->
        keep.
     4. Apply D-MIG comment edit at `persistence/migrate-config.ts:30-33` (current line
        range may have shifted -- locate the contract comment by symbol).

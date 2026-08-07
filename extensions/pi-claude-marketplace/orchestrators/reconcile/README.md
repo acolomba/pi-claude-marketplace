@@ -32,7 +32,7 @@ The pure planner partitions the union of declared (from `MergedConfig`) and reco
 3. `pluginsToInstall` -- declared+enabled but not recorded.
 4. `pluginsToUninstall` -- recorded but not declared. Plugins under a marketplace in `marketplacesToRemove` are EXCLUDED here -- the apply path's marketplace-remove cascade unstages them, so listing each as a separate uninstall would double-bill the work.
 5. `pluginsToEnable` -- declared+enabled AND recorded-but-disabled. The bucket IS populated: `plan.ts::isRecordedButDisabled` reads the empty-resources marker (all four `resources.*` arrays empty AND `compatibility.installable === true`) and the `plan.ts::classifyDeclaredPlugin` recorded-and-declared-enabled branch pushes onto the bucket when the marker matches.
-6. `pluginsToDisable` -- declared with `enabled === false` but still recorded with populated artefacts.
+6. `pluginsToDisable` -- declared with `enabled === false` but still recorded with populated artifacts.
 7. `sourceMismatches` -- four per-cause planner diagnostics on one bucket (`source-mismatch`, `unknown-stored`, `dangling-reference`, `malformed-plugin-key`). Each variant carries only the fields its diagnostic actually renders; subjects derive via `types.ts::plannedSourceMismatchSubject` (marketplace name for the first three causes; raw config key for malformed-plugin-key).
 
 Disabled-entry rule: `enabled === false` excludes the plugin from the desired-materialised set; `enabled === true` and `enabled === undefined` include (D-04 consume-time default -- the absent field includes, only explicit `false` excludes).

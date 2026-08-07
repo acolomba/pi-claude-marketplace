@@ -7,13 +7,13 @@
 <domain>
 ## Phase Boundary
 
-A Pi user can disable a plugin to keep its config entry and version pin while removing its Pi artefacts, and re-enable it from cache with no network -- with disabled status rendered as a distinct, deliberate fact separate from soft-degraded unavailability.
+A Pi user can disable a plugin to keep its config entry and version pin while removing its Pi artifacts, and re-enable it from cache with no network -- with disabled status rendered as a distinct, deliberate fact separate from soft-degraded unavailability.
 
 Success criteria (from ROADMAP):
 
 1. A user can run `enable <plugin>@<marketplace>` and `disable <plugin>@<marketplace>` in the autoupdate/noautoupdate command shape, with `--scope user|project` and `--local` handling consistent with the other mutating commands (ENBL-01); the change is written back to the config (`enabled: true/false`).
-2. After `disable` and a `/reload`, the plugin keeps its config entry and version pin but its Pi artefacts are not materialized -- reconcile's desired-materialized set is `declared AND enabled`, so a disabled entry is never re-materialized (ENBL-02).
-3. Running `enable` re-materializes the plugin's artefacts from the cached marketplace clone and persisted internal records with no network access -- verifiable by enabling with the network unplugged while the version pin is preserved (ENBL-03, NFR-5).
+2. After `disable` and a `/reload`, the plugin keeps its config entry and version pin but its Pi artifacts are not materialized -- reconcile's desired-materialized set is `declared AND enabled`, so a disabled entry is never re-materialized (ENBL-02).
+3. Running `enable` re-materializes the plugin's artifacts from the cached marketplace clone and persisted internal records with no network access -- verifiable by enabling with the network unplugged while the version pin is preserved (ENBL-03, NFR-5).
 4. On `list` and `info` surfaces, a `disabled` plugin renders distinctly from a soft-degraded `unavailable` one, keeping the three orthogonal facts (declared / enabled / available) from collapsing into one another (ENBL-04); the `disabled` vs. reused-token decision lands with its catalog + byte-UAT forms in lockstep.
 
 </domain>

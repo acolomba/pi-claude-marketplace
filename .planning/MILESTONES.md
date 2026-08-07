@@ -183,7 +183,7 @@
 - Bridge-owned asyncRewake registry: detached=false spawn + ring-buffered stderr/stdout + EXEC-02 timer ladder + captured-epoch zombie defense + exit-code-2 pi.sendMessage injection + PID-table-backed orphan reap on `/reload` — the THIRD and FINAL sanctioned `node:child_process` site in the extension tree, atomically supersedes the 2-element whitelist to 3 in the same commit (D-58-01).
 - 1. [Rule 2 -- Missing critical functionality] Composite handler signatures widened beyond the plan's surface
 - HookSummaryEntry discriminated union + ClaudeHookEvent literal-union + multi-line `hooks:` renderer arm in shared/notify.ts, foundation for plans 63-02..05.
-- writeHookConfig + removeHookConfig at bridges/hooks/stage.ts with LIFE-03 subtree symlink walk + NFR-1 atomic write. Flatter verb pair per RESEARCH Open Question 2 -- the single-file artefact does not justify the mcp bridge's 3-verb prepare/commit/abort shape.
+- writeHookConfig + removeHookConfig at bridges/hooks/stage.ts with LIFE-03 subtree symlink walk + NFR-1 atomic write. Flatter verb pair per RESEARCH Open Question 2 -- the single-file artifact does not justify the mcp bridge's 3-verb prepare/commit/abort shape.
 - Closed-set `"orphan rewake"` REASONS token + resolver-side detection + catalog/UAT landing -- atomic per D-58-01.
 - Wires the hooks bridge into the install / update / reinstall / cascadeUnstagePlugin cascades between agents and mcp per D-63-01, and connects resolver-side `orphanRewake` to `PluginInstalledMessage.reasons` so `(installed) {orphan rewake}` surfaces through the existing v1.4 NotificationMessage cascade. Closes LIFE-01 and LIFE-02.
 - Wire `info <plugin>` to surface a multi-line `hooks:` block by extending `composeResolvedComponents` to re-parse `<pluginRoot>/hooks/hooks.json` and project entries to the `HookSummaryEntry[]` carrier defined in Plan 63-01. Closes SURF-01.
@@ -205,7 +205,7 @@
 - Declarative per-scope config files: `claude-plugins.json` + entry-level-override `claude-plugins.local.json`, typebox-validated with a discriminated absent/invalid/valid load seam — a 0-byte or corrupt file can never read as "uninstall everything" (CFG-01..03).
 - Lossless first-run migration: upgrading installs generate the config from existing state.json with nothing uninstalled; atomic, idempotent, and convergence-proven (MIG-01..02).
 - Pure 7-bucket reconcile planner + read-only `/claude:plugin preview` showing exactly what the next load will do, with six new closed-set `will *` tokens landed in atomic catalog lockstep (DIFF-01..02).
-- Offline enable/disable: `disable` keeps the config entry + version pin while removing artefacts; `enable` re-materializes from the cached clone with zero network; a new `(disabled)` token renders distinctly from soft-degraded `unavailable` (ENBL-01..04).
+- Offline enable/disable: `disable` keeps the config entry + version pin while removing artifacts; `enable` re-materializes from the cached clone with zero network; a new `(disabled)` token renders distinctly from soft-degraded `unavailable` (ENBL-01..04).
 - Automatic load-time reconciliation on every Pi startup/`/reload`: per-entry network soft-fail, one structured cascade (never a `/reload` hint), byte-stable fixed point, two-process race safe (RECON-01..06).
 - Config write-back on every mutating command with `--local` targeting, batched import/bootstrap patches, SPLIT-01 cast sites fully rewired to merged-config truth, and the CFG-04 README workflow docs (WB-01..04).
 

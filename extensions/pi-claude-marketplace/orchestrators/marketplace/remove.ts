@@ -378,7 +378,7 @@ async function cascadePluginsInPlace(args: {
     const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
 
     // TR-03: non-AG-5 partial-failure filters resources.* by outcome.dropped.*
-    // so the persisted row reflects only artefacts still on disk.
+    // so the persisted row reflects only artifacts still on disk.
     // AG-5 (AgentsUnstageFailureError) preserves the row INTACT.
     if (!(cause instanceof AgentsUnstageFailureError)) {
       const dropped = outcome.dropped;

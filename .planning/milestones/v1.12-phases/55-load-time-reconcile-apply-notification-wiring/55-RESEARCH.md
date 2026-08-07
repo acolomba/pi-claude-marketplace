@@ -168,7 +168,7 @@ import type { ResourcesDiscoverEvent, ResourcesDiscoverResult, ExtensionContext 
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 
 pi.on("resources_discover", async (event: ResourcesDiscoverEvent, ctx: ExtensionContext): Promise<ResourcesDiscoverResult> => {
-  // RECON-01..06: apply BEFORE discovery so the same /reload picks up new artefacts.
+  // RECON-01..06: apply BEFORE discovery so the same /reload picks up new artifacts.
   // Catastrophic failure must NEVER block Pi load (NFR-2) — wrap the whole call.
   try {
     await applyReconcile({ ctx, pi, cwd: event.cwd });

@@ -155,7 +155,7 @@ Pi's MCP servers are spawned by pi-mcp-adapter (behavior verified against 2.10.0
 
 ### User-scope `${CLAUDE_PROJECT_DIR}` pass-through
 
-Claude Code substitutes `${CLAUDE_PROJECT_DIR}` at invoke time, even for user-scope artefacts. Pi materializes content once at install time, when the project root of a future session is unknowable, so user-scope `${CLAUDE_PROJECT_DIR}` occurrences stay **literal** and no env var rescues them (SUB-02). Pi sets no `CLAUDE_PROJECT_DIR` in bash children either -- deliberate parity, because Claude Code's own bash children carry none (it is a hooks/MCP-only var upstream). For MCP, user-scope installs omit the substitution key entirely and inject no `CLAUDE_PROJECT_DIR` into the server env. The related user-scope disposition is recorded in the phase security register as T-92-06.
+Claude Code substitutes `${CLAUDE_PROJECT_DIR}` at invoke time, even for user-scope artifacts. Pi materializes content once at install time, when the project root of a future session is unknowable, so user-scope `${CLAUDE_PROJECT_DIR}` occurrences stay **literal** and no env var rescues them (SUB-02). Pi sets no `CLAUDE_PROJECT_DIR` in bash children either -- deliberate parity, because Claude Code's own bash children carry none (it is a hooks/MCP-only var upstream). For MCP, user-scope installs omit the substitution key entirely and inject no `CLAUDE_PROJECT_DIR` into the server env. The related user-scope disposition is recorded in the phase security register as T-92-06.
 
 ## Not delivered (out of scope)
 

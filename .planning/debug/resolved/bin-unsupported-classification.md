@@ -47,7 +47,7 @@ removes the entry cleanly).
 - Reclassify `bin` as a supported component kind: remove it from
   `UNSUPPORTED_COMPONENT_KINDS` + its convention probe so a bin-shipping
   plugin resolves `installable` (its bin/ needs no staging — PENV-01 PATH
-  injection is derived from install state, not from a staged artefact).
+  injection is derived from install state, not from a staged artifact).
   Ripple: list/info/install surfaces, resolver tests, PRD component-support
   matrix, T-02-25 closed-list audit note.
 - Give non-carve-out unsupported kinds an accurate reason marker instead of

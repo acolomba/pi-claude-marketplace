@@ -9,7 +9,7 @@
 
 **Secondary:**
 - YAML - Claude plugin manifests and marketplace metadata parsed via the `yaml` package
-- Markdown - documentation, agent/skill/command definitions consumed as plugin artefacts
+- Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime
 
@@ -27,7 +27,7 @@
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
 - `@earendil-works/pi-coding-agent` (peer dep `>=0.80.5`, dev dep `^0.83.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
 - `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.82.1`) - Pi terminal UI primitives
-- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artefact rendering; degrades gracefully when absent
+- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,docs,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`

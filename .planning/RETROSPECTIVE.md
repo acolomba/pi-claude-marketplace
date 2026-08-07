@@ -30,7 +30,7 @@
 ### Patterns Established
 - **Env-var ledger for idempotent PATH mutation.** Record the extension-owned PATH segment in its own env var (`PI_CLAUDE_MARKETPLACE_PATH`), strip exactly that segment, recompute from install state, re-append — repeated `session_start` events converge and non-owned PATH entries are never touched (hardened by quick task 260804-gcs).
 - **Shared producer + drift guard for hand-mirrored spawn sites.** When two env-building lanes must stay identical, extract the shared piece (`claudeSessionEnvFor`) AND pin the lanes with a behavioral test — structure plus enforcement, not either alone.
-- **Documented absence over wrong approximation.** User-scope `${CLAUDE_PROJECT_DIR}` is unknowable at install time; shipping nothing and stating the gap in `docs/env-vars.md` beats baking a per-session value into per-install artefacts.
+- **Documented absence over wrong approximation.** User-scope `${CLAUDE_PROJECT_DIR}` is unknowable at install time; shipping nothing and stating the gap in `docs/env-vars.md` beats baking a per-session value into per-install artifacts.
 - **`safeSet` at every parsed-key sink.** Any write of a manifest-derived key into an object goes through the `__proto__`-hardened setter.
 
 ### Key Lessons
@@ -513,7 +513,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 - **Byte-equality catalog UAT runner** caught drift the moment a catalog fixture and renderer diverged, eliminating the "matches the catalog" judgment call. Pairing `<!-- catalog-state: STATE -->` comments with programmatic fixtures is now load-bearing.
 - **YAML frontmatter as binding contract** (style guide → ESLint rules) means a docs edit fails `npm run check` if it widens the closed set without a paired rule update. The 4-way registry parity test surfaced every drift attempt in the milestone.
 - **Atomic 3-file ES-5 supersession** (markers + snapshot test + PRD pointer in one commit `c4d87d4`) -- the only commit that could land was one that passed `npm run check`, so the user-contract change boundary was inherently green.
-- **Retroactive gates pattern** for closing milestone drift: when Phase 12 / 14.1 lacked SECURITY/VALIDATION artefacts, a dedicated wave-2 plan (14.2-03 / 14.2-04) running `/gsd:secure-phase` + `/gsd:validate-phase` against the prior phase was cleaner than discarding-and-redoing the draft.
+- **Retroactive gates pattern** for closing milestone drift: when Phase 12 / 14.1 lacked SECURITY/VALIDATION artifacts, a dedicated wave-2 plan (14.2-03 / 14.2-04) running `/gsd:secure-phase` + `/gsd:validate-phase` against the prior phase was cleaner than discarding-and-redoing the draft.
 
 ### What Was Inefficient
 
@@ -529,13 +529,13 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 - **Per-row markers replacing aggregated trailers:** `PluginCascadeRow.declaresAgents/Mcp` predicates drive `{requires pi-subagents}` / `{requires pi-mcp}` on the affected line. Cleaner than a separate "Warnings:" partition and structurally typeable via discriminated unions (NFR-7).
 - **Atomic user-contract change boundary commits:** one commit that simultaneously deletes the legacy form, retires the test that locked it in, and rewrites the spec pointer. Rollback path is `git revert <SHA>` (single commit) instead of a coordinated 3-file revert.
 - **Catalog UAT byte-equality fixtures:** programmatic fixture composes via the production renderer; assertion reads the catalog markdown at test time and asserts byte equality. No string-templating in the catalog; no copy-paste between docs and tests.
-- **Retroactive gates:** when historical phases lack SECURITY/VALIDATION artefacts, spawn `/gsd:secure-phase N` + `/gsd:validate-phase N` from a closure-phase plan rather than skipping or backfilling manually. The skill runs the same auditor against the same plan-time threat model.
+- **Retroactive gates:** when historical phases lack SECURITY/VALIDATION artifacts, spawn `/gsd:secure-phase N` + `/gsd:validate-phase N` from a closure-phase plan rather than skipping or backfilling manually. The skill runs the same auditor against the same plan-time threat model.
 
 ### Key Lessons
 
 1. **Lint rules that ship as no-ops are dead weight.** D-14-09 added a `Program: () => {}` rule visitor "to be promoted later" -- and "later" arrived in the next phase. Either ship the active rule or ship nothing; the placeholder rule offered structural-enforcement claims it couldn't back.
 2. **Audits catch what verification doesn't.** Phase 14 verification (5/5 must-haves) passed; the post-phase code-review audit caught CR-01. The phase-goal verification is necessary but not sufficient -- when the goal is "drift-guard", an integration-checker pass should be in scope, not deferred.
-3. **The user-contract change boundary should be a single commit.** ES-5 supersession (`c4d87d4`) worked because all three artefacts moved together. Where the user-contract crosses multiple files, atomic commit is the only safe rollback unit.
+3. **The user-contract change boundary should be a single commit.** ES-5 supersession (`c4d87d4`) worked because all three artifacts moved together. Where the user-contract crosses multiple files, atomic commit is the only safe rollback unit.
 4. **Frontmatter as binding contract scales better than enumerated lists in test code.** Phase 14 extended `grammar-frontmatter.test.ts` from 2-key to 4-key set-equality with no rule duplication -- the YAML loader at `tests/lint-rules/lib/frontmatter.js` is the single seam.
 5. **A 5-plan wave-2 retroactive-gate phase is the cheapest fix for milestone gate gaps.** Better than postponing the milestone close; better than blanket-acknowledging gaps as tech debt.
 

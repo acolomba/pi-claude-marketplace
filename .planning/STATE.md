@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-08-05 after v1.17 close)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
-working Pi-native artefact — atomically, recoverably, and with soft-dependency
+working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 **Current focus:** Planning next milestone. v1.17 env-parity shipped 2026-08-05;
 PR #115 (`features/env-parity`) carries the milestone and awaits review/merge;

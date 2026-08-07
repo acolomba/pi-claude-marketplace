@@ -45,7 +45,7 @@ must_haves:
 <objective>
 Sync `.planning/REQUIREMENTS.md` and `docs/prd/pi-claude-marketplace-prd.md` with three already-shipped behavior changes on `features/v1.13-hook-bridge` (commits 8a7c278, 70017c5, a0011dd) so the spec accurately describes what the code does today.
 
-Purpose: SURF-01 and SURF-02 today claim a contract the code no longer implements (installable-only hook enumeration, no lenient arm); PL-4 today claims a 3-glyph catalog and a `(installed, upgradable)` marker that the renderer no longer emits. Source artefacts must match shipped behavior — otherwise future planners read false constraints and re-derive obsolete decisions.
+Purpose: SURF-01 and SURF-02 today claim a contract the code no longer implements (installable-only hook enumeration, no lenient arm); PL-4 today claims a 3-glyph catalog and a `(installed, upgradable)` marker that the renderer no longer emits. Source artifacts must match shipped behavior — otherwise future planners read false constraints and re-derive obsolete decisions.
 
 Output: Updated REQUIREMENTS.md (SURF-01 rewritten, SURF-02 amended) and PRD (PL-4 rewritten). One atomic commit on `features/v1.13-hook-bridge`.
 </objective>
