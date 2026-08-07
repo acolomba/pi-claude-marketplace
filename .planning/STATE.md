@@ -4,9 +4,9 @@ milestone: v1.18
 milestone_name: manifest-independent-installed-plugin-info
 status: planning
 stopped_at: Roadmap approved; awaiting Phase 95 planning
-last_updated: "2026-08-07T10:21:27Z"
+last_updated: "2026-08-07T22:44:14Z"
 last_activity: 2026-08-07
-last_activity_desc: v1.18 roadmap approved; 15/15 requirements mapped
+last_activity_desc: "v1.18 roadmap validated against the codebase; 16/16 requirements mapped, 3 open decisions"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -34,23 +34,30 @@ persistence or update-semantics changes.
 
 Phase: Not started (roadmap created — Phases 95-97 mapped)
 Plan: —
-Status: Roadmap approved, awaiting phase planning
-Last activity: 2026-08-07 — v1.18 roadmap approved
+Status: Roadmap approved and validated; three open decisions block Phase 95 planning
+Last activity: 2026-08-07 — Completed quick task 260807-q0v: amend v1.18 planning docs per two-review validation findings
 
 ## Roadmap Summary
 
 - 3 sequential phases (95-97), continuing the global counter from Phase 94.
-  All 15 v1 requirements map exactly once; no orphans.
-- **Phase 95 — Manifest-independent installed inventory** (INV-01..04):
-  union valid-manifest entries with current installation records, preserving
-  fully installed, partially-installed, disabled, and `--installed` behavior.
+  All 16 v1 requirements map exactly once; no orphans.
+- Eight requirements (INV-02/03/04, BOUND-01/02, LIFE-04/05/06) describe behavior
+  the code already exhibits. They are carried as contracts the milestone must not
+  break, and their deliverable is characterization and regression coverage. The
+  net-new work is INV-01, BOUND-03, INFO-09..12, COMPAT-01, and DOC-08.
+- **Phase 95 — Manifest-independent installed inventory** (INV-01..04, BOUND-03):
+  characterize the existing union behavior, then open the render-map seam so
+  `{not in manifest}` can appear on installed rows, and thread the manifest load
+  error through the cross-scope orphan-fold path.
 - **Phase 96 — Installation-record-backed plugin info** (INFO-09..12,
-  BOUND-01/02): reorder the valid-manifest miss path, reconstruct local
-  component structure, preserve partial compatibility, stay network-free, and
-  lock read-failure versus unknown-name boundaries.
+  BOUND-01/02): the substantive phase. Reorder the valid-manifest miss path,
+  reconstruct local component structure, preserve partial compatibility, add the
+  explicit network guard the reorder requires, and lock read-failure versus
+  unknown-name boundaries.
 - **Phase 97 — Lifecycle regression and contract documentation** (LIFE-04..06,
-  COMPAT-01, DOC-08): prove uninstall/update/autoupdate non-regression, assert no
-  persistence/token/network expansion, and reconcile the output catalog + PRD.
+  COMPAT-01, DOC-08): no lifecycle production changes expected — pin
+  uninstall/update/autoupdate non-regression, assert no persistence/token/network
+  expansion, and reconcile the output catalog, PRD, and design doc.
 
 ## Milestone Context
 
@@ -78,6 +85,7 @@ two integration checks.
 |---|-------------|------|--------|-----------|
 | 260802-v2z | amend v1.17 env-parity planning docs per validation findings | 2026-08-02 | 1ce8f203 | [260802-v2z-amend-v1-17-env-parity-planning-docs-per](./quick/260802-v2z-amend-v1-17-env-parity-planning-docs-per/) |
 | 260804-gcs | Fix applyPathLedger non-owned PATH stripping | 2026-08-04 | aeef0882 | [260804-gcs-fix-applypathledger-non-owned-path-strip](./quick/260804-gcs-fix-applypathledger-non-owned-path-strip/) |
+| 260807-q0v | amend v1.18 planning docs per two-review validation findings | 2026-08-07 | (pending) | [260807-q0v-amend-v1-18-planning-docs-per-two-review](./quick/260807-q0v-amend-v1-18-planning-docs-per-two-review/) |
 
 ## Decisions
 
@@ -91,6 +99,20 @@ two integration checks.
   snapshot or orphan flag.
 - Keep disabled, unknown-name, manifest-read, update/autoupdate, and uninstall
   semantics unchanged.
+- The disabled-plus-partial classification defect is excluded from v1.18. INV-04
+  covers the canonical disabled shape only; the defect is tracked separately.
+
+### Open decisions (resolve before Phase 95 planning)
+
+Recorded 2026-08-07 by quick task 260807-q0v after validating two independent
+reviews against the codebase. Full statements in ROADMAP.md.
+
+1. Whether installed inventory rows may carry reason braces at all — INV-01
+   reverses a deliberate suppression in the list render map.
+2. Whether the state-only info arm renders Pi-generated installed names or
+   reverse-maps them to original source names.
+3. Whether the LLM tool surface widens its reason projection to carry
+   `{not in manifest}` on installed and partial rows, or accepts the asymmetry.
 
 ## Deferred Items
 
@@ -114,8 +136,11 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
+- Resolve the three open decisions above; they change what Phase 95 and Phase 96
+  build.
 - Discuss and plan Phase 95: manifest-independent installed inventory.
-- Implement through TDD in the isolated feature worktree.
+- Implement through TDD in the isolated feature worktree, writing the
+  characterization tests before any production edit.
 - Verify each phase against its mapped requirements before transition.
 
 ## Performance Metrics

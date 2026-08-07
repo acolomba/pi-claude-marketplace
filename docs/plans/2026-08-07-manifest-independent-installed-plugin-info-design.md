@@ -18,14 +18,14 @@ A missing entry and an unreadable manifest are different conditions. The former 
 
 ## Public Contract
 
-| Manifest result                 | Installation state                              | Read-surface result                                              |
-| ------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| Loads; entry exists             | Any                                             | Existing behavior                                                |
-| Loads; entry absent             | Enabled; no recorded unsupported kinds          | `(installed) {not in manifest}`                                  |
-| Loads; entry absent             | Enabled; one or more recorded unsupported kinds | `(partially-installed) {not in manifest, <unsupported reasons>}` |
-| Loads; entry absent             | Disabled                                        | `(disabled)`                                                     |
-| Loads; entry absent             | No record                                       | `(failed) {not in manifest}` for targeted info                   |
-| Missing, unreadable, or invalid | Any                                             | Existing manifest-read failure behavior                          |
+| Manifest result                 | Installation state                               | Read-surface result                                              |
+| ------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| Loads; entry exists             | Any                                              | Existing behavior                                                |
+| Loads; entry absent             | Enabled; no recorded unsupported kinds           | `(installed) {not in manifest}`                                  |
+| Loads; entry absent             | Enabled; one or more recorded unsupported kinds  | `(partially-installed) {not in manifest, <unsupported reasons>}` |
+| Loads; entry absent             | Disabled (`enabled: false`, `installable: true`) | `(disabled)`                                                     |
+| Loads; entry absent             | No record                                        | `(failed) {not in manifest}` for targeted info                   |
+| Missing, unreadable, or invalid | Any                                              | Existing manifest-read failure behavior                          |
 
 Additional invariants:
 
@@ -49,11 +49,13 @@ Manifest-backed rows continue through the current classifier unchanged. State-on
 
 - enabled record with no unsupported kinds: the existing installed inventory row, with `reasons: ["not in manifest"]`;
 - enabled record with unsupported kinds: the existing partially-installed inventory row, with `"not in manifest"` followed by the reasons derived from `compatibility.unsupported`;
-- disabled record: the existing disabled inventory row, without the reason.
+- disabled record in the canonical disabled shape (`enabled: false` with `compatibility.installable: true`): the existing disabled inventory row, without the reason.
+
+Most of this union already exists: the list path walks installation records first and manifest-only entries second, and partial, disabled, and `--installed` behavior already survive manifest absence. The single production change on this path is that the render map currently suppresses reasons on installed inventory rows, so the new reason cannot reach the renderer until that seam is opened. Soft-dependency markers compose after the caller's reasons and must keep doing so.
 
 The state-only enabled row participates in the installed filter bucket. Existing sorting, scope folding, marketplace headers, severity, and no-reload behavior remain unchanged.
 
-The union is constructed only after `loadMarketplaceManifest` succeeds. Its catch path remains untouched so ENOENT, permission, malformed JSON, and schema failures cannot be mislabeled as entry absence.
+The union is constructed only after `loadMarketplaceManifest` succeeds. Its catch path remains untouched so ENOENT, permission, malformed JSON, and schema failures cannot be mislabeled as entry absence. The cross-scope orphan-fold path needs a matching change: it currently discards the load error, so an absent entry there is indistinguishable from a manifest that was never read, and a naive missing-entry check would assert something about a manifest's contents from a failure to read it. That path must thread the load error the way the primary path does.
 
 ### 2. Plugin info falls back to the existing installation record
 
@@ -80,9 +82,15 @@ For the installation-record-backed row:
 - `commands` comes from `resources.prompts`;
 - `agents` comes from `resources.agents`;
 - `mcp` comes from `resources.mcpServers`;
-- hooks are projected from the materialized `<extensionRoot>/hooks/<generatedName>/hooks.json` configuration associated with `resources.hooks`.
+- hooks are projected from the materialized `<extensionRoot>/hooks/<generatedName>/hooks.json` configuration associated with `resources.hooks`, read through the `assertPathInside` containment guard because the slug is state-supplied data.
 
-Every list is sorted before entering the renderer, preserving the existing `PluginInfoRow` contract. Manifest-only metadata such as description and upstream dependencies is omitted because it is no longer locally authoritative. Exact dropped-component details that were never persisted cannot be reconstructed, but their unsupported kinds remain visible from the compatibility record. No network fetch is attempted, including for `info --fetch`, because no source entry exists to identify or fetch.
+The four name-list kinds are sorted before entering the renderer. Hook entries are not: they preserve materialized declaration order, which is the established contract for that kind and is pinned byte-exact by existing tests. Sorting is not even well defined for them, because a hook summary entry is an event-and-matcher tuple rather than a name.
+
+Two fidelity limits are accepted and documented rather than engineered away. The names in `resources.*` are the Pi-generated installed names rather than the original source names a manifest-backed `info` renders, with MCP servers the sole exception; whether to render those or reverse-map them is an open decision. And the materialized `hooks.json` holds only the supported filtered subset, so displayed hooks are what survived install, not the plugin's full declaration.
+
+Manifest-only metadata such as description and upstream dependencies is omitted because it is no longer locally authoritative. Exact dropped-component details that were never persisted cannot be reconstructed, but their unsupported kinds remain visible from the compatibility record.
+
+No network fetch is attempted, including for `info --fetch`. This needs an explicit guard rather than an argument from absence: the installation record carries `resolvedSource`, so a source is identifiable, and today's network-free behavior on this path is an accident of the early `not in manifest` return sitting in front of every fetch-capable row builder. Reordering the lookup makes those builders reachable, so the guard must be written and asserted against injected clone and auth seams.
 
 ### 3. Lifecycle behavior stays ledger-driven
 
@@ -119,13 +127,15 @@ This avoids stale state and migration work while preserving retry and `/reload` 
 
 ## Test Strategy
 
-Implementation follows TDD.
+Implementation follows TDD. Because much of the approved matrix already holds, distinguish characterization tests, which pin current behavior before it is touched, from tests that drive new behavior. Write the characterization tests first.
 
 1. **List tests**
    - enabled state-only record in default list;
    - inclusion under `--installed` and exclusion from unrelated filters;
    - disabled state-only record remains `(disabled)`;
    - manifest read failures retain their current output;
+   - a folded row whose manifest failed to load is not labeled `{not in manifest}`;
+   - soft-dependency markers still follow the new reason;
    - byte-exact fully installed and partially-installed manifest-absent rendering.
 2. **Info tests**
    - enabled state-only record reports installed version and every persisted component kind;

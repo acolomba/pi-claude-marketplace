@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-97 (planned) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-97 (planned, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
@@ -18,9 +18,30 @@
   from Phase 94, the final v1.17 phase.
 - Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
 
-- [ ] **Phase 95: Manifest-independent installed inventory** — construct list inventory from the union of a successfully loaded manifest and existing installation records; fully supported state-only records render `(installed) {not in manifest}`, partial records preserve `(partially-installed)` plus unsupported-kind reasons, disabled records remain unchanged, and `--installed` includes both enabled forms. (INV-01, INV-02, INV-03, INV-04)
-- [ ] **Phase 96: Installation-record-backed plugin info** — reorder info lookup after successful manifest load, reconstruct installed component structure from existing resource fields and materialized hook config, preserve installed/partial compatibility, remain network-free even with `--fetch`, and lock the unknown-name versus manifest-read failure boundary. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
-- [ ] **Phase 97: Lifecycle regression and contract documentation** — prove uninstall remains installation-record-driven, update and marketplace autoupdate retain manifest-absent skips, assert no persistence/token/network expansion, and reconcile the output catalog and PRD. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
+- [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change two things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are the render-map seam that currently suppresses reasons on installed rows, so `{not in manifest}` can render, and threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry. (INV-01, INV-02, INV-03, INV-04, BOUND-03)
+- [ ] **Phase 96: Installation-record-backed plugin info** — the milestone's substantive phase. Reorder the info lookup so a successful manifest load with no entry falls through to the installation record instead of returning `(failed)`, reconstruct the component inventory from existing resource fields and the materialized hook config, preserve installed and partial compatibility on the state-only arm, and add the explicit network guard the reorder now requires for `--fetch`. The unknown-name and manifest-read boundaries already hold and are pinned as regressions. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
+- [ ] **Phase 97: Lifecycle regression and contract documentation** — no lifecycle production changes are expected. Uninstall is already installation-record-driven and update and autoupdate already skip manifest-absent records, so this phase pins those with coverage spanning all five resource kinds and all four update enumeration paths, asserts no persistence, token, or network expansion, and reconciles the output catalog, the PRD, and the design doc. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
+
+**Open decisions — resolve before Phase 95 planning:**
+
+1. **Reason braces on installed inventory rows.** INV-01 renders
+   `(installed) {not in manifest}`, but the list render map deliberately
+   suppresses reasons on installed rows today, with a recorded rationale about
+   keeping the orphan-rewake brace off steady-state inventory. Confirm the
+   reversal and record why manifest absence earns a brace where orphan rewake
+   did not.
+2. **Component name fidelity on the state-only info arm.** `resources.*` holds
+   Pi-generated installed names; `info` renders raw source names today. Either
+   display the generated names and document the divergence, or reverse-map them
+   by stripping the deterministic prefixes. Displaying generated names matches
+   the milestone thesis — report what is installed in this Pi — but makes the
+   same plugin render differently depending only on whether the manifest still
+   lists it.
+3. **LLM tool-surface exposure.** The tool projection forwards reasons only for
+   `unavailable`, `partially-available`, and `upgradable`, so a `{not in
+   manifest}` on an installed or partial row renders on the slash command and
+   silently vanishes from the tool payload. Decide whether v1.18 widens that
+   projection or accepts the asymmetry. Currently listed Out of Scope.
 
 <details>
 <summary>✅ v1.17 env-parity (Phases 90-94) — SHIPPED 2026-08-05</summary>
@@ -121,14 +142,14 @@
 
 **Depends on:** Nothing; this is the first v1.18 phase and touches the list inventory/classification path only.
 
-**Requirements:** INV-01, INV-02, INV-03, INV-04
+**Requirements:** INV-01, INV-02, INV-03, INV-04, BOUND-03
 
 **Success Criteria:**
 
-1. The default list renders a fully supported enabled state-only record as `● <plugin> v<recorded-version> (installed) {not in manifest}` under its marketplace. (INV-01)
-2. A state-only record with persisted unsupported kinds retains `(partially-installed)`, with `not in manifest` followed by the existing unsupported-kind reasons. (INV-02)
-3. `list --installed` includes both enabled forms; they do not leak into unrelated availability filters. (INV-03)
-4. A disabled state-only record remains `(disabled)` with no `{not in manifest}` reason. (INV-04)
+1. Characterization tests pin the current manifest-absent list behavior before any production edit: partial records keep `(partially-installed)` with their unsupported-kind reasons, disabled records stay `(disabled)`, and `--installed` spans both enabled forms. (INV-02, INV-03, INV-04)
+2. The default list renders a fully supported enabled state-only record as `● <plugin> v<recorded-version> (installed) {not in manifest}` under its marketplace, which requires lifting the render map's suppression of reasons on installed rows. The recorded version is used for the partial row too. (INV-01)
+3. Soft-dependency markers still compose after the new reason rather than being displaced by it. (INV-01, INV-02)
+4. A folded row whose manifest failed to load never renders `{not in manifest}`; the fold path distinguishes a failed read from a successful read with no entry. (BOUND-03)
 
 **Plans:** 0 plans
 
@@ -142,10 +163,10 @@
 
 **Success Criteria:**
 
-1. Info reports a fully supported state-only record as `(installed) {not in manifest}` with its recorded version, while a record with unsupported kinds remains `(partially-installed)` with both reason classes. (INFO-09, INFO-10)
-2. Info renders sorted installed skills, commands, agents, MCP server names, and hook entries reconstructed from existing resources and the materialized hook configuration. (INFO-11)
+1. Info reports a fully supported state-only record as `(installed) {not in manifest}` with its recorded version, while a record with unsupported kinds remains `(partially-installed)` with both reason classes derived from the persisted record. The existing disabled carve-out runs before this path and must keep doing so. (INFO-09, INFO-10)
+2. Info renders installed skills, commands, agents, and MCP server names sorted, plus hook entries in materialized declaration order, reconstructed from existing resources and the materialized hook configuration. Missing, unreadable, or malformed materialized hook config degrades rather than failing the block, and the read passes the containment guard. (INFO-11)
 3. Missing, unreadable, malformed, and invalid manifests retain their current read-failure results, while a name absent from both a valid manifest and installation state remains `(failed) {not in manifest}`. (BOUND-01, BOUND-02)
-4. Bare info and `info --fetch` perform no network operation for the state-only fallback. (INFO-12)
+4. Bare info and `info --fetch` perform no network operation for the state-only fallback, asserted against injected clone and auth seams with a zero-call check rather than inferred from the control flow. (INFO-12)
 
 **Plans:** 0 plans
 
@@ -159,10 +180,10 @@
 
 **Success Criteria:**
 
-1. Uninstall after manifest-entry removal removes every owned resource and the installation record through the existing path. (LIFE-04)
-2. Targeted/bulk plugin update and marketplace autoupdate continue to render `(skipped) {not in manifest}` for the state-only record. (LIFE-05, LIFE-06)
-3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. (COMPAT-01)
-4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior. (DOC-08)
+1. Uninstall after manifest-entry removal removes every owned resource and the installation record through the existing path, with coverage spanning all five resource kinds including hooks and MCP cleanup. (LIFE-04)
+2. Targeted, marketplace-bulk, and global-bulk plugin update plus marketplace autoupdate all continue to render `(skipped) {not in manifest}` for the state-only record. (LIFE-05, LIFE-06)
+3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, which silently skips `orchestrators/plugin/info.ts` because that file contains a NUL byte. (COMPAT-01)
+4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, and the four known documentation defects named in DOC-08 are corrected. (DOC-08)
 
 **Plans:** 0 plans
 
