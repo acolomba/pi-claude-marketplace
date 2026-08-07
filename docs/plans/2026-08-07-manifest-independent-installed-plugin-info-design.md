@@ -8,7 +8,7 @@ Keep installed plugins accurately visible, inspectable, and uninstallable after 
 
 ## Problem
 
-The extension already persists an installation ownership ledger in `state.json`. That ledger is sufficient to identify installed resources and uninstall them, but the read surfaces still treat the current marketplace manifest as the sole plugin inventory:
+The extension already persists an installation record for each plugin in `state.json`. That record is sufficient to identify installed resources, retain compatibility results, and uninstall them, but the read surfaces still treat the current marketplace manifest as the sole plugin inventory:
 
 - `plugin list` does not truthfully represent an enabled installation record whose manifest entry has disappeared.
 - `plugin info` returns `(failed) {not in manifest}` before consulting the installation record.
@@ -18,18 +18,20 @@ A missing entry and an unreadable manifest are different conditions. The former 
 
 ## Public Contract
 
-| Manifest result                 | Installation record | Enabled | Read-surface result                            |
-| ------------------------------- | ------------------- | ------- | ---------------------------------------------- |
-| Loads; entry exists             | Any                 | Any     | Existing behavior                              |
-| Loads; entry absent             | Present             | `true`  | `(installed) {not in manifest}`                |
-| Loads; entry absent             | Present             | `false` | `(disabled)`                                   |
-| Loads; entry absent             | Absent              | --      | `(failed) {not in manifest}` for targeted info |
-| Missing, unreadable, or invalid | Any                 | Any     | Existing manifest-read failure behavior        |
+| Manifest result                 | Installation state                              | Read-surface result                                              |
+| ------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| Loads; entry exists             | Any                                             | Existing behavior                                                |
+| Loads; entry absent             | Enabled; no recorded unsupported kinds          | `(installed) {not in manifest}`                                  |
+| Loads; entry absent             | Enabled; one or more recorded unsupported kinds | `(partially-installed) {not in manifest, <unsupported reasons>}` |
+| Loads; entry absent             | Disabled                                        | `(disabled)`                                                     |
+| Loads; entry absent             | No record                                       | `(failed) {not in manifest}` for targeted info                   |
+| Missing, unreadable, or invalid | Any                                             | Existing manifest-read failure behavior                          |
 
 Additional invariants:
 
 - `list --installed` includes enabled manifest-absent installation records.
 - Other list filters do not reclassify the record as available, remote, partially available, or unavailable.
+- Existing partial-install state is preserved from `compatibility.unsupported`; manifest absence composes with it rather than replacing it.
 - `plugin update` and marketplace autoupdate retain `(skipped) {not in manifest}`.
 - Uninstall remains successful from the ownership ledger.
 - No new status, glyph, reason token, marker, or persistence field is added.
@@ -45,14 +47,15 @@ Additional invariants:
 
 Manifest-backed rows continue through the current classifier unchanged. State-only rows bypass source resolution because no manifest entry exists to resolve. Their classification comes directly from the install record:
 
-- enabled record: the existing installed inventory row, with `reasons: ["not in manifest"]`;
+- enabled record with no unsupported kinds: the existing installed inventory row, with `reasons: ["not in manifest"]`;
+- enabled record with unsupported kinds: the existing partially-installed inventory row, with `"not in manifest"` followed by the reasons derived from `compatibility.unsupported`;
 - disabled record: the existing disabled inventory row, without the reason.
 
 The state-only enabled row participates in the installed filter bucket. Existing sorting, scope folding, marketplace headers, severity, and no-reload behavior remain unchanged.
 
 The union is constructed only after `loadMarketplaceManifest` succeeds. Its catch path remains untouched so ENOENT, permission, malformed JSON, and schema failures cannot be mislabeled as entry absence.
 
-### 2. Plugin info falls back to the installation ledger
+### 2. Plugin info falls back to the existing installation record
 
 `orchestrators/plugin/info.ts::buildBlock` will load the manifest first, as it does today. After a successful load it will obtain both:
 
@@ -63,13 +66,15 @@ The decision order becomes:
 
 1. manifest read failure → existing failed read result;
 2. manifest entry exists → existing installed/not-installed logic;
-3. entry absent and enabled installation record exists → ledger-backed installed row with `{not in manifest}`;
+3. entry absent and enabled installation record exists → installation-record-backed installed or partially-installed row with `{not in manifest}` plus any recorded unsupported-kind reasons;
 4. entry absent and no enabled installation record exists → existing `(failed) {not in manifest}` result.
 
 Disabled records already take the disabled inventory path before `buildBlock` and remain unchanged.
 
-For the ledger-backed installed row:
+For the installation-record-backed row:
 
+- status is `partially-installed` when `compatibility.unsupported` is non-empty, otherwise `installed`;
+- reasons start with `not in manifest` and retain the existing unsupported-kind reasons through `narrowUnsupportedKinds`;
 - `version` comes from the install record;
 - `skills` comes from `resources.skills`;
 - `commands` comes from `resources.prompts`;
@@ -77,7 +82,7 @@ For the ledger-backed installed row:
 - `mcp` comes from `resources.mcpServers`;
 - hooks are projected from the materialized `<extensionRoot>/hooks/<generatedName>/hooks.json` configuration associated with `resources.hooks`.
 
-Every list is sorted before entering the renderer, preserving the existing `PluginInfoRow` contract. Manifest-only metadata such as description and upstream dependencies is omitted because it is no longer locally authoritative. No network fetch is attempted, including for `info --fetch`, because no source entry exists to identify or fetch.
+Every list is sorted before entering the renderer, preserving the existing `PluginInfoRow` contract. Manifest-only metadata such as description and upstream dependencies is omitted because it is no longer locally authoritative. Exact dropped-component details that were never persisted cannot be reconstructed, but their unsupported kinds remain visible from the compatibility record. No network fetch is attempted, including for `info --fetch`, because no source entry exists to identify or fetch.
 
 ### 3. Lifecycle behavior stays ledger-driven
 
@@ -99,7 +104,7 @@ The design deliberately does not persist:
 
 - an orphan flag;
 - a copied manifest entry;
-- an install-time component summary beyond the existing resources ledger;
+- an install-time component summary beyond the existing resources and compatibility fields;
 - a new schema version;
 - a new status or reason.
 
@@ -121,9 +126,10 @@ Implementation follows TDD.
    - inclusion under `--installed` and exclusion from unrelated filters;
    - disabled state-only record remains `(disabled)`;
    - manifest read failures retain their current output;
-   - byte-exact `(installed) {not in manifest}` rendering.
+   - byte-exact fully installed and partially-installed manifest-absent rendering.
 2. **Info tests**
    - enabled state-only record reports installed version and every persisted component kind;
+   - recorded unsupported kinds retain `(partially-installed)` and their existing reason markers;
    - materialized hooks project into the existing hooks detail form;
    - unknown non-installed name remains failed;
    - disabled and manifest-read cases remain unchanged;

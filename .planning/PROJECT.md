@@ -16,13 +16,13 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 **Target features:**
 
-- **Truthful installed inventory** — `plugin list` renders an enabled recorded plugin absent from a valid manifest as `● <plugin> v<version> (installed) {not in manifest}` and includes it in `--installed`; disabled records remain `(disabled)` without the reason.
-- **Ledger-backed plugin info** — `plugin info` consults the installation record when the valid manifest lacks the requested plugin, reports `(installed) {not in manifest}`, and reconstructs installed component structure from the persisted resources ledger plus the materialized hooks configuration.
+- **Truthful installed inventory** — `plugin list` renders a fully supported enabled record absent from a valid manifest as `● <plugin> v<version> (installed) {not in manifest}` and includes it in `--installed`; a record with persisted unsupported kinds retains the existing `(partially-installed)` status and reasons alongside `{not in manifest}`; disabled records remain `(disabled)` without the reason.
+- **Installation-record-backed plugin info** — `plugin info` consults the existing installation record when the valid manifest lacks the requested plugin, preserves `(installed)` vs `(partially-installed)` from recorded compatibility, adds `{not in manifest}`, and reconstructs installed component structure from persisted resources plus the materialized hooks configuration.
 - **Failure-boundary preservation** — unknown non-installed names remain `(failed) {not in manifest}`; a missing, unreadable, or invalid manifest retains the existing manifest-read failure behavior rather than being misclassified as entry absence.
 - **Lifecycle non-regression** — uninstall remains state-ledger-driven and works after manifest removal; plugin update and marketplace autoupdate retain `(skipped) {not in manifest}` behavior.
 - **Contract and regression coverage** — update `docs/output-catalog.md` and the PRD, with byte-level list/info coverage plus uninstall/update lifecycle regression tests.
 
-**Key context:** This is a derived read-surface condition, not new persisted state. No orphan status, orphan flag, manifest snapshot, schema migration, or new reason token is introduced. The existing `installed` status and existing `{not in manifest}` reason are composed only after a manifest loads successfully and the entry lookup misses. List/info stay network-free (NFR-5), while uninstall continues to use the installation ownership ledger.
+**Key context:** This is a derived read-surface condition, not new persisted state. No orphan status, orphan flag, manifest snapshot, schema migration, or new reason token is introduced. The existing `installed` / `partially-installed` statuses and existing `{not in manifest}` / unsupported-kind reasons are composed only after a manifest loads successfully and the entry lookup misses. Exact unsupported details that were never persisted cannot be recovered, but their kinds remain visible from `compatibility.unsupported`. List/info stay network-free (NFR-5), while uninstall continues to use the existing installation record.
 
 ## Previous Milestone: v1.17 env-parity — Claude Code Environment Variable Parity (branch: features/env-parity, shipped 2026-08-05, target npm 0.13.0)
 
@@ -320,8 +320,8 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 <!-- Milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07). -->
 
-- [ ] `plugin list` includes enabled installation records missing from a valid manifest as `(installed) {not in manifest}`, including under `--installed`; disabled records remain `(disabled)`
-- [ ] `plugin info` reports an installed manifest-absent plugin as `(installed) {not in manifest}` and reconstructs its component inventory from local installation data
+- [ ] `plugin list` includes enabled installation records missing from a valid manifest under `--installed`: fully supported records render `(installed) {not in manifest}`, while records with unsupported kinds retain `(partially-installed)` plus their existing reasons; disabled records remain `(disabled)`
+- [ ] `plugin info` preserves `(installed)` vs `(partially-installed)`, adds `{not in manifest}`, and reconstructs installed components from the existing installation record and materialized hooks config
 - [ ] Manifest-read failures and unknown non-installed names keep their existing distinct failure behavior
 - [ ] Uninstall remains successful and update/autoupdate behavior remains `(skipped) {not in manifest}` after entry removal
 - [ ] Output catalog and PRD describe the manifest-independent installed-plugin contract
@@ -484,7 +484,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ______________________________________________________________________
 
-*Last updated: 2026-08-07 after milestone v1.18 Manifest-Independent Installed Plugin Info started (goals confirmed, defining requirements). Installed truth on list/info derives from a valid manifest plus the local installation ledger: enabled state-only records render `(installed) {not in manifest}`, info reconstructs components locally, disabled/unknown/manifest-read/update behaviors stay distinct, and uninstall remains ledger-driven. No persisted orphan state or new token. Prior updates below.*
+*Last updated: 2026-08-07 after milestone v1.18 Manifest-Independent Installed Plugin Info started (goals confirmed, defining requirements). Installed truth on list/info derives from a valid manifest plus the existing installation record: fully supported state-only records render `(installed) {not in manifest}`, records with persisted unsupported kinds retain `(partially-installed)` plus their reason markers, info reconstructs installed components locally, and disabled/unknown/manifest-read/update/uninstall behaviors stay distinct. No persisted orphan state or new token. Prior updates below.*
 
 *Last updated: 2026-08-05 after milestone v1.17 env-parity shipped (Phases 90-94 complete, audit passed 14/14, archived to `.planning/milestones/v1.17-*`). Claude Code environment-variable parity across all five component surfaces: session vars + the PENV-01 plugin-bin PATH ledger on Pi's live `process.env` at `session_start`, both hook spawn lanes fed from the `transCtx.sessionId` snapshot with a drift guard, MCP stage-time three-var substitution + stdio env injection (declared-wins, re-derived on re-stage), `${CLAUDE_SKILL_DIR}` + project-scope `${CLAUDE_PROJECT_DIR}` content substitution, and the authoritative `docs/env-vars.md` matrix with the hooks-compatibility env table reconciled. Riders: D-90-06 bin install-by-default, D-90-05 `{unsupported component}` token (REASONS 38), SURF-01 arm-aware install classifier. PR #115 open; npm 0.13.0 release pending. Prior updates below.*
 

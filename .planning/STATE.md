@@ -26,9 +26,9 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artefact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 **Current focus:** v1.18 Manifest-Independent Installed Plugin Info. Make
-list/info derive installed truth from the local installation ledger when a valid
-marketplace manifest no longer contains the plugin entry, without persistence or
-update-semantics changes.
+list/info derive installed truth from the existing installation record when a
+valid marketplace manifest no longer contains the plugin entry, without
+persistence or update-semantics changes.
 
 ## Current Position
 
@@ -41,12 +41,14 @@ Last activity: 2026-08-07 — Milestone v1.18 started; goals confirmed
 
 v1.18 starts from a derived-state design: after a marketplace manifest loads
 successfully, an enabled plugin present only in `state.json` is still installed
-and renders with the existing `{not in manifest}` reason. `plugin info`
-reconstructs components from the persisted resources ledger and materialized
-hooks config. Disabled records, unknown non-installed names, manifest-read
-failures, update/autoupdate behavior, and the ledger-driven uninstall path retain
-their existing semantics. No persisted orphan marker, schema migration, status,
-or reason token is added.
+and renders with the existing `{not in manifest}` reason. Records carrying
+persisted unsupported kinds retain `(partially-installed)` and their existing
+reason markers. `plugin info` reconstructs installed components from the
+persisted resources plus materialized hooks config while compatibility metadata
+preserves unsupported kinds. Disabled records, unknown non-installed names,
+manifest-read failures, update/autoupdate behavior, and the installation-record-
+driven uninstall path retain their existing semantics. No persisted orphan
+marker, schema migration, status, or reason token is added.
 
 The feature branch is `features/manifest-independent-plugin-info` in the managed
 worktree `.worktrees/manifest-independent-plugin-info`. Baseline `npm run check`
@@ -64,11 +66,13 @@ two integration checks.
 
 ## Decisions
 
-- Keep the public status `(installed)`; do not add `orphaned` or
-  `orphaned-installed`.
+- Do not add `orphaned` or `orphaned-installed`: fully supported records keep
+  `(installed)`, while records with persisted unsupported kinds retain the
+  existing `(partially-installed)` status and reason markers.
 - Reuse `{not in manifest}` and emit it only after a successful manifest load
   whose plugin lookup misses.
-- Reconstruct info from local installation data; do not persist a manifest
+- Reconstruct installed components from existing resource fields and retain
+  unsupported kinds from `compatibility.unsupported`; do not persist a manifest
   snapshot or orphan flag.
 - Keep disabled, unknown-name, manifest-read, update/autoupdate, and uninstall
   semantics unchanged.
