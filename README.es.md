@@ -20,7 +20,7 @@ Accede a los mercados de complementos de Claude desde [Pi Coding Agent](https://
 
 ## Características
 
-Instala complementos desde los mercados de complementos de Claude que contienen los siguientes componentes:
+Esta extensión instala complementos desde los mercados de complementos de Claude que contienen los siguientes componentes:
 
 - Comandos.
 - Habilidades.
@@ -28,9 +28,9 @@ Instala complementos desde los mercados de complementos de Claude que contienen 
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
 
-Los complementos que contienen componentes no compatibles pueden instalarse parcialmente, pero es posible que no funcionen según lo previsto.
+Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
-Los mercados y complementos de Claude se gestionan mediante un comando `/claude:plugin` similar a `/plugin` de Claude Code. Se mantiene una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` para instalaciones de complementos automatizadas y repetibles que pueden compartirse entre máquinas o miembros del equipo.
+El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` hace que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estos archivos entre máquinas o miembros del equipo.
 
 ## Requisitos previos
 
@@ -96,7 +96,7 @@ Ejecuta un complemento:
 
 ### Mapeo de nombres
 
-Los nombres de comandos y habilidades se prefijan con el nombre del complemento. Si el comando o la habilidad ya tiene el prefijo del nombre del complemento más un `-`, esa parte común se omite.
+Esta extensión prefija los nombres de comandos y habilidades con el nombre del complemento. Si el nombre ya empieza con el nombre del complemento y `-`, esta extensión elimina esa parte común.
 
 Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
 
@@ -106,7 +106,7 @@ Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
 | `foo`                  | `foo-bar`                      | `/foo:bar`   |
 | `foo`                  | `foo`                          | `/foo:foo`   |
 
-Las habilidades también se registran con nombres separados por guiones después del prefijo `/skill:`:
+Esta extensión también registra las habilidades con nombres separados por guiones después del prefijo `/skill:`:
 
 | Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
 | ---------------------- | ---------------------- | ---------------- |
@@ -114,7 +114,7 @@ Las habilidades también se registran con nombres separados por guiones después
 | `foo`                  | `foo-bar`              | `/skill:foo-bar` |
 | `foo`                  | `foo`                  | `/skill:foo`     |
 
-Los nombres de los servidores MCP se mantienen sin cambios. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
+Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 
 | Nombre del complemento | Clave de `mcpServers` | Nombre del servidor MCP en Pi  |
 | ---------------------- | --------------------- | ------------------------------ |
@@ -124,15 +124,15 @@ Los nombres de los servidores MCP se mantienen sin cambios. Si otra configuraci�
 
 ### Ámbito (Scoping)
 
-Los mercados y complementos pueden instalarse en el ámbito de usuario o en el ámbito del proyecto actual. El valor predeterminado es el ámbito de usuario.
+Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito del proyecto. El valor predeterminado es el ámbito de usuario.
 
-El ámbito de usuario se hereda, por lo que es posible instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto.
+El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto.
 
-También es posible instalar el mismo complemento en ambos ámbitos, de usuario y de proyecto; el complemento en el ámbito de usuario tiene prioridad.
+También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
 
 ### Complementos parcialmente disponibles
 
-Los complementos que contienen componentes no compatibles, como un hook que no se puede mapear, un servidor LSP o un tema, pueden instalarse o actualizarse parcialmente pasando la opción `--partial`. Se instalan los componentes compatibles y se ignoran los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP o un tema. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 
@@ -140,7 +140,7 @@ Lista los complementos parcialmente disponibles.
 /claude:plugin list --partial
 ```
 
-Instala un complemento parcialmente disponible. Colocar `--partial` primero habilita el autocompletado de argumentos para complementos parcialmente disponibles, los cuales de otro modo estarían excluidos del autocompletado en ausencia de esa opción.
+Instala un complemento parcialmente disponible. Coloca `--partial` primero para habilitar el autocompletado de argumentos para complementos parcialmente disponibles. Sin esa opción, el autocompletado los excluye.
 
 ```text
 /claude:plugin install --partial hookify@claude-plugins-official
@@ -148,14 +148,14 @@ Instala un complemento parcialmente disponible. Colocar `--partial` primero habi
 
 ## Archivos de configuración
 
-Cada ámbito almacena su configuración declarativa de mercado y complemento en `claude-plugins.json` bajo la raíz del ámbito.
+Cada ámbito almacena su configuración declarativa de mercados y complementos en `claude-plugins.json`, bajo la raíz del ámbito.
 
 | Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Este archivo es el registro definitivo de qué mercados y complementos están instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
 
 ### Archivos de configuración local
 
@@ -166,7 +166,7 @@ Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto a
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula las entradas individuales del archivo base: una entrada de mercado o complemento en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
+El archivo local anula las entradas individuales del archivo base. Una entrada en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
 
 Pasa `--local` a cualquier comando de modificación para dirigirse únicamente al archivo local.
 
@@ -177,17 +177,17 @@ Pasa `--local` a cualquier comando de modificación para dirigirse únicamente a
 
 ### Convención de Gitignore
 
-En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json` para que los colaboradores instalen los mismos mercados y complementos, pero mantén `claude-plugins.local.json` fuera del control de versiones. Agrega lo siguiente al `.gitignore` de tu proyecto.
+En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén `claude-plugins.local.json` fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio de inicio; son personales y nunca se comparten.
+Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
 ## Referencia de comandos
 
-Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos, luego ejecuta `/reload` después de instalar, desinstalar, actualizar o reinstalar complementos para que Pi detecte los recursos modificados.
+Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados.
 
 ### Mercado
 
@@ -198,7 +198,7 @@ Agrega un mercado desde la abreviatura de repositorio de GitHub `owner/repo`.
 ```
 
 > [!NOTE]
-> Los repositorios privados pueden desencadenar una autenticación Device Flow si Git no está autenticado.
+> Si Git no está autenticado, un repositorio privado desencadenará una autenticación Device Flow.
 
 Agrega el mismo mercado desde una URL de GitHub.
 
@@ -212,7 +212,7 @@ Fija un mercado de GitHub a una rama, etiqueta o confirmación con un sufijo `#r
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
-Agrega un mercado desde el sistema de archivos local. La ruta puede ser un directorio que contenga `.claude-plugin/marketplace.json` o una ruta directa a un archivo `marketplace.json`.
+Agrega un mercado desde el sistema de archivos local. La ruta puede ser un directorio con `.claude-plugin/marketplace.json`, o una ruta directa a un archivo `marketplace.json`.
 
 ```text
 /claude:plugin marketplace add ~/my-marketplace
@@ -239,7 +239,7 @@ Muestra detalles de un mercado.
 /claude:plugin marketplace info context7-marketplace --scope user
 ```
 
-Actualiza un mercado, o todos los mercados si se omite el nombre.
+Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercados.
 
 ```text
 /claude:plugin marketplace update context7-marketplace
@@ -253,7 +253,7 @@ Elimina un mercado y todos los complementos instalados desde él.
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando el mercado se actualiza manualmente, los complementos instalados se actualizan automáticamente.
+Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando actualizas el mercado manualmente, esta extensión también actualiza los complementos instalados.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
@@ -285,7 +285,7 @@ Muestra detalles de un complemento.
 /claude:plugin info context7-plugin@context7-marketplace
 ```
 
-Instala un complemento, usando el formato `<plugin>@<marketplace>`.
+Instala un complemento con el formato `<plugin>@<marketplace>`.
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace
@@ -306,7 +306,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden incluir un modelo preferido para ejecutar el agente, por ejemplo, "sonnet", "opus", etc. Estos se descartan por defecto, pero la opción `--map-model` para `install` y `update` se puede usar para intentar mapear estos modelos a modelos de Pi en la medida de lo posible.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`.
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
@@ -337,19 +337,19 @@ Recarga Pi después de los cambios.
 
 #### Complementos remotos
 
-Los mercados pueden declarar complementos remotos alojados en un repositorio Git diferente. Se pueden listar con la opción `--remote`.
+Los mercados pueden declarar complementos remotos alojados en un repositorio Git diferente. Puedes listarlos con la opción `--remote`.
 
 ```text
 /claude:plugin list --remote
 ```
 
-Los repositorios de complementos remotos se obtienen de forma diferida (lazy), por lo que `/claude:plugin info` no resolverá sus componentes. Se puede pasar la opción `--fetch` para obtener el repositorio de un complemento específico.
+Esta extensión obtiene los repositorios de complementos remotos solo cuando es necesario. Por eso, `/claude:plugin info` no resuelve sus componentes. Para obtener el repositorio de un complemento, pasa la opción `--fetch`.
 
 ```text
 /claude:plugin info 2crunch-api-security-testing@claude-plugins-official --fetch
 ```
 
-El repositorio de un complemento remoto específico, de todos los complementos en un mercado, o de todos los complementos remotos en todos los mercados también se puede obtener de forma anticipada (eager):
+También puedes obtener los repositorios de forma anticipada. Obtén un complemento remoto, todos los complementos de un mercado, o todos los complementos remotos de todos los mercados:
 
 ```text
 /claude:plugin fetch 2crunch-api-security-testing@claude-plugins-official
@@ -357,7 +357,7 @@ El repositorio de un complemento remoto específico, de todos los complementos e
 /claude:plugin fetch
 ```
 
-Una vez obtenidos, los complementos se clasifican como disponibles, parcialmente disponibles o no disponibles para instalación.
+Después de la obtención, cada complemento está disponible, parcialmente disponible o no disponible para instalar.
 
 El comando `/claude:plugin install` obtiene automáticamente un complemento remoto.
 
@@ -367,13 +367,13 @@ El comando `/claude:plugin install` obtiene automáticamente un complemento remo
 
 ### Bootstrap
 
-`Bootstrap` es una configuración única y práctica del mercado oficial de Anthropic en el ámbito de usuario con `autoupdate` habilitado.
+`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic en el ámbito de usuario y habilita `autoupdate`.
 
 ```text
 /claude:plugin bootstrap
 ```
 
-Esto es equivalente a ejecutar:
+Equivale a ejecutar estos comandos:
 
 ```text
 /claude:plugin marketplace add anthropics/claude-plugins-official
@@ -382,20 +382,20 @@ Esto es equivalente a ejecutar:
 
 ### Import
 
-`Import` es un comando práctico para importar mercados y complementos ya definidos en la configuración de Claude Code.
+El comando `import` agrega mercados y complementos ya definidos en la configuración de Claude Code.
 
 ```text
 /claude:plugin import
 ```
 
-Por defecto, los mercados y complementos se agregan de acuerdo con el ámbito en el que se definen en Claude Code. También es posible limitar la importación a un ámbito específico.
+Por defecto, la importación agrega cada mercado y complemento al mismo ámbito que tiene en Claude Code. También puedes limitar la importación a un ámbito específico.
 
 ```text
 /claude:plugin import --scope user
 /claude:plugin import --scope project
 ```
 
-Los complementos que no están disponibles para instalación en Pi debido a componentes no compatibles se omiten con una advertencia.
+La importación omite los complementos que Pi no puede instalar debido a componentes no compatibles. Muestra una advertencia por cada uno.
 
 ## Contribuir
 
@@ -403,14 +403,14 @@ Consulta [CONTRIBUTING](CONTRIBUTING.md) y [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
 
 ## Descargo de responsabilidad sobre IA
 
-Este proyecto se desarrolla con prácticas de ingeniería de agentes de IA utilizando el sistema de desarrollo basado en especificaciones [Open GSD](https://www.opengsd.net/).
+El autor desarrolló este proyecto con prácticas de ingeniería de agentes de IA. Utiliza el sistema de desarrollo basado en especificaciones [Open GSD](https://www.opengsd.net/).
 
 El autor `vibe-coded` (programó intuitivamente) un prototipo hasta que estuvo funcionalmente completo para un primer lanzamiento, luego extrajo y revisó un PRD a partir de la implementación.
 
-El PRD se utilizó luego para guiar a GSD a través de las fases de discusión, planificación e implementación de una nueva implementación.
+El PRD luego guió a GSD a través de las fases de discusión, planificación e implementación de una nueva implementación.
 
 ## Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT. Consulta el archivo [COPYING](COPYING) para más detalles.
+La Licencia MIT cubre este proyecto. Para más detalles, lee el archivo [COPYING](COPYING).
 
 Derechos de autor 2026 [Alessandro Colomba](https://github.com/acolomba)
