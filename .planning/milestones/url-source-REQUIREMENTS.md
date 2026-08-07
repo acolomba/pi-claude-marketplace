@@ -11,7 +11,7 @@ For current requirements, see `.planning/REQUIREMENTS.md`.
 
 **Defined:** 2026-07-10
 **Workstream:** url-source
-**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
 **Milestone goal:** Everything that can be done for the current `github` and `path` sources works for arbitrary git URL sources -- for both marketplaces and plugins, across every surface and lifecycle operation.
 

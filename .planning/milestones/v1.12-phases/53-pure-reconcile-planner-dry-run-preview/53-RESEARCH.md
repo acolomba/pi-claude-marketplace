@@ -46,7 +46,7 @@ None — discuss phase skipped. Out of scope from REQUIREMENTS.md:
 
 ## Summary
 
-Phase 53 lands two artefacts on the Phase 51 + Phase 52 frozen foundation:
+Phase 53 lands two artifacts on the Phase 51 + Phase 52 frozen foundation:
 
 1. **A pure `planReconcile(MergedConfig, ExtensionState) -> ReconcilePlan` function** in a new `orchestrators/reconcile/plan.ts` (or sibling) module — it computes the bidirectional diff between the user-authored config (Phase 51's `MergedConfig`) and the recorded reality (`state.json`), classifying each entry into one of seven action buckets (marketplaces-to-add, marketplaces-to-remove, plugins-to-install, plugins-to-uninstall, plugins-to-enable, plugins-to-disable, source-mismatches). It performs NO I/O, NO network, NO `fs` access; an architecture test (sibling of `tests/architecture/config-state-write-seams.test.ts` and `tests/architecture/no-orchestrator-network.test.ts`) gates this structurally via import-greps.
 
@@ -461,7 +461,7 @@ Reuses `(installed)` / `(uninstalled)` etc.; the `{pending}` reason is a new `Re
 - Option A keeps the renderer's switch exhaustive without context flags; each pending token has a deterministic single-arm rendering.
 - The cost is 4 new `STATUS_TOKENS` members (15 → 19), 4 new `PLUGIN_STATUSES` members (11 → 15 — if plugin-only) plus 2 new `MARKETPLACE_STATUSES` members (7 → 9, for `(to add)` + `(to remove)`), and 4 new discriminated-union variants. The length-lock test at `tests/architecture/notify-types.test.ts:670` updates accordingly.
 
-**Sub-decision:** the `(to enable)` / `(to disable)` tokens are introduced in this phase but DO NOT require a new icon — `(to enable)` reuses `ICON_INSTALLED` (●), `(to disable)` reuses `ICON_UNINSTALLABLE` (⊘) matching the disabled = artefacts-removed semantic. The catalog records this in the icon column of the status token reference table at `docs/output-catalog.md:125-149`.
+**Sub-decision:** the `(to enable)` / `(to disable)` tokens are introduced in this phase but DO NOT require a new icon — `(to enable)` reuses `ICON_INSTALLED` (●), `(to disable)` reuses `ICON_UNINSTALLABLE` (⊘) matching the disabled = artifacts-removed semantic. The catalog records this in the icon column of the status token reference table at `docs/output-catalog.md:125-149`.
 
 **Alternative grammar to consider:** the diff-output may sit best as a single CASCADE block, not as one row per action. The marketplace-header form (`● <mp> [<scope>] (added)`) could become `● <mp> [<scope>] (to add)` and the per-plugin rows underneath retain the pending tokens. This is structurally what import already does — a per-marketplace block with per-plugin children — so the projection from `ReconcilePlan` to `MarketplaceNotificationMessage[]` follows the import path's template exactly.
 
@@ -744,7 +744,7 @@ Preview: next reload will apply 1 action.
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| State.json holds desired state (autoupdate, enabled) AND machine bookkeeping (resolved versions, artefact records) | SPLIT-01: desired state moves to `claude-plugins.json` via CONFIG_SCHEMA; state.json keeps only machine bookkeeping | Phase 51 (2026-06-10) | Phase 53 planner reads `MergedConfig` (Phase 51's data shape) instead of state.json's autoupdate / enabled fields. |
+| State.json holds desired state (autoupdate, enabled) AND machine bookkeeping (resolved versions, artifact records) | SPLIT-01: desired state moves to `claude-plugins.json` via CONFIG_SCHEMA; state.json keeps only machine bookkeeping | Phase 51 (2026-06-10) | Phase 53 planner reads `MergedConfig` (Phase 51's data shape) instead of state.json's autoupdate / enabled fields. |
 | Migrating from V1 state.json shape required a manual one-off conversion | First-run migration generates `claude-plugins.json` losslessly from state.json (MIG-01/02 atomic, idempotent) | Phase 52 (2026-06-10) | Phase 53's convergence proof rides on Phase 52's `buildConfigFromState` projection. |
 | Reconcile = "apply with side effects" (no pure planning seam) | Pure `planReconcile(merged, state) -> ReconcilePlan` lands before apply (Phase 55 will consume) | Phase 53 (now) | Apply phase becomes a thin executor of the pure plan; the matrix is testable without I/O. Same pattern as `import/marketplaces.ts` (D-28 split, 2026-05). |
 | Output composed via ad-hoc strings + console.log | Structured `notify()` v2 type model with discriminated unions + byte-locked catalog | Phase 13 (v1.3, 2026-05-25) | Phase 53's new variants (pending-tense) follow the v2 model exhaustively; the catalog-uat gate enforces conformance. |
@@ -787,7 +787,7 @@ Preview: next reload will apply 1 action.
 
 4. **Does the planner need to handle the `marketplaceUpdate` (autoupdate flip) transition?**
    - What we know: Autoupdate is a marketplace-level user setting now living in CONFIG_SCHEMA (per Phase 51). A user could declare `autoupdate: true` in config while state still records the old setting.
-   - What's unclear: Is the autoupdate flip a `marketplaceToUpdate` planner bucket, or is it deferred entirely to Phase 56 write-back (since autoupdate doesn't affect materialized artefacts)?
+   - What's unclear: Is the autoupdate flip a `marketplaceToUpdate` planner bucket, or is it deferred entirely to Phase 56 write-back (since autoupdate doesn't affect materialized artifacts)?
    - Recommendation: **Defer the autoupdate-flip bucket to Phase 55/56.** Autoupdate is purely a setting; it doesn't trigger reconcile-time install/uninstall. The preview surface need not show it. If the user wants visibility, they can run `marketplace info`. (Phase 53 narrower scope.)
 
 5. **Where does `samePlannedSource` live after extraction?**

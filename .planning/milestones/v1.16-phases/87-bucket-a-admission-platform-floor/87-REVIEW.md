@@ -97,12 +97,12 @@ correctness, security, or data-loss defects were found.
 **Issue:** The `StopFailure` docstring added in commit `9ff93e5a` contains
 `per 87 research the label is non-load-bearing`. `.claude/rules/typescript-comments.md`
 forbids bare phase references (`Phase NN` / bare `NN` citing per-phase RESEARCH
-docs); the rule's intent is that comments must not record which planning artefact
+docs); the rule's intent is that comments must not record which planning artifact
 authored a line. This is newly introduced by Phase 87 (the same edit correctly
 *removed* a pre-existing `Pitfall:` reference a few lines down, so the policy is
 clearly in force). A pre-commit hook enforcing the policy could red-fail on this
 line.
-**Fix:** Drop the planning-artefact citation; keep the `[ASSUMED]` marker and the
+**Fix:** Drop the planning-artifact citation; keep the `[ASSUMED]` marker and the
 mechanism rationale, which already carry the anchor:
 ```ts
  * [ASSUMED -- field-name label] the `"error"` label names the

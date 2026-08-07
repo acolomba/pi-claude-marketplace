@@ -659,7 +659,7 @@ boundary IS at risk of producing a `U+FFFD` replacement glyph in the
 reconstructed text — but only at the exact wrap point, which is at the
 *head* of the truncated tail. Since `truncated: true` is already set by
 that point and the model is informed via the `_truncated` marker, the
-glyph at the wrap boundary is a documented (and bounded) artefact. Calling
+glyph at the wrap boundary is a documented (and bounded) artifact. Calling
 this out in a code comment so a future maintainer doesn't reach for
 `StringDecoder` thinking it's a bug.
 
@@ -1169,7 +1169,7 @@ wrap point produces a `U+FFFD` replacement glyph when `Buffer.toString
 boundaries; the async-path's ring buffer concatenates bytes without
 decoder awareness because the buffer's tail-drop policy makes
 decoder state non-cumulative.
-**How to avoid:** Document as accepted artefact. The U+FFFD appears at
+**How to avoid:** Document as accepted artifact. The U+FFFD appears at
 the HEAD of the truncated body (the wrap point IS the truncation point),
 and the `[…truncated]` marker already prefixes that location. The model
 sees "missing context indicator → potentially-mangled glyph → rest of body

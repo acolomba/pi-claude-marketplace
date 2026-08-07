@@ -98,7 +98,7 @@ export interface PlannedPluginUninstall {
  * `resources.{skills,prompts,agents,mcpServers}` arrays empty (A1; SPLIT-01
  * preserved, no schema bump). When such a record is paired with a config
  * entry that has `enabled !== false`, the entry lands in this bucket so
- * the apply path can re-materialize the artefacts from cache (no
+ * the apply path can re-materialize the artifacts from cache (no
  * network, NFR-5).
  */
 export interface PlannedPluginEnable {
@@ -109,7 +109,7 @@ export interface PlannedPluginEnable {
 
 /**
  * Planned disable of a plugin declared with `enabled === false` but still
- * recorded in state. The apply path removes the materialised artefacts
+ * recorded in state. The apply path removes the materialised artifacts
  * without removing the state record's version pin (D-04 / ENBL-02).
  */
 export interface PlannedPluginDisable {

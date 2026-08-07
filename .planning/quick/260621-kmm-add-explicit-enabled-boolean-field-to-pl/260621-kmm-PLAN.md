@@ -170,7 +170,7 @@ In `runDisableBranch`, after `installed.resources.hooks = []` and before the `dr
 installed.enabled = false;
 ```
 
-The existing five resource-array zeroing MUST remain — clearing resources is still the mechanism that removes artefacts from Pi. `enabled: false` is the explicit intent marker; the arrays being empty remains the physical state. Both must be set.
+The existing five resource-array zeroing MUST remain — clearing resources is still the mechanism that removes artifacts from Pi. `enabled: false` is the explicit intent marker; the arrays being empty remains the physical state. Both must be set.
 
 **enable-disable.ts — enable branch (idempotent config-flip arm)**:
 

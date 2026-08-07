@@ -467,7 +467,7 @@ sticky flag was built and removed; do NOT rebuild it (REQUIREMENTS.md:76).
 ### Phase Requirements → Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| FORCE-01 | `install --force` on `unsupported` installs supported, skips unsupported; assert state record + on-disk artefacts + no `unsupported` kind materialized | integration (orchestrator) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ exists (add cases) |
+| FORCE-01 | `install --force` on `unsupported` installs supported, skips unsupported; assert state record + on-disk artifacts + no `unsupported` kind materialized | integration (orchestrator) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ exists (add cases) |
 | FORCE-01 (no-op) | `install --force` on fully-supported installs as `(installed)`, byte-identical to non-force | integration (orchestrator) | same | ✅ exists (add case) |
 | FORCE-01 (parse) | handler threads `force:true` into `installPlugin` options | unit (handler shim) | `node --test tests/edge/handlers/plugin/install.test.ts` | ✅ exists (add case) |
 | FORCE-02 | `update --force` where candidate became `unsupported` updates by degrading | integration (orchestrator) | `node --test tests/orchestrators/plugin/update.test.ts` | ✅ exists (add case) |

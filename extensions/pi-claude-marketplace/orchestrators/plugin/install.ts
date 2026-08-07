@@ -812,7 +812,7 @@ export async function runInstallLedger(
   const installable: MaterializablePlugin = resolved;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
-  // to enumerate source artefacts under componentPaths, then applies the
+  // to enumerate source artifacts under componentPaths, then applies the
   // domain/name.ts generators to produce the names whose collisions the
   // cross-bridge guard checks. No bridge writes happen here.
   const { discovered: discoveredSkills } = await discoverPluginSkills({

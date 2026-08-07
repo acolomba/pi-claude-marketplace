@@ -23,7 +23,7 @@ affects: [63-04]
 tech-stack:
   added: []
   patterns:
-    - "flatter writer/remover verb pair for single-file bridge artefacts (RESEARCH Open Question 2 resolution; mcp-bridge keeps the 3-verb prepare/commit/abort pair because of partition-and-merge complexity, hooks-bridge does NOT)"
+    - "flatter writer/remover verb pair for single-file bridge artifacts (RESEARCH Open Question 2 resolution; mcp-bridge keeps the 3-verb prepare/commit/abort pair because of partition-and-merge complexity, hooks-bridge does NOT)"
     - "PathContainmentError -> SymlinkRefusedError translation in subtree walks: catch the generic class from assertPathInside and rethrow the narrower subclass when the failure mode is provably a symlink escape (entry.isSymbolicLink() === true)"
 
 key-files:
@@ -49,7 +49,7 @@ completed: 2026-06-16
 
 # Phase 63 Plan 02: Hooks Bridge Stage/Unstage Summary
 
-**writeHookConfig + removeHookConfig at bridges/hooks/stage.ts with LIFE-03 subtree symlink walk + NFR-1 atomic write. Flatter verb pair per RESEARCH Open Question 2 -- the single-file artefact does not justify the mcp bridge's 3-verb prepare/commit/abort shape.**
+**writeHookConfig + removeHookConfig at bridges/hooks/stage.ts with LIFE-03 subtree symlink walk + NFR-1 atomic write. Flatter verb pair per RESEARCH Open Question 2 -- the single-file artifact does not justify the mcp bridge's 3-verb prepare/commit/abort shape.**
 
 ## Performance
 

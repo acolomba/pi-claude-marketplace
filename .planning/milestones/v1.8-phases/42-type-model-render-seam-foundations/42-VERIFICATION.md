@@ -129,7 +129,7 @@ addressed:
 | T-42-01 (display confusion via wrapDescription) | `wrapDescription` uses `/\s+/` tokenization to collapse CR/LF/tab/multi-space, neutralizing basic injection of newlines into the indent ladder. Phase 43/44 own deeper escaping per the contract boundary. |
 | T-42-02 (componentsResolved:false leakage) | Accept disposition preserved -- the discriminator carries NO data, only a structural marker. |
 | T-42-03 (REASONS closed-set drift) | Length-lock at 29 (`_l4`) + closed-set membership proof (`_l4b`) in `notify-types.test.ts` catch any future rename / removal at compile time. |
-| T-42-04 (intermediate-state catalog drift) | Single atomic commit `4ee23e6` lands all artefacts together; `npm run check` GREEN at the commit boundary; no intermediate state ever existed. |
+| T-42-04 (intermediate-state catalog drift) | Single atomic commit `4ee23e6` lands all artifacts together; `npm run check` GREEN at the commit boundary; no intermediate state ever existed. |
 
 ## Status
 

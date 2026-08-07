@@ -92,7 +92,7 @@ converges:
 This directly violates the phase invariants "back-to-back reconcile is a
 byte-unchanged no-op with zero notify" and "only state-recorded entries
 removed safely", and turns a benign config-key choice into destructive churn
-of installed plugin artefacts plus unbounded network traffic at load. The
+of installed plugin artifacts plus unbounded network traffic at load. The
 race test and apply tests never hit this because their fixtures always use a
 config key equal to the manifest name (the RECON-03 test even comments on the
 mismatch — "addMarketplace records it under the MANIFEST's name" — and then

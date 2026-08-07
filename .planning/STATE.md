@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-08-07 for v1.18 start)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
-working Pi-native artefact — atomically, recoverably, and with soft-dependency
+working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 **Current focus:** v1.18 Manifest-Independent Installed Plugin Info. Make
 list/info derive installed truth from the existing installation record when a

@@ -92,7 +92,7 @@ them ships the milestone un-documented:
   NOT command/args).
 - **C-5 (user-scope `${CLAUDE_PROJECT_DIR}` pass-through):** SUB-02 documented
   divergence — Claude Code substitutes at invoke time even for user-scope
-  artefacts; Pi materializes once at install so user-scope occurrences stay
+  artifacts; Pi materializes once at install so user-scope occurrences stay
   literal; no env var rescues it (Claude Code's own bash children carry no
   `CLAUDE_PROJECT_DIR`, so Pi deliberately sets none in bash children either).
 - **C-6 (threat dispositions):** 91-SECURITY.md and 92-SECURITY.md record the

@@ -316,7 +316,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     // `(disabled)` row (same glyph + token as the disabled-inventory row,
     // version slot kept) + the `/reload` trailer. RLD-05 / D-07: the trailer
     // fires via the fresh `(disabled)` row's `needsReload: true` stamp (RLD-02
-    // OR-reduce), not a cascade kind (the row's artefacts were unstaged --
+    // OR-reduce), not a cascade kind (the row's artifacts were unstaged --
     // SNM-33).
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "fresh disable routes to info severity");
@@ -1079,7 +1079,7 @@ test("C1: orchestrated mode -- corrupt state.json returns { status: 'failed' } t
 // I3: disable cascade partial failure folds dropped + saves shrunken record
 // ──────────────────────────────────────────────────────────────────────────
 
-test("I3: disable cascade partial failure mutates state.resources to drop the cascaded artefacts (TR-03 fold) and surfaces (failed)", async () => {
+test("I3: disable cascade partial failure mutates state.resources to drop the cascaded artifacts (TR-03 fold) and surfaces (failed)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // Seed a populated user-scope record. The cascade primitive walks bridges
     // in skills -> commands -> agents -> mcp order; we make the AGENTS bridge
@@ -1155,7 +1155,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     // I3: state.json drops the SKILLS + PROMPTS the cascade actually unstaged
     // (their bridge ran ok), but RETAINS the agents + mcp axes (their
     // bridges never ran). The TR-03 fold makes the persisted row reflect
-    // only artefacts still on disk.
+    // only artifacts still on disk.
     const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as typeof stateJson;
     const rec = stateAfter.marketplaces.mp!.plugins.foo!;
     assert.deepEqual(rec.resources.skills, [], "skills folded (bridge ran ok before agents threw)");

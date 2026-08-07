@@ -588,7 +588,7 @@ function applyOutcomeToBlock(
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
         dependencies: [],
-        // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+        // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
         // reloads.
         severity: "info",
         needsReload: true,

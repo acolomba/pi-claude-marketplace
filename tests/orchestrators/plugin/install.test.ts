@@ -1651,7 +1651,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
 
 // ───────────────────────────────────────────────────────────────────────────
 // Rollback undo body tests: verify each bridge's undo path removes its
-// staged artefacts when a later phase fails.
+// staged artifacts when a later phase fails.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("Rollback-skills-undo: skills committed then commands phase fails -> skill target removed", async () => {

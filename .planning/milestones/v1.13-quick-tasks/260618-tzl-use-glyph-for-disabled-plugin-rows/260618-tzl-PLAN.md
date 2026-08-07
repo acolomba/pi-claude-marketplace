@@ -161,7 +161,7 @@ two-commit split source+tests / docs if the executor prefers); no merge.
       `(failed)`, `(skipped)`, `(unavailable)`, and `(manual recovery)`
       paths (verify by `grep -n "ICON_UNINSTALLABLE" extensions/pi-claude-marketplace/shared/notify.ts`
       showing at least 3 active references in renderer arms).
-    - No new forbidden planning-artefact tokens introduced in edited
+    - No new forbidden planning-artifact tokens introduced in edited
       comments (`grep -nE "Phase [0-9]+|Plan [0-9]+|Wave [0-9]+|Pitfall [0-9]+|milestone v[0-9]+\.[0-9]+" extensions/pi-claude-marketplace/shared/notify.ts | grep -v "two-phase commit"` returns no NEW hits in the edited regions).
     - `npx tsc --noEmit` (or equivalent typecheck via `npm run check`) passes
       for the edited file.
@@ -308,7 +308,7 @@ two-commit split source+tests / docs if the executor prefers); no merge.
        `the row uses the \`⊘\` glyph (shared with \`will disable\` per RESEARCH Pattern 5)`
        Replace this clause with phrasing that drops the per-phase RESEARCH
        reference (forbidden in code; the policy spirit applies in docs too
-       for GSD-internal planning artefacts):
+       for GSD-internal planning artifacts):
        `the row uses the \`◌\` glyph (shared with \`will disable\` to match the realized/pending-tense precedent: \`●\` for \`(installed)\` / \`(will add)\`, \`○\` for \`(available)\` / \`(will remove)\`)`.
        Leave the rest of the paragraph (D-54-01, isRecordedButDisabled,
        UAT-03, etc.) untouched.
@@ -379,7 +379,7 @@ two-commit split source+tests / docs if the executor prefers); no merge.
       ~1648) all show `◌`.
     - The `(skipped) {already disabled}` example at line ~1661 still
       shows `⊘`.
-    - Forbidden planning-artefact references (`Phase 53`, `Phase 54`,
+    - Forbidden planning-artifact references (`Phase 53`, `Phase 54`,
       `Pitfall 53-4`) in the edited paragraph at ~1281 have been
       stripped. Section heading no longer carries the `(Phase 54 hand-off
       shape)` parenthetical.

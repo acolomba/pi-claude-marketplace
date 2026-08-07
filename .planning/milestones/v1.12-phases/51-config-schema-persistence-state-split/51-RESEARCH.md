@@ -54,7 +54,7 @@ with provenance. Defer all wiring (orchestrators, index.ts, notify emission) to 
   Config = pure user intent (source/autoupdate/enabled). Resolved versions stay machine
   bookkeeping in the internal state file.
 - **D-07 (ENBL-02 reading):** "A disabled plugin keeps its version pin" = the internal
-  record (resolved version + artefact records) survives disable, so `enable` re-materializes
+  record (resolved version + artifact records) survives disable, so `enable` re-materializes
   the same version from cache. SPLIT-01's "version pin" lives in the internal file, not the
   config, for v1.12.
 - **D-08 (WB consequence, constrains Phase 56):** With no version field,

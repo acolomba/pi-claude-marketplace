@@ -40,7 +40,7 @@ created: 2026-06-10
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | TBD | TBD | TBD | ENBL-01 | — | `enable`/`disable` with `--scope` + `--local` parse and dispatch | unit | `node --test tests/edge/handlers/plugin/enable-disable.test.ts` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | ENBL-01 | T-config-write-seam | `enabled: true/false` written to config only via `saveConfig` | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | ENBL-02 | — | disable keeps config entry + version pin; artefacts removed | unit | same orchestrator test | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | ENBL-02 | — | disable keeps config entry + version pin; artifacts removed | unit | same orchestrator test | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | ENBL-02 | — | reconcile desired-materialized = declared AND enabled | unit | `node --test tests/orchestrators/reconcile/plan.test.ts` | ✅ extend | ⬜ pending |
 | TBD | TBD | TBD | ENBL-03 | T-network-on-enable | enable re-materializes from cache, NO network | unit + architecture | `node --test tests/architecture/no-orchestrator-network.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | ✅ extend + ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | ENBL-03 | — | version pin preserved on enable round-trip | unit | orchestrator test (version-roundtrip fixture) | ❌ W0 | ⬜ pending |

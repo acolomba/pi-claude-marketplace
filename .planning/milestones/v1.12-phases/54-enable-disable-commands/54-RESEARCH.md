@@ -40,8 +40,8 @@ None -- discuss phase skipped.
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | ENBL-01 | User can run `enable <plugin>@<marketplace>` / `disable <plugin>@<marketplace>` in the autoupdate/noautoupdate command shape; `--scope user|project` and `--local` consistent with other mutating commands | Standard Stack §Command-shape mirror; Pattern 1 (single orchestrator parameterized by `enable: boolean`); Pattern 2 (write-back). |
-| ENBL-02 | A disabled plugin keeps its config entry AND version pin, but Pi artefacts are not materialized after reload; reconcile's desired-materialized set is `declared AND enabled` | Pattern 3 (artefact removal via existing cascadeUnstagePlugin reuse); Pattern 4 (state-record retention); planner already enforces the rule (plan.ts:233-245). |
-| ENBL-03 | `enable` re-materializes the plugin's artefacts from the cached marketplace clone + persisted internal records with NO network | Pattern 5 (cache-only install path -- PI-2 cached manifest + bridge prepare/commit reuse); Pitfall 54-3 (NFR-5 enforcement). |
+| ENBL-02 | A disabled plugin keeps its config entry AND version pin, but Pi artifacts are not materialized after reload; reconcile's desired-materialized set is `declared AND enabled` | Pattern 3 (artifact removal via existing cascadeUnstagePlugin reuse); Pattern 4 (state-record retention); planner already enforces the rule (plan.ts:233-245). |
+| ENBL-03 | `enable` re-materializes the plugin's artifacts from the cached marketplace clone + persisted internal records with NO network | Pattern 5 (cache-only install path -- PI-2 cached manifest + bridge prepare/commit reuse); Pitfall 54-3 (NFR-5 enforcement). |
 | ENBL-04 | `disabled` status renders distinct from soft-degraded `unavailable` on list/info (three orthogonal facts: declared / enabled / available) | Pattern 6 (new `disabled` PLUGIN_STATUSES token + variant + renderer arm + catalog state + FIXTURES); atomic-supersession discipline (Pitfall 54-2). |
 </phase_requirements>
 
@@ -51,7 +51,7 @@ Phase 54 has TWO halves that compose into a single atomic delivery and one large
 
 **Half A (write-back):** Two new edge subcommands `enable`/`disable` that mirror autoupdate/noautoupdate's structural pattern (a single orchestrator parameterized by `enable: boolean`; two factory entrypoints; `--scope` + new `--local` flag), but target the **plugin** entry in the **config file** (NOT the marketplace record in state). The write goes through `saveConfig` after a read-then-patch-then-save pattern under the per-scope `withStateGuard` / `withLockedStateTransaction` lock. The base file (`claude-plugins.json`) is the default; `--local` redirects to `claude-plugins.local.json` without ever touching base (WB-02 forward signal). Phase 56 will reuse the same `saveConfig`-based patch shape for the broader write-back family; Phase 54 builds it once for enable/disable as the first user-visible consumer.
 
-**Half B (reconciler reality):** Phase 53's planner already implements the `declared AND enabled` desired-materialized rule (`plan.ts:233-245`: `enabledExplicitFalse` AND `recorded` → `pluginsToDisable` bucket). Phase 53 left `pluginsToEnable` structurally empty (Pitfall 53-4) because the state model has no "currently disabled" marker -- a recorded plugin cannot be distinguished from a recorded-but-locally-disabled plugin. Phase 54 closes that gap by **defining what disable removes** (the artefacts) and **what it keeps** (the state record + version pin) -- a recorded plugin with EMPTY `resources.*` arrays + an `installable: true` compatibility record is the "currently disabled" marker. The planner reads this state shape and produces `pluginsToEnable` rows when config says `enabled: undefined|true` AND the recorded plugin has zero artefacts. This requires extending Phase 53's `buildRecordedKeys`/`classifyDeclaredPlugin` logic.
+**Half B (reconciler reality):** Phase 53's planner already implements the `declared AND enabled` desired-materialized rule (`plan.ts:233-245`: `enabledExplicitFalse` AND `recorded` → `pluginsToDisable` bucket). Phase 53 left `pluginsToEnable` structurally empty (Pitfall 53-4) because the state model has no "currently disabled" marker -- a recorded plugin cannot be distinguished from a recorded-but-locally-disabled plugin. Phase 54 closes that gap by **defining what disable removes** (the artifacts) and **what it keeps** (the state record + version pin) -- a recorded plugin with EMPTY `resources.*` arrays + an `installable: true` compatibility record is the "currently disabled" marker. The planner reads this state shape and produces `pluginsToEnable` rows when config says `enabled: undefined|true` AND the recorded plugin has zero artifacts. This requires extending Phase 53's `buildRecordedKeys`/`classifyDeclaredPlugin` logic.
 
 **Code rewire bonus:** Phase 51 left 11 files with `// SPLIT-01:` cast markers reading/writing `record.autoupdate` on state records. Phase 54-56 are charged with the proper rewire to MergedConfig. Phase 54 SHOULD include the targeted subset for the plugin read sites (`plugin/list.ts`, `plugin/info.ts`), leaving the marketplace-side autoupdate rewire to Phase 56 alongside `marketplace autoupdate` write-back. The Plan-51 P02 frontmatter explicitly carved this work into Phases 54-56.
 
@@ -68,11 +68,11 @@ Phase 54 has TWO halves that compose into a single atomic delivery and one large
 | Cross-scope plugin-target resolution | Orchestrator (plugin) | Persistence (state-io) | `resolveCrossScopePluginTarget` from `orchestrators/plugin/shared.ts` -- distinguishes resolved / other-scope / marketplace-absent. |
 | Config read + entry-level patch | Persistence (config-merge + config-io) | -- | `loadMergedScopeConfig` for provenance; `saveConfig` for the patched write (SPLIT-02 sanctioned). |
 | Atomic file write of `claude-plugins.json` / `claude-plugins.local.json` | Persistence (config-io) | -- | `saveConfig` is the SOLE sanctioned writer; `assertPathInside` + `atomicWriteJson` enforced. |
-| Artefact removal (disable) | Orchestrator (marketplace/shared) | Bridges | `cascadeUnstagePlugin` (skills → commands → agents → mcp) already exists; reuse verbatim from `uninstall.ts`. |
-| Artefact materialization from cache (enable) | Orchestrator (plugin) | Bridges + Domain (resolver/manifest) | Reuse install.ts 5-phase ledger MINUS gitOps -- PI-2 cached manifest read + bridge prepare/commit are already network-free. |
+| Artifact removal (disable) | Orchestrator (marketplace/shared) | Bridges | `cascadeUnstagePlugin` (skills → commands → agents → mcp) already exists; reuse verbatim from `uninstall.ts`. |
+| Artifact materialization from cache (enable) | Orchestrator (plugin) | Bridges + Domain (resolver/manifest) | Reuse install.ts 5-phase ledger MINUS gitOps -- PI-2 cached manifest read + bridge prepare/commit are already network-free. |
 | State record update (resources.* arrays + updatedAt timestamp) | Orchestrator (plugin) | Persistence (state-io) | Inside `withStateGuard`; saveState fires on no-throw. |
 | List/info row rendering with disabled distinction | Edge handler (list/info) → notify.ts renderer | -- | New `disabled` PLUGIN_STATUSES + renderer arm. |
-| Reconcile planner reading "currently disabled" state | Orchestrator (reconcile/plan.ts) | -- | Extend `classifyDeclaredPlugin` to read recorded plugin's `resources.*` arity → produce `pluginsToEnable` when desired-enabled but artefacts empty. |
+| Reconcile planner reading "currently disabled" state | Orchestrator (reconcile/plan.ts) | -- | Extend `classifyDeclaredPlugin` to read recorded plugin's `resources.*` arity → produce `pluginsToEnable` when desired-enabled but artifacts empty. |
 | Cross-process lock coverage | Transaction (withStateGuard) | -- | Already supports both state-mutating and read-then-write patterns. |
 
 ## Standard Stack
@@ -97,7 +97,7 @@ Phase 54 has TWO halves that compose into a single atomic delivery and one large
 | `loadMergedScopeConfig` | `persistence/config-merge.ts` | Read base + local + merged view with per-file provenance for `--local` write targeting. |
 | `loadConfig` | `persistence/config-io.ts:119` | Re-read the EXACT file we're about to patch (base or local) under the state lock to get the latest bytes. |
 | `saveConfig(filePath, config, scopeRoot)` | `persistence/config-io.ts:172` | SOLE sanctioned config writer; runs `assertPathInside` + `atomicWriteJson`. |
-| `cascadeUnstagePlugin` | `orchestrators/marketplace/shared.ts` | Disable's artefact-removal cascade (D-02/D-03 fail-fast: skills → commands → agents → mcp). |
+| `cascadeUnstagePlugin` | `orchestrators/marketplace/shared.ts` | Disable's artifact-removal cascade (D-02/D-03 fail-fast: skills → commands → agents → mcp). |
 | `runPhases([skills, commands, agents, mcp, state])` | `orchestrators/plugin/install.ts:674` + `transaction/phase-ledger.ts` | Enable's 5-phase ledger -- reuse the install path's existing phases verbatim. |
 | `loadMarketplaceManifest` | `domain/manifest.ts` | PI-2 cached manifest read (no network); used by install for the manifest entry. |
 | `resolveStrict` + `requireInstallable` | `domain/resolver.ts` | Resolve manifest entry to `ResolvedPluginInstallable` from the cached clone path. |
@@ -110,7 +110,7 @@ Phase 54 has TWO halves that compose into a single atomic delivery and one large
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | New `disabled` PLUGIN_STATUSES token | Reuse `skipped` with `{disabled}` reason, OR `unavailable` with `{disabled}` reason | **REJECTED** -- ENBL-04 mandates that disabled and unavailable be DISTINCT facts. A reused `unavailable` collapses two orthogonal facts into one row token; a reused `skipped` is wrong-tense (skipped is a cascade-action outcome, not an inventory state). The new token costs one length-lock bump per tuple and zero new icon constants (reuse `ICON_UNINSTALLABLE` `⊘` -- already used by `will disable` in Phase 53). |
-| Storing a `disabled: true` marker on the state record | Use EMPTY `resources.*` arrays as the implicit marker | **PREFERRED ALTERNATIVE.** Adding `disabled: boolean` to `PLUGIN_INSTALL_RECORD_SCHEMA` would create a SECOND source of truth (config.enabled vs state.disabled) which contradicts SPLIT-01 ("config file owns user settings"). Empty `resources.*` is already the natural disabled marker -- a disabled plugin has no skills/commands/agents/mcp artefacts present. The state record's `version` field preserves the pin (ENBL-02). |
+| Storing a `disabled: true` marker on the state record | Use EMPTY `resources.*` arrays as the implicit marker | **PREFERRED ALTERNATIVE.** Adding `disabled: boolean` to `PLUGIN_INSTALL_RECORD_SCHEMA` would create a SECOND source of truth (config.enabled vs state.disabled) which contradicts SPLIT-01 ("config file owns user settings"). Empty `resources.*` is already the natural disabled marker -- a disabled plugin has no skills/commands/agents/mcp artifacts present. The state record's `version` field preserves the pin (ENBL-02). |
 | New `enabled: boolean` field on STATE_SCHEMA | Stay with the empty-resources marker | **REJECTED** -- SPLIT-01 explicitly carved user-authored desired-state OUT of state.json; adding it back violates the split. Phase 56 verification gate notes (STATE.md): "no production site reads or writes `record.autoupdate` on state". The analog holds for enabled. |
 | Separate `enable`/`disable` orchestrators | Single `setPluginEnabled(opts: { enable: boolean })` | **PREFERRED.** Mirrors `setMarketplaceAutoupdate(opts: { enable })` exactly. Less code, identical test surface, one cascade-vs-materialize switch inside one function. |
 | Re-running full install path on enable | Cache-only path (PI-2 cached-manifest + bridge prepare/commit; NO gitOps) | **REQUIRED by NFR-5.** Install.ts is already structurally network-free (PI-2 cached-manifest read; the architectural gate at `tests/architecture/no-orchestrator-network.test.ts` enforces this). Phase 54 enable inherits the same structural guarantee by reusing the 5-phase ledger. |
@@ -309,7 +309,7 @@ const patched: ScopeConfig = {
 await saveConfig(targetFilePath, patched, scopeRoot);
 ```
 
-### Pattern 3: Disable -- artefact removal via `cascadeUnstagePlugin` reuse
+### Pattern 3: Disable -- artifact removal via `cascadeUnstagePlugin` reuse
 
 **What:** Disable runs `cascadeUnstagePlugin(plugin, marketplace, locations, installed)` inside `withStateGuard`, then resets the state record's `resources.*` to empty arrays but KEEPS `version`, `resolvedSource`, `compatibility`, `installedAt`. `updatedAt` is bumped to now.
 
@@ -433,7 +433,7 @@ const result = await runPhases(phases, ctxLocal);
 |---------|-------------|-------------|-----|
 | Atomic JSON write | Hand `fs.writeFile(tmp) + rename` | `saveConfig` → `atomicWriteJson` | SPLIT-02 architecture gate; concurrent-write queue in `write-file-atomic`. |
 | Cross-scope plugin resolution | Hand `loadState` calls in handler | `resolveCrossScopePluginTarget` | Returns discriminated union (resolved / other-scope / marketplace-absent); SCOPE-01 contract; existing test coverage. |
-| Bridge-cascade artefact removal | Hand-roll skills/commands/agents/mcp unstage sequence | `cascadeUnstagePlugin` | Already encodes PU-1 D-02/D-03 fail-fast order; reused by uninstall. |
+| Bridge-cascade artifact removal | Hand-roll skills/commands/agents/mcp unstage sequence | `cascadeUnstagePlugin` | Already encodes PU-1 D-02/D-03 fail-fast order; reused by uninstall. |
 | Per-process state lock | Hand-roll `proper-lockfile` calls | `withStateGuard` | Cross-process safe (NFR-3); saves state.json on no-throw. |
 | Manifest read | Hand-roll `readFile(manifest.json) + JSON.parse + typebox` | `loadMarketplaceManifest` | Phase 45 manifest memoization in front; NFR-8 cache. |
 | Plugin resolver | Hand-roll skills/commands/agents/mcp shape inspection | `resolveStrict` + `requireInstallable` | Returns discriminated `ResolvedPluginInstallable` (NFR-7); `installable: true | false` is the proven seam. |
@@ -545,9 +545,9 @@ WB-02 forward signal: assert via test that a `--local enable` against a fresh pr
 
 **What goes wrong:** User hand-edits `claude-plugins.json` to broken JSON, then runs `disable foo@bar`. The code reads `loadConfig === invalid` and -- depending on the implementation -- either crashes, silently overwrites the broken file, or proceeds to disable the plugin in state but leaves the config untouched (so on next reload reconcile re-enables it).
 
-**Why it happens:** The CFG-03 contract is "abort, don't coerce" -- but Phase 54 must decide whether to ALSO skip the state-side artefact removal.
+**Why it happens:** The CFG-03 contract is "abort, don't coerce" -- but Phase 54 must decide whether to ALSO skip the state-side artifact removal.
 
-**How to avoid:** On `loadConfig === invalid`, abort the ENTIRE operation BEFORE entering the artefact cascade. Emit a `(failed) {invalid manifest}` row with `path.basename` (T-53-02-02 information-disclosure mitigation: NEVER emit the absolute path). State is untouched; config is untouched.
+**How to avoid:** On `loadConfig === invalid`, abort the ENTIRE operation BEFORE entering the artifact cascade. Emit a `(failed) {invalid manifest}` row with `path.basename` (T-53-02-02 information-disclosure mitigation: NEVER emit the absolute path). State is untouched; config is untouched.
 
 **Warning signs:** A test where an invalid-config file produces a state.json mtime change MUST FAIL.
 
@@ -754,7 +754,7 @@ if (recorded) {
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | Empty `resources.*` arrays is an acceptable implicit marker for "currently disabled" on the state record (preferred over a new schema field). | Pattern 4 / Alternatives Considered | If a pre-Phase-54 install ever produced an empty-resources record (e.g. a plugin manifest with zero artefacts declared), the planner would mis-classify it as `will enable`. The investigation hook: check whether `install.ts::statePhase` admits an "all-arrays-empty" outcome for a plugin that declares NOTHING. If yes, the marker needs to be strengthened (e.g. a new optional `disabled?: true` field on the state record). |
+| A1 | Empty `resources.*` arrays is an acceptable implicit marker for "currently disabled" on the state record (preferred over a new schema field). | Pattern 4 / Alternatives Considered | If a pre-Phase-54 install ever produced an empty-resources record (e.g. a plugin manifest with zero artifacts declared), the planner would mis-classify it as `will enable`. The investigation hook: check whether `install.ts::statePhase` admits an "all-arrays-empty" outcome for a plugin that declares NOTHING. If yes, the marker needs to be strengthened (e.g. a new optional `disabled?: true` field on the state record). |
 | A2 | The 5-phase ledger from `install.ts` can be reused verbatim for enable without modification beyond `version` preservation and `pluginDataDir` handling. | Pattern 5 | If install's phases have a network-dependent assumption (e.g. agent registry refresh) hidden in a deep import, NFR-5 is violated. Mitigation: extend `no-orchestrator-network.test.ts` FORBIDDEN_TARGETS to include `enable-disable.ts` -- the architectural gate catches the leak structurally. |
 | A3 | `cascadeUnstagePlugin` is safe to call when `installed.resources.*` are EMPTY arrays (the disable-then-disable idempotent case is structurally caught at the idempotency check, but defense-in-depth matters). | Pattern 3 | If cascadeUnstagePlugin throws on empty inputs, the idempotency case is the only safeguard. Mitigation: test fixture explicitly exercises the case. |
 | A4 | The `disabled` token + `(already enabled)` / `(already disabled)` REASONS member additions land in lockstep without breaking any existing UAT fixture byte form. | Pattern 6 | A reused-existing-fixture incidentally containing a substring like `already enabled` from a different context would break. Verify with grep over the catalog-uat FIXTURES before locking. |
@@ -811,7 +811,7 @@ Not applicable -- Phase 54 is purely code/config changes inside the existing pro
 |--------|----------|-----------|-------------------|--------------|
 | ENBL-01 | `enable <p>@<mp>`/`disable <p>@<mp>` with `--scope` + `--local` | unit | `node --test tests/edge/handlers/plugin/enable-disable.test.ts` | ❌ Wave 0 |
 | ENBL-01 | `enabled: true/false` written to config | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ❌ Wave 0 |
-| ENBL-02 | Disable keeps config entry + version pin; artefacts not materialized | unit | (same orchestrator test) | ❌ Wave 0 |
+| ENBL-02 | Disable keeps config entry + version pin; artifacts not materialized | unit | (same orchestrator test) | ❌ Wave 0 |
 | ENBL-02 | Reconcile desired-materialized = `declared AND enabled` | unit (Phase 53 planner test, extended) | `node --test tests/orchestrators/reconcile/plan.test.ts` | ✅ (modification) |
 | ENBL-03 | `enable` re-materializes from cache with NO network | unit + architectural | `node --test tests/architecture/no-orchestrator-network.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | ✅ (extension) + ❌ Wave 0 |
 | ENBL-03 | Version pin preserved on enable | unit | (orchestrator test, version-roundtrip fixture) | ❌ Wave 0 |

@@ -111,7 +111,7 @@ Two comments added in this phase include `T-71-04`:
 stable spec anchor. The comment policy (`typescript-comments.md`) permits decision
 IDs (`D-NN`), requirement-family IDs (`SURF-NN`, `HOOK-NN`, `NFR-N`, etc.), and
 explicitly forbids identifiers whose only purpose is to record which planning
-artefact produced the line. `T-NN-NN` matches the forbidden pattern (per-phase
+artifact produced the line. `T-NN-NN` matches the forbidden pattern (per-phase
 test-matrix references restart numbering per RESEARCH document).
 
 The constraint these comments encode (orphan-rewake over the filtered subset only)

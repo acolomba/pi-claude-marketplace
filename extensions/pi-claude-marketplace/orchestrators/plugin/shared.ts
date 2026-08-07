@@ -676,8 +676,8 @@ export async function maybeWritePluginConfigBack(opts: {
 }
 
 /**
- * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artefacts from
- * the state record in place so the persisted row reflects only artefacts
+ * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artifacts from
+ * the state record in place so the persisted row reflects only artifacts
  * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
  * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
  *

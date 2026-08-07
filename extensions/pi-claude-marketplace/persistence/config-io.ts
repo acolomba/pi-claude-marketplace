@@ -6,7 +6,7 @@
 // Mirror of `persistence/state-io.ts` for the user-authored declarative
 // config file `claude-plugins.json` (+ entry-level override
 // `claude-plugins.local.json`). Where state-io owns the MACHINE bookkeeping
-// (materialized artefact records, resolved versions), config-io owns the
+// (materialized artifact records, resolved versions), config-io owns the
 // USER-AUTHORED desired state -- and inverts state-io's load shape: instead
 // of throwing on bad input and defaulting on missing input, `loadConfig`
 // returns a discriminated `ConfigLoadResult` union so the downstream

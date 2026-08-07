@@ -71,7 +71,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     }
 
     // RECON-01..05: apply the load-time reconcile BEFORE
-    // discovering resources so newly-materialized artefacts are picked up on
+    // discovering resources so newly-materialized artifacts are picked up on
     // the SAME load. The outer try/catch enforces NFR-2: a catastrophic
     // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
     // notify (inside its own try/catch so a UI failure can't propagate

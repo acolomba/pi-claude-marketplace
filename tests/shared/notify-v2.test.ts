@@ -4623,7 +4623,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
   const ctx = makeCtx();
   const pi = piWithBothLoaded();
   // The /claude:plugin disable command's fresh cascade: the fresh
-  // `(disabled)` row stamps `needsReload: true` (its artefacts were unstaged
+  // `(disabled)` row stamps `needsReload: true` (its artifacts were unstaged
   // -- SNM-33), so the RLD-02 OR-reduce fires the trailer with no
   // distinguishing cascade kind. The row renders byte-identically to the
   // inventory form asserted above; ONLY the trailer differs.

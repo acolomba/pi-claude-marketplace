@@ -414,7 +414,7 @@ test("WR-05 convergence: populated record + enabled===false -> disable; disabled
     {},
   );
 
-  // Step 1: artefacts still materialised -> the planner emits the disable.
+  // Step 1: artifacts still materialised -> the planner emits the disable.
   const populated = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
   const planBefore = planReconcile(merged, populated, "project");
   assert.equal(planBefore.pluginsToDisable.length, 1);
@@ -558,7 +558,7 @@ test("Edge: declared plugin under a recorded-but-undeclared marketplace -> dangl
 
 test("Edge: declared-disabled plugin under a recorded-but-undeclared marketplace -> dangling diagnostic, NOT disable (WR-01)", () => {
   // Symmetric to the install case: a disable under a marketplace being torn
-  // down is equally contradictory (the teardown subsumes the artefact
+  // down is equally contradictory (the teardown subsumes the artifact
   // removal); the entry surfaces as a dangling diagnostic.
   const state = stateWithOneGithubMarketplace("mp", "acme/tools", ["cr"]);
   const merged = mergeScopeConfigs(configWith({}, { "cr@mp": { enabled: false } }), {});

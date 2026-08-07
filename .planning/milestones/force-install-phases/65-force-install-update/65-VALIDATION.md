@@ -39,7 +39,7 @@ validated: 2026-06-28
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists |
 |-------------|----------|-----------|-------------------|-------------|
-| FORCE-01 | `install --force` on `unsupported` installs supported components, skips unsupported (state record + on-disk artefacts; no unsupported kind materialized) | integration (orchestrator) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ |
+| FORCE-01 | `install --force` on `unsupported` installs supported components, skips unsupported (state record + on-disk artifacts; no unsupported kind materialized) | integration (orchestrator) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ |
 | FORCE-01 (no-op) | `install --force` on fully-supported installs as `(installed)`, identical to non-force | integration (orchestrator) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ |
 | FORCE-01 (parse) | install handler threads `force: true` into the orchestrator options | unit (handler) | `node --test tests/edge/handlers/plugin/install.test.ts` | ✅ |
 | FORCE-02 | `update --force` where the resolved candidate became `unsupported` updates by degrading the now-unsupported components | integration (orchestrator) | `node --test tests/orchestrators/plugin/update.test.ts` | ✅ |

@@ -931,7 +931,7 @@ jargon-laden; copying language verbatim leaks it into the doc.
 plain English for descriptions ("runs before a tool call", not "bucket-A
 PreToolUse"). Cross-refs point to `code.claude.com/docs/en/hooks` and
 the Pi extension API docs ONLY -- never to REQUIREMENTS.md, PROJECT.md,
-or any `.planning/*` artefact.
+or any `.planning/*` artifact.
 
 **Warning signs:** Grep `docs/hooks.md` for `bucket`, `REQ-`, `Phase`,
 `D-`, `<lossy synthesis>` -- all should return zero matches.

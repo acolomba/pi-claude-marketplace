@@ -106,7 +106,7 @@ _TDD plan executed RED → GREEN, with Task 3 authored first so the SURF-06 lint
 ---
 
 **Total deviations:** 1 auto-fixed (Rule 2 — critical-functionality completion).
-**Impact on plan:** The plan locked the test path but not the glob amendment; without the auto-fix the architecture-lint would have been a dead artefact. No scope creep, no new dependencies, no source-surface changes.
+**Impact on plan:** The plan locked the test path but not the glob amendment; without the auto-fix the architecture-lint would have been a dead artifact. No scope creep, no new dependencies, no source-surface changes.
 
 ## Issues Encountered
 

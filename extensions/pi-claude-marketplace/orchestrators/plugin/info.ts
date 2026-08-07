@@ -1726,7 +1726,7 @@ async function buildAvailableRow(opts: {
  * `(disabled)` inventory token as the list surface (catalog
  * `disabled-inventory` state) -- list-arm marketplace header +
  * `PluginDisabledMessage` row -- rather than the `PluginInfoMessage`
- * standalone variant: a disabled plugin has no materialized artefacts
+ * standalone variant: a disabled plugin has no materialized artifacts
  * (ENBL-02), so the per-kind component/dependencies block would be
  * misleading.
  */

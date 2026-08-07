@@ -20,7 +20,7 @@ current branch HEAD.
 
 ### Update vs disabled plugins (user ruling)
 - `plugin update` and marketplace autoupdate cascade must NOT re-materialize a
-  disabled plugin's artefacts. **Update the record (version/source pin) but
+  disabled plugin's artifacts. **Update the record (version/source pin) but
   keep the plugin disabled** — `resources.*` stay empty. Enable later
   re-materializes from the current manifest.
 - Rendering: prefer NO new catalog tokens. If a new reason token proves
@@ -81,7 +81,7 @@ was never persisted. Fix: return skipped names from `writeAutoupdateBack` and
 demote them to honest failed/skipped rows. Test it.
 
 I3. `enable-disable.ts:252-259` — disable branch ignores `cascade.dropped` on
-partial cascade failure: state.json keeps claiming artefacts gone from disk
+partial cascade failure: state.json keeps claiming artifacts gone from disk
 (fail-clean/NFR-3 gap). Mirror the TR-03 fold from `uninstall.ts:468-484`:
 apply the dropped-fold, save the shrunken record, then surface the failure.
 Test it.

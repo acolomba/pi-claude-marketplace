@@ -185,7 +185,7 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
       // distinct `partially-available` bucket (mirrors `disabled` -> `unavailable`).
       return "unavailable";
     case "disabled":
-      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artefacts
+      // D-54-01 / ENBL-04: a disabled plugin is recorded but its artifacts
       // are not materialized -- the LLM-tool projection treats it as not
       // currently usable, mirroring `unavailable`.
       return "unavailable";

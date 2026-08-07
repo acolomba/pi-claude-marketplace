@@ -102,7 +102,7 @@ export type EnableDisablePluginNotifications =
  * orchestrated mode.
  *
  * - `"enabled"` -- the enable branch re-materialized the plugin.
- * - `"disabled"` -- the disable branch cascaded-unstaged the artefacts and
+ * - `"disabled"` -- the disable branch cascaded-unstaged the artifacts and
  *   reset `resources.*` while preserving the state record.
  * - `"skipped"` -- the idempotent already-enabled / already-disabled arm.
  *   The `reason` carries the standalone benign Reason for parity with the
@@ -246,7 +246,7 @@ async function runEnableBranch(
 }
 
 /**
- * Run the disable branch: cascade-unstage artefacts via the existing
+ * Run the disable branch: cascade-unstage artifacts via the existing
  * `cascadeUnstagePlugin` primitive, then reset `resources.*` to [] in place
  * (PRESERVING `version` / `resolvedSource` / `compatibility` / `installedAt`
  * per ENBL-02). Returns the outcome sentinel.
@@ -265,8 +265,8 @@ async function runDisableBranch(
   const recordedVersion = installed.version;
   const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
   if (!cascade.ok) {
-    // I3: cascade.dropped lists artefacts already unstaged before the throw.
-    // Fold them into the record so state.json never claims artefacts gone
+    // I3: cascade.dropped lists artifacts already unstaged before the throw.
+    // Fold them into the record so state.json never claims artifacts gone
     // from disk (NFR-3 fail-clean). Uses the shared applyPartialCascadeFold
     // helper (TR-03 path); the caller saves the shrunken record before
     // surfacing the failure.
@@ -532,8 +532,8 @@ export async function setPluginEnabled(
         }
 
         // I3: a partial disable cascade mutated `installed.resources.*` in
-        // place to drop the artefacts already removed before the throw.
-        // Persist the shrunken record so state.json never claims artefacts
+        // place to drop the artifacts already removed before the throw.
+        // Persist the shrunken record so state.json never claims artifacts
         // gone from disk (NFR-3 fail-clean), THEN fall through to the
         // post-guard branch that surfaces the failed row.
         if (disableResult.saveShrunken) {
@@ -850,7 +850,7 @@ function dispatchOutcome(args: {
   const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
   // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
   // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
-  // artefacts were unstaged -- SNM-33), so the `/reload to pick up changes`
+  // artifacts were unstaged -- SNM-33), so the `/reload to pick up changes`
   // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable
   // verb's non-fresh arms (idempotent / failed / not-recorded) stamp
   // `needsReload: false`; the enable verb's `(installed)` fresh row stamps
@@ -995,14 +995,14 @@ function composeOutcomeRow(args: {
             name: plugin,
             dependencies: [],
             ...(outcome.version !== undefined && { version: outcome.version }),
-            // D-03/D-06: a realized re-enable re-materializes artefacts -> info,
+            // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
             // reloads Pi resources.
             severity: "info",
             needsReload: true,
           }
         : {
             // D-06/RLD-02: a realized fresh disable unstages Pi-visible
-            // artefacts, so it stamps needsReload directly -- this is what lets
+            // artifacts, so it stamps needsReload directly -- this is what lets
             // the reload trailer fire via the OR-reduce instead of the
             // kind-based `disable-cascade` straddle. List/info `disabled`
             // inventory rows stamp needsReload:false, so the trailer stays

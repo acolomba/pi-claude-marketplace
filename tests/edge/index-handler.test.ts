@@ -6,7 +6,7 @@
 //      `resources_discover` event name (bound ctx -- the `unknown` cast that
 //      elided ctx in a prior version has been dropped).
 //   2. The handler invokes applyReconcile BEFORE aggregateDiscoveredResources
-//      so newly-materialized artefacts are picked up on the SAME load.
+//      so newly-materialized artifacts are picked up on the SAME load.
 //   3. A catastrophic applyReconcile throw is caught and the handler still
 //      returns a `ResourcesDiscoverResult` -- Pi load is NEVER blocked
 //      (NFR-2 boundary preservation). A single last-ditch ctx.ui.notify

@@ -12,7 +12,7 @@
 | `docs/output-catalog.md` (v2.0 rewrite)            | documentation   | spec-fixture (read by UAT) | `docs/output-catalog.md` v1.0 itself (preserve H2 structure + `<!-- catalog-state: STATE -->` marker convention; rewrite expected blocks) | exact (same file)    |
 | `tests/architecture/catalog-uat.test.ts` (rewrite) | test            | byte-equality (parser + render + assert) | `tests/architecture/catalog-uat.test.ts` v1 (parser preserved verbatim) + `tests/shared/notify-v2.test.ts` (mock-ctx / mock-pi + notify() invocation pattern) | exact (V1 parser carry-forward) + exact (Phase 16 mock pattern) |
 | `tests/architecture/grammar-frontmatter.test.ts` (DELETE) | test            | n/a                        | n/a (deletion only -- `git rm`)                                                       | trivial              |
-| `.planning/REQUIREMENTS.md` (traceability edit)    | planning artefact | row edit                   | the table itself (other completed-phase rows: Phase 15/16 entries)                    | exact (same table)   |
+| `.planning/REQUIREMENTS.md` (traceability edit)    | planning artifact | row edit                   | the table itself (other completed-phase rows: Phase 15/16 entries)                    | exact (same table)   |
 | `docs/adr/v2-001-structured-notify.md` (one-line cross-ref edit) | documentation | one-line append            | `docs/adr/v2-001-structured-notify.md` Accepted-status block (Phase 15 reference at line 191) | exact (same file)    |
 
 ## Pattern Assignments

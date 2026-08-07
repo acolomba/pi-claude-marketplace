@@ -30,7 +30,7 @@ key-files:
 decisions:
   - "Use path-name-specific regex patterns (Rule 1 deviation from the plan's locked COARSE-WALK formulation): scope offender detection to the three protected file names (stateJsonPath / configJsonPath / configLocalJsonPath) instead of the entire `atomicWriteJson(` callsite vocabulary."
   - "Optional `(?:\\w+\\.)?` prefix covers both shapes: `loc.stateJsonPath` (member access) and `stateJsonPath` (bare local). The current legitimate writers use both — state-io.ts::saveState binds the target into a bare local `stateJsonPath`, and the matching is on the local name regardless of the storage class."
-  - "Include an in-file walker-regression test: assert each forbidden pattern matches a synthetic offender string AND does NOT match a synthetic benign callsite. This is the manual-positive evidence required by acceptance criterion #7, captured as a permanent test artefact instead of a one-off temporary edit."
+  - "Include an in-file walker-regression test: assert each forbidden pattern matches a synthetic offender string AND does NOT match a synthetic benign callsite. This is the manual-positive evidence required by acceptance criterion #7, captured as a permanent test artifact instead of a one-off temporary edit."
   - "Accept the alias-evasion limitation (someone copying `loc.configJsonPath` into a differently-named local before passing to atomicWriteJson) — documented in the test's header docstring; the 'exactly N' sibling assertions are the second-line defense via code review."
 requirements_completed: [SPLIT-02]
 metrics:

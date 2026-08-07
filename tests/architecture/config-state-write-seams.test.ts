@@ -171,7 +171,7 @@ test("SPLIT-02 whitelist: exactly one file may write claude-plugins.json files",
 // the plan's acceptance criteria -- without it, a regex bug could make the
 // walker silently GREEN against ANY codebase (false-negative class).
 // We test the patterns directly against synthetic strings rather than
-// touching production code, so no permanent test artefact is created.
+// touching production code, so no permanent test artifact is created.
 
 test("SPLIT-02 walker: forbidden patterns catch a synthetic offender", () => {
   const stateOffender = "await atomicWriteJson(loc.stateJsonPath, state);";

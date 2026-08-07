@@ -38,7 +38,7 @@ Plan: 4 of 4
 
 See: .planning/PROJECT.md (updated 2026-07-19)
 
-**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+**Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact — atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 **Current focus:** Phase 84 — Agent skillPath resolution (end-to-end skill availability)
 
 ## Working Context

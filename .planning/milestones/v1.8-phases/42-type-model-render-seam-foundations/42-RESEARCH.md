@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 42 is a pure type-model + renderer-seam extension in `extensions/pi-claude-marketplace/shared/notify.ts`. It adds two new info-surface message variants (`MarketplaceInfoMessage` + `PluginInfoMessage`), one new `REASONS` closed-set entry (`"not added"`), and one file-private renderer helper (`wrapDescription`). All five artefacts land in ONE atomic commit alongside the catalog state(s) and UAT fixture(s) that first consume them, per the v1.3 retrospective atomic-supersession lesson (`c4d87d4`, `dbd149a`).
+Phase 42 is a pure type-model + renderer-seam extension in `extensions/pi-claude-marketplace/shared/notify.ts`. It adds two new info-surface message variants (`MarketplaceInfoMessage` + `PluginInfoMessage`), one new `REASONS` closed-set entry (`"not added"`), and one file-private renderer helper (`wrapDescription`). All five artifacts land in ONE atomic commit alongside the catalog state(s) and UAT fixture(s) that first consume them, per the v1.3 retrospective atomic-supersession lesson (`c4d87d4`, `dbd149a`).
 
 The phase produces **zero behavior change** for any v1.0-v1.7 command surface: the existing 10-arm plugin status switch in `renderPluginRow` and the 7-arm marketplace status switch in `renderMpHeader` must remain byte-identical for all 60+ catalog UAT fixtures that exercise them. The new render arms are reached only via new top-level message variants that no existing call site emits.
 
@@ -385,7 +385,7 @@ function wrapDescription(
 ### Anti-Patterns to Avoid
 
 - **Splitting the atomic commit:** "Land the type model first, then the catalog state in a second commit." Catalog UAT goes RED for the first commit; Plan 13-03 retrospective forbids this.
-- **Mutating the existing `NotificationMessage` shape so existing call sites break:** Use the optional `kind?` strategy or schedule a separate mechanical-rewrite commit BEFORE the atomic-supersession commit. The atomic-supersession commit itself should ONLY contain the new contract artefacts (REASON + types + helper + fixtures + catalog).
+- **Mutating the existing `NotificationMessage` shape so existing call sites break:** Use the optional `kind?` strategy or schedule a separate mechanical-rewrite commit BEFORE the atomic-supersession commit. The atomic-supersession commit itself should ONLY contain the new contract artifacts (REASON + types + helper + fixtures + catalog).
 - **Adding `wrapDescription` to the public exports:** File-private mirrors `truncateDescription`. Exporting would let other modules construct user-visible strings outside `notify()`, violating SNM-17.
 - **Mutating `PLUGIN_STATUSES` to add an info-surface status:** Info messages are a SIBLING concept to cascades, not a new plugin status. Reuse the four existing literals `"installed" | "available" | "unavailable" | "failed"` on the new `PluginInfoMessage.plugin.status` field; do NOT add a 12th `PLUGIN_STATUSES` member.
 - **Hand-rolling `composeReasons` for info messages:** The existing `composeReasons` (`shared/notify.ts:896`) is the SOLE site that composes `{reason, reason}` braces; the info renderers MUST reuse it (pass `false, false` for the two soft-dep declares flags -- info messages do not emit soft-dep markers).
@@ -413,7 +413,7 @@ Phase 42 is a pure source edit (type model + renderer arms). No runtime state ch
 | Live service config | None -- no external service touched. | None -- verified by inspecting NFR-5 compliance (info commands ship in Phases 43-44, not 42). |
 | OS-registered state | None. | None. |
 | Secrets/env vars | None. | None. |
-| Build artifacts | None -- TypeScript transpilation is at runtime via Node native TS strip; no compiled artefact regenerates. | None. |
+| Build artifacts | None -- TypeScript transpilation is at runtime via Node native TS strip; no compiled artifact regenerates. | None. |
 
 ## Common Pitfalls
 

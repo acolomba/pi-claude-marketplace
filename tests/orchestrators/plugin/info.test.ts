@@ -1541,7 +1541,7 @@ test("ENBL-04: info on a recorded-but-disabled plugin renders the list-arm `(dis
     // Single notify (IL-2 holds on the all-disabled path); list-arm
     // marketplace header + `(disabled)` row per the catalog's info-surface
     // paragraph; NO per-kind component lines (the plugin has no
-    // materialized artefacts -- ENBL-02). Severity info.
+    // materialized artifacts -- ENBL-02). Severity info.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
     assert.equal(

@@ -69,7 +69,7 @@
 | `persistence/locations.ts` | **MODIFIED** | Add `configJsonPath` (`<scopeRoot>/claude-plugins.json`) and `configLocalJsonPath` (`<scopeRoot>/claude-plugins.local.json`) fields. Both under `scopeRoot`, NOT `extensionRoot`. |
 | `persistence/state-io.ts` | **MODIFIED** | `STATE_SCHEMA` keeps only machine bookkeeping; `autoupdate` (desired) moves to config. Bump `schemaVersion` if shape changes load-incompatibly. |
 | `orchestrators/{marketplace,plugin}/*` | **MODIFIED** | Each mutating command gains a config write-back step inside its existing lock. `--local` routing flag added. |
-| `orchestrators/plugin/enable.ts`, `disable.ts` | **NEW** | Ride existing uninstall (artefact removal) / install-from-cache (re-materialize) machinery; keep config entry + version pin. |
+| `orchestrators/plugin/enable.ts`, `disable.ts` | **NEW** | Ride existing uninstall (artifact removal) / install-from-cache (re-materialize) machinery; keep config entry + version pin. |
 | `index.ts` | **MODIFIED** | Add load-time reconcile invocation (see hook-point analysis below). |
 | `shared/notify.ts` + catalog | **MODIFIED** | New reconcile-summary surface within the existing `MarketplaceNotificationMessage` grammar. |
 
@@ -110,7 +110,7 @@ extensions/pi-claude-marketplace/
 
 ### Pattern 1: Load-time hook placement — reconcile **before** discover, sequenced not concurrent
 
-**What:** The reconciler must run, materialize artefacts, then `resources_discover` reads the materialized `resources/skills` and `resources/prompts`.
+**What:** The reconciler must run, materialize artifacts, then `resources_discover` reads the materialized `resources/skills` and `resources/prompts`.
 
 **The seam:** `index.ts` currently wires two independent handlers:
 - `on("resources_discover", …)` → `aggregateDiscoveredResources(...)` (reads `skillsTargetDir`/`promptsTargetDir`, lines 21–30)
@@ -186,10 +186,10 @@ for (const p of plan.pluginsToInstall)     await installPlugin({..., notificatio
 **The integration point:** Two atomic files, two writes — there is no single transaction spanning both. The codebase already accepts last-writer-wins byte-safety via `write-file-atomic` and uses `proper-lockfile` for the *state* critical section (`with-state-guard.ts`). Recommended ordering inside each command:
 
 1. Acquire the per-scope state lock (existing `withStateGuard`/`withLockedStateTransaction`).
-2. Do the physical artefact work + `state.json` save (existing).
+2. Do the physical artifact work + `state.json` save (existing).
 3. **Then** write-back config (`saveConfig`) *while still holding the same scope lock* — extend the locked region, not a second lock.
 
-Use `withLockedStateTransaction` (the explicit-save variant, `with-state-guard.ts:83`) for commands that need to interleave a config write with the state save, because it hands the caller `tx.save()` control. The config write-back goes between artefact-commit and `tx.save()`, or immediately after, inside the same `withScopeLock` body.
+Use `withLockedStateTransaction` (the explicit-save variant, `with-state-guard.ts:83`) for commands that need to interleave a config write with the state save, because it hands the caller `tx.save()` control. The config write-back goes between artifact-commit and `tx.save()`, or immediately after, inside the same `withScopeLock` body.
 
 **Recommendation:** Add a `shared/config-writeback.ts` helper invoked *inside* the existing locked closure so config + state share one lock acquisition:
 
@@ -205,10 +205,10 @@ await withLockedStateTransaction(loc, async (tx) => {
 
 ### Pattern 5: enable/disable rides existing uninstall/install machinery
 
-**What:** Disable = remove artefacts but keep config entry + version pin + cached clone. Enable = re-materialize from cache, no network.
+**What:** Disable = remove artifacts but keep config entry + version pin + cached clone. Enable = re-materialize from cache, no network.
 
 **Reuse map:**
-- **disable** ≈ `uninstallPlugin` *minus* the `pluginDataDir` rm-rf (PU-2, uninstall.ts) and *minus* config-entry removal. The artefact cascade (`cascadeUnstagePlugin`) is exactly the bridge-unstaging disable needs. So: parameterize uninstall, or extract its cascade core and have `disable.ts` call the cascade + clear the state `resources` record while leaving the cached clone (`sources/<mp>`) and config entry intact.
+- **disable** ≈ `uninstallPlugin` *minus* the `pluginDataDir` rm-rf (PU-2, uninstall.ts) and *minus* config-entry removal. The artifact cascade (`cascadeUnstagePlugin`) is exactly the bridge-unstaging disable needs. So: parameterize uninstall, or extract its cascade core and have `disable.ts` call the cascade + clear the state `resources` record while leaving the cached clone (`sources/<mp>`) and config entry intact.
 - **enable** ≈ `installPlugin` with `notifications` orchestrated, but reading from the **cached manifest/clone only** — which `installPlugin` already does (PI-2: "cached manifest read ONLY (no network)", install.ts:17). `reinstall` (PRD v1.1) already proves "cached-manifest / recorded-version reuse with no network sync." **`reinstall.ts` is the closest template for enable** — same no-network re-materialize-from-cache shape.
 
 **Recommendation:** enable.ts delegates to the reinstall building blocks (`reinstallPlugin`); disable.ts delegates to the uninstall cascade core. Both then write-back `enabled: false/true` to config. Keep the version pin: enable reads the pinned version from the config entry / state record, never re-resolves from network.
@@ -276,9 +276,9 @@ Pi startup / /reload
 | plugin ref (`plugin@marketplace`) | ✔ (config declares) | ✔ keyed record |
 | plugin `enabled` | ✔ **new in config** | — (or mirror as derived) |
 | plugin `version` (resolved/pinned) | ✔ pin is desired; **config carries the pin** | ✔ state carries *resolved* version |
-| plugin `resolvedSource`, `compatibility`, `resources`, `installedAt`, `updatedAt` | — | ✔ machine bookkeeping (materialized artefact records) |
+| plugin `resolvedSource`, `compatibility`, `resources`, `installedAt`, `updatedAt` | — | ✔ machine bookkeeping (materialized artifact records) |
 
-**Net:** the *desired* fields (which marketplaces/plugins, their source, autoupdate, enabled, version pin) become config-authoritative; the *materialized* records (what artefacts were actually written, resolved versions, timestamps, derived paths) stay in `state.json`. Keep `source` duplicated into state for runtime resolution (the reconciler compares them; mismatch ⇒ re-add). Decide whether to bump `STATE_SCHEMA.schemaVersion` (currently locked `1`) — if `autoupdate` is dropped, an old state.json with it still validates (it's `Type.Optional`), so a bump may be optional; confirm during design.
+**Net:** the *desired* fields (which marketplaces/plugins, their source, autoupdate, enabled, version pin) become config-authoritative; the *materialized* records (what artifacts were actually written, resolved versions, timestamps, derived paths) stay in `state.json`. Keep `source` duplicated into state for runtime resolution (the reconciler compares them; mismatch ⇒ re-add). Decide whether to bump `STATE_SCHEMA.schemaVersion` (currently locked `1`) — if `autoupdate` is dropped, an old state.json with it still validates (it's `Type.Optional`), so a bump may be optional; confirm during design.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Defined:** 2026-07-13
 **Workstream:** url-source
-**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artefact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
+**Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
 **Milestone goal:** Give git-source plugins an honest pre-install lifecycle -- an explicit `(remote)` status for unfetched plugins replacing the over-claiming manifest-only `(available)`, a pi-only `fetch` verb that warms the shared clone cache without installing, and fs-only component resolution in `info` wherever a clone is already warm.
 

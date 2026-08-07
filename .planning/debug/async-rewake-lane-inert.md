@@ -110,5 +110,5 @@ root_cause: |
   The seam test proves the corrected config spawns both children with correct
   HENV-02 env through the unmodified production path.
 fix: "None applied (diagnose-only mode). Direction: re-stage the fixture (reinstall or update env-observe@henv-uat-mkt) so the staged copy carries the sync+async PreToolUse pair, then re-run UAT Test 2 live; no product code change required for G-91-2."
-verification: "Seam-level: throwaway test 2/2 pass (experiment A reproduces the failure from the stale artefact; experiment B shows both spawns + full HENV key parity from the corrected artefact). Live re-verification pending re-staged fixture."
+verification: "Seam-level: throwaway test 2/2 pass (experiment A reproduces the failure from the stale artifact; experiment B shows both spawns + full HENV key parity from the corrected artifact). Live re-verification pending re-staged fixture."
 files_changed: []
