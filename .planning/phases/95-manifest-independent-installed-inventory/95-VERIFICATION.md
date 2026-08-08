@@ -1,7 +1,8 @@
 ---
 phase: 95-manifest-independent-installed-inventory
 verified: 2026-08-08T20:51:54Z
-status: human_needed
+status: passed
+human_validation: "2026-08-08 operator sign-off via autonomous UAT — both items accepted (All good — continue)"
 score: 21/21 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
