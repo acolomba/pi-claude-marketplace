@@ -98,12 +98,16 @@ async function withHermeticHome<T>(
 }
 
 interface SeedMarketplaceOpts {
-  scope: "user" | "project";
+  /**
+   * The user-scope root (`<home>/.pi/agent`). This helper seeds USER scope
+   * only -- the project side of the fold cases is seeded by
+   * `seedFoldedProjectClone`, which needs a marketplace root it does not own.
+   */
   scopeRoot: string;
   cwd: string;
   mpName: string;
-  /** When provided, written to <mpRoot>/.claude-plugin/marketplace.json. */
-  manifest?: unknown;
+  /** Written to <mpRoot>/.claude-plugin/marketplace.json. */
+  manifest: unknown;
   /**
    * Installed plugin records keyed by plugin name. `disabled: true` seeds
    * the ENBL-02 empty-resources marker (recorded-but-disabled); the default
@@ -138,13 +142,13 @@ interface SeedMarketplaceOpts {
 }
 
 /**
- * Seed a marketplace into the given scope's state.json. Writes the
- * marketplace.json on disk (under <scopeRoot>/marketplaces/<mpName>) when
- * `manifest` is provided. Creates installable source dirs under the same
- * marketplace root so resolveStrict can find them.
+ * Seed a marketplace into USER-scope state.json. Writes the marketplace.json
+ * on disk (under <scopeRoot>/marketplaces/<mpName>) and creates installable
+ * source dirs under the same marketplace root so resolveStrict can find them.
  */
 async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
-  const { scope, scopeRoot, cwd, mpName, manifest } = opts;
+  const scope = "user";
+  const { scopeRoot, cwd, mpName, manifest } = opts;
   const locations = locationsFor(scope, cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -153,9 +157,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
 
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
-  if (manifest !== undefined) {
-    await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
-  }
+  await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 
   // Create installable plugin source dirs so resolver probes succeed.
   for (const rel of opts.installablePluginDirs ?? []) {
@@ -242,7 +244,6 @@ test("INV-01: an enabled, fully supported record absent from a LOADED manifest r
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -266,7 +267,6 @@ test("INV-01 / MSG-GR-4: the soft-dep marker composes AFTER the typed reason ins
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -292,7 +292,6 @@ test("INV-01: a record the loaded manifest DOES declare renders with no reason b
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -320,7 +319,6 @@ test("INV-01: manifest membership is EXACT string identity -- a name differing o
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -355,7 +353,6 @@ test("INV-02: a manifest-absent degraded record keeps its glyph, recorded versio
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -381,7 +378,6 @@ test("INV-02: a degraded record its manifest still DECLARES keeps its unsupporte
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -398,9 +394,10 @@ test("INV-02: a degraded record its manifest still DECLARES keeps its unsupporte
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      // The prepend is GATED on manifest absence. This arm is also reached by a
-      // `partially-installed-upgradable` record, which by definition HAS a
-      // manifest entry -- an ungated prepend would falsify this row.
+      // The prepend is GATED on manifest absence: this record IS declared
+      // (same name, same version, so the row stays `partially-installed`
+      // rather than deriving the upgradable arm), and an ungated prepend
+      // would falsify it.
       ["● mp1 [user]", "  ◉ remote v1.0.0 (partially-installed) {lsp}"].join("\n"),
     );
   });
@@ -410,7 +407,6 @@ test("INV-02: a manifest-absent degraded record with a non-carve-out kind render
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -442,7 +438,6 @@ test("INV-04: a manifest-absent CANONICAL disabled record renders `(disabled)` w
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -474,7 +469,6 @@ test("INV-03: `--installed` spans both manifest-absent installed forms and exclu
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -575,7 +569,6 @@ test("BOUND-03: a folded row whose project-side manifest FAILED to load is prese
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -610,7 +603,6 @@ test("BOUND-03: a folded row whose project-side manifest LOADED without the entr
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
@@ -651,7 +643,6 @@ test("INV-01: a folded row absent from its OWN manifest claims the absence even 
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
-      scope: "user",
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",

@@ -312,10 +312,11 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
  * prepending renders the brace with its tokens the wrong way round.
  *
  * The prepend is GATED on `notInManifest` because this row form is also
- * reached by a `partially-installed-upgradable` record, which by definition
- * HAS a manifest entry. `narrowUnsupportedKinds` stays the SOLE producer of
- * the unsupported-kind tokens -- this wraps its output rather than replacing
- * it.
+ * reached by every DECLARED degraded record -- one whose manifest entry
+ * exists and whose components merely resolved unsupported. Such a record must
+ * keep its unsupported-kind tokens alone. `narrowUnsupportedKinds` stays the
+ * SOLE producer of those tokens -- this wraps its output rather than
+ * replacing it.
  */
 function partiallyInstalledReasons(
   record: ExtensionState["marketplaces"][string]["plugins"][string],
