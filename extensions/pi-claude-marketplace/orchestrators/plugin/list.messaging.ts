@@ -87,11 +87,18 @@ export type ListMsg =
  * is a TS2741 compile error at the `satisfies` site. Arm bodies are
  * byte-identical to the central `renderPluginRow` switch.
  *
- * RLD-04 / D-08: the `installed` inventory arm passes `undefined` for `reasons`
- * so the orphan-rewake brace (an install-cascade surface) never leaks onto a
- * steady-state inventory row. The `available` / `unavailable` arms omit the
- * `[<scope>]` bracket entirely (MSG-PL-6 / SNM-11 carve-out) by passing
- * `undefined` to `renderScopeBracket`.
+ * INV-01: the `installed` inventory arm forwards `p.reasons`. Steady-state
+ * inventory rows may state DURABLE facts about a record's relationship to its
+ * marketplace -- `{not in manifest}` stays true across reloads until either
+ * the manifest or the installation changes -- but not TRANSIENT conditions
+ * tied to a pending action (D-95-02). Under D-95-01 that split is documented
+ * convention for authors of the row builder, not a gate here: this map holds
+ * no allowlist and renders whatever the orchestrator stamped. The absence
+ * claim itself is gated upstream on a SUCCESSFUL manifest read (BOUND-03 /
+ * D-95-05).
+ *
+ * The `available` / `unavailable` arms omit the `[<scope>]` bracket entirely
+ * (MSG-PL-6 / SNM-11 carve-out) by passing `undefined` to `renderScopeBracket`.
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
   installed: (p, probe, mpScope) =>
@@ -101,7 +108,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       mpScope,
       renderVersion(p.version),
       "(installed)",
-      undefined,
+      p.reasons,
       probe,
     ),
   available: (p, probe, mpScope) =>
