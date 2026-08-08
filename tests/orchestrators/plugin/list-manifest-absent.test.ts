@@ -243,6 +243,119 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// INV-01: the clean manifest-absent row states the absence
+// ──────────────────────────────────────────────────────────────────────────
+
+test("INV-01: an enabled, fully supported record absent from a LOADED manifest renders `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // A manifest that parses with an EMPTY `plugins` array is a successful
+      // load, so every installed record under it is genuinely absent.
+      manifest: { name: "mp1", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+  });
+});
+
+test("INV-01 / MSG-GR-4: the soft-dep marker composes AFTER the typed reason inside one brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      // The record declares agents and the companion probes as unloaded.
+      installed: { alpha: { version: "1.0.0", agents: true } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp1 [user]",
+        "  ● alpha v1.0.0 (installed) {not in manifest, requires pi-subagents}",
+      ].join("\n"),
+    );
+  });
+});
+
+test("INV-01: a record the loaded manifest DOES declare renders with no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      // Same version as the manifest entry, so the row stays `(installed)`
+      // rather than deriving `(upgradable)` on the PL-5 string compare.
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"),
+    );
+  });
+});
+
+test("INV-01: manifest membership is EXACT string identity -- a name differing only in case is a miss", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The manifest declares `Alpha`; the installed record is `alpha`. The
+      // membership test applies no case folding and no Unicode normalization,
+      // so the record is absent.
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "Alpha", source: "./Alpha", version: "1.0.0" }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["Alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    // `--installed` keeps the undeclared-but-available `Alpha` row out of the
+    // expectation so the assertion isolates the membership question.
+    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // INV-02: the degraded manifest-absent row
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -338,7 +451,7 @@ test("INV-03: `--installed` spans both manifest-absent installed forms and exclu
       // and never consults reasons: `clean` precedes `degraded`.
       [
         "● mp1 [user]",
-        "  ● clean v1.0.0 (installed)",
+        "  ● clean v1.0.0 (installed) {not in manifest}",
         "  ◉ degraded v2.0.0 (partially-installed) {lsp}",
       ].join("\n"),
     );
@@ -346,8 +459,63 @@ test("INV-03: `--installed` spans both manifest-absent installed forms and exclu
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// BOUND-03: the cross-scope orphan fold under an UNREADABLE project manifest
+// BOUND-03: the cross-scope orphan fold
 // ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Write a PROJECT-scope marketplace record that is a CLONE of the user-scope
+ * one: the install orchestrator copies `marketplaceRoot` verbatim, and that
+ * root is the ONLY field `isCloneOfUserMarketplace` compares, so sharing it is
+ * what makes the fold trigger. `manifestPath` is the axis under test -- a
+ * missing file makes the project-side manifest read FAIL, the user record's
+ * real manifest makes it LOAD without the entry.
+ *
+ * `seedMarketplace` cannot express this: it allocates a fresh marketplace root
+ * per call.
+ */
+async function seedFoldedProjectClone(opts: {
+  cwd: string;
+  marketplaceRoot: string;
+  manifestPath: string;
+  pluginName: string;
+  version: string;
+}): Promise<void> {
+  const projectLocations = locationsFor("project", opts.cwd);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await saveState(projectLocations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp1: {
+        name: "mp1",
+        scope: "project",
+        source: pathSource("./mp1-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath: opts.manifestPath,
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {
+          [opts.pluginName]: {
+            version: opts.version,
+            resolvedSource: "./placeholder",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            // Populated resources: an ENABLED installed record (empty
+            // resources + installable:true would read as disabled per
+            // ENBL-04 and render `(disabled)` instead of `(installed)`).
+            resources: {
+              skills: [`${opts.pluginName}-skill`],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  } as unknown as Parameters<typeof saveState>[1]);
+}
 
 test("BOUND-03: a folded row whose project-side manifest FAILED to load is preserved and carries no reason brace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
@@ -361,48 +529,15 @@ test("BOUND-03: a folded row whose project-side manifest FAILED to load is prese
       // No user-scope installs -- alpha lives in project scope (the fold case).
     });
 
-    // The install orchestrator clones the user-scope marketplace record into
-    // the project scope verbatim, so a real clone shares `marketplaceRoot` --
-    // which is the ONLY field `isCloneOfUserMarketplace` keys on. Write the
-    // project record directly to keep that root identical while pointing
-    // `manifestPath` at a file that does not exist, so the project-side
-    // manifest read FAILS.
     const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
-    const projectLocations = locationsFor("project", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 2,
-      marketplaces: {
-        mp1: {
-          name: "mp1",
-          scope: "project",
-          source: pathSource("./mp1-src"),
-          addedFromCwd: cwd,
-          manifestPath: path.join(sharedMpRoot, ".claude-plugin", "does-not-exist.json"),
-          marketplaceRoot: sharedMpRoot,
-          plugins: {
-            alpha: {
-              version: "1.0.0",
-              resolvedSource: "./placeholder",
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              // Populated resources: an ENABLED installed record (empty
-              // resources + installable:true would read as disabled per
-              // ENBL-04 and render `(disabled)` instead of `(installed)`).
-              resources: {
-                skills: ["alpha-skill"],
-                prompts: [],
-                agents: [],
-                mcpServers: [],
-                hooks: [],
-              },
-              enabled: true,
-              installedAt: "2026-01-01T00:00:00.000Z",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          },
-        },
-      },
-    } as unknown as Parameters<typeof saveState>[1]);
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      // Nonexistent file -> the project-side manifest read throws.
+      manifestPath: path.join(sharedMpRoot, ".claude-plugin", "does-not-exist.json"),
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd });
@@ -413,6 +548,38 @@ test("BOUND-03: a folded row whose project-side manifest FAILED to load is prese
       // bracket; only the unverified absence claim is suppressed. Dropping the
       // row instead would hide a plugin already materialized on disk.
       ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+    );
+  });
+});
+
+test("BOUND-03: a folded row whose project-side manifest LOADED without the entry renders `{not in manifest}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      // The user record's REAL manifest: it loads, and it omits alpha. Only
+      // the manifestPath differs from the failed-read case above.
+      manifestPath: path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"),
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed) {not in manifest}"].join("\n"),
     );
   });
 });
