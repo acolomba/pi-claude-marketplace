@@ -632,3 +632,46 @@ test("BOUND-03: a folded row whose project-side manifest LOADED without the entr
     );
   });
 });
+
+// INV-01: the fold triggers on `marketplaceRoot` equality alone, so the two
+// records can name DIFFERENT manifests -- `marketplace add` derives the root by
+// walking up two levels when the source path is a manifest FILE, which pairs
+// one root with an arbitrary manifest name. The folded row renders under the
+// USER header, and that header's own manifest DOES declare alpha, so a
+// `{not in manifest}` brace read off the project-side manifest would be a false
+// statement about the marketplace the header names.
+test("INV-01: a folded row whose project-side manifest is not the block's manifest makes no absence claim", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The USER block's manifest DECLARES alpha.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // Same root, different manifest file -- and this one loads cleanly while
+    // omitting alpha, so only the claim-authority check can suppress the brace.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(otherManifestPath, JSON.stringify({ name: "mp1", plugins: [] }), "utf8");
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+    );
+  });
+});

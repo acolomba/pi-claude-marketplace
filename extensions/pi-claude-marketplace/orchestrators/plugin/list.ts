@@ -778,7 +778,7 @@ async function enumerateMarketplacePlugins(
   scopedManifest: ScopedManifest,
   excludeFromAvailable: ReadonlySet<string> = new Set(),
 ): Promise<ListMsg[]> {
-  const { manifest, loadError } = scopedManifest;
+  const { manifest, loadError, ownsAbsenceClaim } = scopedManifest;
   const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
@@ -789,10 +789,12 @@ async function enumerateMarketplacePlugins(
     // normalization.
     const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
     // BOUND-03 / D-95-05: claim an absence ONLY about a manifest that was
-    // actually read. A load failure yields `false`, so the row keeps its bare
-    // `(installed)` form: the row is preserved and only the unverified claim
-    // is suppressed.
-    const notInManifest = loadError === undefined && manifestEntry === undefined;
+    // actually read, and (INV-01) only about the manifest the rendering
+    // block's header names. Either disqualification yields `false`, so the row
+    // keeps its bare `(installed)` form: the row is preserved and only the
+    // unverified claim is suppressed.
+    const notInManifest =
+      ownsAbsenceClaim && loadError === undefined && manifestEntry === undefined;
     const row = await installedRowMessage(
       pluginName,
       pluginScope,
@@ -847,16 +849,35 @@ async function enumerateMarketplacePlugins(
 interface ScopedManifest {
   readonly manifest: MarketplaceManifest | undefined;
   readonly loadError: string | undefined;
+  /**
+   * INV-01 / BOUND-03: whether this result may back a `{not in manifest}`
+   * claim on the block it is enumerated into. False when the manifest read
+   * here is NOT the one the rendering block's header names.
+   */
+  readonly ownsAbsenceClaim: boolean;
 }
 
+/**
+ * `claimAuthorityPath` is the manifest the RENDERING block's header names. It
+ * defaults to the record's own manifest, which is the identity for every
+ * same-scope block. The cross-scope orphan fold passes the USER block's path:
+ * folded rows are enumerated from the PROJECT record but rendered under the
+ * user-scope header, and `isCloneOfUserMarketplace` folds on `marketplaceRoot`
+ * equality alone, so the two records can name different manifests (`marketplace
+ * add` derives `marketplaceRoot` by walking up two levels when the source path
+ * is a manifest FILE). Comparing at the LOAD site keeps the "one value, not a
+ * manifest plus a separate consistency flag" shape the enumerator relies on.
+ */
 async function loadMarketplaceManifestSoftly(
   mpRecord: ExtensionState["marketplaces"][string],
+  claimAuthorityPath: string = mpRecord.manifestPath,
 ): Promise<ScopedManifest> {
+  const ownsAbsenceClaim = mpRecord.manifestPath === claimAuthorityPath;
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
-    return { manifest, loadError: undefined };
+    return { manifest, loadError: undefined, ownsAbsenceClaim };
   } catch (err) {
-    return { manifest: undefined, loadError: errorMessage(err) };
+    return { manifest: undefined, loadError: errorMessage(err), ownsAbsenceClaim };
   }
 }
 
@@ -1037,8 +1058,14 @@ export async function loadPluginListPayload(
       // `p.scope !== mp.scope`.
       // BOUND-03 / D-95-04: bind the WHOLE result. Taking `manifest` alone
       // here dropped `loadError`, which let a folded row claim an absence
-      // about a project-side manifest that never parsed.
-      const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
+      // about a project-side manifest that never parsed. INV-01: pass the USER
+      // record's manifest as the claim authority -- these rows render under the
+      // user-scope header, so an absence claim is only honest when both records
+      // name the same manifest.
+      const projectScopedManifest = await loadMarketplaceManifestSoftly(
+        projectMp,
+        mpRecord.manifestPath,
+      );
       // WR-02: filter to ONLY installed/upgradable rows. The project-side
       // enumeration also returns `available` and `unavailable` bucket rows
       // from the same shared manifest (cloned `marketplaceRoot`); folding
