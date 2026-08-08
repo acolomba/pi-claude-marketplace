@@ -206,27 +206,65 @@ Does NOT cover `plugin info` (Phase 96), the disabled-state predicate repair
 <code_context>
 ## Existing Code Insights
 
-### The INV-01 change is smaller than the roadmap states
+### INV-01 is a TWO-FILE edit — corrected 2026-08-08 after research
 
-ROADMAP success criterion 2 says INV-01 "requires lifting the render map's
-suppression of reasons on installed rows." **There is no render-map
-suppression.** Verified:
+> **This section previously claimed there was no render-map suppression and that
+> INV-01 was a single added field. That was WRONG and is corrected below.** The
+> error came from reading the central `renderPluginRow` switch and assuming the
+> list surface uses it. It does not.
 
-- `shared/notify.ts:2180-2193` — the `installed` render arm already calls
-  `composeReasons(p.reasons, ...)`.
-- `shared/notify.ts:682` — `PluginInstalledMessage.reasons?` already exists on
-  the type.
+The list surface does **not** render through `shared/notify.ts::renderPluginRow`.
+It dispatches per-row through `context.render[row.status]` —
+`shared/notify-context.ts:110-113` states this verbatim ("NOT the central
+renderPluginRow switch"), and `list.ts:1210` routes through `LIST_CONTEXT`.
 
-The suppression is one orchestrator omission at
-`orchestrators/plugin/list.ts:485-499`, where the returned object simply does
-not set the field. INV-01 is a single added field, not a renderer change.
+`LIST_RENDER.installed` (`orchestrators/plugin/list.messaging.ts:96-107`) passes
+a hardcoded `undefined` as the `reasons` argument to `installedLikeRow`
+(parameter at `shared/notify.ts:2147`). Its comment at `list.messaging.ts:90-92`
+carries the same RLD-04 / D-08 orphan-rewake rationale as the `list.ts` one, and
+adds the useful detail that the excluded brace was "an install-cascade surface"
+— which supports the durable-vs-transient framing in D-95-02.
 
-### Success criterion 3 is already satisfied by existing behavior
+**INV-01 therefore requires both:**
+
+1. `orchestrators/plugin/list.ts:485-499` — stamp `reasons` on the returned
+   `PluginInstalledMessage` (the type already permits it, `notify.ts:682`).
+2. `orchestrators/plugin/list.messaging.ts:96-107` — pass `p.reasons` instead of
+   the hardcoded `undefined`.
+
+Changing only (1) produces **zero visible output change**. The ROADMAP's original
+criterion-2 wording was correct.
+
+### INV-02 is not pure characterization
+
+REQUIREMENTS.md INV-02 requires `not in manifest` **prepended** to the partial
+row's existing unsupported-kind reasons. That is a second orchestrator edit on
+the `partially-installed` construction path in `list.ts`, not merely a
+characterization test. The `partially-installed` arm of `LIST_RENDER` routes
+through `pluginRow`, which does forward `p.reasons`, so no render-map change is
+needed for this arm — only the orchestrator-side reason composition.
+
+### INV-04 is structurally guaranteed
+
+`PluginDisabledMessage` has no `reasons` field, and `LIST_RENDER.disabled`
+(`list.messaging.ts`) hardcodes `composeReasons(undefined, ...)`. A disabled row
+cannot carry `{not in manifest}` by construction. INV-04's deliverable is
+genuinely characterization only.
+
+### Success criterion 3 is testable on the `installed` arm ONLY
 
 `composeReasons` (`notify.ts:1990-2004`) pushes soft-dep markers **after** the
-typed reasons. "Soft-dependency markers still compose after the new reason
-rather than being displaced by it" is therefore existing behavior needing a
-regression test, not new implementation work.
+typed reasons, so ordering is existing behavior needing a regression test rather
+than new implementation work.
+
+But the criterion cites both INV-01 and INV-02, and the INV-02 half is not
+testable: `pluginRow` (`notify.ts:2053-2073`), which renders the
+`partially-installed` arm, hardcodes **both** soft-dep flags to `false` at
+`notify.ts:2071`. Markers can never fire on a partial row. Only
+`installedLikeRow` threads real `p.dependencies` values through.
+
+Plan criterion 3 against the `installed` arm and record the partial-arm
+limitation rather than writing a test that can only ever pass vacuously.
 
 ### The brace and the reload trailer are independent axes
 

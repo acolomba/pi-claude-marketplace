@@ -168,7 +168,7 @@ unless noted. Decision records live in
 4. A folded row whose manifest failed to load never renders `{not in manifest}`; the fold path distinguishes a failed read from a successful read with no entry. (BOUND-03)
 5. The LLM tool payload carries the reason on both `installed` and `partially-installed` rows, so the slash command and the tool surface report the same fact. Asserted on the tool output, not inferred from the row builder. (INV-05)
 
-**Correction to criterion 2 (2026-08-08, quick task 260808-dhm):** the original wording said this "requires lifting the render map's suppression of reasons on installed rows." There is no render-map suppression. `shared/notify.ts` already composes reasons on the `installed` arm and `PluginInstalledMessage.reasons?` already exists on the type; the omission is a single unset field in the `list.ts` row builder. Scope is smaller than the original phrasing implies.
+**Criterion 2 note (2026-08-08, retracted and restated after Phase 95 research):** an earlier same-day amendment claimed there was no render-map suppression to lift. That claim was wrong and is withdrawn — the original criterion-2 wording is correct. The list surface does NOT render through the central `renderPluginRow` switch in `shared/notify.ts`; it dispatches through `context.render[row.status]` (`shared/notify-context.ts:110-113`, routed at `list.ts:1210` via `LIST_CONTEXT`). `LIST_RENDER.installed` (`orchestrators/plugin/list.messaging.ts:96-107`) hardcodes `undefined` into `installedLikeRow`'s `reasons` parameter. **INV-01 is therefore a two-file edit** — stamp `reasons` in the `list.ts` row builder AND pass `p.reasons` through in `list.messaging.ts`. Changing only `list.ts` produces no visible output change.
 
 **Plans:** 0 plans
 
