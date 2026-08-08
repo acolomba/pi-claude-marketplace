@@ -128,6 +128,7 @@ None of the carryover items originate from v1.17 env-parity.
 |----------|------|--------|
 | backlog | REASON-01 — unify all parse-error reasons under a `{malformed <feature>}` family | deferred |
 | debug | async-rewake-lane-inert | diagnosed (diagnose-only; by design) |
+| debug | disabled-partial-record-unrecognized | diagnosed (real defect; fix scoped out of v1.18) |
 | debug | knowledge-base | unknown |
 | quick_task | 260621-kmm-add-explicit-enabled-boolean-field-to-pl | unknown |
 | quick_task | 260718-tli-fix-pr-88-external-contribution-to-pass- | unknown |
