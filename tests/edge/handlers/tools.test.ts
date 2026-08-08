@@ -729,6 +729,68 @@ test("pi_claude_marketplace_plugin_list :: upgradable plugin (manifest version >
   });
 });
 
+// INV-05: a clean, enabled record whose marketplace manifest LOADS but does not
+// declare it. The manifest written here is `{ name, plugins: [] }` -- a
+// successful read of a manifest that declares nothing, not a load failure -- so
+// the row carries the absence reason and the tool payload forwards it.
+test("INV-05 :: a manifest-absent installed record carries [not in manifest] on the tool payload", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "absent-mkt",
+      installedPlugins: [{ name: "palone", version: "1.0.0" }],
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
+
+    // The flat line and the structured payload must state the same fact.
+    assert.match(out.content[0]!.text, /\[installed\] palone\s+1\.0\.0\s+\(not in manifest\)/);
+    const details = out.details as {
+      plugins: { name: string; status: string; version?: string; reasons?: readonly string[] }[];
+    };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "palone");
+    assert.equal(details.plugins[0]!.status, "installed");
+    assert.equal(details.plugins[0]!.version, "1.0.0");
+    assert.deepEqual(details.plugins[0]!.reasons, ["not in manifest"]);
+  });
+});
+
+// INV-05: the control. The same shape whose manifest DOES declare the record at
+// the installed version keeps no `reasons` field at all, which proves the brace
+// is a property of manifest absence rather than of the installed status.
+test("INV-05 :: a manifest-declared installed record projects with no reasons field", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "declared-mkt",
+      installedPlugins: [{ name: "palone", version: "1.0.0" }],
+      manifestEntries: [{ name: "palone", source: "./plugins/palone", version: "1.0.0" }],
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
+
+    assert.doesNotMatch(out.content[0]!.text, /not in manifest/);
+    const details = out.details as {
+      plugins: { name: string; status: string; reasons?: readonly string[] }[];
+    };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "palone");
+    assert.equal(details.plugins[0]!.status, "installed");
+    assert.equal(details.plugins[0]!.reasons, undefined);
+  });
+});
+
 // Lines 407-408: renderPluginPayload skips a row when its status bucket is
 // not in the active filter (the continue branch).
 test("pi_claude_marketplace_plugin_list :: installed:true filter skips unavailable github-source row", async () => {
