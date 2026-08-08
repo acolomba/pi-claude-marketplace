@@ -18,31 +18,46 @@
   from Phase 94, the final v1.17 phase.
 - Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
 
-- [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change two things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are the render-map seam that currently suppresses reasons on installed rows, so `{not in manifest}` can render, and threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry. (INV-01, INV-02, INV-03, INV-04, BOUND-03)
+- [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change three things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are lifting the row builder's omission of reasons on installed rows so `{not in manifest}` can render, threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry, and widening the LLM tool surface's reason projection so the same fact reaches the agent. (INV-01, INV-02, INV-03, INV-04, INV-05, BOUND-03)
 - [ ] **Phase 96: Installation-record-backed plugin info** — the milestone's substantive phase. Reorder the info lookup so a successful manifest load with no entry falls through to the installation record instead of returning `(failed)`, reconstruct the component inventory from existing resource fields and the materialized hook config, preserve installed and partial compatibility on the state-only arm, and add the explicit network guard the reorder now requires for `--fetch`. The unknown-name and manifest-read boundaries already hold and are pinned as regressions. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
 - [ ] **Phase 97: Disabled-state classification repair** — the disabled-state predicate conjoins `compatibility.installable` with `!enabled`, and a partial install always persists `installable: false`, so disabling a partially-installed plugin produces a record no surface recognizes as disabled. Collapse the four copies of the predicate into one definition keyed only on `enabled`, then restore correct behavior across the five affected surfaces: list and info rendering, enable and disable idempotency, reconcile steady state, and the update short-circuit. This repairs ENBL-04, shipped in v1.12 and silently broken by partial installs. (ENBL-05, ENBL-06, ENBL-07, ENBL-08, ENBL-09)
 - [ ] **Phase 98: Lifecycle regression and contract documentation** — no lifecycle production changes are expected. Uninstall is already installation-record-driven and update and autoupdate already skip manifest-absent records, so this phase pins those with coverage spanning all five resource kinds and all four update enumeration paths, asserts no persistence, token, or network expansion, and reconciles the output catalog, the PRD, and the design doc against the behavior the first three phases actually shipped. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
 
-**Open decisions — resolve before Phase 95 planning:**
+**Open decisions:** resolved at the Phase 95 discuss session on 2026-08-08
+unless noted. Decision records live in
+`phases/95-manifest-independent-installed-inventory/95-CONTEXT.md`.
 
-1. **Reason braces on installed inventory rows.** INV-01 renders
-   `(installed) {not in manifest}`, but the list render map deliberately
-   suppresses reasons on installed rows today, with a recorded rationale about
-   keeping the orphan-rewake brace off steady-state inventory. Confirm the
-   reversal and record why manifest absence earns a brace where orphan rewake
-   did not.
-2. **Component name fidelity on the state-only info arm.** `resources.*` holds
-   Pi-generated installed names; `info` renders raw source names today. Either
-   display the generated names and document the divergence, or reverse-map them
-   by stripping the deterministic prefixes. Displaying generated names matches
-   the milestone thesis — report what is installed in this Pi — but makes the
-   same plugin render differently depending only on whether the manifest still
-   lists it.
-3. **LLM tool-surface exposure.** The tool projection forwards reasons only for
-   `unavailable`, `partially-available`, and `upgradable`, so a `{not in
-   manifest}` on an installed or partial row renders on the slash command and
-   silently vanishes from the tool payload. Decide whether v1.18 widens that
-   projection or accepts the asymmetry. Currently listed Out of Scope.
+1. **Reason braces on installed inventory rows — RESOLVED (D-95-01/02/03).**
+   Installed rows may carry reason braces, under a **general rule**: the
+   orchestrator stamps whatever typed reasons apply and `shared/notify.ts`
+   renders them, exactly as every other status arm works. No allowlist in the
+   render path, because the house invariant is that orchestrators determine
+   state while notify stays a dumb renderer. The recorded guidance for future
+   authors is **durable vs transient** — steady-state inventory rows may state
+   durable facts about the record, not conditions tied to a pending action.
+
+   Two corrections to the premise. There is no render-map suppression to
+   reverse (see the criterion-2 correction above). And the recorded rationale
+   cites `RLD-04` / `D-08`, neither of which is defined in any surviving
+   artifact — they appear only in source comments, and "orphan-rewake" appears
+   nowhere but two `list.ts` comments. Do not carry those anchors forward.
+
+2. **Component name fidelity on the state-only info arm — DEFERRED to Phase 96
+   discuss (D-95-11).** `resources.*` holds Pi-generated installed names; `info`
+   renders raw source names today. Either display the generated names and
+   document the divergence, or reverse-map them by stripping the deterministic
+   prefixes. Re-gated because it governs no Phase 95 code — list rows carry
+   plugin names, not component names — and Phase 96 discuss will have the
+   `info.ts` reconstruction in front of it.
+
+3. **LLM tool-surface exposure — RESOLVED (D-95-06/07).** v1.18 **widens** the
+   projection: `pluginReasons` forwards reasons for both `installed` and
+   `partially-installed`, tracked as INV-05 and landing in Phase 95 beside
+   INV-01. Two findings drove this away from the prior Out of Scope position:
+   `projectRowStatus` already flattens four statuses into `installed`, so a
+   degraded install is today indistinguishable from a clean one in the tool
+   payload; and `upgradable` already forwards reasons while also projecting to
+   `installed`, so the exclusion was never a held principle.
 
 <details>
 <summary>✅ v1.17 env-parity (Phases 90-94) — SHIPPED 2026-08-05</summary>
@@ -143,14 +158,17 @@
 
 **Depends on:** Nothing; this is the first v1.18 phase and touches the list inventory/classification path only.
 
-**Requirements:** INV-01, INV-02, INV-03, INV-04, BOUND-03
+**Requirements:** INV-01, INV-02, INV-03, INV-04, INV-05, BOUND-03
 
 **Success Criteria:**
 
 1. Characterization tests pin the current manifest-absent list behavior before any production edit: partial records keep `(partially-installed)` with their unsupported-kind reasons, disabled records stay `(disabled)`, and `--installed` spans both enabled forms. (INV-02, INV-03, INV-04)
-2. The default list renders a fully supported enabled state-only record as `● <plugin> v<recorded-version> (installed) {not in manifest}` under its marketplace, which requires lifting the render map's suppression of reasons on installed rows. The recorded version is used for the partial row too. (INV-01)
+2. The default list renders a fully supported enabled state-only record as `● <plugin> v<recorded-version> (installed) {not in manifest}` under its marketplace. The recorded version is used for the partial row too. (INV-01)
 3. Soft-dependency markers still compose after the new reason rather than being displaced by it. (INV-01, INV-02)
 4. A folded row whose manifest failed to load never renders `{not in manifest}`; the fold path distinguishes a failed read from a successful read with no entry. (BOUND-03)
+5. The LLM tool payload carries the reason on both `installed` and `partially-installed` rows, so the slash command and the tool surface report the same fact. Asserted on the tool output, not inferred from the row builder. (INV-05)
+
+**Correction to criterion 2 (2026-08-08, quick task 260808-dhm):** the original wording said this "requires lifting the render map's suppression of reasons on installed rows." There is no render-map suppression. `shared/notify.ts` already composes reasons on the `installed` arm and `PluginInstalledMessage.reasons?` already exists on the type; the omission is a single unset field in the `list.ts` row builder. Scope is smaller than the original phrasing implies.
 
 **Plans:** 0 plans
 

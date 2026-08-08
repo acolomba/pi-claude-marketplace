@@ -101,6 +101,7 @@ two integration checks.
 | 260804-gcs | Fix applyPathLedger non-owned PATH stripping | 2026-08-04 | aeef0882 | [260804-gcs-fix-applypathledger-non-owned-path-strip](./quick/260804-gcs-fix-applypathledger-non-owned-path-strip/) |
 | 260807-q0v | amend v1.18 planning docs per two-review validation findings | 2026-08-07 | d76b4f6 | [260807-q0v-amend-v1-18-planning-docs-per-two-review](./quick/260807-q0v-amend-v1-18-planning-docs-per-two-review/) |
 | 260807-ur3 | bring disabled-partial classification repair into v1.18 scope | 2026-08-07 | d543f74 | [260807-ur3-bring-disabled-partial-classification-re](./quick/260807-ur3-bring-disabled-partial-classification-re/) |
+| 260808-dhm | amend v1.18 requirements for LLM tool-surface reason widening | 2026-08-08 | _pending_ | [260808-dhm-amend-v1-18-requirements-for-llm-tool-su](./quick/260808-dhm-amend-v1-18-requirements-for-llm-tool-su/) |
 
 ## Decisions
 
@@ -153,13 +154,11 @@ Phase 95 discuss session on 2026-08-08 unless noted.
 
 ### Blockers
 
-- **Planning for Phase 95 is BLOCKED** until a quick task lands the requirement
-  amendment for decision 3 (D-95-10): remove the "Extending the LLM tool
-  surface to carry the new reason" row from REQUIREMENTS.md § Out of Scope, add
-  a requirement ID for the widening mapped to Phase 95 in the traceability
-  table, add it to Phase 95's requirement list in ROADMAP.md, and add a Phase 95
-  success criterion for the tool payload. Without it the planner works from a
-  REQUIREMENTS.md that still lists the change out of scope.
+None. The D-95-10 requirement amendment landed as quick task 260808-dhm on
+2026-08-08: INV-05 covers the LLM tool-surface reason widening, is mapped to
+Phase 95 in the traceability table, appears in Phase 95's requirement list and
+success criteria, and the superseded Out of Scope row is retired. Phase 95
+planning is unblocked.
 
 ## Deferred Items
 
