@@ -103,7 +103,15 @@ async function seedMarketplace(opts: {
   scope: "user" | "project";
   name: string;
   installedPlugins?: { name: string; version: string }[];
-  manifestEntries?: { name: string; source: string; version?: string }[];
+  manifestEntries?: {
+    name: string;
+    source: string;
+    version?: string;
+    /** Declares an unsupported component kind so the entry resolves `partially-available`. */
+    lspServers?: Record<string, unknown>;
+  }[];
+  /** Plugin source dirs created under the marketplace root so resolver probes succeed. */
+  installablePluginDirs?: readonly string[];
 }): Promise<void> {
   const locations = locationsFor(opts.scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -118,6 +126,10 @@ async function seedMarketplace(opts: {
     manifestPath,
     JSON.stringify({ name: opts.name, plugins: opts.manifestEntries ?? [] }),
   );
+
+  for (const rel of opts.installablePluginDirs ?? []) {
+    await mkdir(path.join(mpRoot, rel), { recursive: true });
+  }
 
   const nowIso = new Date().toISOString();
   const plugins: Record<
@@ -788,6 +800,42 @@ test("INV-05 :: a manifest-declared installed record projects with no reasons fi
     assert.equal(details.plugins[0]!.name, "palone");
     assert.equal(details.plugins[0]!.status, "installed");
     assert.equal(details.plugins[0]!.reasons, undefined);
+  });
+});
+
+// INV-05: `partially-upgradable` is the fourth arm `projectRowStatus` flattens
+// onto the coarse `installed` tool bucket. Its `reasons` are REQUIRED, and the
+// upgrade candidate's dropped kinds are exactly the fact an agent needs to
+// decide whether proposing `update` is safe, so the payload must forward them.
+test("INV-05 :: a partially-upgradable record forwards its candidate's dropped kinds", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "fup-mkt",
+      installedPlugins: [{ name: "fup", version: "1.0.0" }],
+      // Newer candidate declaring an unsupported kind: the installed record is
+      // clean, the candidate resolves `partially-available`, so the derived row
+      // status is `partially-upgradable`.
+      manifestEntries: [{ name: "fup", source: "./fup", version: "1.0.1", lspServers: { ls: {} } }],
+      installablePluginDirs: ["fup"],
+    });
+
+    const { pi, registered } = makeMockPi();
+    registerListPluginsTool(pi);
+    const tool = registered.get("pi_claude_marketplace_plugin_list")!;
+    const ctx = makeCtx(cwd);
+    const out = await tool.execute("call-1", { installed: true }, undefined, undefined, ctx);
+
+    assert.match(out.content[0]!.text, /\[installed\] fup\s+1\.0\.0\s+\(lsp\)/);
+    const details = out.details as {
+      plugins: { name: string; status: string; version?: string; reasons?: readonly string[] }[];
+    };
+    assert.equal(details.plugins.length, 1);
+    assert.equal(details.plugins[0]!.name, "fup");
+    assert.equal(details.plugins[0]!.status, "installed");
+    assert.equal(details.plugins[0]!.version, "1.0.0");
+    assert.deepEqual(details.plugins[0]!.reasons, ["lsp"]);
   });
 });
 

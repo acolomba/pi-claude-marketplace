@@ -381,7 +381,8 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
     p.status === "unavailable" ||
     p.status === "partially-available" ||
     p.status === "upgradable" ||
-    p.status === "partially-installed"
+    p.status === "partially-installed" ||
+    p.status === "partially-upgradable"
   ) {
     // USTAT-01: the `partially-available` row carries the same per-kind reason braces as
     // the `unavailable` row, so surface them on the tool details too.
