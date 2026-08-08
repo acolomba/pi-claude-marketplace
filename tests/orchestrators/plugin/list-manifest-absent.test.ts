@@ -566,6 +566,11 @@ async function seedFoldedProjectClone(opts: {
   } as unknown as Parameters<typeof saveState>[1]);
 }
 
+// BOUND-03: the load-failure state is the ONLY thing that suppresses the brace
+// here -- the project record's own manifest is the authority either way, and
+// the sibling test below proves a successful read of that same path renders the
+// brace. Treating the failed read as "manifest omits the record" is the exact
+// false claim D-95-05 forbids.
 test("BOUND-03: a folded row whose project-side manifest FAILED to load is preserved and carries no reason brace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
@@ -636,11 +641,13 @@ test("BOUND-03: a folded row whose project-side manifest LOADED without the entr
 // INV-01: the fold triggers on `marketplaceRoot` equality alone, so the two
 // records can name DIFFERENT manifests -- `marketplace add` derives the root by
 // walking up two levels when the source path is a manifest FILE, which pairs
-// one root with an arbitrary manifest name. The folded row renders under the
-// USER header, and that header's own manifest DOES declare alpha, so a
-// `{not in manifest}` brace read off the project-side manifest would be a false
-// statement about the marketplace the header names.
-test("INV-01: a folded row whose project-side manifest is not the block's manifest makes no absence claim", async () => {
+// one root with an arbitrary manifest name. The folded row is a statement about
+// the PROJECT record, so its absence is judged against the manifest that record
+// names, even though the row renders under the user-scope header. Which
+// manifest a folded row should describe at all is the open BOUND-01 / BOUND-02
+// question; this pins only that a successful read of the record's own manifest
+// backs the brace.
+test("INV-01: a folded row absent from its OWN manifest claims the absence even when the user block names another manifest", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -655,7 +662,7 @@ test("INV-01: a folded row whose project-side manifest is not the block's manife
 
     const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
     // Same root, different manifest file -- and this one loads cleanly while
-    // omitting alpha, so only the claim-authority check can suppress the brace.
+    // omitting alpha.
     const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
     await writeFile(otherManifestPath, JSON.stringify({ name: "mp1", plugins: [] }), "utf8");
     await seedFoldedProjectClone({
@@ -671,7 +678,10 @@ test("INV-01: a folded row whose project-side manifest is not the block's manife
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+      // The user block's own manifest DOES declare alpha, so the folded row
+      // suppresses the duplicate `(available)` enumeration -- but the row's
+      // own reason brace is read off `other.json`, which omits it.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed) {not in manifest}"].join("\n"),
     );
   });
 });

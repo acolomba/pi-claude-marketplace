@@ -762,10 +762,10 @@ async function availableRowMessage(
  * the OTHER scope under the CLONED marketplace record (orphan-fold rule).
  *
  * `scopedManifest` is the WHOLE manifest-load result rather than the manifest
- * alone (D-95-04): the installed rows need `loadError` to tell "the manifest
- * omits this record" apart from "the manifest could not be read". A caller
- * that could pass a manifest and a separate consistency flag is the drift
- * shape that produced the BOUND-03 defect, so there is one value, not two.
+ * alone (D-95-04): the installed rows must tell "the manifest omits this
+ * record" apart from "the manifest could not be read". A caller that could
+ * pass a manifest and a separate consistency flag is the drift shape that
+ * produced the BOUND-03 defect, so there is one discriminated value, not two.
  *
  * Returns the rows in stable (state-iteration + manifest-order) order;
  * the orchestrator applies the final MSG-GR-3 sort at the block boundary.
@@ -778,7 +778,6 @@ async function enumerateMarketplacePlugins(
   scopedManifest: ScopedManifest,
   excludeFromAvailable: ReadonlySet<string> = new Set(),
 ): Promise<ListMsg[]> {
-  const { manifest, loadError, ownsAbsenceClaim } = scopedManifest;
   const rows: ListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
@@ -787,14 +786,15 @@ async function enumerateMarketplacePlugins(
   for (const [pluginName, record] of Object.entries(installedRecords)) {
     // Membership is exact string identity -- no case folding, no Unicode
     // normalization.
-    const manifestEntry = manifest?.plugins.find((p) => p.name === pluginName);
+    const manifestEntry = scopedManifest.ok
+      ? scopedManifest.manifest.plugins.find((p) => p.name === pluginName)
+      : undefined;
     // BOUND-03 / D-95-05: claim an absence ONLY about a manifest that was
-    // actually read, and (INV-01) only about the manifest the rendering
-    // block's header names. Either disqualification yields `false`, so the row
-    // keeps its bare `(installed)` form: the row is preserved and only the
-    // unverified claim is suppressed.
-    const notInManifest =
-      ownsAbsenceClaim && loadError === undefined && manifestEntry === undefined;
+    // actually read. On a failed read the row keeps its bare `(installed)`
+    // form -- the row is preserved and only the unverified claim is
+    // suppressed. INV-01: a successful read that omits the record IS an
+    // absence, on the fold path as much as on a same-scope block.
+    const notInManifest = scopedManifest.ok && manifestEntry === undefined;
     const row = await installedRowMessage(
       pluginName,
       pluginScope,
@@ -813,11 +813,11 @@ async function enumerateMarketplacePlugins(
   }
 
   // Available / unavailable buckets (manifest entries not in state).
-  if (manifest === undefined) {
+  if (!scopedManifest.ok) {
     return rows;
   }
 
-  for (const manifestEntry of manifest.plugins) {
+  for (const manifestEntry of scopedManifest.manifest.plugins) {
     if (installedNames.has(manifestEntry.name)) {
       continue;
     }
@@ -846,38 +846,34 @@ async function enumerateMarketplacePlugins(
   return rows;
 }
 
-interface ScopedManifest {
-  readonly manifest: MarketplaceManifest | undefined;
-  readonly loadError: string | undefined;
-  /**
-   * INV-01 / BOUND-03: whether this result may back a `{not in manifest}`
-   * claim on the block it is enumerated into. False when the manifest read
-   * here is NOT the one the rendering block's header names.
-   */
-  readonly ownsAbsenceClaim: boolean;
-}
+/**
+ * The outcome of one marketplace-manifest read, DISCRIMINATED on `ok` so
+ * "loaded" and "could not be read" are a single state rather than a manifest
+ * plus a separate flag that can drift out of agreement (BOUND-03 / D-95-04).
+ * `ok: false` is the ONLY state in which an absence claim is unsupported, so
+ * the enumerator tests it once.
+ */
+type ScopedManifest =
+  | { readonly ok: true; readonly manifest: MarketplaceManifest }
+  | { readonly ok: false; readonly loadError: string };
 
 /**
- * `claimAuthorityPath` is the manifest the RENDERING block's header names. It
- * defaults to the record's own manifest, which is the identity for every
- * same-scope block. The cross-scope orphan fold passes the USER block's path:
- * folded rows are enumerated from the PROJECT record but rendered under the
- * user-scope header, and `isCloneOfUserMarketplace` folds on `marketplaceRoot`
- * equality alone, so the two records can name different manifests (`marketplace
- * add` derives `marketplaceRoot` by walking up two levels when the source path
- * is a manifest FILE). Comparing at the LOAD site keeps the "one value, not a
- * manifest plus a separate consistency flag" shape the enumerator relies on.
+ * Read the manifest THIS marketplace record names. The record's own manifest
+ * is the authority for every claim the record's rows make about manifest
+ * membership (INV-01), including on the cross-scope orphan fold: a folded row
+ * describes the project-scope record, so its absence is judged against the
+ * manifest that record points at, not against the user block's header path.
+ * Which manifest a folded row SHOULD describe is a separate open question
+ * (BOUND-01 / BOUND-02).
  */
 async function loadMarketplaceManifestSoftly(
   mpRecord: ExtensionState["marketplaces"][string],
-  claimAuthorityPath: string = mpRecord.manifestPath,
 ): Promise<ScopedManifest> {
-  const ownsAbsenceClaim = mpRecord.manifestPath === claimAuthorityPath;
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
-    return { manifest, loadError: undefined, ownsAbsenceClaim };
+    return { ok: true, manifest };
   } catch (err) {
-    return { manifest: undefined, loadError: errorMessage(err), ownsAbsenceClaim };
+    return { ok: false, loadError: errorMessage(err) };
   }
 }
 
@@ -932,7 +928,6 @@ async function buildMarketplaceMessage(args: {
   // Bind the WHOLE load result once: the same value feeds the failed-header
   // guard below and the enumeration's absence gate (D-95-04).
   const scopedManifest = await loadMarketplaceManifestSoftly(mpRecord);
-  const { loadError } = scopedManifest;
 
   // Unparseable manifest: catalog `unparseable-mp` form (lines 215-226)
   // -- bare `(failed)` marketplace header with `plugins: []`. No
@@ -941,7 +936,7 @@ async function buildMarketplaceMessage(args: {
   // plugins: []" contract. The autoupdate detail also drops on failure --
   // the renderer's failed-status arm at shared/notify.ts:593 emits a
   // bare header with no `<autoupdate>` marker.
-  if (loadError !== undefined) {
+  if (!scopedManifest.ok) {
     return {
       mp: {
         name: mpName,
@@ -1057,15 +1052,11 @@ export async function loadPluginListPayload(
       // scope), surfaced via the renderer's orphan-fold rule when
       // `p.scope !== mp.scope`.
       // BOUND-03 / D-95-04: bind the WHOLE result. Taking `manifest` alone
-      // here dropped `loadError`, which let a folded row claim an absence
-      // about a project-side manifest that never parsed. INV-01: pass the USER
-      // record's manifest as the claim authority -- these rows render under the
-      // user-scope header, so an absence claim is only honest when both records
-      // name the same manifest.
-      const projectScopedManifest = await loadMarketplaceManifestSoftly(
-        projectMp,
-        mpRecord.manifestPath,
-      );
+      // here dropped the load-failure state, which let a folded row claim an
+      // absence about a project-side manifest that never parsed. INV-01: the
+      // project record's OWN manifest is the authority for its rows' absence
+      // claims -- the folded row is a statement about that record.
+      const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
       // WR-02: filter to ONLY installed/upgradable rows. The project-side
       // enumeration also returns `available` and `unavailable` bucket rows
       // from the same shared manifest (cloned `marketplaceRoot`); folding
