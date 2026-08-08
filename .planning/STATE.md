@@ -4,17 +4,17 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 95
 current_phase_name: manifest-independent-installed-inventory
-status: executing
-stopped_at: Completed 95-01-PLAN.md
-last_updated: "2026-08-08T18:34:49.449Z"
+status: ready_for_verification
+stopped_at: Completed 95-02-PLAN.md
+last_updated: "2026-08-08T18:59:54.545Z"
 last_activity: 2026-08-08
-last_activity_desc: Phase 95 context gathered; open decisions 1 and 3 resolved, decision 2 deferred to Phase 96
+last_activity_desc: Phase 95 plan 02 executed; both plans complete, phase ready for verification
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -34,14 +34,17 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 95 (manifest-independent-installed-inventory) — EXECUTING
-Plan: 2 of 2 (95-01 complete)
+Phase: 95 (manifest-independent-installed-inventory) — READY FOR VERIFICATION
+Plan: 2 of 2 (both complete)
 Status: 95-01 shipped the `{not in manifest}` brace on the `(installed)` and
 `(partially-installed)` inventory rows, gated on a SUCCESSFUL manifest read so
 the cross-scope fold never claims an absence about a manifest it could not parse
-(INV-01/02/03/04, BOUND-03). 95-02 (INV-05, the LLM tool-surface widening in
-`edge/handlers/tools.ts`) is next; it touches no file 95-01 changed.
-Last activity: 2026-08-08 — Phase 95 plan 01 executed
+(INV-01/02/03/04, BOUND-03). 95-02 carried the same facts onto the LLM tool
+surface: `pluginReasons` now forwards reasons on both installed-family arms, so
+a degraded install is no longer indistinguishable from a clean one in the
+`pi_claude_marketplace_plugin_list` payload (INV-05). All five phase
+requirements are complete and `npm run check` is green.
+Last activity: 2026-08-08 — Phase 95 plan 02 executed
 
 ## Roadmap Summary
 
@@ -129,6 +132,8 @@ two integration checks.
 
 - [Phase 95]: Gate the {not in manifest} claim on a SUCCESSFUL manifest read (loadError === undefined) so no row states a fact about a manifest never parsed (BOUND-03 / D-95-05)
 - [Phase 95]: Thread the whole ScopedManifest bundle into enumerateMarketplacePlugins rather than a parallel manifestLoaded boolean (D-95-04)
+- [Phase 95]: INV-05: pluginReasons forwards reasons on both installed-family arms; the installed arm guards on undefined and empty so a clean row keeps no reasons key (D-95-06)
+- [Phase 95]: projectRowStatus left byte-unchanged: the tool-payload widening adds information inside the installed bucket rather than re-partitioning it
 
 ### Open decisions
 
@@ -202,9 +207,10 @@ None of the carryover items originate from v1.17 env-parity.
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
 | Phase 95 P01 | 30min | 3 tasks | 3 files |
+| Phase 95 P02 | 25min | 2 tasks | 2 files |
 
 ## Session
 
-**Last session:** 2026-08-08T18:34:39.822Z
-**Stopped at:** Completed 95-01-PLAN.md
+**Last session:** 2026-08-08T18:59:54.514Z
+**Stopped at:** Completed 95-02-PLAN.md
 **Resume file:** None

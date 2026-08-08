@@ -222,3 +222,8 @@ None — no external service configuration required.
 
 *Phase: 95-manifest-independent-installed-inventory*
 *Completed: 2026-08-08*
+
+## Self-Check: PASSED
+
+Both claimed source files and the summary exist on disk; all 4 commits
+(`1797912`, `c091ebc`, `99f6a00`, `b26ecb3`) resolve in `git log`.

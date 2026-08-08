@@ -171,7 +171,7 @@ unless noted. Decision records live in
 
 **Criterion 2 note (2026-08-08, retracted and restated after Phase 95 research):** an earlier same-day amendment claimed there was no render-map suppression to lift. That claim was wrong and is withdrawn — the original criterion-2 wording is correct. The list surface does NOT render through the central `renderPluginRow` switch in `shared/notify.ts`; it dispatches through `context.render[row.status]` (`shared/notify-context.ts:110-113`, routed at `list.ts:1210` via `LIST_CONTEXT`). `LIST_RENDER.installed` (`orchestrators/plugin/list.messaging.ts:96-107`) hardcodes `undefined` into `installedLikeRow`'s `reasons` parameter. **INV-01 is therefore a two-file edit** — stamp `reasons` in the `list.ts` row builder AND pass `p.reasons` through in `list.messaging.ts`. Changing only `list.ts` produces no visible output change.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans executed
 
 Plans:
 **Wave 1**
@@ -180,7 +180,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 95-02-PLAN.md — widen the LLM tool surface's reason projection so the agent-facing payload states the same fact as the rendered row (INV-05)
+- [x] 95-02-PLAN.md — widen the LLM tool surface's reason projection so the agent-facing payload states the same fact as the rendered row (INV-05)
 
 ### Phase 96: Installation-record-backed plugin info
 
@@ -239,7 +239,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 95. Manifest-independent installed inventory | v1.18 | 1/2 | In Progress|  |
+| 95. Manifest-independent installed inventory | v1.18 | 2/2 | In Progress|  |
 | 96. Installation-record-backed plugin info | v1.18 | 0/0 | Not started | — |
 | 97. Disabled-state classification repair | v1.18 | 0/0 | Not started | — |
 | 98. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
