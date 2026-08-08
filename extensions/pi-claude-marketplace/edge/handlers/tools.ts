@@ -364,14 +364,24 @@ function pluginScopeOrFallback(
 
 /**
  * Read `p.reasons` defensively. Only a subset of plugin variants carry the
- * field (D-15-01); for list-surface variants `available` / `installed`
- * omit `reasons` entirely (omit when undefined or empty).
+ * field (D-15-01). INV-05 / D-95-06: every list-surface variant that carries
+ * typed reasons forwards them here, and the field is omitted when the array is
+ * absent or empty -- an agent reading the tool payload sees the same facts a
+ * human reading the rendered row sees.
  */
 function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefined {
+  if (p.status === "installed") {
+    // INV-05: the steady-state inventory row's `reasons` is OPTIONAL, so it
+    // needs an undefined guard the required-`reasons` arms below do not.
+    // Returning `[]` here would put an empty array on a clean row's payload.
+    return p.reasons !== undefined && p.reasons.length > 0 ? p.reasons : undefined;
+  }
+
   if (
     p.status === "unavailable" ||
     p.status === "partially-available" ||
-    p.status === "upgradable"
+    p.status === "upgradable" ||
+    p.status === "partially-installed"
   ) {
     // USTAT-01: the `partially-available` row carries the same per-kind reason braces as
     // the `unavailable` row, so surface them on the tool details too.
