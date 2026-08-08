@@ -326,6 +326,22 @@ function partiallyInstalledReasons(
 }
 
 /**
+ * An installed record's resolution against the manifest its own marketplace
+ * record names, as a single discriminated value:
+ *
+ *   - `declared`   -- the manifest was read and declares the record; its entry
+ *                     drives the PL-5 version compare and the PL-4 description.
+ *   - `absent`     -- the manifest was read and does NOT declare the record.
+ *                     The only state that warrants the INV-01 absence brace.
+ *   - `unverified` -- the manifest could not be read, so nothing is claimed
+ *                     about membership either way (BOUND-03 / D-95-05).
+ */
+type ManifestLookup =
+  | { readonly kind: "declared"; readonly entry: MarketplaceManifest["plugins"][number] }
+  | { readonly kind: "absent" }
+  | { readonly kind: "unverified" };
+
+/**
  * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
@@ -352,10 +368,11 @@ function partiallyInstalledReasons(
  * `needsReload` only and never reads `reasons`, so stamping a reason here
  * cannot re-trigger it.
  *
- * `notInManifest` says the owning manifest was READ and did not declare this
- * record. It is false whenever the manifest could not be read at all, so no
- * absence is claimed about a manifest the system never saw (BOUND-03 /
- * D-95-05).
+ * `lookup` carries the record's relationship to its manifest as ONE value, so
+ * the `{not in manifest}` brace and the entry-derived `(upgradable)` /
+ * `description` fields cannot disagree: an entry alongside an absence claim is
+ * unrepresentable. A manifest plus a separate consistency flag is the drift
+ * shape that produced the BOUND-03 defect (WR-07).
  *
  * PL-4: `description` is sourced from the manifest entry (when available).
  * The installed state record does not carry description; if the manifest is
@@ -367,8 +384,7 @@ async function installedRowMessage(
   marketplaceScope: Scope,
   marketplaceRoot: string,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
-  manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-  notInManifest: boolean,
+  lookup: ManifestLookup,
   cwd: string,
 ): Promise<
   | PluginInstalledMessage
@@ -377,6 +393,10 @@ async function installedRowMessage(
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage
 > {
+  const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
+  // BOUND-03 / D-95-05: only a READ manifest that omits the record backs the
+  // claim -- `unverified` says nothing about a manifest the system never saw.
+  const notInManifest = lookup.kind === "absent";
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
@@ -784,25 +804,13 @@ async function enumerateMarketplacePlugins(
 
   // Installed bucket.
   for (const [pluginName, record] of Object.entries(installedRecords)) {
-    // Membership is exact string identity -- no case folding, no Unicode
-    // normalization.
-    const manifestEntry = scopedManifest.ok
-      ? scopedManifest.manifest.plugins.find((p) => p.name === pluginName)
-      : undefined;
-    // BOUND-03 / D-95-05: claim an absence ONLY about a manifest that was
-    // actually read. On a failed read the row keeps its bare `(installed)`
-    // form -- the row is preserved and only the unverified claim is
-    // suppressed. INV-01: a successful read that omits the record IS an
-    // absence, on the fold path as much as on a same-scope block.
-    const notInManifest = scopedManifest.ok && manifestEntry === undefined;
     const row = await installedRowMessage(
       pluginName,
       pluginScope,
       marketplaceScope,
       mpRecord.marketplaceRoot,
       record,
-      manifestEntry,
-      notInManifest,
+      manifestLookupFor(scopedManifest, pluginName),
       opts.cwd,
     );
     // Installed-inventory rows are matched on render status; the resolver
@@ -856,6 +864,26 @@ async function enumerateMarketplacePlugins(
 type ScopedManifest =
   | { readonly ok: true; readonly manifest: MarketplaceManifest }
   | { readonly ok: false; readonly loadError: string };
+
+/**
+ * Resolve one installed record against its marketplace's manifest read.
+ *
+ * BOUND-03 / D-95-05: a failed read is `unverified`, so the row keeps its bare
+ * `(installed)` form -- the row is preserved and only the unverified claim is
+ * suppressed. INV-01: a successful read that omits the record IS an absence,
+ * on the fold path as much as on a same-scope block.
+ *
+ * Membership is exact string identity -- no case folding, no Unicode
+ * normalization.
+ */
+function manifestLookupFor(scopedManifest: ScopedManifest, pluginName: string): ManifestLookup {
+  if (!scopedManifest.ok) {
+    return { kind: "unverified" };
+  }
+
+  const entry = scopedManifest.manifest.plugins.find((p) => p.name === pluginName);
+  return entry === undefined ? { kind: "absent" } : { kind: "declared", entry };
+}
 
 /**
  * Read the manifest THIS marketplace record names. The record's own manifest
