@@ -550,8 +550,10 @@ test("pi_claude_marketplace_plugin_list :: force-upgradable row projects to inst
 // `compatibility.unsupported` is non-empty and `installable` is false). The
 // list orchestrator classifies it `force-installed`; `projectRowStatus` flattens
 // it to the coarse `installed` bucket and `pluginVersion` carries the recorded
-// version through. `pluginReasons` OMITS the force-installed row's reasons on
-// the tool surface (only unavailable / unsupported / upgradable carry reasons).
+// version through. INV-05: `pluginReasons` FORWARDS this row's reasons, so the
+// tool payload states the same facts the rendered row does -- the marketplace
+// manifest here loads and declares nothing, so the row carries the absence
+// reason ahead of its dropped-component reason.
 test("pi_claude_marketplace_plugin_list :: force-installed plugin projects [installed] with version through execute", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const mpRoot = await mkdtemp(path.join(tmpdir(), "mp-force-"));
@@ -607,10 +609,20 @@ test("pi_claude_marketplace_plugin_list :: force-installed plugin projects [inst
     const ctx = makeCtx(cwd);
     const out = await tool.execute("call-1", {}, undefined, undefined, ctx);
 
-    // Force-installed flattens to the [installed] tool line.
-    assert.match(out.content[0]!.text, /\[installed\] pforce/);
+    // Force-installed flattens to the [installed] tool line, and INV-05 puts the
+    // reason trailer on the flat line so it states what `details` states.
+    assert.match(
+      out.content[0]!.text,
+      /\[installed\] pforce\s+2\.0\.0\s+\(not in manifest, unsupported component\)/,
+    );
     const details = out.details as {
-      plugins: { name: string; status: string; version?: string; scope: string }[];
+      plugins: {
+        name: string;
+        status: string;
+        version?: string;
+        scope: string;
+        reasons?: readonly string[];
+      }[];
     };
     assert.equal(details.plugins.length, 1);
     assert.equal(details.plugins[0]!.name, "pforce");
@@ -619,6 +631,9 @@ test("pi_claude_marketplace_plugin_list :: force-installed plugin projects [inst
     assert.equal(details.plugins[0]!.version, "2.0.0");
     // pluginScopeOrFallback returns the row scope for the force arm.
     assert.equal(details.plugins[0]!.scope, "project");
+    // INV-05: both reasons reach the agent, in row order -- `themes` is not a
+    // carve-out kind, so it narrows to `unsupported component`.
+    assert.deepEqual(details.plugins[0]!.reasons, ["not in manifest", "unsupported component"]);
 
     await rm(mpRoot, { recursive: true, force: true });
   });
