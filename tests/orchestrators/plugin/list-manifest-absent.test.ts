@@ -377,10 +377,67 @@ test("INV-02: a manifest-absent degraded record keeps its glyph, recorded versio
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      // Same-scope row: the `[user]` bracket is suppressed (D-16-17). This
-      // pins the PRE-INV-02 reason set -- the brace carries the
-      // unsupported-kind token alone.
-      ["● mp1 [user]", "  ◉ plug v1.0.0 (partially-installed) {lsp}"].join("\n"),
+      // Same-scope row: the `[user]` bracket is suppressed (D-16-17). INV-02
+      // puts the absence reason FIRST, ahead of the unsupported-kind token:
+      // `composeReasons` joins in array order.
+      ["● mp1 [user]", "  ◉ plug v1.0.0 (partially-installed) {not in manifest, lsp}"].join("\n"),
+    );
+  });
+});
+
+test("INV-02: a degraded record its manifest still DECLARES keeps its unsupported-kind reasons alone", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "remote", source: "./remote", version: "1.0.0" }],
+      },
+      installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
+      installablePluginDirs: ["remote"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // The prepend is GATED on manifest absence. This arm is also reached by a
+      // `partially-installed-upgradable` record, which by definition HAS a
+      // manifest entry -- an ungated prepend would falsify this row.
+      ["● mp1 [user]", "  ◉ remote v1.0.0 (partially-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
+test("INV-02: a manifest-absent degraded record with a non-carve-out kind renders `{not in manifest, unsupported component}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+      // `themes` is not one of `narrowUnsupportedKinds`' carve-outs
+      // (`lspServers` -> `lsp`, `hooks` -> `unsupported hooks`), so it maps to
+      // the generic token.
+      installed: { plug: { version: "1.0.0", unsupported: ["themes"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp1 [user]",
+        "  ◉ plug v1.0.0 (partially-installed) {not in manifest, unsupported component}",
+      ].join("\n"),
     );
   });
 });
@@ -452,7 +509,7 @@ test("INV-03: `--installed` spans both manifest-absent installed forms and exclu
       [
         "● mp1 [user]",
         "  ● clean v1.0.0 (installed) {not in manifest}",
-        "  ◉ degraded v2.0.0 (partially-installed) {lsp}",
+        "  ◉ degraded v2.0.0 (partially-installed) {not in manifest, lsp}",
       ].join("\n"),
     );
   });
