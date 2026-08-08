@@ -307,6 +307,25 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
 }
 
 /**
+ * Reasons for the degraded inventory row. INV-02 puts the absence reason
+ * FIRST: `composeReasons` joins in array order, so appending instead of
+ * prepending renders the brace with its tokens the wrong way round.
+ *
+ * The prepend is GATED on `notInManifest` because this row form is also
+ * reached by a `partially-installed-upgradable` record, which by definition
+ * HAS a manifest entry. `narrowUnsupportedKinds` stays the SOLE producer of
+ * the unsupported-kind tokens -- this wraps its output rather than replacing
+ * it.
+ */
+function partiallyInstalledReasons(
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+  notInManifest: boolean,
+): PluginPartiallyInstalledMessage["reasons"] {
+  const kinds = narrowUnsupportedKinds(record.compatibility.unsupported);
+  return notInManifest ? ["not in manifest", ...kinds] : kinds;
+}
+
+/**
  * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
@@ -457,7 +476,7 @@ async function installedRowMessage(
     return {
       status: "partially-installed",
       name: pluginName,
-      reasons: narrowUnsupportedKinds(record.compatibility.unsupported),
+      reasons: partiallyInstalledReasons(record, notInManifest),
       version: record.version,
       ...scopeField,
       ...descriptionField,
