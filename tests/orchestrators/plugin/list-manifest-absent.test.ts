@@ -104,8 +104,6 @@ interface SeedMarketplaceOpts {
   mpName: string;
   /** When provided, written to <mpRoot>/.claude-plugin/marketplace.json. */
   manifest?: unknown;
-  /** When provided, manifestPath in state points here (typically a nonexistent file). */
-  manifestPathOverride?: string;
   /**
    * Installed plugin records keyed by plugin name. `disabled: true` seeds
    * the ENBL-02 empty-resources marker (recorded-but-disabled); the default
@@ -133,8 +131,6 @@ interface SeedMarketplaceOpts {
        * so a marker case cannot be seeded without this.
        */
       agents?: boolean;
-      /** Populate `resources.mcpServers` alongside the default skill. */
-      mcp?: boolean;
     }
   >;
   /** When provided, plugin source dirs at these names get created so resolver probes find them. */
@@ -156,13 +152,9 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   const mpRoot = path.join(scopeRoot, "marketplaces", mpName);
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
 
-  let manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   if (manifest !== undefined) {
     await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
-  }
-
-  if (opts.manifestPathOverride !== undefined) {
-    manifestPath = opts.manifestPathOverride;
   }
 
   // Create installable plugin source dirs so resolver probes succeed.
@@ -197,7 +189,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
             skills: [`${name}-skill`],
             prompts: [],
             agents: info.agents === true ? [`${name}-agent`] : [],
-            mcpServers: info.mcp === true ? [`${name}-mcp`] : [],
+            mcpServers: [],
             hooks: [],
           };
 
