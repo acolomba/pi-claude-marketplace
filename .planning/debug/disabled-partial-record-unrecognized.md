@@ -7,9 +7,15 @@ updated: 2026-08-07T00:00:00Z
 
 ## Current Focus
 
-ROOT CAUSE CONFIRMED — investigation complete (diagnose-only; no fix applied).
-Scoped out of milestone v1.18 deliberately: the defect predates the milestone,
-is unrelated to manifest independence, and its blast radius spans five surfaces.
+ROOT CAUSE CONFIRMED — investigation complete. No fix applied in this session.
+
+SCHEDULED: milestone v1.18 Phase 97 (disabled-state classification repair), by
+operator decision 2026-08-07, reversing the same-day decision to track it
+separately. The repair is specified as ENBL-05 through ENBL-09, which continue
+the v1.12 enable/disable family because this defect is a live violation of
+ENBL-04 — "declared / enabled / available are orthogonal facts" — that the
+partial-install feature introduced. Status stays `diagnosed` until the fix lands;
+move this file to `resolved/` and add a knowledge-base entry at that point.
 
 reasoning_checkpoint:
   hypothesis: "Disabling a partially-installed plugin produces an on-disk record (enabled: false + compatibility.installable: false) that no surface recognizes as disabled, because every disabled-detection predicate also requires installable === true"

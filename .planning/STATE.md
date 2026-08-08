@@ -4,11 +4,11 @@ milestone: v1.18
 milestone_name: manifest-independent-installed-plugin-info
 status: planning
 stopped_at: Roadmap approved; awaiting Phase 95 planning
-last_updated: "2026-08-07T22:44:14Z"
+last_updated: "2026-08-07T23:30:00Z"
 last_activity: 2026-08-07
-last_activity_desc: "v1.18 roadmap validated against the codebase; 16/16 requirements mapped, 3 open decisions"
+last_activity_desc: "disabled-partial classification repair brought into v1.18 as Phase 97; 21/21 requirements mapped across 4 phases"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -35,12 +35,12 @@ persistence or update-semantics changes.
 Phase: Not started (roadmap created — Phases 95-97 mapped)
 Plan: —
 Status: Roadmap approved and validated; three open decisions block Phase 95 planning
-Last activity: 2026-08-07 — Completed quick task 260807-q0v: amend v1.18 planning docs per two-review validation findings
+Last activity: 2026-08-07 — Completed quick task 260807-ur3: bring the disabled-partial classification repair into v1.18 as Phase 97
 
 ## Roadmap Summary
 
-- 3 sequential phases (95-97), continuing the global counter from Phase 94.
-  All 16 v1 requirements map exactly once; no orphans.
+- 4 sequential phases (95-98), continuing the global counter from Phase 94.
+  All 21 v1 requirements map exactly once; no orphans.
 - Eight requirements (INV-02/03/04, BOUND-01/02, LIFE-04/05/06) describe behavior
   the code already exhibits. They are carried as contracts the milestone must not
   break, and their deliverable is characterization and regression coverage. The
@@ -54,7 +54,12 @@ Last activity: 2026-08-07 — Completed quick task 260807-q0v: amend v1.18 plann
   reconstruct local component structure, preserve partial compatibility, add the
   explicit network guard the reorder requires, and lock read-failure versus
   unknown-name boundaries.
-- **Phase 97 — Lifecycle regression and contract documentation** (LIFE-04..06,
+- **Phase 97 — Disabled-state classification repair** (ENBL-05..09): collapse the
+  four copies of the disabled-state predicate into one keyed only on `enabled`,
+  then restore list/info rendering, enable/disable idempotency, reconcile steady
+  state, and the update short-circuit for disabled partially-installed records.
+  Repairs ENBL-04 from v1.12. No state migration.
+- **Phase 98 — Lifecycle regression and contract documentation** (LIFE-04..06,
   COMPAT-01, DOC-08): no lifecycle production changes expected — pin
   uninstall/update/autoupdate non-regression, assert no persistence/token/network
   expansion, and reconcile the output catalog, PRD, and design doc.
@@ -99,8 +104,11 @@ two integration checks.
   snapshot or orphan flag.
 - Keep disabled, unknown-name, manifest-read, update/autoupdate, and uninstall
   semantics unchanged.
-- The disabled-plus-partial classification defect is excluded from v1.18. INV-04
-  covers the canonical disabled shape only; the defect is tracked separately.
+- The disabled-plus-partial classification defect is IN scope for v1.18 as
+  Phase 97 (operator decision 2026-08-07, reversing the same-day exclusion).
+  It repairs ENBL-04, shipped in v1.12 and silently broken by partial installs.
+  INV-04 still covers the canonical disabled shape only, because the partial
+  shape is not recognized as disabled until Phase 97 lands; ENBL-06 widens it.
 
 ### Open decisions (resolve before Phase 95 planning)
 
@@ -128,7 +136,6 @@ None of the carryover items originate from v1.17 env-parity.
 |----------|------|--------|
 | backlog | REASON-01 — unify all parse-error reasons under a `{malformed <feature>}` family | deferred |
 | debug | async-rewake-lane-inert | diagnosed (diagnose-only; by design) |
-| debug | disabled-partial-record-unrecognized | diagnosed (real defect; fix scoped out of v1.18) |
 | debug | knowledge-base | unknown |
 | quick_task | 260621-kmm-add-explicit-enabled-boolean-field-to-pl | unknown |
 | quick_task | 260718-tli-fix-pr-88-external-contribution-to-pass- | unknown |

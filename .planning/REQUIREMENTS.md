@@ -12,7 +12,7 @@
 - [ ] **INV-01**: In the default plugin list, an enabled fully supported installation record whose name is absent from a successfully loaded marketplace manifest appears under that marketplace as `● <plugin> v<recorded-version> (installed) {not in manifest}`.
 - [ ] **INV-02**: An enabled installation record with one or more persisted `compatibility.unsupported` kinds retains the existing `(partially-installed)` status and unsupported-kind reasons, with `not in manifest` added first. Manifest-absent partial records are already classified from `compatibility.unsupported` alone, which is manifest-independent, so they are neither flattened to `(installed)` nor omitted today; adding the reason is the only change. Pin the existing classification with a characterization test before touching it.
 - [ ] **INV-03**: `plugin list --installed` includes both fully installed and partially-installed manifest-absent records. This already holds; the requirement is regression coverage, not new behavior.
-- [ ] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true`. Records combining `enabled: false` with `compatibility.installable: false` are excluded; see Out of Scope.
+- [ ] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true` -- because the partial-disabled shape is not recognized as disabled by any surface until ENBL-05 repairs the predicate in Phase 97. Do not pin the current partial-disabled rendering as correct here; ENBL-06 widens this coverage after the repair.
 
 ### Plugin Information
 
@@ -37,12 +37,35 @@
 - [ ] **LIFE-05**: Targeted and bulk plugin update retain their existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; coverage must span the targeted, marketplace-bulk, and global-bulk enumeration paths.
 - [ ] **LIFE-06**: Marketplace autoupdate retains its existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; the skip originates in the shared update preflight and is re-narrowed by the cascade mapper, so cover the autoupdate-on-marketplace-update path explicitly.
 
+### Enable/Disable State Classification
+
+<!-- ENBL numbering continues from v1.12 (ENBL-01..04). -->
+
+These repair a live violation of ENBL-04, which v1.12 shipped as "disabled status
+renders distinct from soft-degraded `unavailable` on list/info surfaces (declared
+/ enabled / available are orthogonal facts)." The disabled-state predicate
+conjoins `compatibility.installable` with `!enabled`, and a partial install always
+persists `installable: false`, so disabling a partially-installed plugin produces a
+record no surface recognizes as disabled — coupling enabled-ness to
+available-ness, which is exactly the orthogonality ENBL-04 asserts. Full
+diagnosis: the `disabled-partial-record-unrecognized` debug session.
+
+- [ ] **ENBL-05**: The disabled-state predicate depends only on the `enabled` field, never on `compatibility.installable`. It has one definition that every surface consumes, replacing the four copies that can drift independently. The textual drift-guard asserting the predicate body and the truth-table cell that currently pins the defective behavior as intended are both updated.
+- [ ] **ENBL-06**: `plugin list` and `plugin info` render a disabled partially-installed record as `(disabled)`, distinct from an enabled partially-installed record, completing ENBL-04 for the partial case. This composes with INV-04: a manifest-absent disabled partial record is `(disabled)` with no `{not in manifest}` reason.
+- [ ] **ENBL-07**: `plugin enable` re-materializes a disabled partially-installed record instead of reporting idempotent success, and `plugin disable` reports idempotent success on an already-disabled partial record instead of re-running the unstage cascade.
+- [ ] **ENBL-08**: Load-time reconcile reaches steady state for a disabled partially-installed record: a config declaring the plugin disabled does not re-plan a disable on every pass.
+- [ ] **ENBL-09**: `plugin update` leaves a disabled partially-installed record alone rather than re-staging its artifacts, matching the existing disabled-record short-circuit.
+
+Repairing the predicate is a read-time change, so records already on disk in the
+unrecognized shape are reclassified correctly on the next load with no state
+migration, no schema-version bump, and no persisted change.
+
 ### Compatibility and Documentation
 
 <!-- DOC numbering continues from v1.17 (DOC-06/07). -->
 
 - [ ] **COMPAT-01**: The feature introduces no manifest snapshot, orphan field, state-schema migration, status token, reason token, glyph, or new network path; it derives the read-surface condition from the valid manifest and existing installation record. The network clause is already enforced for both `info` surfaces by the existing architecture gate. Any new source-scanning gate must read files directly rather than shelling out to `grep`: `orchestrators/plugin/info.ts` contains a literal NUL byte, so `grep` classifies it as binary and silently skips the one file this milestone changes most.
-- [ ] **DOC-08**: `docs/output-catalog.md` and `docs/prd/pi-claude-marketplace-prd.md` document the manifest-independent list/info behavior, partial-install preservation, failure boundary, and unchanged lifecycle behavior. This also settles four known documentation defects: the PRD's PL-6 row and its section 5.3.1 flowchart still describe the retired v1 manifest-failure renderer; the output catalog's brace-bearing-variant count is stale; `(partially-installed)` is missing from the catalog's status-token reference table despite being a closed-set member; and the `notify-reasons.ts` header comments still describe a 37-entry reason set that now holds 38.
+- [ ] **DOC-08**: `docs/output-catalog.md` and `docs/prd/pi-claude-marketplace-prd.md` document the manifest-independent list/info behavior, partial-install preservation, failure boundary, and unchanged lifecycle behavior. This also settles four known documentation defects: the PRD's PL-6 row and its section 5.3.1 flowchart still describe the retired v1 manifest-failure renderer; the output catalog's brace-bearing-variant count is stale; `(partially-installed)` is missing from the catalog's status-token reference table despite being a closed-set member; and the `notify-reasons.ts` header comments still describe a 37-entry reason set that now holds 38. The disabled-state repair is documented too: `(disabled)` now covers the partial case, and the reconcile comment asserting that only the disable orchestrator writes `enabled: false` is corrected.
 
 ## Future Requirements
 
@@ -58,7 +81,6 @@ None identified for this milestone.
 | Description or dependency reconstruction without a manifest entry | These are manifest-only metadata and must not be guessed from unrelated local state. |
 | Update or autoupdate installation fallback | Mutation paths intentionally continue to skip when the current manifest does not declare the plugin. |
 | Manifest-read recovery or error reclassification | A missing entry can only be asserted after a successful manifest load; existing read failures remain authoritative. |
-| Fixing the disabled-plus-partial classification defect | `isRecordedButDisabled` conjoins `compatibility.installable` with `!enabled`, and a partial install always persists `installable: false`, so disabling a partially-installed plugin produces a record no surface recognizes as disabled. The fallout reaches enable, disable, reconcile, update, and info, needs a drift-guard test updated, and is unrelated to manifest independence. Tracked as the `disabled-partial-record-unrecognized` debug session; INV-04 is narrowed to the canonical disabled shape. |
 | Full-fidelity hook reconstruction | The materialized `hooks.json` holds only the supported filtered subset, and the dropped-handler enumeration was never persisted. Displayed hooks are what survived install, not what the plugin declared. |
 | Extending the LLM tool surface to carry the new reason | The tool projection forwards reasons only for `unavailable`, `partially-available`, and `upgradable`, and no `info` tool exists at all. Widening it is a separate surface change; pending the open decision, the new reason renders on the slash command only. |
 
@@ -79,24 +101,34 @@ Which phases cover which requirements.
 | BOUND-01 | Phase 96 | Pending |
 | BOUND-02 | Phase 96 | Pending |
 | BOUND-03 | Phase 95 | Pending |
-| LIFE-04 | Phase 97 | Pending |
-| LIFE-05 | Phase 97 | Pending |
-| LIFE-06 | Phase 97 | Pending |
-| COMPAT-01 | Phase 97 | Pending |
-| DOC-08 | Phase 97 | Pending |
+| ENBL-05 | Phase 97 | Pending |
+| ENBL-06 | Phase 97 | Pending |
+| ENBL-07 | Phase 97 | Pending |
+| ENBL-08 | Phase 97 | Pending |
+| ENBL-09 | Phase 97 | Pending |
+| LIFE-04 | Phase 98 | Pending |
+| LIFE-05 | Phase 98 | Pending |
+| LIFE-06 | Phase 98 | Pending |
+| COMPAT-01 | Phase 98 | Pending |
+| DOC-08 | Phase 98 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 16 total
-- Mapped to phases: 16
+- v1 requirements: 21 total
+- Mapped to phases: 21
 - Unmapped: 0 ✓
 
-Eight of the sixteen -- INV-02, INV-03, INV-04, BOUND-01, BOUND-02, LIFE-04,
+Eight of the twenty-one -- INV-02, INV-03, INV-04, BOUND-01, BOUND-02, LIFE-04,
 LIFE-05, LIFE-06 -- describe behavior the code already exhibits. They are carried
 as requirements because they are contracts this milestone must not break, and
 their deliverable is characterization and regression coverage rather than new
 behavior. The net-new work is INV-01, BOUND-03, INFO-09 through INFO-12,
-COMPAT-01, and DOC-08.
+ENBL-05 through ENBL-09, COMPAT-01, and DOC-08.
+
+ENBL-05 through ENBL-09 are corrective rather than additive: they repair a
+shipped requirement (ENBL-04) that the partial-install feature silently broke.
+They entered scope on 2026-08-07 by operator decision, after being recorded as
+out of scope earlier the same day.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-97 (planned, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-98 (planned, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, and a disabled partially-installed plugin is once again recognized as disabled
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
@@ -14,13 +14,14 @@
 
 **Phase Numbering:**
 
-- Integer phases (95-97): planned milestone work continuing the global counter
+- Integer phases (95-98): planned milestone work continuing the global counter
   from Phase 94, the final v1.17 phase.
 - Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
 
 - [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change two things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are the render-map seam that currently suppresses reasons on installed rows, so `{not in manifest}` can render, and threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry. (INV-01, INV-02, INV-03, INV-04, BOUND-03)
 - [ ] **Phase 96: Installation-record-backed plugin info** — the milestone's substantive phase. Reorder the info lookup so a successful manifest load with no entry falls through to the installation record instead of returning `(failed)`, reconstruct the component inventory from existing resource fields and the materialized hook config, preserve installed and partial compatibility on the state-only arm, and add the explicit network guard the reorder now requires for `--fetch`. The unknown-name and manifest-read boundaries already hold and are pinned as regressions. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
-- [ ] **Phase 97: Lifecycle regression and contract documentation** — no lifecycle production changes are expected. Uninstall is already installation-record-driven and update and autoupdate already skip manifest-absent records, so this phase pins those with coverage spanning all five resource kinds and all four update enumeration paths, asserts no persistence, token, or network expansion, and reconciles the output catalog, the PRD, and the design doc. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
+- [ ] **Phase 97: Disabled-state classification repair** — the disabled-state predicate conjoins `compatibility.installable` with `!enabled`, and a partial install always persists `installable: false`, so disabling a partially-installed plugin produces a record no surface recognizes as disabled. Collapse the four copies of the predicate into one definition keyed only on `enabled`, then restore correct behavior across the five affected surfaces: list and info rendering, enable and disable idempotency, reconcile steady state, and the update short-circuit. This repairs ENBL-04, shipped in v1.12 and silently broken by partial installs. (ENBL-05, ENBL-06, ENBL-07, ENBL-08, ENBL-09)
+- [ ] **Phase 98: Lifecycle regression and contract documentation** — no lifecycle production changes are expected. Uninstall is already installation-record-driven and update and autoupdate already skip manifest-absent records, so this phase pins those with coverage spanning all five resource kinds and all four update enumeration paths, asserts no persistence, token, or network expansion, and reconciles the output catalog, the PRD, and the design doc against the behavior the first three phases actually shipped. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
 
 **Open decisions — resolve before Phase 95 planning:**
 
@@ -170,11 +171,30 @@
 
 **Plans:** 0 plans
 
-### Phase 97: Lifecycle regression and contract documentation
+### Phase 97: Disabled-state classification repair
 
-**Goal:** The new read behavior ships without mutation, persistence, network, or public-contract regressions.
+**Goal:** A disabled partially-installed plugin is recognized as disabled by every surface, restoring the orthogonality of declared, enabled, and available that ENBL-04 asserts.
 
-**Depends on:** Phases 95 and 96; lifecycle and documentation coverage describe and verify the completed list/info behavior.
+**Depends on:** Phase 95, which establishes the disabled-row characterization for the canonical shape that this phase widens to the partial shape. Independent of Phase 96.
+
+**Requirements:** ENBL-05, ENBL-06, ENBL-07, ENBL-08, ENBL-09
+
+**Success Criteria:**
+
+1. One disabled-state predicate keyed only on `enabled` replaces the four independently-drifting copies; the drift-guard test and the truth-table cell that pins the defective behavior are both updated, and the reconcile comment asserting a false invariant is corrected. (ENBL-05)
+2. `list` and `info` render a disabled partially-installed record as `(disabled)`, distinct from an enabled partial, and a manifest-absent one carries no `{not in manifest}` reason. (ENBL-06, composing with INV-04)
+3. `enable` re-materializes a disabled partial record rather than reporting "already enabled"; `disable` on an already-disabled partial record is idempotent rather than re-running the unstage cascade. (ENBL-07)
+4. Reconcile reaches steady state for a disabled partial record across repeated passes. (ENBL-08)
+5. `update` leaves a disabled partial record alone rather than re-staging its artifacts. (ENBL-09)
+6. No state migration or schema-version change is introduced; records already on disk in the unrecognized shape reclassify correctly on the next load.
+
+**Plans:** 0 plans
+
+### Phase 98: Lifecycle regression and contract documentation
+
+**Goal:** The new read behavior and the disabled-state repair ship without mutation, persistence, network, or public-contract regressions.
+
+**Depends on:** Phases 95, 96, and 97; lifecycle and documentation coverage describe and verify the completed behavior.
 
 **Requirements:** LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08
 
@@ -183,7 +203,7 @@
 1. Uninstall after manifest-entry removal removes every owned resource and the installation record through the existing path, with coverage spanning all five resource kinds including hooks and MCP cleanup. (LIFE-04)
 2. Targeted, marketplace-bulk, and global-bulk plugin update plus marketplace autoupdate all continue to render `(skipped) {not in manifest}` for the state-only record. (LIFE-05, LIFE-06)
 3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, which silently skips `orchestrators/plugin/info.ts` because that file contains a NUL byte. (COMPAT-01)
-4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, and the four known documentation defects named in DOC-08 are corrected. (DOC-08)
+4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, including the repaired disabled-partial case, and the known documentation defects named in DOC-08 are corrected. (DOC-08)
 
 **Plans:** 0 plans
 
@@ -193,7 +213,8 @@
 |-------|-----------|----------------|--------|-----------|
 | 95. Manifest-independent installed inventory | v1.18 | 0/0 | Not started | — |
 | 96. Installation-record-backed plugin info | v1.18 | 0/0 | Not started | — |
-| 97. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
+| 97. Disabled-state classification repair | v1.18 | 0/0 | Not started | — |
+| 98. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
