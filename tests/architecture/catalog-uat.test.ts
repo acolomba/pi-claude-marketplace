@@ -851,6 +851,7 @@ const FIXTURES: FixtureMap = {
                 needsReload: false,
                 dependencies: [],
                 reasons: ["not in manifest"],
+                severity: "info",
               },
             ],
           },
