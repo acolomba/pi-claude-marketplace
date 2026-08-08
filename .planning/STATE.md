@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
-current_phase: 95
-current_phase_name: manifest-independent-installed-inventory
-status: ready_for_verification
+current_phase: 96
+current_phase_name: Installation-record-backed plugin info
+status: planning
 stopped_at: Completed 95-02-PLAN.md
-last_updated: "2026-08-08T18:59:54.545Z"
+last_updated: "2026-08-08T21:07:13.054Z"
 last_activity: 2026-08-08
 last_activity_desc: Phase 95 plan 02 executed; both plans complete, phase ready for verification
 progress:
@@ -21,7 +21,7 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-07 for v1.18 start)
+See: .planning/PROJECT.md (updated 2026-08-08 after Phase 95)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
@@ -34,17 +34,13 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 95 (manifest-independent-installed-inventory) — READY FOR VERIFICATION
-Plan: 2 of 2 (both complete)
-Status: 95-01 shipped the `{not in manifest}` brace on the `(installed)` and
-`(partially-installed)` inventory rows, gated on a SUCCESSFUL manifest read so
-the cross-scope fold never claims an absence about a manifest it could not parse
-(INV-01/02/03/04, BOUND-03). 95-02 carried the same facts onto the LLM tool
-surface: `pluginReasons` now forwards reasons on both installed-family arms, so
-a degraded install is no longer indistinguishable from a clean one in the
-`pi_claude_marketplace_plugin_list` payload (INV-05). All five phase
-requirements are complete and `npm run check` is green.
-Last activity: 2026-08-08 — Phase 95 plan 02 executed
+Phase: 96 — Installation-record-backed plugin info
+Plan: Not started
+Status: Ready to discuss (no CONTEXT.md yet; open decision D-95-11 — component
+name fidelity on the state-only info arm — is gated to this discuss)
+Last activity: 2026-08-08 — Phase 95 complete (verification passed 21/21 with
+operator UAT sign-off; Nyquist-compliant; threats_open 0), transitioned to
+Phase 96
 
 ## Roadmap Summary
 
@@ -56,10 +52,13 @@ Last activity: 2026-08-08 — Phase 95 plan 02 executed
   break, and their deliverable is characterization and regression coverage. The
   net-new work is INV-01, BOUND-03, INFO-09..12, COMPAT-01, and DOC-08.
 
-- **Phase 95 — Manifest-independent installed inventory** (INV-01..04, BOUND-03):
-  characterize the existing union behavior, then open the render-map seam so
-  `{not in manifest}` can appear on installed rows, and thread the manifest load
-  error through the cross-scope orphan-fold path.
+- **Phase 95 — Manifest-independent installed inventory** (INV-01..05, BOUND-03):
+  COMPLETE 2026-08-08. Characterized the union behavior, opened the render-map
+  seam (`{not in manifest}` on installed rows), threaded the manifest load error
+  through the cross-scope fold, widened the LLM tool payload (INV-05), and — via
+  the review fix loop — hardened absence into a `ManifestLookup` discriminated
+  value judged against the record's own manifest, with both new row forms under
+  the output-catalog byte gate.
 
 - **Phase 96 — Installation-record-backed plugin info** (INFO-09..12,
   BOUND-01/02): the substantive phase. Reorder the valid-manifest miss path,
@@ -134,6 +133,8 @@ two integration checks.
 - [Phase 95]: Thread the whole ScopedManifest bundle into enumerateMarketplacePlugins rather than a parallel manifestLoaded boolean (D-95-04)
 - [Phase 95]: INV-05: pluginReasons forwards reasons on both installed-family arms; the installed arm guards on undefined and empty so a clean row keeps no reasons key (D-95-06)
 - [Phase 95]: projectRowStatus left byte-unchanged: the tool-payload widening adds information inside the installed bucket rather than re-partitioning it
+- [Phase 95 fix loop]: Absence is judged against the manifest the record itself names — `ScopedManifest` is a discriminated union (`{ok,manifest}|{ok:false,loadError}`) and `ManifestLookup` (`declared`/`absent`/`unverified`) is the single value flowing into the row builder, making "entry present + absence claimed" unrepresentable (WR-05/06/07)
+- [Phase 95 fix loop]: `pluginReasons` covers all four flattened installed-family arms incl. `partially-upgradable` (CR-01); the two new manifest-absent row forms are catalog states under the byte-equality gate (WR-03)
 
 ### Open decisions
 
@@ -192,12 +193,13 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Resolve the three open decisions above; they change what Phase 95 and Phase 96
-  build.
+- Discuss Phase 96 (installation-record-backed plugin info). Bring into the
+  discuss: deferred decision D-95-11 (component name fidelity on the state-only
+  info arm) and the pending todo on folded-row manifest choice
+  (`.planning/todos/pending/2026-08-08-folded-row-manifest-choice-*`).
 
-- Discuss and plan Phase 95: manifest-independent installed inventory.
-- Implement through TDD in the isolated feature worktree, writing the
-  characterization tests before any production edit.
+- Then plan and execute Phases 96-98 in order; Phase 98 additionally carries
+  the notify.ts/tools.ts stale-comment reconciliation todo (DOC-08).
 
 - Verify each phase against its mapped requirements before transition.
 
@@ -211,6 +213,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-08T18:59:54.514Z
-**Stopped at:** Completed 95-02-PLAN.md
+**Last session:** 2026-08-08T21:15:00Z
+**Stopped at:** Phase 95 complete, ready to discuss Phase 96
 **Resume file:** None

@@ -19,7 +19,7 @@
 
 - Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
 
-- [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change three things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are lifting the row builder's omission of reasons on installed rows so `{not in manifest}` can render, threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry, and widening the LLM tool surface's reason projection so the same fact reaches the agent. (INV-01, INV-02, INV-03, INV-04, INV-05, BOUND-03)
+- [x] **Phase 95: Manifest-independent installed inventory** — characterize first, then change three things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are lifting the row builder's omission of reasons on installed rows so `{not in manifest}` can render, threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry, and widening the LLM tool surface's reason projection so the same fact reaches the agent. (INV-01, INV-02, INV-03, INV-04, INV-05, BOUND-03) (completed 2026-08-08)
 - [ ] **Phase 96: Installation-record-backed plugin info** — the milestone's substantive phase. Reorder the info lookup so a successful manifest load with no entry falls through to the installation record instead of returning `(failed)`, reconstruct the component inventory from existing resource fields and the materialized hook config, preserve installed and partial compatibility on the state-only arm, and add the explicit network guard the reorder now requires for `--fetch`. The unknown-name and manifest-read boundaries already hold and are pinned as regressions. (INFO-09, INFO-10, INFO-11, INFO-12, BOUND-01, BOUND-02)
 - [ ] **Phase 97: Disabled-state classification repair** — the disabled-state predicate conjoins `compatibility.installable` with `!enabled`, and a partial install always persists `installable: false`, so disabling a partially-installed plugin produces a record no surface recognizes as disabled. Collapse the four copies of the predicate into one definition keyed only on `enabled`, then restore correct behavior across the five affected surfaces: list and info rendering, enable and disable idempotency, reconcile steady state, and the update short-circuit. This repairs ENBL-04, shipped in v1.12 and silently broken by partial installs. (ENBL-05, ENBL-06, ENBL-07, ENBL-08, ENBL-09)
 - [ ] **Phase 98: Lifecycle regression and contract documentation** — no lifecycle production changes are expected. Uninstall is already installation-record-driven and update and autoupdate already skip manifest-absent records, so this phase pins those with coverage spanning all five resource kinds and all four update enumeration paths, asserts no persistence, token, or network expansion, and reconciles the output catalog, the PRD, and the design doc against the behavior the first three phases actually shipped. (LIFE-04, LIFE-05, LIFE-06, COMPAT-01, DOC-08)
@@ -171,7 +171,7 @@ unless noted. Decision records live in
 
 **Criterion 2 note (2026-08-08, retracted and restated after Phase 95 research):** an earlier same-day amendment claimed there was no render-map suppression to lift. That claim was wrong and is withdrawn — the original criterion-2 wording is correct. The list surface does NOT render through the central `renderPluginRow` switch in `shared/notify.ts`; it dispatches through `context.render[row.status]` (`shared/notify-context.ts:110-113`, routed at `list.ts:1210` via `LIST_CONTEXT`). `LIST_RENDER.installed` (`orchestrators/plugin/list.messaging.ts:96-107`) hardcodes `undefined` into `installedLikeRow`'s `reasons` parameter. **INV-01 is therefore a two-file edit** — stamp `reasons` in the `list.ts` row builder AND pass `p.reasons` through in `list.messaging.ts`. Changing only `list.ts` produces no visible output change.
 
-**Plans:** 2/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -239,7 +239,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 95. Manifest-independent installed inventory | v1.18 | 2/2 | In Progress|  |
+| 95. Manifest-independent installed inventory | v1.18 | 2/2 | Complete    | 2026-08-08 |
 | 96. Installation-record-backed plugin info | v1.18 | 0/0 | Not started | — |
 | 97. Disabled-state classification repair | v1.18 | 0/0 | Not started | — |
 | 98. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
