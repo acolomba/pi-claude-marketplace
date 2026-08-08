@@ -141,7 +141,10 @@ Does NOT cover `plugin info` (Phase 96), the disabled-state predicate repair
 
 ### Scope and process
 
-- **D-95-10:** The requirement amendment for D-95-06 lands as a **quick task
+- **D-95-10 [informational]:** Executed before planning: the amendment landed
+  as quick task `260808-dhm` (2026-08-08); INV-05 now exists in REQUIREMENTS.md,
+  is mapped to Phase 95, and is covered by plan 95-02. Original decision text:
+  The requirement amendment for D-95-06 lands as a **quick task
   after this discuss session**, matching the precedent already set twice on this
   branch (quick tasks `260807-q0v` and `260807-ur3`, both of which amended v1.18
   planning docs mid-milestone). The amendment must: remove the "Extending the
@@ -152,7 +155,9 @@ Does NOT cover `plugin info` (Phase 96), the disabled-state predicate repair
   start until this lands** — otherwise the planner works from a REQUIREMENTS.md
   that still lists the widening out of scope.
 
-- **D-95-11:** Open decision 2 (component name fidelity on the state-only info
+- **D-95-11 [informational]:** A deferral, not Phase 95 plan content: recorded
+  in STATE.md's open-decisions section as deferred to Phase 96 discuss. Original
+  decision text: Open decision 2 (component name fidelity on the state-only info
   arm) is **deferred to Phase 96 discuss**. It governs no Phase 95 code — list
   rows carry plugin names, not component names — and Phase 96's discuss will
   have the `info.ts` reconstruction in front of it. STATE.md's recorded gate

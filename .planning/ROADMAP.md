@@ -16,6 +16,7 @@
 
 - Integer phases (95-98): planned milestone work continuing the global counter
   from Phase 94, the final v1.17 phase.
+
 - Decimal phases (95.1, 96.1): urgent insertions only, marked `INSERTED`.
 
 - [ ] **Phase 95: Manifest-independent installed inventory** — characterize first, then change three things. The list inventory is already the union of a successfully loaded manifest and the installation records, and partial, disabled, and `--installed` behavior already survive manifest absence; those become characterization tests. The production changes are lifting the row builder's omission of reasons on installed rows so `{not in manifest}` can render, threading the manifest load error through the cross-scope orphan-fold path so an unreadable manifest is never reported as a missing entry, and widening the LLM tool surface's reason projection so the same fact reaches the agent. (INV-01, INV-02, INV-03, INV-04, INV-05, BOUND-03)
@@ -173,8 +174,12 @@ unless noted. Decision records live in
 **Plans:** 2 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 95-01-PLAN.md — characterize the manifest-absent list behavior, then thread the manifest-load outcome and render `{not in manifest}` on the installed and partially-installed rows (INV-01, INV-02, INV-03, INV-04, BOUND-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 95-02-PLAN.md — widen the LLM tool surface's reason projection so the agent-facing payload states the same fact as the rendered row (INV-05)
 
 ### Phase 96: Installation-record-backed plugin info
