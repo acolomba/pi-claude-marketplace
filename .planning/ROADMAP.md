@@ -170,7 +170,12 @@ unless noted. Decision records live in
 
 **Criterion 2 note (2026-08-08, retracted and restated after Phase 95 research):** an earlier same-day amendment claimed there was no render-map suppression to lift. That claim was wrong and is withdrawn — the original criterion-2 wording is correct. The list surface does NOT render through the central `renderPluginRow` switch in `shared/notify.ts`; it dispatches through `context.render[row.status]` (`shared/notify-context.ts:110-113`, routed at `list.ts:1210` via `LIST_CONTEXT`). `LIST_RENDER.installed` (`orchestrators/plugin/list.messaging.ts:96-107`) hardcodes `undefined` into `installedLikeRow`'s `reasons` parameter. **INV-01 is therefore a two-file edit** — stamp `reasons` in the `list.ts` row builder AND pass `p.reasons` through in `list.messaging.ts`. Changing only `list.ts` produces no visible output change.
 
-**Plans:** 0 plans
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 95-01-PLAN.md — characterize the manifest-absent list behavior, then thread the manifest-load outcome and render `{not in manifest}` on the installed and partially-installed rows (INV-01, INV-02, INV-03, INV-04, BOUND-03)
+- [ ] 95-02-PLAN.md — widen the LLM tool surface's reason projection so the agent-facing payload states the same fact as the rendered row (INV-05)
 
 ### Phase 96: Installation-record-backed plugin info
 
