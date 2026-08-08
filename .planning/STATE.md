@@ -4,16 +4,16 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 95
 current_phase_name: manifest-independent-installed-inventory
-status: planning
-stopped_at: Phase 95 context gathered
-last_updated: "2026-08-08T18:00:31.187Z"
+status: executing
+stopped_at: Completed 95-01-PLAN.md
+last_updated: "2026-08-08T18:34:49.449Z"
 last_activity: 2026-08-08
 last_activity_desc: Phase 95 context gathered; open decisions 1 and 3 resolved, decision 2 deferred to Phase 96
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -34,12 +34,14 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 95 — Manifest-independent installed inventory (context gathered)
-Plan: —
-Status: Context captured. Open decisions 1 and 3 resolved; decision 2 deferred
-to Phase 96 discuss. Planning is BLOCKED until the requirement amendment for the
-LLM tool-surface widening lands as a quick task (D-95-06 / D-95-10).
-Last activity: 2026-08-08 — Phase 95 discuss completed; 95-CONTEXT.md written
+Phase: 95 (manifest-independent-installed-inventory) — EXECUTING
+Plan: 2 of 2 (95-01 complete)
+Status: 95-01 shipped the `{not in manifest}` brace on the `(installed)` and
+`(partially-installed)` inventory rows, gated on a SUCCESSFUL manifest read so
+the cross-scope fold never claims an absence about a manifest it could not parse
+(INV-01/02/03/04, BOUND-03). 95-02 (INV-05, the LLM tool-surface widening in
+`edge/handlers/tools.ts`) is next; it touches no file 95-01 changed.
+Last activity: 2026-08-08 — Phase 95 plan 01 executed
 
 ## Roadmap Summary
 
@@ -125,6 +127,9 @@ two integration checks.
   INV-04 still covers the canonical disabled shape only, because the partial
   shape is not recognized as disabled until Phase 97 lands; ENBL-06 widens it.
 
+- [Phase 95]: Gate the {not in manifest} claim on a SUCCESSFUL manifest read (loadError === undefined) so no row states a fact about a manifest never parsed (BOUND-03 / D-95-05)
+- [Phase 95]: Thread the whole ScopedManifest bundle into enumerateMarketplacePlugins rather than a parallel manifestLoaded boolean (D-95-04)
+
 ### Open decisions
 
 Recorded 2026-08-07 by quick task 260807-q0v after validating two independent
@@ -196,9 +201,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+| Phase 95 P01 | 30min | 3 tasks | 3 files |
 
 ## Session
 
-**Last session:** 2026-08-08T13:40:30.266Z
-**Stopped at:** Phase 95 context gathered
-**Resume file:** .planning/phases/95-manifest-independent-installed-inventory/95-CONTEXT.md
+**Last session:** 2026-08-08T18:34:39.822Z
+**Stopped at:** Completed 95-01-PLAN.md
+**Resume file:** None

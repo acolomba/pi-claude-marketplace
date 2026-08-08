@@ -9,10 +9,10 @@
 
 ### Installed Inventory
 
-- [ ] **INV-01**: In the default plugin list, an enabled fully supported installation record whose name is absent from a successfully loaded marketplace manifest appears under that marketplace as `● <plugin> v<recorded-version> (installed) {not in manifest}`.
-- [ ] **INV-02**: An enabled installation record with one or more persisted `compatibility.unsupported` kinds retains the existing `(partially-installed)` status and unsupported-kind reasons, with `not in manifest` added first. Manifest-absent partial records are already classified from `compatibility.unsupported` alone, which is manifest-independent, so they are neither flattened to `(installed)` nor omitted today; adding the reason is the only change. Pin the existing classification with a characterization test before touching it.
-- [ ] **INV-03**: `plugin list --installed` includes both fully installed and partially-installed manifest-absent records. This already holds; the requirement is regression coverage, not new behavior.
-- [ ] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true` -- because the partial-disabled shape is not recognized as disabled by any surface until ENBL-05 repairs the predicate in Phase 97. Do not pin the current partial-disabled rendering as correct here; ENBL-06 widens this coverage after the repair.
+- [x] **INV-01**: In the default plugin list, an enabled fully supported installation record whose name is absent from a successfully loaded marketplace manifest appears under that marketplace as `● <plugin> v<recorded-version> (installed) {not in manifest}`.
+- [x] **INV-02**: An enabled installation record with one or more persisted `compatibility.unsupported` kinds retains the existing `(partially-installed)` status and unsupported-kind reasons, with `not in manifest` added first. Manifest-absent partial records are already classified from `compatibility.unsupported` alone, which is manifest-independent, so they are neither flattened to `(installed)` nor omitted today; adding the reason is the only change. Pin the existing classification with a characterization test before touching it.
+- [x] **INV-03**: `plugin list --installed` includes both fully installed and partially-installed manifest-absent records. This already holds; the requirement is regression coverage, not new behavior.
+- [x] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true` -- because the partial-disabled shape is not recognized as disabled by any surface until ENBL-05 repairs the predicate in Phase 97. Do not pin the current partial-disabled rendering as correct here; ENBL-06 widens this coverage after the repair.
 - [ ] **INV-05**: The LLM tool surface forwards reasons for `installed` and `partially-installed` rows, joining the `unavailable` / `partially-available` / `upgradable` set already handled by `pluginReasons`. Without it, `{not in manifest}` renders on the slash command and silently vanishes from the tool payload. This also closes a pre-existing loss unrelated to manifest absence: `projectRowStatus` already flattens `installed`, `upgradable`, `partially-installed`, and `partially-upgradable` into a single `installed` tool status, so a degraded install is today indistinguishable from a clean one and its unsupported-kind reasons are discarded. `PluginPartiallyInstalledMessage.reasons` is required and drops in cleanly; `PluginInstalledMessage.reasons` is optional and needs an undefined guard before the length check. Adds no status token, reason token, glyph, state field, migration, or network path, so COMPAT-01 continues to hold. (Entered scope 2026-08-08 by operator decision at Phase 95 discuss, reversing the same-milestone exclusion; rationale D-95-06 / D-95-07.)
 
 ### Plugin Information
@@ -28,7 +28,7 @@
 
 - [ ] **BOUND-01**: Missing, unreadable, malformed, or invalid marketplace manifests retain the existing manifest-read failure output on list and info; `{not in manifest}` is emitted only after a manifest loads successfully and its plugin lookup misses. The authoritative description of that existing output is `docs/output-catalog.md` and the current tests -- a bare `(failed)` marketplace header with no child rows. The PRD's PL-6 row describes the retired v1 renderer and is not authoritative; DOC-08 corrects it.
 - [ ] **BOUND-02**: A targeted plugin name absent from both a successfully loaded manifest and the marketplace installation records remains `(failed) {not in manifest}`. This already holds; the requirement is regression coverage.
-- [ ] **BOUND-03**: On the cross-scope orphan-fold path, a manifest that failed to load is distinguished from a manifest that loaded without the entry. The fold path currently discards the load error, so an absent manifest entry is indistinguishable from an unread manifest; it must thread the load error the way the primary path does. `{not in manifest}` is never emitted for a folded row whose manifest was never successfully read.
+- [x] **BOUND-03**: On the cross-scope orphan-fold path, a manifest that failed to load is distinguished from a manifest that loaded without the entry. The fold path currently discards the load error, so an absent manifest entry is indistinguishable from an unread manifest; it must thread the load error the way the primary path does. `{not in manifest}` is never emitted for a folded row whose manifest was never successfully read.
 
 ### Lifecycle Compatibility
 
@@ -91,10 +91,10 @@ Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 | --- | --- | --- |
-| INV-01 | Phase 95 | Pending |
-| INV-02 | Phase 95 | Pending |
-| INV-03 | Phase 95 | Pending |
-| INV-04 | Phase 95 | Pending |
+| INV-01 | Phase 95 | Complete |
+| INV-02 | Phase 95 | Complete |
+| INV-03 | Phase 95 | Complete |
+| INV-04 | Phase 95 | Complete |
 | INV-05 | Phase 95 | Pending |
 | INFO-09 | Phase 96 | Pending |
 | INFO-10 | Phase 96 | Pending |
@@ -102,7 +102,7 @@ Which phases cover which requirements.
 | INFO-12 | Phase 96 | Pending |
 | BOUND-01 | Phase 96 | Pending |
 | BOUND-02 | Phase 96 | Pending |
-| BOUND-03 | Phase 95 | Pending |
+| BOUND-03 | Phase 95 | Complete |
 | ENBL-05 | Phase 97 | Pending |
 | ENBL-06 | Phase 97 | Pending |
 | ENBL-07 | Phase 97 | Pending |
