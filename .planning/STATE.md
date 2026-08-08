@@ -1,12 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.18
-milestone_name: manifest-independent-installed-plugin-info
+milestone_name: Manifest-Independent Installed Plugin Info
+current_phase: 95
+current_phase_name: manifest-independent-installed-inventory
 status: planning
-stopped_at: Roadmap approved; awaiting Phase 95 planning
-last_updated: "2026-08-07T23:30:00Z"
-last_activity: 2026-08-07
-last_activity_desc: "disabled-partial classification repair brought into v1.18 as Phase 97; 21/21 requirements mapped across 4 phases"
+stopped_at: Phase 95 context gathered
+last_updated: "2026-08-08T13:40:30.301Z"
+last_activity: 2026-08-08
+last_activity_desc: "Phase 95 context gathered; open decisions 1 and 3 resolved, decision 2 deferred to Phase 96"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -32,33 +34,40 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: Not started (roadmap created — Phases 95-97 mapped)
+Phase: 95 — Manifest-independent installed inventory (context gathered)
 Plan: —
-Status: Roadmap approved and validated; three open decisions block Phase 95 planning
-Last activity: 2026-08-07 — Completed quick task 260807-ur3: bring the disabled-partial classification repair into v1.18 as Phase 97
+Status: Context captured. Open decisions 1 and 3 resolved; decision 2 deferred
+to Phase 96 discuss. Planning is BLOCKED until the requirement amendment for the
+LLM tool-surface widening lands as a quick task (D-95-06 / D-95-10).
+Last activity: 2026-08-08 — Phase 95 discuss completed; 95-CONTEXT.md written
 
 ## Roadmap Summary
 
 - 4 sequential phases (95-98), continuing the global counter from Phase 94.
   All 21 v1 requirements map exactly once; no orphans.
+
 - Eight requirements (INV-02/03/04, BOUND-01/02, LIFE-04/05/06) describe behavior
   the code already exhibits. They are carried as contracts the milestone must not
   break, and their deliverable is characterization and regression coverage. The
   net-new work is INV-01, BOUND-03, INFO-09..12, COMPAT-01, and DOC-08.
+
 - **Phase 95 — Manifest-independent installed inventory** (INV-01..04, BOUND-03):
   characterize the existing union behavior, then open the render-map seam so
   `{not in manifest}` can appear on installed rows, and thread the manifest load
   error through the cross-scope orphan-fold path.
+
 - **Phase 96 — Installation-record-backed plugin info** (INFO-09..12,
   BOUND-01/02): the substantive phase. Reorder the valid-manifest miss path,
   reconstruct local component structure, preserve partial compatibility, add the
   explicit network guard the reorder requires, and lock read-failure versus
   unknown-name boundaries.
+
 - **Phase 97 — Disabled-state classification repair** (ENBL-05..09): collapse the
   four copies of the disabled-state predicate into one keyed only on `enabled`,
   then restore list/info rendering, enable/disable idempotency, reconcile steady
   state, and the update short-circuit for disabled partially-installed records.
   Repairs ENBL-04 from v1.12. No state migration.
+
 - **Phase 98 — Lifecycle regression and contract documentation** (LIFE-04..06,
   COMPAT-01, DOC-08): no lifecycle production changes expected — pin
   uninstall/update/autoupdate non-regression, assert no persistence/token/network
@@ -98,30 +107,59 @@ two integration checks.
 - Do not add `orphaned` or `orphaned-installed`: fully supported records keep
   `(installed)`, while records with persisted unsupported kinds retain the
   existing `(partially-installed)` status and reason markers.
+
 - Reuse `{not in manifest}` and emit it only after a successful manifest load
   whose plugin lookup misses.
+
 - Reconstruct installed components from existing resource fields and retain
   unsupported kinds from `compatibility.unsupported`; do not persist a manifest
   snapshot or orphan flag.
+
 - Keep disabled, unknown-name, manifest-read, update/autoupdate, and uninstall
   semantics unchanged.
+
 - The disabled-plus-partial classification defect is IN scope for v1.18 as
   Phase 97 (operator decision 2026-08-07, reversing the same-day exclusion).
   It repairs ENBL-04, shipped in v1.12 and silently broken by partial installs.
   INV-04 still covers the canonical disabled shape only, because the partial
   shape is not recognized as disabled until Phase 97 lands; ENBL-06 widens it.
 
-### Open decisions (resolve before Phase 95 planning)
+### Open decisions
 
 Recorded 2026-08-07 by quick task 260807-q0v after validating two independent
-reviews against the codebase. Full statements in ROADMAP.md.
+reviews against the codebase. Full statements in ROADMAP.md. Resolved at the
+Phase 95 discuss session on 2026-08-08 unless noted.
 
-1. Whether installed inventory rows may carry reason braces at all — INV-01
-   reverses a deliberate suppression in the list render map.
-2. Whether the state-only info arm renders Pi-generated installed names or
-   reverse-maps them to original source names.
-3. Whether the LLM tool surface widens its reason projection to carry
-   `{not in manifest}` on installed and partial rows, or accepts the asymmetry.
+1. **RESOLVED (D-95-01/02/03)** — Installed inventory rows may carry reason
+   braces, under a general rule: the orchestrator stamps reasons and
+   `notify.ts` renders them, with no allowlist in the render path. Recorded
+   guidance is durable-vs-transient. Note the premise was imprecise: there is
+   no render-map suppression to reverse. `notify.ts:2180-2193` already composes
+   reasons on the `installed` arm and `PluginInstalledMessage.reasons?` already
+   exists; the omission is one orchestrator field at `list.ts:485-499`.
+
+2. **DEFERRED to Phase 96 discuss (D-95-11)** — Whether the state-only info arm
+   renders Pi-generated installed names or reverse-maps them to original source
+   names. Re-gated: it governs no Phase 95 code, and Phase 96 discuss will have
+   the `info.ts` reconstruction in front of it.
+
+3. **RESOLVED (D-95-06/07)** — The LLM tool surface widens: `pluginReasons`
+   forwards reasons for both `installed` and `partially-installed`, landing in
+   Phase 95 beside INV-01. This reverses a REQUIREMENTS.md § Out of Scope row.
+   Driven by two findings — `projectRowStatus` already flattens four statuses
+   into `"installed"`, so a degraded install is today indistinguishable from a
+   clean one in the tool payload; and `upgradable` already forwards reasons
+   while also projecting to `"installed"`.
+
+### Blockers
+
+- **Planning for Phase 95 is BLOCKED** until a quick task lands the requirement
+  amendment for decision 3 (D-95-10): remove the "Extending the LLM tool
+  surface to carry the new reason" row from REQUIREMENTS.md § Out of Scope, add
+  a requirement ID for the widening mapped to Phase 95 in the traceability
+  table, add it to Phase 95's requirement list in ROADMAP.md, and add a Phase 95
+  success criterion for the tool payload. Without it the planner works from a
+  REQUIREMENTS.md that still lists the change out of scope.
 
 ## Deferred Items
 
@@ -147,9 +185,11 @@ None of the carryover items originate from v1.17 env-parity.
 
 - Resolve the three open decisions above; they change what Phase 95 and Phase 96
   build.
+
 - Discuss and plan Phase 95: manifest-independent installed inventory.
 - Implement through TDD in the isolated feature worktree, writing the
   characterization tests before any production edit.
+
 - Verify each phase against its mapped requirements before transition.
 
 ## Performance Metrics
@@ -157,3 +197,9 @@ None of the carryover items originate from v1.17 env-parity.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+
+## Session
+
+**Last session:** 2026-08-08T13:40:30.266Z
+**Stopped at:** Phase 95 context gathered
+**Resume file:** .planning/phases/95-manifest-independent-installed-inventory/95-CONTEXT.md
