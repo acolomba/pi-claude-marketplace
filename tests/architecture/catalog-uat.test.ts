@@ -830,6 +830,57 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // INV-01: the steady-state inventory row for a record whose marketplace
+    // manifest loaded successfully but does not declare it. The clean
+    // `(installed)` token and `●` glyph are unchanged -- manifest absence is a
+    // reason, not a status. Severity stays `info` (no `expectedSeverity`).
+    "manifest-absent-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "installed",
+                name: "orphan-plugin",
+                version: "1.0.0",
+                needsReload: false,
+                dependencies: [],
+                reasons: ["not in manifest"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // INV-02: manifest absence and dropped components are independent axes, so
+    // a degraded manifest-absent record carries BOTH -- absence first, then the
+    // `narrowUnsupportedKinds` output. Severity stays `info`.
+    "manifest-absent-partially-installed-inventory": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "partially-installed",
+                name: "degraded-plugin",
+                version: "1.0.0",
+                reasons: ["not in manifest", "lsp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // -------------------------------------------------------------------------

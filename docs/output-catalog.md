@@ -400,6 +400,28 @@ A partial-hook plugin -- one whose `hooks.json` parses and validates cleanly but
 
 A currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it is DERIVED as `partially-upgradable` (FSTAT-04 / D-66-02). The candidate is resolved without network (FSTAT-05). The row REUSES the `●` glyph (`ICON_INSTALLED`) because it is clean today -- only its candidate would degrade -- mirroring the `upgradable` precedent. A plugin already `partially-installed` is never `partially-upgradable` (already degraded). This is a list-inventory-only row; severity `info`, no reload-hint.
 
+### Manifest-absent inventory row (INV-01)
+
+<!-- catalog-state: manifest-absent-inventory -->
+
+```text
+● official [user] <autoupdate>
+  ● orphan-plugin v1.0.0 (installed) {not in manifest}
+```
+
+An installed record whose marketplace manifest LOADED successfully but does not declare it carries the `not in manifest` reason (INV-01). The inventory is manifest-independent: the record is materialized on disk, so the row keeps the clean `(installed)` token and the `●` glyph, and the brace states the one fact the manifest settles. The claim is made ONLY about a manifest that was actually read and that the block header names -- a manifest-read failure renders the bare `(failed)` marketplace header instead (BOUND-01), and a cross-scope folded row whose owning record names a different manifest drops the brace (BOUND-03 / D-95-05). Severity `info`; no reload-hint (inventory row).
+
+### Manifest-absent partially-installed inventory row (INV-02)
+
+<!-- catalog-state: manifest-absent-partially-installed-inventory -->
+
+```text
+● official [user] <autoupdate>
+  ◉ degraded-plugin v1.0.0 (partially-installed) {not in manifest, lsp}
+```
+
+A degraded record that is ALSO absent from a manifest that loaded prepends `not in manifest` to the dropped-component kinds (INV-02). The absence reason comes first because it describes the record's relationship to the marketplace, and the kinds describe the install itself; `narrowUnsupportedKinds` stays the sole producer of the kind tokens. The row keeps the `◉` glyph and the `partially-installed` token -- manifest absence is a separate axis from degradation and never changes the status. Severity `info`; no reload-hint (inventory row).
+
 ______________________________________________________________________
 
 ## `/claude:plugin install <plugin>@<marketplace>`
