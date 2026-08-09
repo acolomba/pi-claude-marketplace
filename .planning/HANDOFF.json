@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-09T17:57:01Z",
+  "phase": "97",
+  "phase_name": "disabled-state-classification-repair",
+  "phase_dir": ".planning/phases/97-disabled-state-classification-repair",
+  "plan": 5,
+  "task": 2,
+  "total_tasks": 11,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "97-01", "name": "Predicate collapse tracer (ENBL-05 + CR-01 repro)", "status": "done", "commit": "8eab6c08 (+4e0a2494, b2b8f973, 4e89e015)"},
+    {"id": "97-02", "name": "Disabled-partial rendering pins + prose sweep (ENBL-06 list half)", "status": "done", "commit": "4973f437..0b490f6b"},
+    {"id": "97-03", "name": "Partial-capable enable + disable idempotency (ENBL-07)", "status": "done", "commit": "117069a7..f1610ac"},
+    {"id": "97-04", "name": "Backfill enabled-guard + planner fixed point (ENBL-08, T-97-01 high threat closed)", "status": "done", "commit": "6c5ba69a..6ded1fe0"},
+    {"id": "97-05", "name": "Update short-circuit + derived availability (ENBL-09)", "status": "in_progress", "progress": "Both core commits exist (c15ad05a test pin, 5c412456 update.ts fix, update suite green) but NO 97-05-SUMMARY.md, no docs completion commit, no STATE/ROADMAP tracking update. These commits were NOT made by the paused session's dispatched executor (its dispatch was interrupted before start) — they landed concurrently."}
+  ],
+  "remaining_tasks": [
+    {"id": "97-05-closeout", "name": "Verify 97-05 acceptance criteria vs delivered commits; write 97-05-SUMMARY.md; update STATE/ROADMAP", "status": "not_started"},
+    {"id": "97-post", "name": "Phase 97 tail: aggregate → code review (gsd-code-review 97, then 97 --fix --auto if findings) → verifier → validate-phase 97 → secure-phase 97 → transition (phase.complete 97; closes the CR-01 carrier todo resolves_phase:97)", "status": "not_started"},
+    {"id": "98", "name": "Phase 98 (LIFE-04..06, COMPAT-01, DOC-08): discuss → plan → execute → verify → transition", "status": "not_started"},
+    {"id": "lifecycle", "name": "Milestone lifecycle: audit-milestone → complete-milestone v1.18 → cleanup (run UAT before archive per operator convention)", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "D-96-01..04 and D-97-01 recorded in phase CONTEXT files; requirements-as-spec for Phase 97 with two discretion anchors (bare disabled row; existing resolve-failure on manifest-absent enable)", "rationale": "operator selections at interactive discuss", "phase": "96/97"},
+    {"decision": "BFILL-01 guard in scope (97-04); enable restores current manifest set (97-03); manifest-absent enable boundary unit-level only", "rationale": "orchestrator-resolved research open questions, endorsed by pattern mapper", "phase": "97"},
+    {"decision": "Sequential execution on the feature worktree (no per-agent worktrees)", "rationale": "#683 fork-base auto-degrade (HEAD ahead of origin/HEAD) + repo-known worktree node_modules issues", "phase": "all"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Close out 97-05 via continuation (NOT a fresh full executor): read 97-05-PLAN.md acceptance criteria, verify both tasks' criteria against commits c15ad05a + 5c412456 (run PI_SUBAGENTS_ROOT=/home/acolomba/.pi/agent/npm/node_modules/pi-subagents npm run check, capture $? directly), write 97-05-SUMMARY.md, update STATE/ROADMAP via roadmap update-plan-progress, then resume the autonomous flow: /gsd-autonomous --interactive --from 97 (its execute step will find all 5 summaries and proceed to phase gates per #2868).",
+  "context_notes": "Session was /gsd-autonomous --interactive over milestone v1.18 (4 phases, 95-98) run from the worktree .worktrees/manifest-independent-plugin-info (branch features/manifest-independent-plugin-info). Phases 95+96 fully complete: verified passed, 3-iteration review fix loops (all_fixed), validate-phase + secure-phase artifacts committed, transitions done. Phase 97 planned (5 plans) and executed through 97-04 with full suite green after each plan. The 97-05 executor dispatch was interrupted by the user; two 97-05 commits then appeared concurrently (not from this session). Environment: run all GSD tooling from the worktree (main checkout reports stale v1.17 state); full suites need PI_SUBAGENTS_ROOT (stale global pi-subagents 0.24.3 otherwise fails two integration tests); commits from the worktree need the trufflehog filesystem-scan + SKIP=trufflehog protocol from CLAUDE.md; IDE diagnostics on .ts files are stale noise — trust npm run check."
+}
