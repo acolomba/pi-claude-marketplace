@@ -1057,6 +1057,66 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
   });
 });
 
+// ENBL-06: disabled-ness (`enabled`) and availability
+// (`compatibility.installable`) are orthogonal axes, so a record whose
+// install-time resolution dropped a component kind is still DISABLED once the
+// user disables it. Its row renders at byte parity with the canonical disabled
+// row -- bare. `PluginDisabledMessage` carries no `reasons` field by
+// construction, which makes INV-04's "never `{not in manifest}` on a disabled
+// row" structural rather than test-enforced. The enabled partial seeded beside
+// it keeps its unsupported-kind brace, so the two shapes stay distinguishable
+// inside one marketplace block.
+test("ENBL-06 / INV-04: a disabled PARTIAL renders bare `(disabled)` beside an enabled partial's `(partially-installed) {lsp}` in the same block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0" },
+          { name: "beta", source: "./beta", version: "1.0.0" },
+        ],
+      },
+      // Both records carry the same dropped kind; only `disabled` differs.
+      installed: {
+        alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] },
+        beta: { version: "1.0.0", unsupported: ["lspServers"] },
+      },
+      installablePluginDirs: ["alpha", "beta"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+
+    assert.equal(notifications.length, 1);
+    const out = notifications[0]!.message;
+    // The byte form IS the contract: one join proves both status tokens, the
+    // brace asymmetry, and the row order together. `alpha` staying first shows
+    // that reclassifying a record from partially-installed to disabled does not
+    // move its row -- order is state insertion order, not bucket order.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ◍ alpha v1.0.0 (disabled)",
+        "  ◉ beta v1.0.0 (partially-installed) {lsp}",
+      ].join("\n"),
+    );
+
+    // Row-scoped negatives so a regression names itself. A whole-output brace
+    // check would be defeated by beta's legitimate `{lsp}`.
+    const alphaRow = out.split("\n").find((line) => line.includes("alpha")) ?? "";
+    assert.equal(alphaRow.includes("{"), false, `the disabled row carries no brace: ${alphaRow}`);
+    assert.equal(alphaRow.includes("(partially-installed)"), false, alphaRow);
+    assert.equal(alphaRow.includes("{not in manifest}"), false, alphaRow);
+    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+  });
+});
+
 // D-63-04: hooks-only installed plugin must render `(installed)`, NOT
 // `(disabled)`. Regression pin for the hooks-only-list-disabled bug --
 // the hook bridge added resources.hooks to the state schema
