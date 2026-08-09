@@ -1036,11 +1036,35 @@ test("D-96-04: a mixed disabled + state-only `--fetch` run orders both skip rows
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
 
-    const skip = notifications.find((n) => n.message.includes("(skipped)"));
-    assert.ok(skip !== undefined, JSON.stringify(notifications));
-    assert.equal(skip.severity, "warning");
+    // The whole sequence is pinned by index, not searched: a `find()` would
+    // survive a duplicated skip notification, a lost info block, and any
+    // reordering -- including the WR-10 inventory/note inversion this order
+    // encodes.
+    assert.equal(notifications.length, 3, JSON.stringify(notifications));
+
+    // 0: the user-scope state-only info block, unchanged by the flag.
+    assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
-      skip.message,
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v2.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+
+    // 1: the project-scope disabled inventory. WR-10: the inventory precedes
+    // the note that annotates it, matching the all-disabled early return.
+    assert.equal(notifications[1]!.severity, undefined);
+    assert.equal(
+      notifications[1]!.message,
+      ["● mp [project]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+    );
+
+    // 2: ONE skip notification carrying both rows, project-first.
+    assert.equal(notifications[2]!.severity, "warning");
+    assert.equal(
+      notifications[2]!.message,
       [
         "Some plugin operations need attention.",
         "",
