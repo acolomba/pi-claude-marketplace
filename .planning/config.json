@@ -13,6 +13,7 @@
     "quick_branch_template": null
   },
   "workflow": {
+    "context_guard_mode": "auto",
     "research": true,
     "plan_check": true,
     "verifier": true,
@@ -39,5 +40,12 @@
   "features": {},
   "mode": "yolo",
   "granularity": "standard",
-  "context_window": 1000000
+  "context_window": 1000000,
+  "claude_md_assembly": {
+    "mode": "link",
+    "blocks": {
+      "project": "embed"
+    }
+  },
+  "claude_md_path": "CLAUDE.md"
 }
