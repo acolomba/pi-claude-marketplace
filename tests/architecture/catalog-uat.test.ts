@@ -2726,8 +2726,11 @@ const FIXTURES: FixtureMap = {
   //     * state-only-installed-hooks-degraded          (D-96-03 unlistable hooks marker)
   //     * available-single-scope                       (INFO-02 available bucket)
   //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
+  //   - Warning state:
+  //     * state-only-fetch-skipped                     (D-96-04 skipped --fetch note, "warning")
   //   - Multi-scope fan-out:
   //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
+  //     * state-only-installed-both-scopes-fan-out     (INFO-09 record-backed fan-out)
   //   - Components arm (INFO-05):
   //     * components-not-resolved                      (external-source marker)
   //   - Failure states:
@@ -2737,7 +2740,8 @@ const FIXTURES: FixtureMap = {
   //
   // Severity routing: every success + fan-out + components-not-resolved
   // state is `info` (omits `expectedSeverity`); the three `{not added}` /
-  // `{not in manifest}` failure states route to `"error"`.
+  // `{not in manifest}` failure states route to `"error"`; the D-96-04
+  // fetch-skip note is the sole `"warning"` state on this surface.
   // -------------------------------------------------------------------------
   "/claude:plugin info <plugin>@<marketplace>": {
     "installed-single-scope": {
@@ -2866,6 +2870,32 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // D-96-04: `--fetch` against a manifest-absent installation record. This is
+    // a CASCADE row, not a `PluginInfoRow`: the standalone info status set
+    // admits no `skipped`. The `severity: "warning"` on the row is what selects
+    // the `needs attention` summary and the second `notify` argument.
+    "state-only-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["not in manifest"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "available-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -2934,6 +2964,47 @@ const FIXTURES: FixtureMap = {
               version: "2.0.0",
               componentsResolved: true,
               components: { agents: ["a1"] },
+            },
+          },
+        ],
+      } satisfies NotificationMessage,
+    },
+
+    // INFO-09: the same fan-out when NEITHER scope's manifest declares the
+    // plugin. Both blocks are `(installed) {not in manifest}` rather than
+    // `(failed)`, so they join one `info` cascade instead of being separated
+    // into two `error` notifications by the GRAM-04 failure split.
+    "state-only-installed-both-scopes-fan-out": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "alpha",
+              version: "1.0.0",
+              reasons: ["not in manifest"],
+              componentsResolved: true,
+              components: { skills: ["alpha-skill"] },
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "alpha",
+              version: "1.0.0",
+              reasons: ["not in manifest"],
+              componentsResolved: true,
+              components: { skills: ["alpha-skill"] },
             },
           },
         ],

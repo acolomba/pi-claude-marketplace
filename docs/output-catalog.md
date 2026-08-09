@@ -1442,7 +1442,7 @@ ______________________________________________________________________
 
 Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` note is the one `warning` state on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 ### Success -- installed single scope
 
@@ -1526,6 +1526,19 @@ The installation record names a hooks container, but the materialized configurat
     skills: alpha-skill
 ```
 
+### Warning -- the requested fetch was skipped (D-96-04)
+
+The user gives `--fetch`, the marketplace manifest loads, the manifest does not declare the plugin, and an installation record exists. There is no manifest entry, thus there is no source to fetch from, and the command fetches nothing. This note tells the user that the flag did not run. The info block shows beside this note, and its bytes are the same as those of a bare run. The row uses the `(skipped) {not in manifest}` form that `update` already emits. This is the only `warning`-severity state on the info surface. The note is a SECOND notification, because the standalone info row cannot hold a `skipped` status. The disabled inventory row above breaks IL-2 in the same manner and for the same reason. A bare run and a plugin that the manifest DOES declare show no note. Severity `warning`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-fetch-skipped -->
+
+```text
+A plugin operation needs attention.
+
+● mp [user]
+  ⊘ alpha v1.0.0 (skipped) {not in manifest}
+```
+
 ### Success -- available single scope
 
 Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notify.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
@@ -1584,6 +1597,22 @@ Triggered by `plugin info <plugin>@<marketplace>` with NO `--scope` filter when 
 ● mp [user] <no autoupdate>
   ● foo v2.0.0 (installed)
     agents: a1
+```
+
+### Multi-scope fan-out -- the record is in both scopes and in no manifest (INFO-09)
+
+The manifest loads in both scopes and declares the plugin in neither, and each scope holds an installation record. Both blocks thus show `(installed) {not in manifest}`, and the pair renders as ONE `info`-severity cascade in project-first order, with one blank line between the blocks. Before this state, the same input made TWO `error`-severity notifications, each with its own summary line, because both blocks were `(failed)`. The change follows the outcome: an installation record that outlived its manifest entry is not a failure. The `(failed)` separation itself does not change. A block that IS a failure is still surfaced as its own `error` notification with its summary line, because a failure in one scope must not hide behind a healthy other scope (GRAM-04). Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-both-scopes-fan-out -->
+
+```text
+● mp [project] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    skills: alpha-skill
+
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    skills: alpha-skill
 ```
 
 ### Components not resolved (external source)
