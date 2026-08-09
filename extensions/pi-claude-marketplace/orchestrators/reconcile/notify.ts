@@ -401,9 +401,10 @@ export function buildReconcilePendingNotification(
 
     for (const o of plan.pluginsToEnable) {
       // The bucket is populated only when a recorded plugin carries the
-      // empty-resources marker (`isRecordedButDisabled` in plan.ts). The
-      // loop runs unconditionally so the enable wiring exercises this
-      // projection arm whenever the planner produced any enable rows.
+      // explicit `enabled: false` boolean (`isRecordedButDisabled` in
+      // persistence/state-io.ts). The loop runs unconditionally so the enable
+      // wiring exercises this projection arm whenever the planner produced any
+      // enable rows.
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
         status: "will enable",

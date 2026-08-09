@@ -14,10 +14,11 @@
 //   4. `pluginsToUninstall`   -- recorded but not declared
 //   5. `pluginsToEnable`      -- recorded-but-disabled plugins paired with
 //                                a config entry that has `enabled !== false`
-//                                (recorded-but-disabled marker is "all four
-//                                resources arrays empty AND
-//                                installable: true" -- see
-//                                plan.ts::isRecordedButDisabled)
+//                                (the recorded-but-disabled marker is the
+//                                record's explicit `enabled: false` boolean
+//                                alone -- see
+//                                persistence/state-io.ts::isRecordedButDisabled;
+//                                availability is an orthogonal axis)
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
 //   7. `sourceMismatches`     -- four per-cause planner diagnostics

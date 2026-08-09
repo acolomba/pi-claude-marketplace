@@ -723,11 +723,14 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
 
 /**
  * `(disabled)` -- D-54-01 / ENBL-04 closed-set token. Emitted on `list` /
- * `info` surfaces for plugins whose state record carries the
- * empty-resources + `installable: true` marker (the load-bearing predicate is
- * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`), AND -- per the
- * UAT-03 decision -- as the `/claude:plugin
+ * `info` surfaces for plugins whose state record carries the explicit
+ * `enabled: false` boolean (ENBL-05: the load-bearing predicate is
+ * `persistence/state-io.ts::isRecordedButDisabled`, which reads that boolean
+ * and nothing else), AND -- per the UAT-03 decision -- as the `/claude:plugin
  * disable` command's fresh cascade row (byte-identical to the inventory row).
+ * Availability (`compatibility.installable`) is an ORTHOGONAL axis and is not
+ * part of the marker, so a partially-installed record the user disabled
+ * renders this same row.
  * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
  * -- the fresh-disable transition stamps `true`, the list / info inventory row
  * stamps `false` -- so the row's reload behavior no longer depends on a cascade
@@ -737,7 +740,11 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  * form differs (`(disabled)` vs `(unavailable)`).
  *
  * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
- * -- the inventory row is bare. The renderer arm uses `ICON_DISABLED`
+ * -- the inventory row is bare. ENBL-06 / INV-04: the absent `reasons` field
+ * is what makes "a disabled row never carries `{not in manifest}`" structural
+ * rather than test-enforced. A row type with no reasons field cannot emit a
+ * manifest-absence reason, whatever the record's availability or manifest
+ * status. The renderer arm uses `ICON_DISABLED`
  * (`◍`) -- the same glyph the `will disable` row uses. PL-4: optional
  * `description` rendered as a second 4-space-indented line, truncated at
  * column 66 (same as the other list-surface inventory variants).
@@ -992,9 +999,9 @@ export interface PluginWillUninstallMessage extends MessageBase {
 /**
  * `(will enable)` -- DIFF-02 pending-list row for a recorded plugin currently
  * marked disabled but newly declared `enabled: true`. The bucket is
- * populated only when the recorded-but-disabled marker (all four resource
- * arrays empty + `installable: true` -- see
- * `orchestrators/reconcile/plan.ts::isRecordedButDisabled`) is paired
+ * populated only when the recorded-but-disabled marker -- the record's
+ * explicit `enabled: false` boolean, read through
+ * `persistence/state-io.ts::isRecordedButDisabled` -- is paired
  * with a config entry whose `enabled !== false`.
  */
 export interface PluginWillEnableMessage extends MessageBase {
