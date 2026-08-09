@@ -159,6 +159,8 @@ function pluginRecord(opts: {
   readonly installable: boolean;
   readonly supported: readonly string[];
   readonly unsupported: readonly string[];
+  /** ENBL-08 axis: omit for the enabled default; `false` seeds a disabled record. */
+  readonly enabled?: boolean;
 }): PluginRecord {
   return {
     version: "1.0.0",
@@ -170,7 +172,7 @@ function pluginRecord(opts: {
       unsupported: [...opts.unsupported],
     },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
+    enabled: opts.enabled ?? true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -624,6 +626,96 @@ test("WR-03: a plugin already touched by applyPlan this load is not double-emitt
     assert.equal(outcomes.length, 1);
     assert.equal(outcomes.filter((o) => "plugin" in o && o.plugin === "hello").length, 1);
     assert.ok(!outcomes.some((o) => o.kind === "plugin-backfilled"));
+  });
+});
+
+test("ENBL-08: the backfill scan skips a DISABLED partial whose supported set grew -- no re-materialize, no re-enable", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // hello IS declared in the manifest (a manifest-ABSENT fixture would prove
+    // nothing -- the offline resolve returns early and the scan skips either
+    // way) and its on-disk tree advertises skills + commands while the record
+    // recorded only `skills`, so the supported set grew: the exact shape the
+    // ENABLED control below backfills on. The record is DISABLED, and the
+    // re-materialize runs through reinstall, whose record write sets
+    // `enabled: true` unconditionally -- scanning it would revert an explicit
+    // user disable at load time, with no prompt and no command.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true, lsp: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["lspServers"],
+          enabled: false,
+        }),
+      },
+    });
+    const state = await loadState(extensionRoot);
+    const ctx = makeCtx();
+    const outcomes: PerEntryOutcome[] = [];
+
+    await __test_scanForceInstalledBackfills(
+      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+      "project",
+      state,
+      outcomes,
+    );
+
+    // Skipped before the resolve: no promotion row, no failure row.
+    assert.equal(outcomes.length, 0);
+    // The user's disable survived the load: still disabled, still unmaterialized.
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.equal(record.enabled, false);
+    assert.deepEqual(record.resources, {
+      skills: [],
+      prompts: [],
+      agents: [],
+      mcpServers: [],
+      hooks: [],
+    });
+  });
+});
+
+test("ENBL-08 control: the SAME grown-set fixture with an ENABLED record still backfills", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // Identical tree + recorded supported set as the guard test above; the only
+    // difference is `enabled`. This is what proves the guard test's fixture
+    // really is a backfill candidate -- and that the guard narrowed the scan to
+    // disabled records rather than switching BFILL-01 off.
+    const { extensionRoot } = await seedScope({
+      cwd,
+      stamp: "0.0.0",
+      trees: { hello: { skill: true, command: true, lsp: true } },
+      records: {
+        hello: pluginRecord({
+          pluginRoot: path.join(cwd, "mp-src", "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["lspServers"],
+        }),
+      },
+    });
+    const state = await loadState(extensionRoot);
+    const ctx = makeCtx();
+    const outcomes: PerEntryOutcome[] = [];
+
+    await __test_scanForceInstalledBackfills(
+      { ctx: ctx as unknown as ExtensionContext, pi: STUB_PI, cwd, scope: "project" },
+      "project",
+      state,
+      outcomes,
+    );
+
+    assert.equal(outcomes.length, 1);
+    assert.equal(outcomes[0]?.kind, "plugin-backfilled");
+    // The re-materialize ran: the recorded supported set grew to match the tree
+    // and the skill artifact is back on the record.
+    const record = pluginRecordOf(await loadState(extensionRoot), "mp", "hello");
+    assert.ok(record.compatibility.supported.includes("commands"));
+    assert.ok(record.resources.skills.length > 0);
   });
 });
 
