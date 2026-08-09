@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 97
-current_phase_name: Disabled-state classification repair
-status: planning
-stopped_at: Phase 97 context gathered
-last_updated: "2026-08-09T11:09:47.326Z"
+current_phase_name: disabled-state-classification-repair
+status: executing
+stopped_at: Completed 97-01-PLAN.md
+last_updated: "2026-08-09T11:38:15.022Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 96 plan 04 executed; D-96-02 folded-row manifest authority pinned and the open question closed in code, tests and the output catalog
+last_activity_desc: Phase 97 plan 01 executed; the four disabled-state predicate copies collapsed onto one enabled-only definition in persistence/state-io.ts and the CR-01 info repro turned green
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 6
+  completed_plans: 7
   percent: 50
 ---
 
@@ -27,21 +27,24 @@ See: .planning/PROJECT.md (updated 2026-08-09 after Phase 96)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Phase 96 — installation-record-backed-plugin-info
-list/info derive installed truth from the existing installation record when a
-valid marketplace manifest no longer contains the plugin entry, without
-persistence or update-semantics changes.
+**Current focus:** Phase 97 — disabled-state-classification-repair
+A disabled partially-installed plugin is recognized as disabled by every
+surface, restoring the orthogonality of declared, enabled and available.
+No state migration and no schema-version change.
 
 ## Current Position
 
-Phase: 97 — Disabled-state classification repair
-Plan: Not started
-Status: Ready to discuss (no CONTEXT.md yet). Phase 97 carries the CR-01
-finding from the Phase 96 review as a pending todo: soft-degraded
-(`installable: false`) disabled records bypass `partitionDisabledScopes` and
-reach the state-only info arm — exactly the predicate ENBL-05 collapses.
-Last activity: 2026-08-09 — Phase 96 complete (verification passed 15/15;
-Nyquist-compliant; threats_open 0), transitioned to Phase 97
+Phase: 97 (disabled-state-classification-repair) — EXECUTING
+Plan: 2 of 5
+Status: Plan 01 complete. The ENBL-05 root repair has landed: one
+disabled-state predicate in `persistence/state-io.ts` keyed only on
+`enabled`, six modules on it, and the CR-01 repro (a manifest-absent
+disabled partial reaching the state-only info arm) green. Plans 02-05 are
+expansion — ENBL-07's `partial` gate on the enable branch, ENBL-09's
+`refreshDisabledRecord` hard-coded `installable: true`, and ENBL-08's
+missing `enabled` guard on the BFILL-01 backfill scan are the second-order
+edits still outstanding.
+Last activity: 2026-08-09 — Phase 97 plan 01 executed (full suite green)
 
 ## Roadmap Summary
 
@@ -146,6 +149,9 @@ two integration checks.
 - [Phase 96]: INFO-12 is asserted as zero call counts on injected clone and credential seams, not read off the control flow
 - [Phase 96]: D-96-02 ratified — a folded row reads its OWN record's manifest for absence, upgradable and description alike, all three from one ManifestLookup value
 - [Phase 96]: BOUND-01's wholesale non-render under a failed owning manifest is contract, not a defect: the bare (failed) header suppresses folded rows the fold already computed
+- [Phase 97]: ENBL-05: the sole disabled-state predicate lives in persistence/state-io.ts beside toDisabledRecord, keyed only on `enabled`; reconcile/plan.ts deliberately does NOT re-export it
+- [Phase 97]: The disabled-state drift gate asserts an absence (no conjunctive twin in any former definition site) plus a presence (each imports the one predicate), replacing the name-keyed body-shape pin
+- [Phase 97]: D-97-01 anchor 1 resolved toward parity: a disabled PARTIAL row renders bare, byte-identical to the canonical (disabled) row -- no catalog amendment
 
 ### Open decisions
 
@@ -227,9 +233,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 96 P02 | 31min | 3 tasks | 4 files |
 | Phase 96 P03 | 40min | 3 tasks | 5 files |
 | Phase 96 P04 | 25min | 2 tasks | 3 files |
+| Phase 97 P01 | 22min | 2 tasks | 11 files |
 
 ## Session
 
-**Last session:** 2026-08-09T09:52:32.531Z
-**Stopped at:** Phase 97 context gathered
-**Resume file:** .planning/phases/97-disabled-state-classification-repair/97-CONTEXT.md
+**Last session:** 2026-08-09T11:38:14.987Z
+**Stopped at:** Completed 97-01-PLAN.md
+**Resume file:** None
