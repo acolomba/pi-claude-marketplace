@@ -676,3 +676,165 @@ test("INV-01: a folded row absent from its OWN manifest claims the absence even 
     );
   });
 });
+
+// D-96-02: the absence claim above is one of THREE facts a folded row states
+// about a manifest. The upgradable derivation and the description are the other
+// two, and all three read the SINGLE `ManifestLookup` value `manifestLookupFor`
+// produces for the manifest the folded record itself names. The three pins below
+// state that authority in the directions where the two manifests DISAGREE --
+// agreeing fixtures prove nothing about which manifest was consulted.
+
+test("D-96-02: a folded row is NOT upgradable when its OWN manifest declares the installed version, though the user block's manifest declares a newer one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The discriminator: the USER block's manifest declares 2.0.0. Consulting
+      // it against the record's installed 1.0.0 would derive `(upgradable)`.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "2.0.0" }] },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // Same root, different manifest file -- and this one declares the version
+    // the project record is actually installed at.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // `other.json` declares alpha at the installed version, so the PL-5
+      // string compare finds no drift: `(installed)`, and no `{not in manifest}`
+      // brace either -- the same lookup backs both facts.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (installed)"].join("\n"),
+    );
+  });
+});
+
+test("D-96-02: a folded row IS upgradable when its OWN manifest declares a newer version, though the user block's manifest declares the installed one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The inverse discriminator: the USER block's manifest declares the
+      // installed version, so consulting it would leave the row `(installed)`.
+      manifest: { name: "mp1", plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "2.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // The candidate probe has no materialized plugin tree under this fixture's
+      // marketplace root, so the CR-01 degrade returns the PLAIN `(upgradable)`
+      // row rather than the `(partially-upgradable)` variant. That degradation
+      // is the documented behavior of an unassertable candidate, not a defect.
+      ["● mp1 [user]", "  ● alpha [project] v1.0.0 (upgradable)"].join("\n"),
+    );
+  });
+});
+
+test("D-96-02: a folded row's description comes from its OWN manifest entry, not the user block's entry for the same name", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // Both manifests declare alpha at the installed version, so the version
+      // axis is held constant and the description is the ONLY disagreement.
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            description: "From the user manifest.",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            description: "From the project manifest.",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      // PL-4 renders the description as a 4-space-indented second line. The
+      // user block's text appears nowhere: whole-message equality is what makes
+      // that a real assertion rather than a hopeful one.
+      [
+        "● mp1 [user]",
+        "  ● alpha [project] v1.0.0 (installed)",
+        "    From the project manifest.",
+      ].join("\n"),
+    );
+  });
+});
