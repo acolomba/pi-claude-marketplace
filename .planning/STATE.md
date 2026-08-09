@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 96
 current_phase_name: Installation-record-backed plugin info
 status: planning
-stopped_at: Completed 95-02-PLAN.md
-last_updated: "2026-08-08T21:07:13.054Z"
+stopped_at: Phase 96 context gathered
+last_updated: "2026-08-09T00:17:45.745Z"
 last_activity: 2026-08-08
 last_activity_desc: Phase 95 plan 02 executed; both plans complete, phase ready for verification
 progress:
@@ -213,6 +213,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-08T21:15:00Z
-**Stopped at:** Phase 95 complete, ready to discuss Phase 96
-**Resume file:** None
+**Last session:** 2026-08-09T00:17:45.712Z
+**Stopped at:** Phase 96 context gathered
+**Resume file:** .planning/phases/96-installation-record-backed-plugin-info/96-CONTEXT.md
