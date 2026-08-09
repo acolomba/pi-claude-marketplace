@@ -1202,6 +1202,43 @@ test("D-96-04: `info --fetch` on a manifest-DECLARED plugin emits NO skip note",
   });
 });
 
+// D-96-04 false-positive control: the BOUND-02 row carries the very same
+// `not in manifest` reason, so it is the input that would wrongly acquire a skip
+// note if the note were keyed on the rendered reason rather than on the arm that
+// produced the block. No installation record exists, so nothing was ever
+// fetchable and there is no skipped request to account for.
+test("D-96-04: a `--fetch` run on a name in NEITHER manifest nor records emits NO skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 1, "the failure block only -- no skip note beside it");
+    assert.equal(notifications[0]!.severity, "error");
+    assert.ok(
+      notifications[0]!.message.includes("(failed) {not in manifest}"),
+      notifications[0]!.message,
+    );
+    assert.ok(!notifications[0]!.message.includes("(skipped)"), notifications[0]!.message);
+  });
+});
+
 test("D-96-04: a hooks-degraded state-only record under `--fetch` still emits the skip note", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

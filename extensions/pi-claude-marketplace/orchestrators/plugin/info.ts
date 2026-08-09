@@ -770,6 +770,23 @@ async function composeResolvedComponents(
 }
 
 /**
+ * D-96-04: one built block plus the identity of the arm that built it.
+ *
+ * `stateOnly` is reported by the producer rather than re-derived from the
+ * rendered row. The earlier inference read `status !== "failed" && reasons
+ * includes "not in manifest"`, which is exact only for as long as the
+ * state-only arm remains the sole producer of that pairing -- a future arm
+ * stamping the same reason on a non-failed row would silently acquire a
+ * `warning`-severity fetch-skip note on a read-only surface. A discriminator
+ * costs one field and cannot drift.
+ */
+interface InfoBlock {
+  readonly block: PluginInfoMessage;
+  /** The block came from `buildStateOnlyInstalledRow` (there is nothing to fetch). */
+  readonly stateOnly: boolean;
+}
+
+/**
  * Build a `PluginInfoMessage` for ONE scope-record pair. Branches:
  *   (a) Manifest read failure -> `(failed) {<reason>}` row, reason
  *       classified via `narrowProbeError`.
@@ -790,7 +807,7 @@ async function buildBlock(
   autoupdate: boolean,
   cwd: string,
   fetchCtx?: InfoFetchContext,
-): Promise<PluginInfoMessage> {
+): Promise<InfoBlock> {
   const marketplaceDetails = { autoupdate };
 
   // RSTA-06 / NFR-5: the per-scope locations feed `makePresenceProbe`'s
@@ -813,19 +830,13 @@ async function buildBlock(
   try {
     manifest = await loadMarketplaceManifest(mpRecord.manifestPath);
   } catch (err) {
-    return {
-      kind: "plugin-info",
-      marketplaceName: marketplace,
-      marketplaceScope: scope,
-      marketplaceDetails,
-      plugin: {
-        status: "failed",
-        name: pluginName,
-        reasons: [narrowProbeError(err)],
-        componentsResolved: true,
-        components: {},
-      },
-    };
+    return wrapBlock(marketplace, scope, marketplaceDetails, {
+      status: "failed",
+      name: pluginName,
+      reasons: [narrowProbeError(err)],
+      componentsResolved: true,
+      components: {},
+    });
   }
 
   // (b) Plugin name not in the LOADED manifest. INFO-09 / INFO-10: an
@@ -848,22 +859,17 @@ async function buildBlock(
         scope,
         marketplaceDetails,
         await buildStateOnlyInstalledRow(pluginName, installed, locations, cwd),
+        true,
       );
     }
 
-    return {
-      kind: "plugin-info",
-      marketplaceName: marketplace,
-      marketplaceScope: scope,
-      marketplaceDetails,
-      plugin: {
-        status: "failed",
-        name: pluginName,
-        reasons: ["not in manifest"],
-        componentsResolved: true,
-        components: {},
-      },
-    };
+    return wrapBlock(marketplace, scope, marketplaceDetails, {
+      status: "failed",
+      name: pluginName,
+      reasons: ["not in manifest"],
+      componentsResolved: true,
+      components: {},
+    });
   }
 
   const installedVersion = installed?.version;
@@ -911,18 +917,27 @@ async function buildBlock(
   return wrapBlock(marketplace, scope, marketplaceDetails, row);
 }
 
+/**
+ * D-96-04: the single `InfoBlock` constructor. `stateOnly` defaults to false so
+ * only the one arm that IS state-only has to say so, and a new arm cannot
+ * acquire the flag by accident.
+ */
 function wrapBlock(
   marketplace: string,
   scope: Scope,
   marketplaceDetails: { readonly autoupdate: boolean },
   plugin: PluginInfoRow,
-): PluginInfoMessage {
+  stateOnly = false,
+): InfoBlock {
   return {
-    kind: "plugin-info",
-    marketplaceName: marketplace,
-    marketplaceScope: scope,
-    marketplaceDetails,
-    plugin,
+    block: {
+      kind: "plugin-info",
+      marketplaceName: marketplace,
+      marketplaceScope: scope,
+      marketplaceDetails,
+      plugin,
+    },
+    stateOnly,
   };
 }
 
@@ -2066,22 +2081,6 @@ function partitionDisabledScopes(
 }
 
 /**
- * D-96-04: did this block come from the state-only arm? The test is exact
- * TODAY because that arm is the only one that can stamp `not in manifest` on a
- * NON-failed info row: every other arm either found a manifest entry (so the
- * reason is unreachable) or renders `failed`. It is an inference from the
- * rendered row rather than a discriminator the builder returns, so a future arm
- * stamping the same reason on a non-failed row would silently acquire a skip
- * note. The manifest-declared negative control in
- * `tests/orchestrators/plugin/info-manifest-absent.test.ts` is the tripwire.
- */
-function isStateOnlyInfoBlock(block: PluginInfoMessage): boolean {
-  return (
-    block.plugin.status !== "failed" && (block.plugin.reasons ?? []).includes("not in manifest")
-  );
-}
-
-/**
  * D-96-04: the `--fetch`-was-skipped note for one state-only scope, shaped like
  * `buildDisabledInventoryBlock` (same marketplace header, `details` ONLY when
  * autoupdate is true).
@@ -2130,18 +2129,20 @@ function buildFetchSkipBlock(
  * One notification carries one block per state-only scope, in the caller's
  * project-first order (MSG-GR-3).
  */
-function emitStateOnlyFetchSkip(
-  opts: GetPluginInfoOptions,
-  blocks: readonly PluginInfoMessage[],
-): void {
+function emitStateOnlyFetchSkip(opts: GetPluginInfoOptions, built: readonly InfoBlock[]): void {
   if (opts.fetch !== true) {
     return;
   }
 
-  const skipBlocks = blocks
-    .filter(isStateOnlyInfoBlock)
-    .map((b) =>
-      buildFetchSkipBlock(opts.marketplace, b.marketplaceScope, b, b.marketplaceDetails.autoupdate),
+  const skipBlocks = built
+    .filter((b) => b.stateOnly)
+    .map(({ block }) =>
+      buildFetchSkipBlock(
+        opts.marketplace,
+        block.marketplaceScope,
+        block,
+        block.marketplaceDetails.autoupdate,
+      ),
     );
   const [first, ...remaining] = skipBlocks;
   if (first === undefined) {
@@ -2222,7 +2223,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = infoFound;
   if (sole !== undefined && rest.length === 0 && disabledBlocks.length === 0) {
-    const block = await buildBlock(
+    const built = await buildBlock(
       opts.marketplace,
       opts.plugin,
       sole.scope,
@@ -2231,8 +2232,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       opts.cwd,
       fetchCtx,
     );
-    notify(opts.ctx, opts.pi, block);
-    emitStateOnlyFetchSkip(opts, [block]);
+    notify(opts.ctx, opts.pi, built.block);
+    emitStateOnlyFetchSkip(opts, [built]);
     return;
   }
 
@@ -2251,7 +2252,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
-  const blocks = await Promise.all(
+  const built = await Promise.all(
     infoFound.map((f) =>
       buildBlock(
         opts.marketplace,
@@ -2264,6 +2265,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       ),
     ),
   );
+  const blocks = built.map((b) => b.block);
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");
 
@@ -2280,7 +2282,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     });
   }
 
-  emitStateOnlyFetchSkip(opts, blocks);
+  emitStateOnlyFetchSkip(opts, built);
 
   // D-54-01 / ENBL-04: surface the disabled-inventory scopes through the
   // list-arm cascade. Mixed disabled+info renders break IL-2's single-notify
