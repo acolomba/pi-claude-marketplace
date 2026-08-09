@@ -46,6 +46,7 @@ import {
   getPluginInfo,
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
@@ -160,6 +161,12 @@ interface SeedPathMarketplaceOpts {
   readonly installablePluginDirs?: readonly string[];
   /** Per-plugin component dirs to create (relative to plugin root). */
   readonly componentDirs?: Record<string, readonly string[]>;
+  /**
+   * SPLIT-01: the autoupdate read-path lives in `claude-plugins.json`, not in
+   * state, so setting this seeds the config file the info orchestrator merges.
+   * Omitted leaves no config entry, which the orchestrator reads as `false`.
+   */
+  readonly autoupdate?: boolean;
 }
 
 /**
@@ -241,6 +248,19 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       },
     },
   } as unknown as Parameters<typeof saveState>[1]);
+
+  // SPLIT-01: the info orchestrator reads autoupdate from the merged config, so
+  // seed `claude-plugins.json` when the fixture asks for it.
+  if (opts.autoupdate !== undefined) {
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: { [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate } },
+      },
+      locations.scopeRoot,
+    );
+  }
 
   return mpRoot;
 }
@@ -1257,6 +1277,94 @@ test("D-96-04: `info --fetch` on a manifest-absent record emits the skip note be
     assert.equal(notifications[0]!.severity, undefined, "the info block keeps info severity");
     assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
     assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(notifications[1]!.message, SKIP_NOTE);
+  });
+});
+
+// Header agreement across the two arms in ONE run. The skip note rides the
+// LIST-arm marketplace header, which shows `<autoupdate>` only when the flag is
+// on; the standalone info header always spells one of the two markers. The pair
+// below pins both halves: with autoupdate ON the two headers match byte for
+// byte, and with autoupdate OFF (the case every other test in this file seeds)
+// the note's header is bare while the info block reads `<no autoupdate>`. The
+// marker therefore AGREES with the info block -- it is present in exactly the
+// runs the info block reports autoupdate as on -- and the off-case difference is
+// recorded in the catalog's `state-only-fetch-skipped` prose.
+test("D-96-04: with autoupdate ON the skip-note header matches the info block header", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+      autoupdate: true,
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user] <autoupdate>",
+        "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
+      ].join("\n"),
+    );
+  });
+});
+
+test("D-96-04: with autoupdate OFF the skip-note header omits the marker the info block spells", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+      autoupdate: false,
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.ok(
+      notifications[0]!.message.startsWith("● mp [user] <no autoupdate>\n"),
+      notifications[0]!.message,
+    );
     assert.equal(notifications[1]!.message, SKIP_NOTE);
   });
 });
