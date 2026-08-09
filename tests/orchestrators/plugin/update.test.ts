@@ -145,6 +145,25 @@ function makeDisabledPluginRecord(version: string): PluginRecord {
   });
 }
 
+/**
+ * ENBL-09 test helper: the disabled PARTIAL shape. Disabled-ness (`enabled`)
+ * and availability (`compatibility.installable`) are orthogonal axes, so this
+ * record carries `enabled: false` beside a FALSE availability discriminant and
+ * a non-empty unsupported list -- the two fields that must stay in agreement
+ * after `update` refreshes the block.
+ */
+function makeDisabledPartialPluginRecord(version: string): PluginRecord {
+  return {
+    ...makeDisabledPluginRecord(version),
+    compatibility: {
+      installable: false,
+      notes: [],
+      supported: ["skills"],
+      unsupported: ["themes"],
+    },
+  };
+}
+
 interface SeededPathMp {
   marketplaceRoot: string;
   manifestPath: string;
@@ -2885,6 +2904,244 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
       assert.deepEqual([...rec.resources.prompts], []);
       assert.deepEqual([...rec.resources.agents], []);
       assert.deepEqual([...rec.resources.mcpServers], []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── ENBL-09: update vs a DISABLED PARTIAL ──────────────────────────────────
+//
+// Every test below passes `partial: true`. Without it `resolveUpdateCandidate`
+// runs the strict `requireInstallable` gate, the degraded candidate throws, and
+// the throw is converted into a skipped outcome BEFORE the disabled-record
+// short-circuit is reached -- so a test without the flag would prove nothing
+// about the short-circuit at all.
+
+/** Assert every one of the five resource slots is empty on a disabled record. */
+function assertResourcesEmpty(record: PluginRecord, why: string): void {
+  assert.deepEqual([...record.resources.skills], [], `skills ${why}`);
+  assert.deepEqual([...record.resources.prompts], [], `prompts ${why}`);
+  assert.deepEqual([...record.resources.agents], [], `agents ${why}`);
+  assert.deepEqual([...record.resources.mcpServers], [], `mcpServers ${why}`);
+  assert.deepEqual([...record.resources.hooks], [], `hooks ${why}`);
+}
+
+test("ENBL-09: the disabled-record refresh derives compatibility.installable from the resolution -- degraded stays degraded", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-degraded-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      // The candidate still resolves `partially-available`.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      // The invariant: the availability discriminant and the unsupported list
+      // must agree. `installable: true` beside a non-empty unsupported list is
+      // the self-contradictory record ENBL-09 forbids.
+      assert.equal(
+        rec.compatibility.installable,
+        false,
+        "availability derived from the partially-available resolution",
+      );
+      assert.ok(
+        rec.compatibility.unsupported.length > 0,
+        `unsupported list stays non-empty: ${JSON.stringify(rec.compatibility.unsupported)}`,
+      );
+      assert.equal(rec.enabled, false, "the record stays disabled");
+      assertResourcesEmpty(rec, "stay empty (still disabled)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ENBL-09 counter-case: a candidate that resolves fully supported promotes the refreshed record's availability", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-promoted-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        // Same fixture as the degraded case MINUS the unsupported marker, so
+        // the candidate resolves `installable`.
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      // Paired with the degraded case above, this proves the value is DERIVED
+      // rather than pinned to either constant.
+      assert.equal(rec.compatibility.installable, true, "promoted to full availability");
+      assert.deepEqual([...rec.compatibility.unsupported], []);
+      assert.equal(rec.enabled, false, "promotion of the availability axis never enables");
+      assertResourcesEmpty(rec, "stay empty (still disabled)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stages nothing (--partial is required to reach the short-circuit)", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-shortcircuit-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      // Reuses the existing `unchanged` byte form -- the artifact state really
+      // IS unchanged, so no new catalog token appears. No `/reload` trailer:
+      // nothing was updated.
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" + "  ⊘ hello (skipped) {up-to-date}",
+      );
+
+      // The defect this guards is re-staging on disk, so assert on disk: the
+      // supported `skills/tool` component would materialize as `hello-tool`
+      // had the three-phase body run.
+      assert.equal(
+        await pathExists(path.join(locations.skillsTargetDir, "hello-tool")),
+        false,
+        "no skill staged for a disabled record",
+      );
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "version pin refreshed for a future enable");
+      assert.ok(
+        rec.resolvedSource.includes("hello"),
+        `resolvedSource refreshed to the current pluginRoot: ${rec.resolvedSource}`,
+      );
+      assert.equal(rec.enabled, false);
+      assertResourcesEmpty(rec, "stay empty (no re-materialization)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two identical calls leave the record unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-idempotent-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      // Compare on the fields the operation owns; `updatedAt` is a wall-clock
+      // stamp and would make the equality flaky.
+      const settledFields = async (): Promise<unknown> => {
+        const s = await loadState(locations.extensionRoot);
+        const r = s.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(r !== undefined);
+        return {
+          version: r.version,
+          resolvedSource: r.resolvedSource,
+          installable: r.compatibility.installable,
+          unsupported: [...r.compatibility.unsupported],
+          enabled: r.enabled,
+          resources: {
+            skills: [...r.resources.skills],
+            prompts: [...r.resources.prompts],
+            agents: [...r.resources.agents],
+            mcpServers: [...r.resources.mcpServers],
+            hooks: [...r.resources.hooks],
+          },
+        };
+      };
+
+      const runOnce = async (): Promise<NotifyRecord[]> => {
+        const { ctx, pi, notifications } = makeCtx();
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          partial: true,
+        });
+        return notifications;
+      };
+
+      const firstNotifications = await runOnce();
+      const firstRecord = await settledFields();
+      const secondNotifications = await runOnce();
+      const secondRecord = await settledFields();
+
+      assert.equal(secondNotifications.length, 1);
+      assert.deepEqual(secondNotifications, firstNotifications);
+      assert.deepEqual(secondRecord, firstRecord, "the refresh is a fixed point");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
