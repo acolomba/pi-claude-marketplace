@@ -2720,6 +2720,8 @@ const FIXTURES: FixtureMap = {
   //   - Success states:
   //     * installed-single-scope                       (INFO-02 happy path)
   //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
+  //     * state-only-installed-single-scope            (INFO-09 record-backed row)
+  //     * state-only-partially-installed-single-scope  (INFO-10 record-backed partial)
   //     * available-single-scope                       (INFO-02 available bucket)
   //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
   //   - Multi-scope fan-out:
@@ -2777,6 +2779,46 @@ const FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
           },
           dependencies: ["helper@utils-mp"],
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "state-only-installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "state-only-partially-installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest", "lsp"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
         },
       } satisfies NotificationMessage,
     },

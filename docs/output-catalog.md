@@ -1442,7 +1442,7 @@ ______________________________________________________________________
 
 Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / components-not-resolved) is `info` severity (no second arg to `ctx.ui.notify`); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 ### Success -- installed single scope
 
@@ -1473,6 +1473,30 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     commands: c1, c2
     skills: commit-summary
     dependencies: helper@utils-mp
+```
+
+### Success -- installed from the installation record (INFO-09)
+
+The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps their raw source keys. This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-single-scope -->
+
+```text
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    skills: alpha-skill
+```
+
+### Success -- partially installed from the installation record (INFO-10)
+
+The unsupported kinds come from the persisted `compatibility.unsupported` field on the installation record. This state does no live resolve. `not in manifest` is always the FIRST reason in the brace; `narrowUnsupportedKinds` supplies the kind tokens that follow it. The persisted derivation stays separate from the live-resolver derivation that the path-source manifest-backed arm uses; this state does not unify the two (INFO-10). Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-partially-installed-single-scope -->
+
+```text
+● mp [user] <no autoupdate>
+  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp}
+    skills: alpha-skill
 ```
 
 ### Success -- available single scope
