@@ -2335,8 +2335,6 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     });
   }
 
-  emitFetchSkip(opts, scopes, built, disabled);
-
   // D-54-01 / ENBL-04: surface the disabled-inventory scopes through the
   // list-arm cascade. Mixed disabled+info renders break IL-2's single-notify
   // rule the same way the GRAM-04 failure separation below does -- the two
@@ -2346,6 +2344,13 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
     notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
   }
+
+  // D-96-04: the skip note comes AFTER the inventory it annotates, matching the
+  // all-disabled early return's order. A `{already disabled}` row printed above
+  // the `(disabled)` row that establishes the state reads as a forward
+  // reference, and the same (inventory, note) pair must not render in two
+  // orders on two paths of one function.
+  emitFetchSkip(opts, scopes, built, disabled);
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).
   for (const failure of failedBlocks) {
