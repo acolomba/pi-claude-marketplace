@@ -20,6 +20,7 @@
 /.claude/hooks/managed-hooks-registry.cjs
 /.claude/hooks/package.json
 /.claude/scripts/*
+/.gsd
 
 # build output
 /dist/

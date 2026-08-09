@@ -17,8 +17,7 @@ export default tseslint.config(
       "dist/",
       "node_modules/",
       "tmp/",
-      // Standalone live-runtime UAT drivers (`.mjs`): not part of the typed
-      // source tree or `npm run check`; they need a real `pi` binary + sandbox.
+      ".worktrees/",
       "tests/live-uat/",
     ],
   },
