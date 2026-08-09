@@ -2126,6 +2126,18 @@ function buildFetchSkipBlock(args: {
 }
 
 /**
+ * One scope's worth of "nothing was fetched here", before it is rendered. Both
+ * skip arms produce this shape; only `reason` tells them apart.
+ */
+interface SkipSource {
+  readonly scope: Scope;
+  readonly pluginName: string;
+  readonly version: string | undefined;
+  readonly reason: ContentReason;
+  readonly autoupdate: boolean;
+}
+
+/**
  * D-96-04: report a `--fetch` no arm could carry out. A flag that renders
  * identical bytes with and without it teaches the user it worked, so the
  * request is accounted for out loud instead of being swallowed.
@@ -2142,9 +2154,9 @@ function buildFetchSkipBlock(args: {
  * admits no `skipped`, so folding the note into the info block would mean
  * dropping it. The info block keeps its own bytes and its own `info` severity.
  *
- * One notification carries one block per skipped scope, keyed and ordered by
- * SCOPE so a mixed disabled + state-only run stays project-first (MSG-GR-3)
- * rather than grouping by arm.
+ * One notification carries one block per skipped scope, ordered by SCOPE so a
+ * mixed disabled + state-only run stays project-first (MSG-GR-3) rather than
+ * grouping by arm.
  */
 function emitFetchSkip(
   opts: GetPluginInfoOptions,
@@ -2156,40 +2168,35 @@ function emitFetchSkip(
     return;
   }
 
-  const byScope = new Map<Scope, MarketplaceRows<PluginInfoCascadeMsg>>();
-  for (const { block, stateOnly } of built) {
-    if (stateOnly) {
-      byScope.set(
-        block.marketplaceScope,
-        buildFetchSkipBlock({
-          marketplace: opts.marketplace,
-          scope: block.marketplaceScope,
-          pluginName: block.plugin.name,
-          version: block.plugin.version,
-          reason: "not in manifest",
-          autoupdate: block.marketplaceDetails.autoupdate,
-        }),
-      );
-    }
-  }
+  // The two arms contribute skip SOURCES to one flat list, which the scope
+  // iteration then orders. Keying a Map by scope instead would let one arm
+  // silently overwrite the other's row if the partition ever stopped being
+  // disjoint; ordering a list cannot lose a row, so a broken invariant would
+  // show as a duplicate rather than as a disappearance.
+  const sources: readonly SkipSource[] = [
+    ...built
+      .filter(({ stateOnly }) => stateOnly)
+      .map(({ block }): SkipSource => ({
+        scope: block.marketplaceScope,
+        pluginName: block.plugin.name,
+        version: block.plugin.version,
+        reason: "not in manifest",
+        autoupdate: block.marketplaceDetails.autoupdate,
+      })),
+    ...disabled.map((d): SkipSource => ({
+      scope: d.scope,
+      pluginName: opts.plugin,
+      version: d.installed.version,
+      reason: "already disabled",
+      autoupdate: d.autoupdate,
+    })),
+  ];
 
-  for (const d of disabled) {
-    byScope.set(
-      d.scope,
-      buildFetchSkipBlock({
-        marketplace: opts.marketplace,
-        scope: d.scope,
-        pluginName: opts.plugin,
-        version: d.installed.version,
-        reason: "already disabled",
-        autoupdate: d.autoupdate,
-      }),
-    );
-  }
-
-  const skipBlocks = scopes
-    .map((s) => byScope.get(s))
-    .filter((b): b is MarketplaceRows<PluginInfoCascadeMsg> => b !== undefined);
+  const skipBlocks = scopes.flatMap((s) =>
+    sources
+      .filter((src) => src.scope === s)
+      .map((src) => buildFetchSkipBlock({ marketplace: opts.marketplace, ...src })),
+  );
   const [first, ...remaining] = skipBlocks;
   if (first === undefined) {
     return;
