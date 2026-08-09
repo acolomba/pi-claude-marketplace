@@ -30,7 +30,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { hookConfigPathFor } from "../../bridges/hooks/stage.ts";
 import {
   BUCKET_A_EVENTS,
   TOOL_EVENTS,
@@ -520,7 +519,13 @@ async function readStateOnlyHookEntries(
   const entries: HookSummaryEntry[] = [];
   for (const slug of slugs) {
     try {
-      const hooksJsonPath = hookConfigPathFor(locations, slug);
+      // D-57-03: composed inline rather than through the hooks bridge's
+      // `hookConfigPathFor`, which `bridges/hooks/index.ts` documents as a
+      // private helper the barrel deliberately does not re-export. The sibling
+      // read site (`bridges/hooks/event-router.ts`'s hydrate path) composes the
+      // same one-line join for the same reason. NFR-10 containment is carried
+      // by the `assertPathInside` chokepoint below, not by the composer.
+      const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
       await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
       const raw = await readFile(hooksJsonPath, "utf8");
       // Mirrors `readHookSummaryEntries`: the info surface consumes only the
