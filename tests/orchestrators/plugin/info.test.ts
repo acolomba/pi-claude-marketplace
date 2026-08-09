@@ -1129,6 +1129,73 @@ test("WR-03: marketplace.json missing on disk surfaces `{source missing}` failur
 });
 
 // ---------------------------------------------------------------------------
+// BOUND-01: a manifest that could not be READ licenses no membership claim
+// about its contents, so a live installation record must not rescue the block
+// into an installed-looking row. The read-failure arm returns before any
+// plugin lookup, and this pins that ordering byte-exact with a populated
+// record behind the unreadable manifest.
+// ---------------------------------------------------------------------------
+
+test("BOUND-01: a manifest READ FAILURE with an installed record present still renders the failure row, not the installation record", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const locations = locationsFor("user", cwd);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    const mpRoot = path.join(userRoot, "marketplaces", "mp");
+    const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+    // Intentionally do NOT write the manifest file -- the state record
+    // points at a path that does not exist.
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: pathSource("./mp-src"),
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: mpRoot,
+          plugins: {
+            alpha: {
+              version: "1.0.0",
+              resolvedSource: "./placeholder",
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: ["alpha-skill"],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+              },
+              enabled: true,
+              installedAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ alpha (failed) {source missing}",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Component-discovery failure propagation. ENOENT/ENOTDIR on a declared
 // component dir is the legitimate "no components in this kind" state
 // and yields an empty bucket. Every other readdir failure (EACCES, EPERM,
