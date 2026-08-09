@@ -226,6 +226,25 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   return mpRoot;
 }
 
+/**
+ * Write a materialized hooks configuration at the path the hooks bridge owns
+ * (`<hooksDir>/<slug>/hooks.json`), which is the file the state-only info arm
+ * reads back. `raw` is written verbatim so a malformed payload can be seeded.
+ * Returns the file path so a test can mutate its mode afterwards.
+ */
+async function seedMaterializedHooks(
+  scope: "user" | "project",
+  cwd: string,
+  slug: string,
+  raw: string,
+): Promise<string> {
+  const locations = locationsFor(scope, cwd);
+  const file = path.join(locations.hooksDir, slug, "hooks.json");
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, raw, "utf8");
+  return file;
+}
+
 // ---------------------------------------------------------------------------
 // INFO-09: a fully supported record the loaded manifest no longer declares is
 // INSTALLED, not failed. The version comes from the installation record
@@ -375,6 +394,168 @@ test("INFO-11: a manifest-absent record with all-empty resources renders the bar
     assert.equal(
       notifications[0]!.message,
       ["● mp [user] <no autoupdate>", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-11 hooks kind: the installation record holds only the hooks container
+// slug, so the entries are reconstructed from the MATERIALIZED configuration
+// the install ledger wrote at `<hooksDir>/<slug>/hooks.json` (D-57-03). The
+// block lands between the `commands` and `mcp` lines, which is the renderer's
+// fixed kind order.
+// ---------------------------------------------------------------------------
+
+test("INFO-11: a recorded hooks slug renders the materialized config's entries as a `hooks:` block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({
+        Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo b" }] }],
+      }),
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    hooks:",
+        "      Stop",
+        "      PreToolUse(Bash)",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-11 ordering: hook entries keep the materialized file's DECLARATION
+// order. Seeding the same two events in the reverse order must swap the two
+// rendered lines -- the four name-list kinds are sorted, the hooks kind is not.
+// ---------------------------------------------------------------------------
+
+test("INFO-11: hook entries follow the materialized file's declaration order, never a sort", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo b" }] }],
+        Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+      }),
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    hooks:",
+        "      PreToolUse(Bash)",
+        "      Stop",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-96-03 true negative: a record with NO recorded hooks omits the `hooks:`
+// line and stamps NO reason. Nothing is read, so there is nothing to degrade.
+// ---------------------------------------------------------------------------
+
+test("D-96-03: a record with no recorded hooks omits the `hooks:` line with no added reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: [] } } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-11 empty edge / D-96-03: a materialized file that parses to an EMPTY
+// event map is a successful read of nothing. Zero entries means no header line
+// and, because nothing failed, no reason either -- byte-identical to the
+// INFO-09 row.
+// ---------------------------------------------------------------------------
+
+test("INFO-11: a materialized hooks config that parses to an empty map renders no `hooks:` line and no reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    await seedMaterializedHooks("user", cwd, "alpha", "{}");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
     );
   });
 });
