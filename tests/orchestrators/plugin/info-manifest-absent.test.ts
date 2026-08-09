@@ -29,7 +29,7 @@
 // `info.test.ts`.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -554,6 +554,216 @@ test("INFO-11: a materialized hooks config that parses to an empty map renders n
       [
         "● mp [user] <no autoupdate>",
         "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-96-03 degradation matrix. Every case below records hook slugs the arm
+// cannot list. The contract is the same each time: the `hooks:` line is
+// OMITTED and the row carries a read reason LAST in the brace, so the operator
+// can tell "this plugin has no hooks" from "this plugin has hooks I could not
+// read". The rest of the block always renders -- no read failure takes the
+// plugin's remaining truth off the screen.
+//
+// The reasons are the `narrowProbeError` ladder's own output, not a
+// hooks-specific vocabulary. They are attributable to hooks because the
+// materialized hooks configuration is the ONLY file this arm opens.
+// ---------------------------------------------------------------------------
+
+test("D-96-03: a recorded hooks slug with no materialized file omits the block and reports `source missing`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    // Deliberately no `seedMaterializedHooks` call: the record names a slug
+    // whose file the install ledger wrote and something later removed.
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// Both structural parse arms collapse to the same token: `parseHooksConfig`
+// returns `{ok:false}` for malformed JSON and for a schema-invalid payload
+// alike, and the reader maps that single verdict to `unparseable`. One case
+// therefore covers the whole arm.
+test("D-96-03: a malformed materialized hooks config omits the block and reports `unparseable`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    await seedMaterializedHooks("user", cwd, "alpha", "{ not json");
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, unparseable}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// NFR-10: the slug is state-supplied data used as a path component, so
+// `assertPathInside` refuses a traversal slug BEFORE any `readFile`. No file
+// outside `hooksDir` is opened even if one exists at the composed path. The
+// containment error carries no errno, so it classifies as `unreadable`, and
+// the four name-list kinds still render in full.
+test("NFR-10: a traversal hooks slug is refused before any read and the block still renders", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          resources: {
+            skills: ["alpha-skill"],
+            prompts: ["alpha:build"],
+            agents: ["pi-claude-marketplace-alpha-review"],
+            mcpServers: ["alpha-srv"],
+            hooks: ["../../etc"],
+          },
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+        "    agents: pi-claude-marketplace-alpha-review",
+        "    commands: alpha:build",
+        "    mcp: alpha-srv",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("D-96-03: an unreadable materialized hooks config reports `permission denied` (POSIX-only)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("POSIX-only chmod 0 unreadable file path");
+    return;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    t.skip("running as root -- chmod 0 does not block read");
+    return;
+  }
+
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    const file = await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({ Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] }),
+    );
+    await chmod(file, 0o000);
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]!.severity, undefined);
+      assert.equal(
+        notifications[0]!.message,
+        [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      );
+    } finally {
+      // Restore the mode so the hermetic-HOME teardown can remove the tree.
+      await chmod(file, 0o644);
+    }
+  });
+});
+
+// INFO-10 / D-96-03 composition: absence FIRST, the unsupported-kind tokens
+// NEXT, the read marker LAST. Three reasons in one brace prove the order rule
+// holds when both reason families are present.
+test("INFO-10 / D-96-03: a partial record with an unreadable hooks config orders the three reasons absence, kind, read", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          unsupported: ["lspServers"],
+          resources: { hooks: ["alpha"] },
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp, source missing}",
         "    skills: alpha-skill",
       ].join("\n"),
     );
