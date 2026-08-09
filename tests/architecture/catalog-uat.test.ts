@@ -2729,6 +2729,7 @@ const FIXTURES: FixtureMap = {
   //   - Warning states:
   //     * state-only-fetch-skipped                     (D-96-04 skipped --fetch note, "warning")
   //     * disabled-fetch-skipped                       (D-96-04 skipped --fetch on a disabled record)
+  //     * mixed-fetch-skipped                          (D-96-04 both causes in one note, MSG-GR-3 order)
   //   - Multi-scope fan-out:
   //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
   //     * state-only-installed-both-scopes-fan-out     (INFO-09 record-backed fan-out)
@@ -2741,7 +2742,7 @@ const FIXTURES: FixtureMap = {
   //
   // Severity routing: every success + fan-out + components-not-resolved
   // state is `info` (omits `expectedSeverity`); the three `{not added}` /
-  // `{not in manifest}` failure states route to `"error"`; the two D-96-04
+  // `{not in manifest}` failure states route to `"error"`; the three D-96-04
   // fetch-skip notes are the only `"warning"` states on this surface.
   // -------------------------------------------------------------------------
   "/claude:plugin info <plugin>@<marketplace>": {
@@ -2915,6 +2916,46 @@ const FIXTURES: FixtureMap = {
                 name: "alpha",
                 version: "1.0.0",
                 reasons: ["already disabled"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-96-04 / MSG-GR-3: the two skip causes in ONE run. This is the byte
+    // shape `info-manifest-absent.test.ts`'s mixed-run test pins by index --
+    // plural summary, two marketplace headers, one reason token each, ordered
+    // project-first by SCOPE rather than grouped by the arm that produced the
+    // row. It composes the two states above; it is not a third cause.
+    "mixed-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["already disabled"],
+                severity: "warning",
+              },
+            ],
+          },
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "2.0.0",
+                reasons: ["not in manifest"],
                 severity: "warning",
               },
             ],

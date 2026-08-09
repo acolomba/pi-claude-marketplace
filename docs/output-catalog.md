@@ -1528,7 +1528,7 @@ The installation record names a hooks container, but the materialized configurat
 
 ### Warning -- the requested fetch was skipped (D-96-04)
 
-The user gives `--fetch`, the marketplace manifest loads, the manifest does not declare the plugin, and an installation record exists. There is no manifest entry, thus there is no source to fetch from, and the command fetches nothing. This note tells the user that the flag did not run. The info block shows beside this note, and its bytes are the same as those of a bare run. The row uses the `(skipped) {not in manifest}` form that `update` already emits. This is one of the two `warning`-severity states on this surface. The other is `disabled-fetch-skipped` below, which gives the other cause of a skipped fetch. The note is a SECOND notification, because the standalone info row cannot hold a `skipped` status. The disabled inventory row above breaks IL-2 in the same manner and for the same reason. A bare run and a plugin that the manifest DOES declare show no note. Severity `warning`; no reload-hint (read-only surface).
+The user gives `--fetch`, the marketplace manifest loads, the manifest does not declare the plugin, and an installation record exists. There is no manifest entry, thus there is no source to fetch from, and the command fetches nothing. This note tells the user that the flag did not run. The info block shows beside this note, and its bytes are the same as those of a bare run. The row uses the `(skipped) {not in manifest}` form that `update` already emits. This is one of the two causes of a `warning` on this surface. The other is `disabled-fetch-skipped` below. A run that hits both causes shows `mixed-fetch-skipped`, which composes the two. The note is a SECOND notification, because the standalone info row cannot hold a `skipped` status. The disabled inventory row above breaks IL-2 in the same manner and for the same reason. A bare run and a plugin that the manifest DOES declare show no note. Severity `warning`; no reload-hint (read-only surface).
 
 Header note: this note uses the LIST-arm marketplace header, which shows the `<autoupdate>` marker only when autoupdate is on, and shows no marker at all when it is off. The standalone info block always spells one of `<autoupdate>` / `<no autoupdate>`. Thus, when autoupdate is off, one run shows two different headers for the same marketplace and scope: `● mp [user] <no autoupdate>` on the info block and `● mp [user]` on this note. The marker still agrees with the info block, because it shows in exactly the conditions in which the info block reports autoupdate as on. This difference is a property of the two header arms and is recorded here on purpose.
 
@@ -1552,6 +1552,22 @@ A plugin operation needs attention.
 
 ● mp [user]
   ⊘ alpha v1.0.0 (skipped) {already disabled}
+```
+
+### Warning -- one run skips the fetch for both causes (D-96-04)
+
+The two causes above can occur in one run: one found scope holds the disabled marker, and another holds a record that the manifest does not declare. One notification carries both rows in project-first scope order (MSG-GR-3). Each row keeps the reason token of its own cause, and each scope keeps its own marketplace header. The summary line takes the plural form, because the note now accounts for two rows. This state is the composition of the two states above, and not a third cause of a skipped fetch. Severity `warning`; no reload-hint (read-only surface).
+
+<!-- catalog-state: mixed-fetch-skipped -->
+
+```text
+Some plugin operations need attention.
+
+● mp [project]
+  ⊘ alpha v1.0.0 (skipped) {already disabled}
+
+● mp [user]
+  ⊘ alpha v2.0.0 (skipped) {not in manifest}
 ```
 
 ### Success -- available single scope
