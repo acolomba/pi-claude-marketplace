@@ -1371,8 +1371,8 @@ async function refreshDisabledRecord(
     sRecord.resolvedSource = installable.pluginRoot;
     // ENBL-09: derive the availability discriminant from the resolution rather
     // than hard-coding it, so it always agrees with the unsupported list copied
-    // beside it. `installable: true` next to a non-empty `unsupported` is a
-    // record whose two fields contradict each other, and every downstream
+    // beside it. `installable: true` next to a non-empty `unsupported` array is
+    // a record whose two fields contradict each other, and every downstream
     // classifier reads a different token off the same record.
     sRecord.compatibility = {
       installable: installable.state === "installable",
