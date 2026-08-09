@@ -4,17 +4,17 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 96
 current_phase_name: installation-record-backed-plugin-info
-status: executing
-stopped_at: Completed 96-03-PLAN.md
-last_updated: "2026-08-09T03:38:43.668Z"
+status: ready_for_verification
+stopped_at: Completed 96-04-PLAN.md
+last_updated: "2026-08-09T04:00:21.775Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 96 plan 03 executed; INFO-12 asserted as zero seam calls and the skipped --fetch reported at warning severity
+last_activity_desc: Phase 96 plan 04 executed; D-96-02 folded-row manifest authority pinned and the open question closed in code, tests and the output catalog
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 25
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -34,14 +34,15 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 96 (installation-record-backed-plugin-info) — EXECUTING
+Phase: 96 (installation-record-backed-plugin-info) — READY FOR VERIFICATION
 Plan: 4 of 4
-Status: Plans 96-01, 96-02 and 96-03 complete (INFO-09/10/11/12 + BOUND-01/02
-landed, hooks kind reconstructed from the materialized config, the state-only
-arm's network abstinence asserted on injected seams and the skipped `--fetch`
-reported at warning severity); plan 04 remains — the D-96-02 folded-row catalog
-close
-Last activity: 2026-08-09 — Phase 96 plan 01 executed; npm run check green
+Status: All four plans complete (INFO-09/10/11/12 + BOUND-01/02 landed, hooks
+kind reconstructed from the materialized config, the state-only arm's network
+abstinence asserted on injected seams, the skipped `--fetch` reported at warning
+severity, and D-96-02's folded-row authority ratified by four regression pins
+with the open question closed in `list.ts`, the list suite and the output
+catalog)
+Last activity: 2026-08-09 — Phase 96 plan 04 executed; npm run check green
 
 ## Roadmap Summary
 
@@ -142,6 +143,8 @@ two integration checks.
 - [Phase 96]: State-only hooks degradation reuses the existing narrowProbeError reason ladder at row level; no new closed-set token
 - [Phase 96]: info's cascade render map widens to skipped so a --fetch the state-only arm cannot carry out is reported as its own warning note (D-96-04)
 - [Phase 96]: INFO-12 is asserted as zero call counts on injected clone and credential seams, not read off the control flow
+- [Phase 96]: D-96-02 ratified — a folded row reads its OWN record's manifest for absence, upgradable and description alike, all three from one ManifestLookup value
+- [Phase 96]: BOUND-01's wholesale non-render under a failed owning manifest is contract, not a defect: the bare (failed) header suppresses folded rows the fold already computed
 
 ### Open decisions
 
@@ -220,9 +223,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 96 P01 | 25min | 3 tasks | 5 files |
 | Phase 96 P02 | 31min | 3 tasks | 4 files |
 | Phase 96 P03 | 40min | 3 tasks | 5 files |
+| Phase 96 P04 | 25min | 2 tasks | 3 files |
 
 ## Session
 
-**Last session:** 2026-08-09T03:38:33.964Z
-**Stopped at:** Completed 96-03-PLAN.md
+**Last session:** 2026-08-09T04:00:21.743Z
+**Stopped at:** Completed 96-04-PLAN.md
 **Resume file:** None

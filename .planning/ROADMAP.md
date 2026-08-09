@@ -197,7 +197,7 @@ Plans:
 3. Missing, unreadable, malformed, and invalid manifests retain their current read-failure results, while a name absent from both a valid manifest and installation state remains `(failed) {not in manifest}`. (BOUND-01, BOUND-02)
 4. Bare info and `info --fetch` perform no network operation for the state-only fallback, asserted against injected clone and auth seams with a zero-call check rather than inferred from the control flow. (INFO-12)
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -214,7 +214,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 96-04-PLAN.md — ratify the folded-row manifest authority with regression pins and close the open question in the source comments and the output catalog (BOUND-01, BOUND-02)
+- [x] 96-04-PLAN.md — ratify the folded-row manifest authority with regression pins and close the open question in the source comments and the output catalog (BOUND-01, BOUND-02)
 
 ### Phase 97: Disabled-state classification repair
 
@@ -257,7 +257,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 95. Manifest-independent installed inventory | v1.18 | 2/2 | Complete    | 2026-08-08 |
-| 96. Installation-record-backed plugin info | v1.18 | 3/4 | In Progress|  |
+| 96. Installation-record-backed plugin info | v1.18 | 4/4 | In Progress|  |
 | 97. Disabled-state classification repair | v1.18 | 0/0 | Not started | — |
 | 98. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
