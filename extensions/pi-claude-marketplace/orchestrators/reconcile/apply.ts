@@ -1002,8 +1002,9 @@ async function scanForceInstalledBackfills(
 
 /**
  * Per-plugin fault isolation for one scanned record. Applies the D-68-03
- * partially-installed filter + the WR-03 already-touched dedupe (both benign skips
- * returning `false`), then runs `maybeBackfillPlugin` inside a try/catch.
+ * partially-installed filter, the ENBL-08 disabled-record filter and the WR-03
+ * already-touched dedupe (all three benign skips returning `false`), then runs
+ * `maybeBackfillPlugin` inside a try/catch.
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
  * manifest) propagate out of `maybeBackfillPlugin`. Without this guard that throw
@@ -1034,6 +1035,16 @@ async function backfillOnePluginIsolated(
     return false;
   }
 
+  // ENBL-08: never scan a record the user disabled. The backfill re-materializes
+  // through reinstall, whose record write sets `enabled: true` unconditionally,
+  // so scanning a disabled record would reverse an explicit user disable at load
+  // time -- restoring that plugin's hooks, MCP servers and PATH entries with no
+  // command and no prompt. Availability and disabled-ness are orthogonal axes
+  // (ENBL-05), so the filter above does not cover this one.
+  if (!record.enabled) {
+    return false;
+  }
+
   // WR-03: applyPlan already touched this plugin this load -- don't double-emit /
   // re-materialize over it.
   if (alreadyTouched.has(`${marketplace} ${plugin}`)) {
@@ -1055,11 +1066,15 @@ async function backfillOnePluginIsolated(
 }
 
 /**
- * Test seam (mirrors reinstall.ts's `__test_*` exports): exercise the WR-03
- * dedupe directly with a pre-populated `outcomes` array standing in for a
- * same-load applyPlan transition (the planner's enable bucket requires
- * installable === true, so a partially-installed plugin cannot reach it through a
- * real plan -- the seam injects the precondition).
+ * Test seam (mirrors reinstall.ts's `__test_*` exports): run one scan in
+ * isolation over a caller-supplied `outcomes` array. Pre-populating that array
+ * stands in for a same-load applyPlan transition, which is the input the WR-03
+ * dedupe reads; passing it empty exercises the scan's own filters instead.
+ *
+ * ENBL-05: the planner's enable bucket is keyed on the `enabled` boolean alone,
+ * so a partially-installed plugin CAN reach it through a real plan. The seam is
+ * a convenience for driving the scan directly, not a stand-in for an
+ * unreachable precondition.
  */
 export { scanForceInstalledBackfills as __test_scanForceInstalledBackfills };
 
