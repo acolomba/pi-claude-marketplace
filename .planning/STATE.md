@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 97
 current_phase_name: disabled-state-classification-repair
 status: executing
-stopped_at: Completed 97-02-PLAN.md
-last_updated: "2026-08-09T12:16:34.649Z"
+stopped_at: Completed 97-03-PLAN.md
+last_updated: "2026-08-09T12:49:54.716Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 97 plan 02 executed; ENBL-06 closed on both surfaces with a byte-exact list contrast row and an info --fetch cause pin, and the stale two-axis-marker prose swept from the render surfaces and the output catalog
+last_activity_desc: Phase 97 plan 03 executed; ENBL-07 closed with a partial-capable enable branch that derives the install ledger's gate from the record's availability discriminant, plus byte-exact pins for the manifest-absent enable boundary and disable idempotency on an already-disabled partial
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 50
 ---
 
@@ -35,20 +35,24 @@ No state migration and no schema-version change.
 ## Current Position
 
 Phase: 97 (disabled-state-classification-repair) — EXECUTING
-Plan: 3 of 5
-Status: Plans 01-02 complete. The ENBL-05 root repair landed first: one
+Plan: 4 of 5
+Status: Plans 01-03 complete. The ENBL-05 root repair landed first: one
 disabled-state predicate in `persistence/state-io.ts` keyed only on
 `enabled`, six modules on it, and the CR-01 repro (a manifest-absent
 disabled partial reaching the state-only info arm) green. Plan 02 then
 froze the rendering that repair exposed — ENBL-06 is closed on both
 surfaces, with a byte-exact `list` contrast row and an `info --fetch`
 cause pin, and the stale two-axis-marker prose swept from the render
-surfaces and the output catalog. Plans 03-05 are the remaining expansion —
-ENBL-07's `partial` gate on the enable branch, ENBL-09's
-`refreshDisabledRecord` hard-coded `installable: true`, and ENBL-08's
+surfaces and the output catalog. Plan 03 closed ENBL-07: `runEnableBranch`
+derives the install ledger's admission gate from the record's own
+availability discriminant, so a disabled partial re-materializes through
+the partially-available arm instead of dying on `requireInstallable`, with
+the manifest-absent enable and the repeat disable pinned byte-exactly.
+Plans 04-05 are the remaining expansion — ENBL-09's
+`refreshDisabledRecord` hard-coded `installable: true` and ENBL-08's
 missing `enabled` guard on the BFILL-01 backfill scan are the second-order
 edits still outstanding.
-Last activity: 2026-08-09 — Phase 97 plan 02 executed (full suite green)
+Last activity: 2026-08-09 — Phase 97 plan 03 executed (full suite green)
 
 ## Roadmap Summary
 
@@ -157,6 +161,7 @@ two integration checks.
 - [Phase 97]: The disabled-state drift gate asserts an absence (no conjunctive twin in any former definition site) plus a presence (each imports the one predicate), replacing the name-keyed body-shape pin
 - [Phase 97]: D-97-01 anchor 1 resolved toward parity: a disabled PARTIAL row renders bare, byte-identical to the canonical (disabled) row -- no catalog amendment
 - [Phase 97]: ENBL-06 is pinned as a contrast pair in one rendered block (disabled partial vs enabled partial), asserted as a single byte-exact join so the status tokens, the brace asymmetry, and the row order are all frozen together
+- [Phase 97]: The enable branch's ledger gate is derived from the record's availability discriminant, not hard-coded, so a fully-installable record keeps the strict gate
 
 ### Open decisions
 
@@ -240,9 +245,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 96 P04 | 25min | 2 tasks | 3 files |
 | Phase 97 P01 | 22min | 2 tasks | 11 files |
 | Phase 97 P02 | 35min | 3 tasks | 6 files |
+| Phase 97 P03 | 25min | 2 tasks | 2 files |
 
 ## Session
 
-**Last session:** 2026-08-09T12:16:22.637Z
-**Stopped at:** Completed 97-02-PLAN.md
+**Last session:** 2026-08-09T12:49:46.820Z
+**Stopped at:** Completed 97-03-PLAN.md
 **Resume file:** None
