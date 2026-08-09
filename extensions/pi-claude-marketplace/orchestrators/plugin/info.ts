@@ -30,6 +30,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { hookConfigPathFor } from "../../bridges/hooks/stage.ts";
 import {
   BUCKET_A_EVENTS,
   TOOL_EVENTS,
@@ -478,6 +479,70 @@ async function readHookSummaryEntries(
 }
 
 /**
+ * INFO-11 / D-96-03 / D-57-03 / NFR-10: reconstruct the hook inventory for a
+ * record whose manifest entry is gone. The installation record carries only the
+ * hooks container slug, so the entries survive nowhere but the MATERIALIZED
+ * configuration the install ledger wrote at `<hooksDir>/<slug>/hooks.json`.
+ * This is the only disk read the state-only arm performs, which is what makes a
+ * row-level read reason attributable to hooks without a hooks-specific token.
+ *
+ * `resources.hooks[i]` is state-supplied data used as a path component, so
+ * `assertPathInside` runs BEFORE `readFile` -- the same read-site chokepoint the
+ * hooks hydrate path uses, mirroring the write-site guard. A corrupted record
+ * carrying a traversal slug is refused, never opened.
+ *
+ * D-96-03 truthful split: no recorded slugs returns neither entries nor a
+ * marker (a real negative), while recorded slugs that cannot be listed return
+ * no entries AND a marker, so silence never reads as verified absence. No
+ * failure shape fails the info block -- a throw collapses through the shared
+ * `narrowProbeError` ladder and a `{ok:false}` parse to `unparseable`, and the
+ * caller stamps that reason while every other fact still renders.
+ *
+ * A failure returns immediately and discards entries collected from earlier
+ * slugs: a half-listed hooks block claims a completeness it does not have,
+ * which is a worse lie than omitting the block and naming the failure.
+ */
+async function readStateOnlyHookEntries(
+  slugs: readonly string[],
+  locations: ScopedLocations,
+): Promise<{ readonly entries?: readonly HookSummaryEntry[]; readonly degraded?: ContentReason }> {
+  if (slugs.length === 0) {
+    return {};
+  }
+
+  // D-57-03: the install ledger writes zero or one slug today; iterate
+  // defensively for forward-compat, as the hydrate path does.
+  const entries: HookSummaryEntry[] = [];
+  for (const slug of slugs) {
+    try {
+      const hooksJsonPath = hookConfigPathFor(locations, slug);
+      await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
+      const raw = await readFile(hooksJsonPath, "utf8");
+      // Mirrors `readHookSummaryEntries`: the info surface consumes only the
+      // parsed value, so the `if`-field side-Map is discarded via
+      // `skipIfMap: true` and the no-op `compileIf` is never invoked.
+      const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
+      const noopCompileIf = (): null => null;
+      const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+      if (!parsed.ok) {
+        return { degraded: "unparseable" };
+      }
+
+      // No `projectDroppedHookEntries` here: the materialized file IS the
+      // filtered supported subset the install ledger wrote, so its `dropped`
+      // list is empty by construction. The detail an unsupported handler would
+      // have carried was never persisted, and reconstructing it would be
+      // invention.
+      entries.push(...projectHookSummaryEntries(parsed.value));
+    } catch (err) {
+      return { degraded: narrowProbeError(err) };
+    }
+  }
+
+  return { entries };
+}
+
+/**
  * INFO-05 / HOOK-01: best-effort hooks reader for the info surface ONLY.
  * Runs whenever `resolved.hooksConfigPath === undefined`, which covers
  * two distinct cases: (a) the resolver bailed on supportability (the
@@ -735,7 +800,7 @@ async function buildBlock(
         marketplace,
         scope,
         marketplaceDetails,
-        buildStateOnlyInstalledRow(pluginName, installed),
+        await buildStateOnlyInstalledRow(pluginName, installed, locations),
       );
     }
 
@@ -831,21 +896,28 @@ function wrapBlock(
  * entry, and the body constructs no probe, so the arm is network-free by
  * signature rather than by control flow.
  */
-function buildStateOnlyInstalledRow(
+async function buildStateOnlyInstalledRow(
   pluginName: string,
   record: MarketplaceRecord["plugins"][string],
-): PluginInfoRow {
+  locations: ScopedLocations,
+): Promise<PluginInfoRow> {
+  const { components, degraded } = await composeStateOnlyComponents(record, locations);
   return {
     status: derivePersistedInstalledStatus(record),
     name: pluginName,
     version: record.version,
-    // INFO-10: absence FIRST, then the kind tokens. `composeReasons` joins in
-    // array order, and `narrowUnsupportedKinds` stays the sole producer of
-    // those tokens -- this wraps its output rather than replacing it (the same
-    // ordering rule `list.ts::partiallyInstalledReasons` implements).
-    reasons: ["not in manifest", ...narrowUnsupportedKinds(record.compatibility.unsupported)],
+    // INFO-10 / D-96-03: absence FIRST, then the kind tokens, then the hooks
+    // read marker LAST. `composeReasons` joins in array order, and
+    // `narrowUnsupportedKinds` stays the sole producer of the kind tokens --
+    // this wraps its output rather than replacing it (the same ordering rule
+    // `list.ts::partiallyInstalledReasons` implements).
+    reasons: [
+      "not in manifest",
+      ...narrowUnsupportedKinds(record.compatibility.unsupported),
+      ...(degraded === undefined ? [] : [degraded]),
+    ],
     componentsResolved: true,
-    components: composeStateOnlyComponents(record),
+    components,
   };
 }
 
@@ -875,23 +947,34 @@ function derivePersistedInstalledStatus(
  * the record of what was materialized, and hiding a duplicate would hide a
  * real state defect.
  *
- * INFO-11 / D-96-03: the `hooks` kind is deliberately absent. It needs a read
- * of the materialized `hooks.json`, which lands inside this function -- no
- * caller changes when it does.
+ * INFO-11 / D-96-03: the `hooks` kind is the one kind the record cannot supply
+ * on its own -- it holds a container slug, so the entries are read back from
+ * the materialized configuration. That read is the only disk access this arm
+ * makes, and its failure surfaces as the optional `degraded` reason the caller
+ * appends to the row rather than as a missing block the operator cannot see.
  */
-function composeStateOnlyComponents(
+async function composeStateOnlyComponents(
   record: MarketplaceRecord["plugins"][string],
-): Extract<PluginInfoRow, { componentsResolved: true }>["components"] {
+  locations: ScopedLocations,
+): Promise<{
+  readonly components: Extract<PluginInfoRow, { componentsResolved: true }>["components"];
+  readonly degraded?: ContentReason;
+}> {
   const agents = sortComponentNames(record.resources.agents);
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
+  const { entries, degraded } = await readStateOnlyHookEntries(record.resources.hooks, locations);
 
   return {
-    ...(agents.length > 0 && { agents }),
-    ...(commands.length > 0 && { commands }),
-    ...(mcp.length > 0 && { mcp }),
-    ...(skills.length > 0 && { skills }),
+    components: {
+      ...(agents.length > 0 && { agents }),
+      ...(commands.length > 0 && { commands }),
+      ...(entries !== undefined && entries.length > 0 && { hooks: entries }),
+      ...(mcp.length > 0 && { mcp }),
+      ...(skills.length > 0 && { skills }),
+    },
+    ...(degraded !== undefined && { degraded }),
   };
 }
 
