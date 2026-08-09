@@ -1369,8 +1369,13 @@ async function refreshDisabledRecord(
 
     sRecord.version = toVersion;
     sRecord.resolvedSource = installable.pluginRoot;
+    // ENBL-09: derive the availability discriminant from the resolution rather
+    // than hard-coding it, so it always agrees with the unsupported list copied
+    // beside it. `installable: true` next to a non-empty `unsupported` is a
+    // record whose two fields contradict each other, and every downstream
+    // classifier reads a different token off the same record.
     sRecord.compatibility = {
-      installable: true,
+      installable: installable.state === "installable",
       notes: [...installable.notes],
       supported: [...installable.supported],
       unsupported: [...installable.unsupported],
@@ -1546,12 +1551,14 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
 
   const { installable, fromVersion, toVersion } = preflight;
 
-  // D-UPD: a disabled-but-recorded plugin (explicit `enabled: false` -- the
-  // single `isRecordedButDisabled` marker, degraded or not) must NOT
-  // re-materialize artifacts; an `enable` after the update is the rematerialization
-  // surface. Refresh the record's version + resolvedSource so a future enable
-  // reads the current pin, but keep `resources.*` empty. Renders the existing
-  // `unchanged` byte form -- the artifact state really is unchanged.
+  // D-UPD / ENBL-05: a disabled-but-recorded plugin (explicit `enabled: false`
+  // read through the single `isRecordedButDisabled` predicate -- degraded or
+  // not, since availability is an orthogonal axis) must NOT re-materialize
+  // artifacts; an `enable` after the update is the rematerialization surface.
+  // ENBL-09: refresh the record's version, resolvedSource and compatibility so
+  // a future enable reads the current pin, but keep `resources.*` empty.
+  // Renders the existing `unchanged` byte form -- the artifact state really is
+  // unchanged.
   if (isRecordedButDisabled(preflight.record)) {
     await refreshDisabledRecord(args, preflight);
     return {
