@@ -1973,6 +1973,29 @@ async function buildAvailableRow(opts: {
 }
 
 /**
+ * The list-arm `<autoupdate>` marker composition every cascade block on this
+ * surface shares: `details` is stamped ONLY when the flag is true, and
+ * `lastUpdatedAt` never rides this surface.
+ *
+ * The asymmetry is deliberate and belongs to `renderMpHeader`, not to the
+ * callers: the list arm omits the marker entirely when autoupdate is false,
+ * whereas the STANDALONE info header always spells one of `<autoupdate>` /
+ * `<no autoupdate>`. A `--fetch` run on a state-only record therefore prints a
+ * bare `● mp [user]` skip-note header beside the info block's
+ * `● mp [user] <no autoupdate>` for the same (marketplace, scope) pair. The
+ * marker still TRACKS the info block -- it is present in exactly the cases the
+ * info block reports autoupdate as on -- and the divergence is recorded in the
+ * output catalog's `state-only-fetch-skipped` state. Stamping
+ * `details: { autoupdate: false }` here would not change a byte; only a
+ * closed-set change to the list-arm header would.
+ */
+function autoupdateDetails(autoupdate: boolean): {
+  readonly details?: { autoupdate: boolean };
+} {
+  return autoupdate ? { details: { autoupdate: true } } : {};
+}
+
+/**
  * D-54-01 / ENBL-04: list-arm cascade block for a recorded-but-disabled
  * plugin. The info surface conveys the disabled state via the SAME
  * `(disabled)` inventory token as the list surface (catalog
@@ -1989,16 +2012,10 @@ function buildDisabledInventoryBlock(
   installed: MarketplaceRecord["plugins"][string],
   autoupdate: boolean,
 ): MarketplaceRows<PluginInfoCascadeMsg> {
-  // Mirror the list surface's `<autoupdate>` marker composition (details is
-  // emitted ONLY when the flag is true; `lastUpdatedAt` never on this
-  // surface).
-  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
-    ? { details: { autoupdate: true } }
-    : {};
   return {
     name: marketplace,
     scope,
-    ...detailsField,
+    ...autoupdateDetails(autoupdate),
     plugins: [
       {
         // D-03/D-06: a disabled INVENTORY row (info surface) is steady state,
@@ -2082,14 +2099,11 @@ function buildFetchSkipBlock(
   block: PluginInfoMessage,
   autoupdate: boolean,
 ): MarketplaceRows<PluginInfoCascadeMsg> {
-  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
-    ? { details: { autoupdate: true } }
-    : {};
   const version = block.plugin.version;
   return {
     name: marketplace,
     scope,
-    ...detailsField,
+    ...autoupdateDetails(autoupdate),
     plugins: [
       {
         status: "skipped",
