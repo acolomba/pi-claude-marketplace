@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 97
 current_phase_name: disabled-state-classification-repair
 status: executing
-stopped_at: Completed 97-04-PLAN.md
-last_updated: "2026-08-09T13:16:10.304Z"
+stopped_at: Completed 97-05-PLAN.md — all 5 plans complete, phase at gates
+last_updated: "2026-08-09T20:12:00.000Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 97 plan 04 executed; ENBL-08 closed by guarding the load-time backfill scan against disabled records (the T-97-01 re-enable path) and pinning the two-pass planner fixed point for a disabled partial with a declared-enabled counter-case
+last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 50
 ---
 
@@ -34,9 +34,9 @@ No state migration and no schema-version change.
 
 ## Current Position
 
-Phase: 97 (disabled-state-classification-repair) — EXECUTING
+Phase: 97 (disabled-state-classification-repair) — EXECUTED, AT GATES
 Plan: 5 of 5
-Status: Plans 01-04 complete. The ENBL-05 root repair landed first: one
+Status: Plans 01-05 complete. The ENBL-05 root repair landed first: one
 disabled-state predicate in `persistence/state-io.ts` keyed only on
 `enabled`, six modules on it, and the CR-01 repro (a manifest-absent
 disabled partial reaching the state-only info arm) green. Plan 02 then
@@ -53,10 +53,20 @@ disabled partial: the BFILL-01 backfill scan now filters on `enabled` as
 well as availability, so no unattended pass re-materializes — and through
 reinstall's record write re-enables — a plugin the user disabled, and two
 identical planner passes are pinned to the empty plan with a
-declared-enabled counter-case. Plan 05 is the remaining expansion —
-ENBL-09's `refreshDisabledRecord` hard-coded `installable: true` is the
-second-order edit still outstanding.
-Last activity: 2026-08-09 — Phase 97 plan 04 executed (full suite green)
+declared-enabled counter-case. Plan 05 closed ENBL-09, the second-order
+edit the collapse exposed: `refreshDisabledRecord` now derives the
+persisted availability discriminant from the resolution instead of
+hard-coding `installable: true`, so the short-circuit a disabled partial
+reaches can no longer write full availability beside a non-empty
+unsupported array — proven by a degraded/promotion counter-case pair and
+by mutation. The short-circuit itself is pinned by an on-disk no-stage
+assertion, and two identical `update --partial` calls are a fixed point.
+Its production work landed as concurrent commits outside the paused
+session's dispatch and was verified criterion-by-criterion at close-out,
+which caught one comment tripping the D-75-01 vocabulary guard (fixed in
+`be4da56d`).
+Last activity: 2026-08-09 — Phase 97 plan 05 closed out (full suite green,
+exit 0); phase awaits its verification gates
 
 ## Roadmap Summary
 
@@ -167,6 +177,9 @@ two integration checks.
 - [Phase 97]: ENBL-06 is pinned as a contrast pair in one rendered block (disabled partial vs enabled partial), asserted as a single byte-exact join so the status tokens, the brace asymmetry, and the row order are all frozen together
 - [Phase 97]: The enable branch's ledger gate is derived from the record's availability discriminant, not hard-coded, so a fully-installable record keeps the strict gate
 - [Phase 97]: ENBL-08 backfill guard reads record.enabled directly rather than isRecordedButDisabled: apply.ts is not a drift-gate site and the guard is a scan filter symmetric with the availability filter above it
+- [Phase 97]: ENBL-09: the derive landed in refreshDisabledRecord, not runThreePhaseUpdate, so the edit adds no pressure to an already complexity-suppressed function; suppression count in update.ts unchanged at 6
+- [Phase 97]: A persisted discriminant is proven derived only by a counter-case pair — the degraded assertion alone is satisfied by hard-coding the opposite constant; the promotion case on the same fixture excludes both
+- [Phase 97]: The update short-circuit's no-stage claim is asserted on disk (the generated skill absent from the skills target dir), not by the record's empty resource arrays, because re-staging is the defect and unrecorded files would still satisfy a state-only check
 
 ### Open decisions
 
@@ -225,11 +238,11 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Discuss Phase 97 (disabled-state classification repair). Bring into the
-  discuss: the CR-01 carrier todo
-  (`.planning/todos/pending/2026-08-09-disabled-partial-reaches-state-only-info-arm.md`)
-  — ENBL-05's single-predicate collapse fixes that arm too, and ENBL-06 must
-  widen the guard test that today covers only the installable:true half.
+- Run Phase 97's verification gates. All five plans are executed and the full
+  suite is green; ENBL-05..09 are each closed and summarized. The CR-01 carrier
+  todo (`.planning/todos/pending/2026-08-09-disabled-partial-reaches-state-only-info-arm.md`)
+  was absorbed by ENBL-05's single-predicate collapse and ENBL-06's widened
+  guard test — close it out as part of the phase verification.
 
 - Then plan and execute Phase 98, which carries the notify.ts/tools.ts
   stale-comment reconciliation todo (DOC-08) plus the D-96-01 divergence
@@ -252,9 +265,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 97 P02 | 35min | 3 tasks | 6 files |
 | Phase 97 P03 | 25min | 2 tasks | 2 files |
 | Phase 97 P04 | 30min | 2 tasks | 3 files |
+| Phase 97 P05 | 25min | 2 tasks | 2 files |
 
 ## Session
 
-**Last session:** 2026-08-09T13:15:57.572Z
-**Stopped at:** Completed 97-04-PLAN.md
+**Last session:** 2026-08-09T20:12:00.000Z
+**Stopped at:** Completed 97-05-PLAN.md — Phase 97 fully executed (5/5), awaiting verification gates
 **Resume file:** None
