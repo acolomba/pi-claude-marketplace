@@ -2726,8 +2726,9 @@ const FIXTURES: FixtureMap = {
   //     * state-only-installed-hooks-degraded          (D-96-03 unlistable hooks marker)
   //     * available-single-scope                       (INFO-02 available bucket)
   //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
-  //   - Warning state:
+  //   - Warning states:
   //     * state-only-fetch-skipped                     (D-96-04 skipped --fetch note, "warning")
+  //     * disabled-fetch-skipped                       (D-96-04 skipped --fetch on a disabled record)
   //   - Multi-scope fan-out:
   //     * installed-both-scopes-fan-out                (INFO-03 project-first fan-out)
   //     * state-only-installed-both-scopes-fan-out     (INFO-09 record-backed fan-out)
@@ -2740,8 +2741,8 @@ const FIXTURES: FixtureMap = {
   //
   // Severity routing: every success + fan-out + components-not-resolved
   // state is `info` (omits `expectedSeverity`); the three `{not added}` /
-  // `{not in manifest}` failure states route to `"error"`; the D-96-04
-  // fetch-skip note is the sole `"warning"` state on this surface.
+  // `{not in manifest}` failure states route to `"error"`; the two D-96-04
+  // fetch-skip notes are the only `"warning"` states on this surface.
   // -------------------------------------------------------------------------
   "/claude:plugin info <plugin>@<marketplace>": {
     "installed-single-scope": {
@@ -2888,6 +2889,32 @@ const FIXTURES: FixtureMap = {
                 name: "alpha",
                 version: "1.0.0",
                 reasons: ["not in manifest"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-96-04: `--fetch` against an all-disabled marketplace. Same cascade row
+    // shape as the state-only note above, with the reason token that names the
+    // OTHER cause of a skipped fetch -- a disabled record has no materialized
+    // artifacts to refresh (ENBL-02).
+    "disabled-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["already disabled"],
                 severity: "warning",
               },
             ],

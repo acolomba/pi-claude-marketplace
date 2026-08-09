@@ -2045,43 +2045,47 @@ function buildDisabledInventoryBlock(
   };
 }
 
+/** One scope whose record carries the recorded-but-disabled marker. */
+interface DisabledScope {
+  readonly scope: Scope;
+  readonly installed: MarketplaceRecord["plugins"][string];
+  readonly autoupdate: boolean;
+}
+
 /**
  * D-54-01 / ENBL-04: split the found (scope, record) tuples into the
- * disabled-inventory blocks (recorded-but-disabled marker present) and the
- * info-surface tuples that proceed through `buildBlock`. Extracted from
- * `getPluginInfo` to keep its cognitive complexity within the lint budget.
+ * recorded-but-disabled scopes and the info-surface tuples that proceed through
+ * `buildBlock`. Extracted from `getPluginInfo` to keep its cognitive complexity
+ * within the lint budget.
+ *
+ * The disabled side returns the TUPLES rather than pre-rendered blocks because
+ * a disabled scope produces two different rows: the `(disabled)` inventory row
+ * it always renders, and the D-96-04 `(skipped)` fetch-skip row it renders when
+ * `--fetch` was typed. Both derive from the same record.
  */
 function partitionDisabledScopes(
   opts: GetPluginInfoOptions,
   found: readonly { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[],
 ): {
-  disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[];
+  disabled: DisabledScope[];
   infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[];
 } {
-  const disabledBlocks: MarketplaceRows<PluginInfoCascadeMsg>[] = [];
+  const disabled: DisabledScope[] = [];
   const infoFound: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
   for (const f of found) {
     const installed = f.record.plugins[opts.plugin];
     if (installed !== undefined && isRecordedButDisabled(installed)) {
-      disabledBlocks.push(
-        buildDisabledInventoryBlock(
-          opts.marketplace,
-          opts.plugin,
-          f.scope,
-          installed,
-          f.autoupdate,
-        ),
-      );
+      disabled.push({ scope: f.scope, installed, autoupdate: f.autoupdate });
     } else {
       infoFound.push(f);
     }
   }
 
-  return { disabledBlocks, infoFound };
+  return { disabled, infoFound };
 }
 
 /**
- * D-96-04: the `--fetch`-was-skipped note for one state-only scope, shaped like
+ * D-96-04: the `--fetch`-was-skipped note for ONE scope, shaped like
  * `buildDisabledInventoryBlock` (same marketplace header, `details` ONLY when
  * autoupdate is true).
  *
@@ -2091,59 +2095,101 @@ function partitionDisabledScopes(
  * the tri-state reading of the outcome -- the user asked for a refreshed state
  * and did not get one -- and matches `update`'s `(skipped) {not in manifest}`
  * precedent.
+ *
+ * `reason` names WHY nothing was fetched, and differs by the arm that skipped:
+ * `not in manifest` for a state-only record (no manifest entry, so no source to
+ * fetch from) and `already disabled` for a recorded-but-disabled record (no
+ * materialized artifacts to refresh -- ENBL-02).
  */
-function buildFetchSkipBlock(
-  marketplace: string,
-  scope: Scope,
-  block: PluginInfoMessage,
-  autoupdate: boolean,
-): MarketplaceRows<PluginInfoCascadeMsg> {
-  const version = block.plugin.version;
+function buildFetchSkipBlock(args: {
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly pluginName: string;
+  readonly version: string | undefined;
+  readonly reason: ContentReason;
+  readonly autoupdate: boolean;
+}): MarketplaceRows<PluginInfoCascadeMsg> {
   return {
-    name: marketplace,
-    scope,
-    ...autoupdateDetails(autoupdate),
+    name: args.marketplace,
+    scope: args.scope,
+    ...autoupdateDetails(args.autoupdate),
     plugins: [
       {
         status: "skipped",
-        name: block.plugin.name,
-        reasons: ["not in manifest"],
+        name: args.pluginName,
+        reasons: [args.reason],
         severity: "warning",
-        ...(version !== undefined && { version }),
+        ...(args.version !== undefined && { version: args.version }),
       },
     ],
   };
 }
 
 /**
- * D-96-04: report a `--fetch` the state-only arm could not carry out. A flag
- * that renders identical bytes with and without it teaches the user it worked,
- * so the request is accounted for out loud instead of being swallowed.
+ * D-96-04: report a `--fetch` no arm could carry out. A flag that renders
+ * identical bytes with and without it teaches the user it worked, so the
+ * request is accounted for out loud instead of being swallowed.
+ *
+ * BOTH non-fetchable arms are covered, because both reach `getPluginInfo` exits
+ * that never touch a probe: the state-only arm (no manifest entry to fetch
+ * from) and the disabled carve-out (no materialized artifacts to refresh). The
+ * disabled scopes are the ones that also short-circuit the all-disabled early
+ * return, where a `--fetch` previously rendered bytes identical to a bare run.
  *
  * IL-2: this is a SECOND notification beside the info block, for the same
- * reason the disabled-inventory path above emits one -- the two surfaces carry
+ * reason the disabled-inventory path emits one -- the two surfaces carry
  * incompatible message kinds, and the standalone `PluginInfoRow` status set
  * admits no `skipped`, so folding the note into the info block would mean
  * dropping it. The info block keeps its own bytes and its own `info` severity.
  *
- * One notification carries one block per state-only scope, in the caller's
- * project-first order (MSG-GR-3).
+ * One notification carries one block per skipped scope, keyed and ordered by
+ * SCOPE so a mixed disabled + state-only run stays project-first (MSG-GR-3)
+ * rather than grouping by arm.
  */
-function emitStateOnlyFetchSkip(opts: GetPluginInfoOptions, built: readonly InfoBlock[]): void {
+function emitFetchSkip(
+  opts: GetPluginInfoOptions,
+  scopes: readonly Scope[],
+  built: readonly InfoBlock[],
+  disabled: readonly DisabledScope[],
+): void {
   if (opts.fetch !== true) {
     return;
   }
 
-  const skipBlocks = built
-    .filter((b) => b.stateOnly)
-    .map(({ block }) =>
-      buildFetchSkipBlock(
-        opts.marketplace,
+  const byScope = new Map<Scope, MarketplaceRows<PluginInfoCascadeMsg>>();
+  for (const { block, stateOnly } of built) {
+    if (stateOnly) {
+      byScope.set(
         block.marketplaceScope,
-        block,
-        block.marketplaceDetails.autoupdate,
-      ),
+        buildFetchSkipBlock({
+          marketplace: opts.marketplace,
+          scope: block.marketplaceScope,
+          pluginName: block.plugin.name,
+          version: block.plugin.version,
+          reason: "not in manifest",
+          autoupdate: block.marketplaceDetails.autoupdate,
+        }),
+      );
+    }
+  }
+
+  for (const d of disabled) {
+    byScope.set(
+      d.scope,
+      buildFetchSkipBlock({
+        marketplace: opts.marketplace,
+        scope: d.scope,
+        pluginName: opts.plugin,
+        version: d.installed.version,
+        reason: "already disabled",
+        autoupdate: d.autoupdate,
+      }),
     );
+  }
+
+  const skipBlocks = scopes
+    .map((s) => byScope.get(s))
+    .filter((b): b is MarketplaceRows<PluginInfoCascadeMsg> => b !== undefined);
   const [first, ...remaining] = skipBlocks;
   if (first === undefined) {
     return;
@@ -2207,7 +2253,10 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // info-surface scopes BEFORE block building. A disabled record renders the
   // list-arm `(disabled)` inventory cascade (see buildDisabledInventoryBlock)
   // instead of the standalone `PluginInfoMessage` shape.
-  const { disabledBlocks, infoFound } = partitionDisabledScopes(opts, found);
+  const { disabled, infoFound } = partitionDisabledScopes(opts, found);
+  const disabledBlocks = disabled.map((d) =>
+    buildDisabledInventoryBlock(opts.marketplace, opts.plugin, d.scope, d.installed, d.autoupdate),
+  );
 
   // Every found scope holds the disabled marker: a single list-arm cascade
   // (one block per scope) preserves IL-2 on this all-disabled path. OUT-07 /
@@ -2215,6 +2264,10 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   if (infoFound.length === 0) {
     const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
     notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
+    // D-96-04: this early return short-circuits every probe, so a `--fetch`
+    // here fetched nothing. Account for it out loud rather than rendering
+    // bytes identical to a bare run.
+    emitFetchSkip(opts, scopes, [], disabled);
     return;
   }
 
@@ -2233,7 +2286,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       fetchCtx,
     );
     notify(opts.ctx, opts.pi, built.block);
-    emitStateOnlyFetchSkip(opts, [built]);
+    emitFetchSkip(opts, scopes, [built], []);
     return;
   }
 
@@ -2282,7 +2335,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     });
   }
 
-  emitStateOnlyFetchSkip(opts, built);
+  emitFetchSkip(opts, scopes, built, disabled);
 
   // D-54-01 / ENBL-04: surface the disabled-inventory scopes through the
   // list-arm cascade. Mixed disabled+info renders break IL-2's single-notify

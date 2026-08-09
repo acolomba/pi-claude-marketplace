@@ -920,6 +920,122 @@ test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` 
   });
 });
 
+// D-96-04 on the all-disabled early return: that branch short-circuits every
+// probe, so `--fetch` fetched nothing there too. Without the note the run
+// renders bytes identical to a bare run -- the exact failure mode D-96-04 was
+// written to close, on a sibling branch of the same function. The reason token
+// differs from the state-only note because the cause differs: a disabled record
+// has no materialized artifacts to refresh (ENBL-02), rather than no manifest
+// entry to fetch from.
+test("D-96-04: `info --fetch` on an all-disabled marketplace emits the skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+    );
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user]",
+        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+      ].join("\n"),
+    );
+  });
+});
+
+test("D-96-04: bare `info` on an all-disabled marketplace emits NO skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1, "no flag was typed, so there is nothing to account for");
+    assert.ok(!notifications[0]!.message.includes("(skipped)"), notifications[0]!.message);
+  });
+});
+
+// MSG-GR-3: a mixed run skips for two different reasons in two different
+// scopes. Both rows ride ONE notification, ordered project-first by SCOPE --
+// not grouped by which arm produced them.
+test("D-96-04: a mixed disabled + state-only `--fetch` run orders both skip rows project-first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const projectRoot = path.join(cwd, ".pi");
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+    });
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "2.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
+
+    const skip = notifications.find((n) => n.message.includes("(skipped)"));
+    assert.ok(skip !== undefined, JSON.stringify(notifications));
+    assert.equal(skip.severity, "warning");
+    assert.equal(
+      skip.message,
+      [
+        "Some plugin operations need attention.",
+        "",
+        "● mp [project]",
+        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+        "",
+        // Both headers are the list-arm form, which omits the marker when
+        // autoupdate is off -- see the `state-only-fetch-skipped` catalog state.
+        "● mp [user]",
+        "  ⊘ alpha v2.0.0 (skipped) {not in manifest}",
+      ].join("\n"),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // INFO-12 / NFR-5: the state-only arm reaches no network surface.
 //

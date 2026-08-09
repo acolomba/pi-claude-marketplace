@@ -1442,7 +1442,7 @@ ______________________________________________________________________
 
 Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` note is the one `warning` state on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 ### Success -- installed single scope
 
@@ -1537,6 +1537,19 @@ A plugin operation needs attention.
 
 ● mp [user]
   ⊘ alpha v1.0.0 (skipped) {not in manifest}
+```
+
+### Warning -- the requested fetch was skipped for a disabled plugin (D-96-04)
+
+The user gives `--fetch` and every found scope holds the recorded-but-disabled marker. A disabled plugin has no materialized artifacts (ENBL-02), thus there is nothing to refresh and the command fetches nothing. This branch returns before any probe runs, thus without this note the run shows bytes that are the same as those of a bare run. The reason token is different from the state-only note above because the cause is different: the plugin is disabled, and the manifest can still declare it. The `(disabled)` inventory block shows beside this note and keeps its own `info` severity. A bare run on the same input shows no note. Severity `warning`; no reload-hint (read-only surface).
+
+<!-- catalog-state: disabled-fetch-skipped -->
+
+```text
+A plugin operation needs attention.
+
+● mp [user]
+  ⊘ alpha v1.0.0 (skipped) {already disabled}
 ```
 
 ### Success -- available single scope
