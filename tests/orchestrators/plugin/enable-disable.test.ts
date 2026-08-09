@@ -79,6 +79,11 @@ async function writeUserState(
     // production shape of a hooks-only installed plugin. Ignored when
     // `disabled: true` (a disabled record always has every axis empty).
     hooksOnly?: boolean;
+    // ENBL-07 / D-66-01: seed the persisted `compatibility.unsupported`
+    // list, with the availability discriminant derived from its emptiness
+    // (the same derivation the list and info fixtures use). Non-empty +
+    // `disabled: true` is the disabled PARTIAL shape.
+    unsupported?: readonly string[];
   },
 ): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
   const scopeRoot = path.join(home, ".pi", "agent");
@@ -102,6 +107,7 @@ async function writeUserState(
     resources = { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] };
   }
 
+  const unsupported = opts.unsupported ?? [];
   const state = {
     schemaVersion: 2,
     marketplaces: {
@@ -121,10 +127,10 @@ async function writeUserState(
             version: opts.version ?? "1.2.3",
             resolvedSource: "/tmp/dummy-mp/plugins/foo",
             compatibility: {
-              installable: true,
+              installable: unsupported.length === 0,
               notes: [],
               supported: [],
-              unsupported: [],
+              unsupported: [...unsupported],
             },
             resources,
             enabled: !opts.disabled,
@@ -818,6 +824,42 @@ test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {al
   });
 });
 
+test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL renders the same skipped row and leaves state.json bytes unchanged", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+      unsupported: ["lspServers"],
+    });
+    const statePre = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // Idempotency now covers the PARTIAL shape: the degraded availability
+    // axis is orthogonal to the disabled marker (ENBL-05), so the row is
+    // byte-identical to the canonical already-disabled skip.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ⊘ foo (skipped) {already disabled}"].join("\n"),
+    );
+    assert.equal(notifications[0]!.severity, undefined, "info routing locked");
+    // Unchanged bytes are the strongest available proof the unstage cascade
+    // never ran -- the idempotent arm returns before tx.save().
+    const statePost = await readFile(statePath, "utf8");
+    assert.equal(statePost, statePre, "state.json bytes unchanged after idempotent no-op");
+  });
+});
+
 test("WR-03: enable on state-enabled plugin with config enabled:false lands the config-side truth (promotion, state untouched)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { statePath, configPath } = await writeUserState(home, {
@@ -1011,6 +1053,36 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-di
       pluginName: "foo",
       disabled: true,
       version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "skipped");
+    if (outcome.status === "skipped") {
+      assert.equal(outcome.reason, "already disabled");
+    }
+  });
+});
+
+test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL returns { status: 'skipped', reason: 'already disabled' } no notify", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+      version: "1.2.3",
+      unsupported: ["lspServers"],
     });
     const { ctx, notifications } = makeCtx(cwd);
     const outcome = await setPluginEnabled({
