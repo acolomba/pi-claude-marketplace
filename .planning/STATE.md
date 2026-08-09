@@ -6,13 +6,13 @@ current_phase: 97
 current_phase_name: Disabled-state classification repair
 status: planning
 stopped_at: Phase 97 context gathered
-last_updated: "2026-08-09T09:52:32.564Z"
+last_updated: "2026-08-09T11:09:47.326Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 96 plan 04 executed; D-96-02 folded-row manifest authority pinned and the open question closed in code, tests and the output catalog
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
+  total_plans: 11
   completed_plans: 6
   percent: 50
 ---

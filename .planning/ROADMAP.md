@@ -236,8 +236,12 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 97-01-PLAN.md — tracer: collapse the four disabled-state predicate copies into one definition in `persistence/state-io.ts`, repoint every consumer, update the truth-table cell and replace the drift gate, and turn the CR-01 repro green (ENBL-05, ENBL-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 97-02-PLAN.md — byte-pin the disabled-partial `(disabled)` row against the enabled-partial contrast, pin the `--fetch` skip-note switch, and reconcile the stale two-axis-marker prose across the render surfaces and the output catalog (ENBL-06)
 - [ ] 97-03-PLAN.md — partial-capable enable branch plus the re-materialization, manifest-absent fail-clean boundary, and disable-idempotency byte-locks (ENBL-07)
 - [ ] 97-04-PLAN.md — guard the load-time backfill scan against disabled records and pin the two-pass planner fixed point (ENBL-08)

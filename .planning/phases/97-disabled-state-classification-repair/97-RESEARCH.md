@@ -1198,7 +1198,7 @@ TypeScript source and tests only. No `package.json` dependency change is expecte
 | A3 | The operator wants Pitfall 3 (the BFILL-01 `enabled` guard) fixed inside Phase 97 rather than deferred. | ENBL-08 / Pitfall 3 | Medium — it is arguably a separate pre-existing defect. ENBL-08's literal text is only about the disable re-plan. If deferred, file a todo carrier so it is not lost (per the "verifier deferrals need a carrier" lesson). |
 | A4 | Pinning the manifest-absent enable boundary as a unit-level byte assertion (not a new catalog state) satisfies the byte-gate convention. | Enable on a Manifest-Absent Partial | Low-Medium — if the operator considers any user-visible byte form catalog-bound, a new `enable-not-in-manifest` catalog state is required instead. |
 
-## Open Questions
+## Open Questions (RESOLVED at planning)
 
 1. **Does ENBL-08's "steady state" include the BFILL-01 backfill re-materialization?**
    - What we know: the backfill scan filters only on `installable`, has no `enabled` guard,
