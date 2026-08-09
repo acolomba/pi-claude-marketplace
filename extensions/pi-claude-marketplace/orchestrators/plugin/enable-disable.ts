@@ -945,13 +945,12 @@ function dispatchOutcome(args: {
  * ledger just wrote. A clean re-enable keeps the `(installed)` row byte-for-byte
  * (NREG-01).
  *
- * SEV-01: the degraded arm stamps `warning`, not the `info` the `install`
- * `--partial` success row stamps. The difference is the opt-in axis, not the
- * outcome: `install --partial` is an explicit user request for a degraded
- * materialization (desired state reached -> info), while `enable` has no
- * `--partial` flag and derives the widened gate from the record itself
- * (WR-02 / WR-03), so a dropped-kind enable is "carried out but short of what
- * was asked for" -> warning.
+ * SEV-03 parity: BOTH arms stamp `info`. The partial shortfall predates the
+ * enable -- the record was already degraded when it was disabled -- so the
+ * requested enable was fully carried out and the desired state was reached.
+ * Same stance as the `install --partial` success row and the still-degraded
+ * `plugin-backfilled` arm; the dropped kinds are named in the `{reasons}`
+ * brace, which is where that detail belongs.
  */
 function freshEnableRow(
   plugin: string,
@@ -968,7 +967,8 @@ function freshEnableRow(
       dependencies: [],
       ...(outcome.version !== undefined && { version: outcome.version }),
       reasons: narrowUnsupportedKinds(unsupported),
-      severity: "warning",
+      // SEV-03: a pre-existing degradation re-materialized as requested -> info.
+      severity: "info",
       needsReload: true,
     };
   }

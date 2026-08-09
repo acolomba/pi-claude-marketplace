@@ -464,13 +464,13 @@ test("SEV-05: a partial backfill (installable:false) projects to a (partially-in
   assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
 });
 
-test("ENBL-07: a reconcile enable that dropped component kinds projects to a (partially-installed) row with the dropped-kinds brace, severity warning", () => {
+test("ENBL-07: a reconcile enable that dropped component kinds projects to a (partially-installed) row with the dropped-kinds brace, severity info", () => {
   // The load-time reconcile drives setPluginEnabled for every config-declared-
   // enabled disabled record, and ENBL-07's widened gate re-materializes a
   // soft-degraded record with kinds dropped. FSTAT-07 / D-66-04: the row follows
   // the resolution, so it must NOT claim the clean (installed) token the very
-  // next `list` contradicts. SEV-01: the reconcile enable carries no --partial
-  // opt-in, so the degraded arm is carried out but short -> warning.
+  // next `list` contradicts. SEV-03: the degradation predates the enable, so
+  // the row stays info -- parity with the sibling backfill partial arm.
   const outcome: PerEntryOutcome = {
     kind: "plugin-enabled",
     scope: "project",
@@ -487,7 +487,7 @@ test("ENBL-07: a reconcile enable that dropped component kinds projects to a (pa
   assert.ok(row);
   assert.equal(row.status, "partially-installed");
   assert.equal(row.name, "cr");
-  assert.equal(row.severity, "warning");
+  assert.equal(row.severity, "info");
   assert.equal(row.needsReload, true);
   assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
 });

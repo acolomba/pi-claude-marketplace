@@ -3592,11 +3592,11 @@ const FIXTURES: FixtureMap = {
 
     // ENBL-07 / FSTAT-07 / D-66-04: a re-enable admitted through the partial
     // gate drops component kinds, so the row follows the RESOLUTION (`◉
-    // (partially-installed)` + the kinds) rather than the verb. SEV-01: enable
-    // has no `--partial` opt-in, so the degraded arm stamps `warning`.
+    // (partially-installed)` + the kinds) rather than the verb. SEV-03: the
+    // degradation predates the enable, so the row stays `info` (no summary
+    // line) -- parity with install --partial and the backfill partial arm.
     "enable-partial": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -3605,7 +3605,7 @@ const FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "partially-installed",
-                severity: "warning",
+                severity: "info",
                 needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",

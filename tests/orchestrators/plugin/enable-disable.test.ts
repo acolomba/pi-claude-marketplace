@@ -591,14 +591,12 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.severity,
-      "warning",
-      "SEV-01: enable has no --partial opt-in, so a dropped-kind enable is carried out but short",
+      undefined,
+      "SEV-03: the degradation predates the enable, so the realized transition stays info",
     );
     assert.equal(
       notifications[0]!.message,
       [
-        "A plugin operation needs attention.",
-        "",
         "● mp [user]",
         "  ◉ foo-plugin v1.2.3 (partially-installed) {lsp}",
         "",

@@ -516,6 +516,11 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * `plugin-installed` / `plugin-backfilled` arms. `dependencies` stays empty on
  * both arms (the orchestrated enable outcome carries no staged-name counts --
  * WR-06), so no soft-dep marker fires either way.
+ *
+ * SEV-03 parity: BOTH arms stamp `info`. The partial shortfall predates the
+ * enable -- the record was already degraded when it was disabled -- so the
+ * requested enable was fully carried out. Same stance the sibling
+ * `plugin-backfilled` partial arm takes for a still-degraded promotion.
  */
 function enabledRowFromOutcome(
   outcome: PluginEnabledOutcome,
@@ -528,7 +533,8 @@ function enabledRowFromOutcome(
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies: [],
       reasons: narrowUnsupportedKinds(unsupported),
-      severity: "warning",
+      // SEV-03: a pre-existing degradation re-materialized as requested -> info.
+      severity: "info",
       needsReload: true,
     };
   }
@@ -635,9 +641,8 @@ function applyOutcomeToBlock(
       // gate dropped component kinds, so it takes the `(partially-installed)`
       // projection instead -- the SAME split the standalone enable verb and the
       // `plugin-backfilled` arm make, and the row the very next `list` renders
-      // for that record. SEV-01: the enable verb has no `--partial` opt-in, so
-      // the degraded arm is "carried out but short of what was asked for" and
-      // stamps `warning` (a clean re-enable stays `info`).
+      // for that record. SEV-03: both arms stay `info` -- the degradation
+      // predates the enable, so the requested transition was fully carried out.
       block.plugins.push(enabledRowFromOutcome(outcome));
       return;
     case "plugin-disabled":

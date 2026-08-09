@@ -2127,15 +2127,13 @@ Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace
 <!-- catalog-state: enable-partial -->
 
 ```text
-A plugin operation needs attention.
-
 ● claude-plugins-official [user]
   ◉ foo-plugin v1.2.3 (partially-installed) {lsp}
 
 /reload to pick up changes
 ```
 
-ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is empty on both enable arms, so no soft-dep marker fires. Severity `warning`, unlike the `install --partial` success row: `enable` has no `--partial` flag and derives the widened gate from the record itself, so a dropped-kind enable is carried out but short of what the user asked for (SEV-01). Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
+ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is empty on both enable arms, so no soft-dep marker fires. Severity `info` (no summary line), matching the `install --partial` success row and the still-degraded `plugin-backfilled` arm per SEV-03: the shortfall predates the enable -- the record was already degraded when it was disabled -- so the requested enable was fully carried out and the dropped kinds ride the `{reasons}` brace rather than the severity channel. Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
 
 ### Idempotent enable
 
