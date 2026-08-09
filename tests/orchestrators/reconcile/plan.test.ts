@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -707,12 +707,21 @@ test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", (
 //      it is the shape the convergence proof at plan-convergence.test.ts
 //      rests on (a soft-degraded but never-disabled plugin must not be
 //      planned as `pluginsToEnable`).
-//   2. A source gate asserting no module re-derives the predicate locally:
-//      none of the four former definition sites still contains the two-axis
-//      conjunction, and each one imports the single predicate.
+//   2. A source gate asserting no module re-derives the predicate locally.
+//      It is a WALK of the whole extension tree, not an allowlist of the
+//      sites that once held a copy: an allowlist is structurally blind to the
+//      next copy, which is exactly how a fifth twin landed in
+//      `reconcile/apply.ts` while the gate stayed green. Two checks run over
+//      every source file -- the removed two-axis conjunction must be absent,
+//      and the inline single-axis rederivation (`!rec.enabled` and its
+//      `=== false` / `!== true` spellings) must be absent outside the module
+//      that DEFINES the predicate. The former-definition sites additionally
+//      have to import it, which pins the collapse itself.
 // ──────────────────────────────────────────────────────────────────────────
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+const EXTENSION_SOURCE_ROOT = "extensions/pi-claude-marketplace";
 
 /** The four modules that each held their own copy of the predicate. */
 const FORMER_DEFINITION_SITES: ReadonlyArray<string> = [
@@ -722,8 +731,45 @@ const FORMER_DEFINITION_SITES: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
 ];
 
+/**
+ * The module that OWNS the rule. It is the one place the `enabled` boolean may
+ * be read directly, because reading it there IS the definition.
+ */
+const PREDICATE_DEFINITION_SITE = "extensions/pi-claude-marketplace/persistence/state-io.ts";
+
 /** The removed two-axis conjunction, in any of its parameter spellings. */
 const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;
+
+/**
+ * The single-axis rederivation, in the three spellings that mean "this record
+ * is disabled". Deliberately does NOT match `entry.enabled !== false`: that is
+ * the CONFIG-declaration axis (`persistence/config-io.ts`), a different fact
+ * about a different object, whose default is enabled-when-absent.
+ */
+const INLINE_REDERIVATIONS: ReadonlyArray<RegExp> = [
+  /!\s*[\w.]+\.enabled\b/,
+  /\.enabled\s*===\s*false/,
+  /\.enabled\s*!==\s*true/,
+];
+
+/** Every `.ts` file under the extension source tree, repo-relative. */
+async function extensionSourceFiles(): Promise<readonly string[]> {
+  const out: string[] = [];
+  const walk = async (rel: string): Promise<void> => {
+    const entries = await readdir(path.join(REPO_ROOT, rel), { withFileTypes: true });
+    for (const entry of entries) {
+      const childRel = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await walk(childRel);
+      } else if (entry.name.endsWith(".ts")) {
+        out.push(childRel);
+      }
+    }
+  };
+
+  await walk(EXTENSION_SOURCE_ROOT);
+  return out;
+}
 
 /** The single-predicate import the collapse requires of every former site. */
 const SINGLE_PREDICATE_IMPORT =
@@ -834,15 +880,16 @@ test("ENBL-05: the transient all-empty-resources shape with enabled: true is NOT
   assert.equal(isRecordedButDisabled(emptied), false);
 });
 
-test("ENBL-05: no conjunctive disabled-state twin survives -- every former definition site consumes the single persistence/state-io.ts predicate (drift gate)", async () => {
-  // Inverted from the body-shape pin it replaces: instead of asserting that a
-  // named twin still carries the right body -- which a rename defeats and
-  // which cannot see a FIFTH copy appearing elsewhere -- assert that no former
-  // site re-derives the rule at all and that each one imports the one
-  // definition. Comments are stripped FIRST: the surviving JSDoc legally
-  // describes the removed conjunction in prose while explaining the collapse.
+test("ENBL-05: no disabled-state twin survives ANYWHERE in the extension tree -- the whole source walk, not an allowlist (drift gate)", async () => {
+  // The gate this replaces enumerated the four sites that once held a copy, so
+  // it was structurally blind to a NEW one: a fifth twin (`!record.enabled`)
+  // landed in `orchestrators/reconcile/apply.ts` with the gate green. Walking
+  // the tree makes the `state-io.ts` "SOLE predicate" claim enforceable
+  // wherever a sixth copy lands. Comments are stripped FIRST: the surviving
+  // JSDoc legally describes the removed rule in prose while explaining the
+  // collapse.
   const offenders: string[] = [];
-  for (const rel of FORMER_DEFINITION_SITES) {
+  for (const rel of await extensionSourceFiles()) {
     const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
 
     if (TWO_AXIS_CONJUNCTION.test(stripped)) {
@@ -851,6 +898,34 @@ test("ENBL-05: no conjunctive disabled-state twin survives -- every former defin
       );
     }
 
+    if (rel === PREDICATE_DEFINITION_SITE) {
+      continue;
+    }
+
+    for (const re of INLINE_REDERIVATIONS) {
+      if (re.test(stripped)) {
+        offenders.push(
+          `${rel} re-derives the disabled state inline (${String(re)}) -- call isRecordedButDisabled instead`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `ENBL-05 violation: a local disabled-state twin survives:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("ENBL-05: every former definition site imports the single persistence/state-io.ts predicate", async () => {
+  // The absence walk above proves no site re-derives the rule; this pins the
+  // other half of the collapse -- the four modules that each carried a copy
+  // now CONSUME the one definition rather than having dropped the check
+  // altogether.
+  const offenders: string[] = [];
+  for (const rel of FORMER_DEFINITION_SITES) {
+    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
     if (!SINGLE_PREDICATE_IMPORT.test(stripped)) {
       offenders.push(`${rel} does not import isRecordedButDisabled from persistence/state-io.ts`);
     }
@@ -859,6 +934,6 @@ test("ENBL-05: no conjunctive disabled-state twin survives -- every former defin
   assert.deepEqual(
     offenders,
     [],
-    `ENBL-05 violation: a local disabled-state twin survives:\n  ${offenders.join("\n  ")}`,
+    `ENBL-05 violation: a former definition site dropped the single predicate:\n  ${offenders.join("\n  ")}`,
   );
 });

@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { asAbsolutePluginRoot } from "../domain/plugin-root.ts";
 import { locationsFor } from "../persistence/locations.ts";
-import { loadState } from "../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState } from "../persistence/state-io.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { applyPathLedger, PATH_LEDGER_ENV } from "../shared/session-env.ts";
@@ -36,7 +36,10 @@ export function collectBinDirs(state: ExtensionState): string[] {
   const dirs: string[] = [];
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
     for (const [pluginName, rec] of Object.entries(mp.plugins)) {
-      if (!rec.enabled) {
+      // ENBL-05: read the single disabled-state predicate rather than the
+      // `enabled` boolean directly, so this site cannot drift from the rule
+      // `persistence/state-io.ts` owns.
+      if (isRecordedButDisabled(rec)) {
         continue;
       }
 

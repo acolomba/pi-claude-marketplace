@@ -49,6 +49,7 @@ import { resolveStrict } from "../../domain/resolver.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -1053,8 +1054,10 @@ async function backfillOnePluginIsolated(
   // so scanning a disabled record would reverse an explicit user disable at load
   // time -- restoring that plugin's hooks, MCP servers and PATH entries with no
   // command and no prompt. Availability and disabled-ness are orthogonal axes
-  // (ENBL-05), so the filter above does not cover this one.
-  if (!record.enabled) {
+  // (ENBL-05), so the filter above does not cover this one. Read through the
+  // single predicate rather than the boolean, so this site cannot drift from
+  // the rule `persistence/state-io.ts` owns.
+  if (isRecordedButDisabled(record)) {
     return false;
   }
 

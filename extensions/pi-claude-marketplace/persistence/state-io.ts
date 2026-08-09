@@ -131,7 +131,10 @@ export function toDisabledRecord(
  * {@link toDisabledRecord} writes. Every surface that asks "is this record
  * currently disabled" consumes this one definition; a module that re-derives
  * the rule locally is a drift twin the gate in
- * `tests/orchestrators/reconcile/plan.test.ts` rejects.
+ * `tests/orchestrators/reconcile/plan.test.ts` rejects. That gate WALKS the
+ * whole extension source tree rather than an allowlist of known sites, so the
+ * claim holds for a copy landing anywhere -- this module is the single
+ * exemption, because reading the boolean here IS the definition.
  *
  * The availability axis (`compatibility.installable`) is deliberately NOT an
  * input. The disable orchestrator is the only writer of `enabled: false` and
