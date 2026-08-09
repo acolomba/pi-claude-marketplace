@@ -233,7 +233,15 @@ Plans:
 5. `update` leaves a disabled partial record alone rather than re-staging its artifacts. (ENBL-09)
 6. No state migration or schema-version change is introduced; records already on disk in the unrecognized shape reclassify correctly on the next load.
 
-**Plans:** 0 plans
+**Plans:** 5 plans
+
+Plans:
+
+- [ ] 97-01-PLAN.md — tracer: collapse the four disabled-state predicate copies into one definition in `persistence/state-io.ts`, repoint every consumer, update the truth-table cell and replace the drift gate, and turn the CR-01 repro green (ENBL-05, ENBL-06)
+- [ ] 97-02-PLAN.md — byte-pin the disabled-partial `(disabled)` row against the enabled-partial contrast, pin the `--fetch` skip-note switch, and reconcile the stale two-axis-marker prose across the render surfaces and the output catalog (ENBL-06)
+- [ ] 97-03-PLAN.md — partial-capable enable branch plus the re-materialization, manifest-absent fail-clean boundary, and disable-idempotency byte-locks (ENBL-07)
+- [ ] 97-04-PLAN.md — guard the load-time backfill scan against disabled records and pin the two-pass planner fixed point (ENBL-08)
+- [ ] 97-05-PLAN.md — derive the availability discriminant in the disabled-record refresh and pin the `update --partial` short-circuit and its idempotency (ENBL-09)
 
 ### Phase 98: Lifecycle regression and contract documentation
 
@@ -258,7 +266,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 95. Manifest-independent installed inventory | v1.18 | 2/2 | Complete    | 2026-08-08 |
 | 96. Installation-record-backed plugin info | v1.18 | 4/4 | Complete    | 2026-08-09 |
-| 97. Disabled-state classification repair | v1.18 | 0/0 | Not started | — |
+| 97. Disabled-state classification repair | v1.18 | 0/5 | Planned | — |
 | 98. Lifecycle regression and contract documentation | v1.18 | 0/0 | Not started | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
