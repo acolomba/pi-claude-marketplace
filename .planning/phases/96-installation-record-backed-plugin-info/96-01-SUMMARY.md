@@ -45,7 +45,11 @@ patterns-established:
   - "Component inventory from `resources.*` is copied and sorted but never de-duplicated — the record states what was materialized, and hiding a duplicate would hide a real state defect"
   - "`componentsResolved: true` with an empty components map is the honest shape for a record with no components; `false` would emit `components: not resolved` and deny known information"
 
-requirements-completed: [INFO-09, INFO-10, INFO-11, BOUND-01, BOUND-02]
+requirements-completed: [INFO-09, INFO-10, BOUND-01, BOUND-02]
+# INFO-11 is PARTIAL, not complete: the four name-list kinds ship here, the
+# hooks kind is plan 96-02. REQUIREMENTS.md carries it as Partial rather than
+# Complete so 96-02's delivery is not pre-claimed.
+requirements-partial: [INFO-11]
 
 coverage:
   - id: D1
@@ -213,3 +217,9 @@ None - no external service configuration required.
 ---
 *Phase: 96-installation-record-backed-plugin-info*
 *Completed: 2026-08-09*
+
+## Self-Check: PASSED
+
+All 5 source artifacts and the SUMMARY exist on disk; all 4 commits
+(`5481c5ae`, `bd9bb542`, `4c45ac97`, `b4813d9`) are present in git history.
+No stubs, no skipped tests, no unrun `<verify>` blocks.

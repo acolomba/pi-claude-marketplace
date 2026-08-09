@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 96
-current_phase_name: Installation-record-backed plugin info
-status: planning
-stopped_at: Phase 96 context gathered
-last_updated: "2026-08-09T01:48:37.233Z"
-last_activity: 2026-08-08
-last_activity_desc: Phase 95 plan 02 executed; both plans complete, phase ready for verification
+current_phase_name: installation-record-backed-plugin-info
+status: executing
+stopped_at: Completed 96-01-PLAN.md
+last_updated: "2026-08-09T02:17:42.368Z"
+last_activity: 2026-08-09
+last_activity_desc: Phase 96 plan 01 executed; installation-record-backed info arm landed with both boundaries pinned
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 25
 ---
 
@@ -27,20 +27,19 @@ See: .planning/PROJECT.md (updated 2026-08-08 after Phase 95)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** v1.18 Manifest-Independent Installed Plugin Info. Make
+**Current focus:** Phase 96 — installation-record-backed-plugin-info
 list/info derive installed truth from the existing installation record when a
 valid marketplace manifest no longer contains the plugin entry, without
 persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 96 — Installation-record-backed plugin info
-Plan: Not started
-Status: Ready to discuss (no CONTEXT.md yet; open decision D-95-11 — component
-name fidelity on the state-only info arm — is gated to this discuss)
-Last activity: 2026-08-08 — Phase 95 complete (verification passed 21/21 with
-operator UAT sign-off; Nyquist-compliant; threats_open 0), transitioned to
-Phase 96
+Phase: 96 (installation-record-backed-plugin-info) — EXECUTING
+Plan: 2 of 4
+Status: Plan 96-01 complete (INFO-09/10/11 + BOUND-01/02 landed); plans 02-04
+remain — hooks-kind reconstruction (INFO-11 / D-96-03), the INFO-12 fetch skip
+note, and the D-96-02 folded-row catalog close
+Last activity: 2026-08-09 — Phase 96 plan 01 executed; npm run check green
 
 ## Roadmap Summary
 
@@ -135,6 +134,9 @@ two integration checks.
 - [Phase 95]: projectRowStatus left byte-unchanged: the tool-payload widening adds information inside the installed bucket rather than re-partitioning it
 - [Phase 95 fix loop]: Absence is judged against the manifest the record itself names — `ScopedManifest` is a discriminated union (`{ok,manifest}|{ok:false,loadError}`) and `ManifestLookup` (`declared`/`absent`/`unverified`) is the single value flowing into the row builder, making "entry present + absence claimed" unrepresentable (WR-05/06/07)
 - [Phase 95 fix loop]: `pluginReasons` covers all four flattened installed-family arms incl. `partially-upgradable` (CR-01); the two new manifest-absent row forms are catalog states under the byte-equality gate (WR-03)
+- [Phase 96]: INFO-09/10: a manifest-absent installation record is described from the record (installed/partially-installed with 'not in manifest' as a reason), not reported as a failure; severity for that input moves error -> info
+- [Phase 96]: The state-only row builders are synchronous and take no locations: require-await (strictTypeChecked) and noUnusedParameters reject the planned async + threaded-unused-param shape; the hooks read converts both in one edit
+- [Phase 96]: derivePersistedInstalledStatus extracted so the persisted installed/partially-installed derivation has one copy shared by the non-path and state-only info rows
 
 ### Open decisions
 
@@ -210,9 +212,10 @@ None of the carryover items originate from v1.17 env-parity.
 | —    | —        | —     | —     |
 | Phase 95 P01 | 30min | 3 tasks | 3 files |
 | Phase 95 P02 | 25min | 2 tasks | 2 files |
+| Phase 96 P01 | 25min | 3 tasks | 5 files |
 
 ## Session
 
-**Last session:** 2026-08-09T00:17:45.712Z
-**Stopped at:** Phase 96 context gathered
-**Resume file:** .planning/phases/96-installation-record-backed-plugin-info/96-CONTEXT.md
+**Last session:** 2026-08-09T02:17:29.222Z
+**Stopped at:** Completed 96-01-PLAN.md
+**Resume file:** None

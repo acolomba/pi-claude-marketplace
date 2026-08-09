@@ -19,15 +19,15 @@
 
 <!-- INFO numbering continues from v1.8 (INFO-01..08). -->
 
-- [ ] **INFO-09**: `plugin info` reports an enabled fully supported installation record absent from a successfully loaded manifest as `(installed) {not in manifest}`, using the version from the installation record.
-- [ ] **INFO-10**: `plugin info` preserves `(partially-installed)` and the reasons derived from persisted `compatibility.unsupported`, adding `not in manifest` first, when the manifest-absent installation record contains unsupported kinds. This governs the installation-record-backed arm only. `info` today derives `(partially-installed)` from the live resolver on the path-source arm and from the persisted record on every other source arm; v1.18 does not unify those two derivations, and the state-only arm follows the persisted record.
+- [x] **INFO-09**: `plugin info` reports an enabled fully supported installation record absent from a successfully loaded manifest as `(installed) {not in manifest}`, using the version from the installation record.
+- [x] **INFO-10**: `plugin info` preserves `(partially-installed)` and the reasons derived from persisted `compatibility.unsupported`, adding `not in manifest` first, when the manifest-absent installation record contains unsupported kinds. This governs the installation-record-backed arm only. `info` today derives `(partially-installed)` from the live resolver on the path-source arm and from the persisted record on every other source arm; v1.18 does not unify those two derivations, and the state-only arm follows the persisted record.
 - [ ] **INFO-11**: `plugin info` reconstructs the installed component inventory from existing local installation data: skills from `resources.skills`, commands from `resources.prompts`, agents from `resources.agents`, MCP servers from `resources.mcpServers`, and hook entries from the materialized hook configuration associated with `resources.hooks`. The four name-list kinds render sorted; hook entries preserve materialized declaration order, which is the existing contract for that kind. Two fidelity limits apply and must be documented rather than engineered away: the names in `resources.*` are the Pi-generated installed names (`<plugin>-<skill>`, `<plugin>:<command>`, `pi-claude-marketplace-<plugin>-<agent>`) rather than the original source names a manifest-backed `info` renders, with MCP servers the sole exception because `resources.mcpServers` holds raw source keys; and the materialized `hooks.json` holds only the supported filtered subset, so displayed hooks are not the plugin's full declaration. Reading that file goes through the `assertPathInside` containment guard, because the slug is state-supplied data. Whether to render generated names or reverse-map them to source names is an open decision -- see the roadmap.
 - [ ] **INFO-12**: Manifest-absent installation-record fallback is network-free, including when the caller supplies `info --fetch`; no missing manifest entry is fetched or synthesized. Today this holds only by construction: the early `not in manifest` return precedes every fetch-capable row builder. The Phase 96 reorder makes those builders reachable for the state-only arm, so this requirement becomes a guard that must be written and asserted against an injected clone/auth seam, not a property inherited for free.
 
 ### Failure Boundaries
 
-- [ ] **BOUND-01**: Missing, unreadable, malformed, or invalid marketplace manifests retain the existing manifest-read failure output on list and info; `{not in manifest}` is emitted only after a manifest loads successfully and its plugin lookup misses. The authoritative description of that existing output is `docs/output-catalog.md` and the current tests -- a bare `(failed)` marketplace header with no child rows. The PRD's PL-6 row describes the retired v1 renderer and is not authoritative; DOC-08 corrects it.
-- [ ] **BOUND-02**: A targeted plugin name absent from both a successfully loaded manifest and the marketplace installation records remains `(failed) {not in manifest}`. This already holds; the requirement is regression coverage.
+- [x] **BOUND-01**: Missing, unreadable, malformed, or invalid marketplace manifests retain the existing manifest-read failure output on list and info; `{not in manifest}` is emitted only after a manifest loads successfully and its plugin lookup misses. The authoritative description of that existing output is `docs/output-catalog.md` and the current tests -- a bare `(failed)` marketplace header with no child rows. The PRD's PL-6 row describes the retired v1 renderer and is not authoritative; DOC-08 corrects it.
+- [x] **BOUND-02**: A targeted plugin name absent from both a successfully loaded manifest and the marketplace installation records remains `(failed) {not in manifest}`. This already holds; the requirement is regression coverage.
 - [x] **BOUND-03**: On the cross-scope orphan-fold path, a manifest that failed to load is distinguished from a manifest that loaded without the entry. The fold path currently discards the load error, so an absent manifest entry is indistinguishable from an unread manifest; it must thread the load error the way the primary path does. `{not in manifest}` is never emitted for a folded row whose manifest was never successfully read.
 
 ### Lifecycle Compatibility
@@ -96,12 +96,12 @@ Which phases cover which requirements.
 | INV-03 | Phase 95 | Complete |
 | INV-04 | Phase 95 | Complete |
 | INV-05 | Phase 95 | Complete |
-| INFO-09 | Phase 96 | Pending |
-| INFO-10 | Phase 96 | Pending |
-| INFO-11 | Phase 96 | Pending |
+| INFO-09 | Phase 96 | Complete |
+| INFO-10 | Phase 96 | Complete |
+| INFO-11 | Phase 96 | Partial (four name-list kinds delivered; hooks kind pending in 96-02) |
 | INFO-12 | Phase 96 | Pending |
-| BOUND-01 | Phase 96 | Pending |
-| BOUND-02 | Phase 96 | Pending |
+| BOUND-01 | Phase 96 | Complete |
+| BOUND-02 | Phase 96 | Complete |
 | BOUND-03 | Phase 95 | Complete |
 | ENBL-05 | Phase 97 | Pending |
 | ENBL-06 | Phase 97 | Pending |
