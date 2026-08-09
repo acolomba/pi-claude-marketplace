@@ -2722,6 +2722,8 @@ const FIXTURES: FixtureMap = {
   //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
   //     * state-only-installed-single-scope            (INFO-09 record-backed row)
   //     * state-only-partially-installed-single-scope  (INFO-10 record-backed partial)
+  //     * state-only-installed-with-hooks              (INFO-11 materialized hooks block)
+  //     * state-only-installed-hooks-degraded          (D-96-03 unlistable hooks marker)
   //     * available-single-scope                       (INFO-02 available bucket)
   //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
   //   - Multi-scope fan-out:
@@ -2815,6 +2817,47 @@ const FIXTURES: FixtureMap = {
           name: "alpha",
           version: "1.0.0",
           reasons: ["not in manifest", "lsp"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "state-only-installed-with-hooks": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            hooks: [{ event: "Stop" }, { event: "PreToolUse", matcher: "Bash" }],
+            skills: ["alpha-skill"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "state-only-installed-hooks-degraded": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest", "source missing"],
           componentsResolved: true,
           components: {
             skills: ["alpha-skill"],

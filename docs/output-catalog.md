@@ -1499,6 +1499,33 @@ The unsupported kinds come from the persisted `compatibility.unsupported` field 
     skills: alpha-skill
 ```
 
+### Success -- hooks listed from the materialized configuration (INFO-11)
+
+The installation record keeps only the name of the hooks container, not the hook entries. Thus the hook entries come from the materialized configuration that the extension wrote at install time, and not from the plugin's source declaration. The entries keep the order of the materialized file. The four name-list kinds are sorted, but the hook entries are not: their order is the order in which the author declared them. A tool event shows as `<event>(<matcher>)`; all other events show as `<event>`. Fidelity note: the materialized file holds only the supported subset that the install path kept. Thus this list can be shorter than the plugin's initial declaration, and the entries that the install path removed do not show. This limit is documented and not corrected, in the same manner as the D-96-01 name divergence above. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-with-hooks -->
+
+```text
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    hooks:
+      Stop
+      PreToolUse(Bash)
+    skills: alpha-skill
+```
+
+### Success -- recorded hooks that cannot be listed (D-96-03)
+
+The installation record names a hooks container, but the materialized configuration is missing, unreadable, or malformed. The `hooks:` line does not show, and the row carries the read reason as the LAST reason in the brace. Thus the operator can see that hook entries exist but that the command could not list them. This state can show one of four reasons: `source missing` (no such file), `permission denied` (the file cannot be opened), `unparseable` (the content is not valid JSON or it fails the schema), and `unreadable` (all other failures, which include the refusal of a container name that points outside the hooks directory). The reason is attributable to the hooks read because the materialized hooks configuration is the ONLY file that this state reads. If the record names NO hooks container, the `hooks:` line does not show and NO reason is added. Thus the two conditions -- no hooks, and hooks that cannot be listed -- are different on the screen. No read failure removes the remainder of the block: the status, the version, the other reasons, and the four name-list kinds all continue to show. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-hooks-degraded -->
+
+```text
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest, source missing}
+    skills: alpha-skill
+```
+
 ### Success -- available single scope
 
 Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notify.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
