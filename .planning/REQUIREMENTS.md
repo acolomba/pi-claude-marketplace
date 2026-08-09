@@ -54,7 +54,7 @@ diagnosis: the `disabled-partial-record-unrecognized` debug session.
 - [x] **ENBL-05**: The disabled-state predicate depends only on the `enabled` field, never on `compatibility.installable`. It has one definition that every surface consumes, replacing the four copies that can drift independently. The textual drift-guard asserting the predicate body and the truth-table cell that currently pins the defective behavior as intended are both updated.
 - [x] **ENBL-06**: `plugin list` and `plugin info` render a disabled partially-installed record as `(disabled)`, distinct from an enabled partially-installed record, completing ENBL-04 for the partial case. This composes with INV-04: a manifest-absent disabled partial record is `(disabled)` with no `{not in manifest}` reason.
 - [x] **ENBL-07**: `plugin enable` re-materializes a disabled partially-installed record instead of reporting idempotent success, and `plugin disable` reports idempotent success on an already-disabled partial record instead of re-running the unstage cascade.
-- [ ] **ENBL-08**: Load-time reconcile reaches steady state for a disabled partially-installed record: a config declaring the plugin disabled does not re-plan a disable on every pass.
+- [x] **ENBL-08**: Load-time reconcile reaches steady state for a disabled partially-installed record: a config declaring the plugin disabled does not re-plan a disable on every pass.
 - [ ] **ENBL-09**: `plugin update` leaves a disabled partially-installed record alone rather than re-staging its artifacts, matching the existing disabled-record short-circuit.
 
 Repairing the predicate is a read-time change, so records already on disk in the
@@ -106,7 +106,7 @@ Which phases cover which requirements.
 | ENBL-05 | Phase 97 | Complete |
 | ENBL-06 | Phase 97 | Complete |
 | ENBL-07 | Phase 97 | Complete |
-| ENBL-08 | Phase 97 | Pending |
+| ENBL-08 | Phase 97 | Complete |
 | ENBL-09 | Phase 97 | Pending |
 | LIFE-04 | Phase 98 | Pending |
 | LIFE-05 | Phase 98 | Pending |
