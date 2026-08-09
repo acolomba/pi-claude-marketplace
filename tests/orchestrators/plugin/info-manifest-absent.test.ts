@@ -702,6 +702,64 @@ test("NFR-10: a traversal hooks slug is refused before any read and the block st
   });
 });
 
+// NFR-10 observability: `{unreadable}` is a cosmetic degradation marker shared
+// with transient disk failures, so a REFUSED traversal slug must also be named
+// in the debug log -- otherwise a tampering attempt is indistinguishable from an
+// EIO in both the UI and the log. Mirrors the hooks hydrate read site, which
+// logs its containment violation before returning.
+test("NFR-10: a refused traversal hooks slug is named in the debug log, not just folded to `{unreadable}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["../../etc"] } } },
+    });
+
+    const originalDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    const originalError = console.error;
+    const logged: string[] = [];
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    console.error = (...args: unknown[]): void => {
+      logged.push(args.map((a) => String(a)).join(" "));
+    };
+
+    try {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+      // The rendered outcome is unchanged -- the token stays the closed-set
+      // `{unreadable}` the catalog pins.
+      assert.equal(
+        notifications[0]!.message,
+        [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      );
+    } finally {
+      console.error = originalError;
+      if (originalDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = originalDebug;
+      }
+    }
+
+    const violation = logged.find((l) => l.includes("containment violation"));
+    assert.ok(
+      violation !== undefined,
+      `expected a containment-violation debug line, got: ${JSON.stringify(logged)}`,
+    );
+    assert.ok(violation.startsWith("[hooks] info: containment violation"), violation);
+    assert.ok(violation.includes('"../../etc"'), violation);
+  });
+});
+
 test("D-96-03: an unreadable materialized hooks config reports `permission denied` (POSIX-only)", async (t) => {
   if (process.platform === "win32") {
     t.skip("POSIX-only chmod 0 unreadable file path");

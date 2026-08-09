@@ -52,7 +52,8 @@ import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../.
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { assertNever } from "../../shared/errors.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever, errorMessage } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
@@ -60,7 +61,7 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { notify } from "../../shared/notify.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
+import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,
   narrowResolverNotes,
@@ -545,6 +546,20 @@ async function readStateOnlyHookEntries(
       // invention.
       entries.push(...projectHookSummaryEntries(parsed.value));
     } catch (err) {
+      // NFR-10: a containment refusal is NOT a disk hiccup, so it is named in
+      // the debug log before it collapses into the shared probe ladder. This
+      // mirrors the hooks hydrate read site, which logs the violation and
+      // returns rather than propagating.
+      //
+      // `derivePluginRootForInfo`'s sibling rule -- containment throws
+      // propagate unmasked -- deliberately does NOT apply here: this arm has no
+      // caller-side catch, so a rethrow would fail the entire read-only info
+      // block over one refused component kind. The rendered outcome stays the
+      // closed-set `{unreadable}` the catalog pins; only the diagnostic is new.
+      if (err instanceof PathContainmentError) {
+        hookDebugLog(`info: containment violation for hooks slug "${slug}": ${errorMessage(err)}`);
+      }
+
       return { degraded: narrowProbeError(err) };
     }
   }
