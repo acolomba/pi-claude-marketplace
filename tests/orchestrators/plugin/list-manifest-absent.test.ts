@@ -635,10 +635,11 @@ test("BOUND-03: a folded row whose project-side manifest LOADED without the entr
 // walking up two levels when the source path is a manifest FILE, which pairs
 // one root with an arbitrary manifest name. The folded row is a statement about
 // the PROJECT record, so its absence is judged against the manifest that record
-// names, even though the row renders under the user-scope header. Which
-// manifest a folded row should describe at all is the open BOUND-01 / BOUND-02
-// question; this pins only that a successful read of the record's own manifest
-// backs the brace.
+// names, even though the row renders under the user-scope header. D-96-02
+// settles that a folded row describes its own record's manifest for every fact
+// it states -- the absence claim, the upgradable derivation and the description
+// -- since all three read the one `ManifestLookup` value built for that
+// manifest. This test pins the absence fact; the three below pin the others.
 test("INV-01: a folded row absent from its OWN manifest claims the absence even when the user block names another manifest", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
@@ -835,6 +836,60 @@ test("D-96-02: a folded row's description comes from its OWN manifest entry, not
         "  ● alpha [project] v1.0.0 (installed)",
         "    From the project manifest.",
       ].join("\n"),
+    );
+  });
+});
+
+// BOUND-01 / D-96-02: the own-manifest authority rule has a second half. A
+// marketplace whose OWN manifest cannot be read renders nothing beneath it --
+// folded rows from a scope whose manifest reads perfectly well included. The
+// mechanism is the `!scopedManifest.ok` early return, which emits `plugins: []`
+// before the folded extras are merged. This is the decided contract, not a
+// defect: the block states one honest failure instead of a partial truth
+// assembled from a neighbouring scope's evidence. Changing it needs a decision,
+// not a patch, and this pin is what stops such a "fix" from landing silently.
+test("BOUND-01: a marketplace whose OWN manifest failed to load renders the bare `(failed)` header -- folded rows are suppressed with it", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [] },
+    });
+
+    const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+    // The project clone's OWN manifest reads cleanly and declares its installed
+    // alpha, so nothing about the project record is in doubt.
+    const otherManifestPath = path.join(sharedMpRoot, ".claude-plugin", "other.json");
+    await writeFile(
+      otherManifestPath,
+      JSON.stringify({
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      }),
+      "utf8",
+    );
+    await seedFoldedProjectClone({
+      cwd,
+      marketplaceRoot: sharedMpRoot,
+      manifestPath: otherManifestPath,
+      pluginName: "alpha",
+      version: "1.0.0",
+    });
+
+    // Remove the file the USER record names, so its own manifest read throws.
+    await rm(path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"));
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.equal(
+      notifications[0]!.message,
+      // No `alpha` row of any kind: the fold computed one, and the failed
+      // header discarded it.
+      ["A marketplace operation has failed.", "", "⊘ mp1 [user] (failed)"].join("\n"),
     );
   });
 });

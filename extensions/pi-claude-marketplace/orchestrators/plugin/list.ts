@@ -892,8 +892,14 @@ function manifestLookupFor(scopedManifest: ScopedManifest, pluginName: string): 
  * membership (INV-01), including on the cross-scope orphan fold: a folded row
  * describes the project-scope record, so its absence is judged against the
  * manifest that record points at, not against the user block's header path.
- * Which manifest a folded row SHOULD describe is a separate open question
- * (BOUND-01 / BOUND-02).
+ *
+ * D-96-02 settles the scope of that authority: a folded row describes its own
+ * record's manifest for ALL of its facts -- the absence claim, the upgradable
+ * derivation and the description -- because all three read the single
+ * {@link ManifestLookup} value produced for that manifest, which makes
+ * disagreement between them unrepresentable. BOUND-01 is the other half: a
+ * marketplace whose OWN manifest cannot be read renders the bare `(failed)`
+ * header with no child rows, folded rows included.
  */
 async function loadMarketplaceManifestSoftly(
   mpRecord: ExtensionState["marketplaces"][string],
