@@ -1025,6 +1025,60 @@ test("D-96-04: `info --fetch` on an all-disabled marketplace emits the skip note
   });
 });
 
+// ENBL-06: the same `--fetch` accounting for the PARTIAL disabled shape. Before
+// the disabled-state axes were separated, this record missed the disabled
+// partition and landed in the state-only arm, so its skip row named the
+// manifest-absence cause. The cause is the disabled record, not the missing
+// manifest entry, and the reason token has to say so.
+test("ENBL-06 / D-96-04: `info --fetch` on a DISABLED PARTIAL skips for the disabled cause, not the manifest-absence cause", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+    );
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user]",
+        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+      ].join("\n"),
+    );
+    // The specific regression: the state-only arm's reason token on a record
+    // that never belongs there.
+    assert.equal(
+      notifications[1]!.message.includes("not in manifest"),
+      false,
+      notifications[1]!.message,
+    );
+  });
+});
+
 test("D-96-04: bare `info` on an all-disabled marketplace emits NO skip note", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
