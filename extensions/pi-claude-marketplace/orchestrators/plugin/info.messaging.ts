@@ -33,9 +33,11 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *
  *       - the recorded-but-disabled inventory row a scope holding the disabled
  *         marker produces (`disabled`);
- *       - the D-96-04 fetch-skip note a `--fetch` run produces when the block
- *         came from the state-only arm and there was nothing to fetch
- *         (`skipped`).
+ *       - the D-96-04 fetch-skip note a `--fetch` run produces per scope that
+ *         had nothing to fetch (`skipped`) -- a state-only block
+ *         (`not in manifest`) or a recorded-but-disabled record
+ *         (`already disabled`). The disabled arm builds its row straight from
+ *         the record; there is no `InfoBlock` in that case.
  *
  *     `PLUGIN_INFO_CONTEXT` is total over exactly those two statuses (D-10).
  *     The standalone `PluginInfoRow` shape cannot express either one: its
