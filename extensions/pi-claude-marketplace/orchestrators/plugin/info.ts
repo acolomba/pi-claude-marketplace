@@ -38,6 +38,7 @@ import {
 import {
   parseHooksConfig,
   type DroppedHook,
+  type HookConfigParseResult,
   type HooksConfig,
 } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
@@ -437,6 +438,24 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
 }
 
 /**
+ * MATCH-03 / A1 projectRoot fallback: the single `parseHooksConfig` invocation
+ * both info-surface hook readers share, mirroring the resolver's
+ * `readStandaloneHooks` call site.
+ *
+ * `skipIfMap: true` short-circuits the `if`-predicate side-Map, so `compileIf`
+ * is never invoked and `ifCtx` is never read -- the info surface consumes only
+ * the parsed value. The context is nonetheless built from a REAL `cwd` supplied
+ * by the caller rather than fabricated here, so the day `skipIfMap` is dropped
+ * there is ONE place that decides which project root predicates compile
+ * against, and callers that know their cwd already pass the right one.
+ */
+function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
+  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  const noopCompileIf = (): null => null;
+  return parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+}
+
+/**
  * Read & re-parse `<pluginRoot>/<resolved.hooksConfigPath>` from disk
  * and project to `HookSummaryEntry[]`. The resolver discards the parsed
  * value (it only records `hooksConfigPath`), so the info renderer must
@@ -466,14 +485,13 @@ async function readHookSummaryEntries(
   hooksConfigPath: string,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   const raw = await readFile(path.join(pluginRoot, hooksConfigPath), "utf8");
-  // MATCH-03 / A1 projectRoot fallback: mirrors the resolver's
-  // `readStandaloneHooks` call site. The info surface only consumes the
-  // installable-verdict + parsed value; the `if`-field side-Map is
-  // discarded via `skipIfMap: true`, and the no-op `compileIf` is never
-  // invoked.
-  const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
-  const noopCompileIf = (): null => null;
-  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+  // The manifest-backed call chain that reaches this reader does not thread the
+  // command's `cwd` (only `ScopedLocations`, which does not carry one), so the
+  // process cwd stands in. Inert today -- `parseHooksForInfo` never reads the
+  // context -- but it is the one remaining site that would need the real cwd if
+  // `skipIfMap` were ever dropped. The state-only reader below passes the
+  // command's own `cwd`.
+  const parsed = parseHooksForInfo(raw, process.cwd());
   if (!parsed.ok) {
     return undefined;
   }
@@ -510,6 +528,7 @@ async function readHookSummaryEntries(
 async function readStateOnlyHookEntries(
   slugs: readonly string[],
   locations: ScopedLocations,
+  cwd: string,
 ): Promise<{ readonly entries?: readonly HookSummaryEntry[]; readonly degraded?: ContentReason }> {
   if (slugs.length === 0) {
     return {};
@@ -529,12 +548,7 @@ async function readStateOnlyHookEntries(
       const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
       await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
       const raw = await readFile(hooksJsonPath, "utf8");
-      // Mirrors `readHookSummaryEntries`: the info surface consumes only the
-      // parsed value, so the `if`-field side-Map is discarded via
-      // `skipIfMap: true` and the no-op `compileIf` is never invoked.
-      const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
-      const noopCompileIf = (): null => null;
-      const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
+      const parsed = parseHooksForInfo(raw, cwd);
       if (!parsed.ok) {
         return { degraded: "unparseable" };
       }
@@ -825,7 +839,7 @@ async function buildBlock(
         marketplace,
         scope,
         marketplaceDetails,
-        await buildStateOnlyInstalledRow(pluginName, installed, locations),
+        await buildStateOnlyInstalledRow(pluginName, installed, locations, cwd),
       );
     }
 
@@ -933,8 +947,9 @@ async function buildStateOnlyInstalledRow(
   pluginName: string,
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
+  cwd: string,
 ): Promise<PluginInfoRow> {
-  const { components, degraded } = await composeStateOnlyComponents(record, locations);
+  const { components, degraded } = await composeStateOnlyComponents(record, locations, cwd);
   return {
     status: derivePersistedInstalledStatus(record),
     name: pluginName,
@@ -989,6 +1004,7 @@ function derivePersistedInstalledStatus(
 async function composeStateOnlyComponents(
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
+  cwd: string,
 ): Promise<{
   readonly components: Extract<PluginInfoRow, { componentsResolved: true }>["components"];
   readonly degraded?: ContentReason;
@@ -997,7 +1013,11 @@ async function composeStateOnlyComponents(
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
-  const { entries, degraded } = await readStateOnlyHookEntries(record.resources.hooks, locations);
+  const { entries, degraded } = await readStateOnlyHookEntries(
+    record.resources.hooks,
+    locations,
+    cwd,
+  );
 
   return {
     components: {
