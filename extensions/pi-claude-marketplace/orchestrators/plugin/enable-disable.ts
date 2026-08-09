@@ -187,8 +187,17 @@ async function runEnableBranch(
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
-  recordedVersion: string,
+  installed: InstalledPluginRecord,
 ): Promise<SetEnabledOutcome> {
+  const recordedVersion = installed.version;
+  // ENBL-07 / NFR-7: derive the ledger's gate from the record's OWN
+  // availability discriminant. A record disabled while soft-degraded
+  // (`installable: false`) must re-materialize in place, so it resolves
+  // through `requirePartialInstallable` -- the same partial-capable stance
+  // reinstall takes for backfill (D-68-02). The structurally `unavailable`
+  // arm is still rejected by that gate, and a record that was fully
+  // installable keeps the strict gate.
+  const partial = !installed.compatibility.installable;
   // I4: thread an InstallFailureCapture so a rollback-partial enable failure
   // surfaces the per-phase rollback children in the (failed) row, matching
   // the install/uninstall cascade rendering. The ledger populates this BEFORE
@@ -206,6 +215,7 @@ async function runEnableBranch(
         plugin: opts.plugin,
         pinVersionOverride: recordedVersion,
         allowExistingRecord: true,
+        partial,
       },
       capture,
     );
@@ -508,7 +518,7 @@ export async function setPluginEnabled(
       }
 
       if (enable) {
-        outcome = await runEnableBranch(opts, scope, locations, state, installed.version);
+        outcome = await runEnableBranch(opts, scope, locations, state, installed);
       } else {
         const disableResult = await runDisableBranch(opts, scope, locations, installed);
         outcome = disableResult.outcome;
