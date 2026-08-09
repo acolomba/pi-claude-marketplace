@@ -414,7 +414,12 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
   const seen = new Set<string>();
   for (const drop of dropped) {
     const matcher = drop.kind === "event" ? undefined : drop.matcher;
-    const key = `${drop.event} ${matcher ?? ""}`;
+    // The separator is U+0000 because it cannot occur in an event name or a
+    // matcher, so no `(event, matcher)` pair can collide with another. Written
+    // as an ESCAPE rather than a literal control character: a raw NUL byte in
+    // the source makes `grep` and other line tools classify this whole file as
+    // binary and refuse to print matches.
+    const key = `${drop.event}\u0000${matcher ?? ""}`;
     if (seen.has(key)) {
       continue;
     }
