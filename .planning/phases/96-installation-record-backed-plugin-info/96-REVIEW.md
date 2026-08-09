@@ -1,7 +1,8 @@
 ---
 phase: 96-installation-record-backed-plugin-info
-reviewed: 2026-08-09T00:00:00Z
+reviewed: 2026-08-09T06:40:00Z
 depth: standard
+iteration: 3
 files_reviewed: 8
 files_reviewed_list:
   - docs/output-catalog.md
@@ -13,14 +14,14 @@ files_reviewed_list:
   - tests/orchestrators/plugin/info.test.ts
   - tests/orchestrators/plugin/list-manifest-absent.test.ts
 findings:
-  critical: 1
-  warning: 9
-  info: 0
-  total: 10
+  critical: 0
+  warning: 1
+  info: 1
+  total: 2
 status: issues_found
 ---
 
-# Phase 96: Code Review Report
+# Phase 96: Code Review Report (iteration 3, final)
 
 **Reviewed:** 2026-08-09
 **Depth:** standard
@@ -29,361 +30,138 @@ status: issues_found
 
 ## Summary
 
-Reviewed the diff `5481c5ae^..HEAD` (19 commits) covering the state-only info arm
-(INFO-09..12, BOUND-01/02, D-96-01..04). Verification performed: traced
-`buildBlock`'s new arm split against `persistence/state-io.ts`'s record schema;
-traced `readStateOnlyHookEntries` against the hooks-bridge write site
-(`bridges/hooks/stage.ts::writeHookConfig`, `install.ts` `hooksValue = parsed.value`)
-and against the hydrate read site (`bridges/hooks/event-router.ts`); verified
-`assertPathInside` semantics in `shared/path-safety.ts`; verified the `skipped`
-render arm is byte-identical to `shared/notify.ts:2288`; verified
-`severity: "warning"` really is load-bearing (`cascadeSeverity` defaults absent
-severity to `info`); verified the `emitStateOnlyFetchSkip` call sites against all
-four `getPluginInfo` exit paths; ran ESLint over the changed source and the new
-suite (clean).
+Re-review of `5481c5ae^..HEAD` after the iteration-2 fix pass (six commits:
+`4c563758`, `44b4c684`, `e9882eba`, `63508fec`, `5f4b718c`, `bbd20c78`).
 
-The implementation is careful and the new test suite is unusually strong (whole-message
-byte equality, real negative controls, injected-seam zero-call counters rather than
-control-flow reading). The defects below are real regressions and boundary
-violations the suite does not cover, not stylistic quibbles.
+All six fixes land and none of them regresses behavior. No BLOCKER-class defect
+exists in this phase. What remains is one factual clause the WR-12 doc fix
+itself introduced, plus one catalog-coverage gap for the byte form the WR-13
+test newly pins.
 
-The headline problem is that the phase's own stated invariant -- "the disabled
-carve-out runs BEFORE the state-only arm" -- does not hold for the exact record
-class the new arm was built to describe (`partially-installed`), and the test that
-claims to pin it seeds only the half of the input space where the invariant is true.
+### Fix verification
 
-Deferrals honored: stale `shared/notify.ts` comments, retired RLD-04/D-08 anchors,
-the path-source live-resolver vs persisted-record non-unification, and the
-`pluginRow`/notify closed-set architecture are not reported.
+| ID | Verdict | Evidence |
+| --- | --- | --- |
+| WR-10 note-last ordering | FIXED, both paths agree | `info.ts:2350-2360` — the mixed path now notifies `disabledBlocks` and *then* calls `emitFetchSkip`, matching the all-disabled early return (`:2271-2278`, inventory then note). I walked the third path too: the single-scope arm (`:2295-2296`) notifies the info block then the note, so all three orderings are now subject-then-note. The move places `emitFetchSkip` above the `failedBlocks` loop, which preserves the pre-existing warning-before-error relative order (failures were already last). |
+| WR-11 catalog "only warning" | FIXED | `output-catalog.md:1531` now reads "one of the two `warning`-severity states … the other is `disabled-fetch-skipped` below". Grepped every `warning` occurrence in the catalog (81 hits): no surviving uniqueness claim on this surface, and `:1445`'s two-state routing sentence agrees. |
+| WR-12 module header | FIXED | `info.messaging.ts:36-40` now names both reasons (`not in manifest` / `already disabled`) and explicitly says the disabled arm has no `InfoBlock`. Matches `emitFetchSkip`'s two source arms exactly. |
+| WR-12 catalog per-scope rule | FIXED with a new inaccuracy | `output-catalog.md:1546` restates the trigger as "at least one found scope" and splits the all-disabled and mixed cases. The all-disabled clause and the "inventory shows before this note" clause are both now true. One added clause is not — see WR-15. |
+| WR-13 mixed test pinned | FIXED | `info-manifest-absent.test.ts:1043-1079` replaces `find()` with `assert.equal(notifications.length, 3)` plus whole-message equality at indices 0/1/2 and a severity assertion on each. This now matches the file-header convention and would fail on a duplicated note, a lost info block, or any reordering — including a WR-10 regression. |
+| WR-14 test comment | FIXED | `info-manifest-absent.test.ts:1419-1423` describes the producer-reported `stateOnly: false` discriminant and states that nothing about the rendered row is consulted. `grep -rn isStateOnlyInfoBlock extensions/ tests/ docs/` returns nothing. |
+| IN-01 skip-source list | FIXED, semantics preserved | `info.ts:2132-2199`. The scope-keyed `Map` is replaced by a flat `SkipSource[]` plus `scopes.flatMap`. I checked the output is byte-identical on every reachable input: `partitionDisabledScopes` (`:2075-2082`) puts each found scope in exactly one of `disabled` / `infoFound`, `found` holds at most one tuple per scope (`:2229-2238` iterates `scopes`), and `built` derives only from `infoFound` — so the source list has at most one entry per scope and `flatMap` reproduces the old `Map`-lookup order. The rejected-assert rationale in the commit message is correct: `getPluginInfo` has no classifying catch upstream (`edge/handlers/plugin/info.ts` → `edge/router.ts` are catch-free), so a throw would abort the read-only command. `SkipSource` cannot silently drift from `buildFetchSkipBlock`'s parameter object because the spread at `:2198` would stop type-checking. |
 
-## Critical Issues
+### Independent verification performed
 
-### CR-01: A DISABLED soft-degraded record escapes the disabled carve-out and renders a false `(partially-installed)` row
+- `npm run typecheck` — clean.
+- `npm test` — 3303 pass / 0 fail / 1 skipped (3263 subtests), including the
+  119 tests across `info.test.ts`, `info-manifest-absent.test.ts`,
+  `list-manifest-absent.test.ts` and `catalog-uat.test.ts`.
+- `pre-commit run --files <the four changed source/doc/test files>` — every hook
+  passes (prettier, mdformat, markdownlint-cli2, npm lint, npm format check, npm
+  typecheck). The only failure is the documented structural trufflehog
+  worktree-mode abort described in `CLAUDE.md`, not a content finding.
+- Comment-policy check: `git diff 4c563758^..HEAD` over `extensions/` and
+  `tests/` adds no `Phase N` / `Plan N` / `Wave N` / `Pitfall N` / `milestone
+  vX.Y` reference. The surviving "research Open Question 3" in
+  `info.messaging.ts:19` is pre-existing and untouched by this phase.
+- No debug artifacts introduced: `TODO` / `FIXME` / `XXX` / `HACK` /
+  `console.log` / `debugger` all absent from the four changed files.
+- `list.ts`'s only phase change is comment text (`:892-902`); no behavior.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:907-930` (arm),
-`:1965-1992` (`partitionDisabledScopes`), gate in
-`extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:272-276`
-
-**Issue:**
-`partitionDisabledScopes` routes a scope away from the new state-only arm only when
-`isRecordedButDisabled(record)` is true, and that predicate is
-`record.compatibility.installable && !record.enabled`. It therefore returns **false**
-for a record that is explicitly disabled but whose install persisted
-`compatibility.installable: false` (any soft-degraded / partially-installed plugin,
-e.g. one carrying `unsupported: ["lspServers"]`).
-
-That path is reachable: `enable-disable.ts` places no `installable` guard on the
-disable branch (`:476` computes `isCurrentlyDisabled` with the same predicate, so a
-soft-degraded record never reads as "already disabled"), runs `runDisableBranch`,
-unstages every artifact, and stores `toDisabledRecord(...)` -- `enabled: false` with
-all five `resources.*` arrays emptied (`state-io.ts:117-127`).
-
-`info` on such a record after its manifest entry disappears now produces:
-
-```text
-● mp [user] <no autoupdate>
-  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp}
-```
-
-with `componentsResolved: true` and an empty components map. That is a positive false
-claim on a read-only surface: it asserts the plugin is installed *and* that its
-component inventory was resolved and is genuinely empty, for a plugin whose artifacts
-were deliberately unstaged. Before this diff the same input rendered
-`(failed) {not in manifest}` -- also wrong, but not an installed-ness claim. The arm's
-own doc comment says `componentsResolved: true` is "load-bearing" precisely because
-`false` "would deny components this arm actually knows"; here it affirms an inventory
-the arm does not know.
-
-The root predicate defect predates this phase and affects the untouched manifest-backed
-arm identically, so it is not a new bug in `isRecordedButDisabled`. What is new is that
-this phase (a) added a code path that consumes the predicate to make a stronger claim,
-and (b) shipped a guard test that reads as coverage but is not:
-`tests/orchestrators/plugin/info-manifest-absent.test.ts:841-863` seeds
-`{ version: "1.0.0", disabled: true }`, which the fixture factory turns into
-`unsupported: []` -> `installable: true` (`:193, :199`). Only the arm of the predicate
-that already works is exercised.
-
-**Fix:** Make the state-only arm's status derivation honor the explicit disable marker
-rather than inheriting the `installable`-conditioned predicate. Minimal, local change:
-
-```ts
-// info.ts, in buildBlock arm (b)
-if (installed !== undefined) {
-  // ENBL-02: `enabled: false` is the sole disable marker. `isRecordedButDisabled`
-  // additionally requires `compatibility.installable`, so a soft-degraded record
-  // that was explicitly disabled reaches here; it must NOT claim installed-ness.
-  if (!installed.enabled) {
-    return wrapBlock(
-      marketplace,
-      scope,
-      marketplaceDetails,
-      /* the disabled-inventory shape, or fall through to the `(failed)` arm */
-    );
-  }
-
-  return wrapBlock(/* ... buildStateOnlyInstalledRow ... */);
-}
-```
-
-Preferred alternative (single fix for both arms): widen `partitionDisabledScopes` to
-partition on `installed.enabled === false` directly, leaving `isRecordedButDisabled`
-for the reconcile planner that needs the `installable` conjunct.
-
-Either way, add the missing fixture axis -- a `disabled: true` **plus**
-`unsupported: ["lspServers"]` record -- to
-`tests/orchestrators/plugin/info-manifest-absent.test.ts:841`, so the carve-out claim
-is pinned across the whole predicate, not half of it.
+Recorded deferrals honored — CR-01 (Phase 97 ENBL-05/06), the WR-06 cwd-threading
+half, WR-04 case 2, the `:1445` shorthand-ids consistency item, the stale
+`shared/notify.ts` comments (Phase 98 DOC-08), and the INFO-10 non-unification
+carve-out are not re-reported.
 
 ## Warnings
 
-### WR-01: An NFR-10 containment refusal is folded into `{unreadable}` with no diagnostic, contradicting the file's own stated rule
+### WR-15: The clause the WR-12 catalog fix added is false for the exact mixed case the suite pins
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:517-539`
+**File:** `docs/output-catalog.md:1546`
 
-**Issue:** The `try` block wraps `assertPathInside`, so a `PathContainmentError` /
-`SymlinkRefusedError` raised by a tampered `resources.hooks` slug is caught at `:537`
-and classified by `narrowProbeError(err)` -> `"unreadable"` (the classifier has no
-containment arm, `shared/probe-classifiers.ts:38-66`). Two problems:
+**Issue:** The rewritten `disabled-fetch-skipped` paragraph ends the mixed-run
+case with:
 
-1. It directly contradicts the rule this same file states 500 lines later at
-   `:1030-1037`: *"`derivePluginRootForInfo`'s own throws -- the programmer-bug `Error`
-   ... AND the `PathContainmentError` from `assertPathInside` -- propagate unmasked ...;
-   classifying them as IO probe failures would mis-route a path-escape as a transient
-   disk error."* The new reader does exactly the mis-routing that comment forbids.
-   `PathContainmentError`'s own class doc (`shared/path-safety.ts:5-8`) says it
-   "always propagates loudly".
-2. The read-site precedent it claims to mirror does not swallow silently: the hydrate
-   path logs the violation before returning
-   (`bridges/hooks/event-router.ts:634-641`, `hookDebugLog("hydrate: containment
-   violation ...")`). The new reader emits nothing, so an actual tampering attempt is
-   indistinguishable from a disk hiccup in both the UI and the debug log.
+> If only some of the found scopes are disabled, the note shows beside the info
+> block of each other scope, whose probes do run.
 
-No read occurs, so this is not an exploitable containment hole -- it is an
-observability and consistency defect. `tests/.../info-manifest-absent.test.ts:663`
-and the catalog prose codify the `{unreadable}` outcome, so changing the token is a
-decision; adding the log is not.
+The non-restrictive relative clause asserts that every non-disabled scope in a
+mixed run does run probes. That is true only when the other scope is a
+manifest-declared plugin. It is false for the other reachable shape, which is
+the one the phase's own test exercises: in
+`info-manifest-absent.test.ts:1015-1081` the project scope is disabled and the
+user scope is a **state-only** record whose arm is network-free by signature
+(`buildStateOnlyInstalledRow`, `info.ts:969-993` — the INFO-12 zero-call suite
+at `:1096` exists precisely to prove no probe runs there).
 
-**Fix:** At minimum, emit the diagnostic before folding:
+Two consequences for a catalog reader, on the document this project treats as
+the byte-level user contract:
 
-```ts
-} catch (err) {
-  if (err instanceof PathContainmentError) {
-    hookDebugLog(`info: containment violation for hooks slug "${slug}": ${errorMessage(err)}`);
-  }
+1. The sentence teaches that a `{already disabled}` note beside a live info
+   block implies the other scope was fetched. In the state-only mixed case
+   nothing was fetched in *either* scope.
+2. It omits the fact the sentence exists to introduce — that in that case the
+   other scope contributes its **own** `{not in manifest}` row to the **same**
+   notification. That combined two-row form is what the test pins.
 
-  return { degraded: narrowProbeError(err) };
-}
-```
-
-Alternatively hoist the `assertPathInside` call out of the `try` and give the
-containment arm its own handling, matching `:1030-1037`.
-
-### WR-02: `hookConfigPathFor` is deep-imported past the hooks barrel, which documents it as deliberately private
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:33`
-
-**Issue:** `bridges/hooks/index.ts:25-28` states: *"Private helpers
-(`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT re-exported --
-callers use only the two verbs below."* Every other consumer honors that: `install.ts`,
-`update.ts`, `reinstall.ts`, `uninstall.ts`, `enable-disable.ts`,
-`marketplace/shared.ts`, `reconcile/apply.ts` and `index.ts` all import from
-`../../bridges/hooks/index.ts`. Only the new code reaches into
-`../../bridges/hooks/stage.ts` to pull the private helper. No ESLint zone rule catches
-it (`eslint.config.js:204-212` gates direction, not barrel usage), so the boundary is
-comment-enforced and the comment is now false.
-
-**Fix:** Either re-export the helper from the barrel and update the barrel comment, or
-avoid the dependency entirely -- the expression is one `path.join`:
-
-```ts
-const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
-```
-
-which is exactly what the sibling read site already does
-(`bridges/hooks/event-router.ts:604`). Do not leave a documented-private helper
-consumed across the layer with a stale barrel comment.
-
-### WR-03: `isStateOnlyInfoBlock` infers the producing arm from rendered reason strings, and its tripwire covers only one direction
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2004-2008`
-
-**Issue:** The fetch-skip note is gated on
-`status !== "failed" && reasons.includes("not in manifest")`. The comment concedes the
-hazard ("a future arm stamping the same reason on a non-failed row would silently
-acquire a skip note") and names
-`tests/orchestrators/plugin/info-manifest-absent.test.ts` as the tripwire -- but the
-only negative control there (`:1110`) asserts a *manifest-declared* plugin emits no
-note. That proves the true-negative direction; nothing pins the false-positive
-direction, which is the one the comment worries about. A silently acquired skip note is
-a `warning`-severity notification on a read-only surface.
-
-`buildStateOnlyInstalledRow` is the sole producer of this shape and could return the
-fact instead of hiding it in a string. The block builders already return typed rows;
-threading a discriminator costs one field.
-
-**Fix:** Return the arm identity rather than re-deriving it:
-
-```ts
-// buildBlock arm (b)
-return { ...wrapBlock(...), stateOnly: true } // or a parallel Set<Scope> collected in getPluginInfo
-
-// emitStateOnlyFetchSkip
-const skipBlocks = blocks.filter((b) => stateOnlyScopes.has(b.marketplaceScope));
-```
-
-If the inference is kept, add the missing control: a fixture whose non-failed row
-carries `not in manifest` from some other producer must be impossible-by-construction,
-or the assertion must be that `buildStateOnlyInstalledRow` is the unique producer of
-that reason on a non-failed row.
-
-### WR-04: `--fetch` accounting is incomplete -- the all-disabled path and declared path-source plugins still swallow the flag
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2143-2147`,
-`:2062-2082`
-
-**Issue:** The D-96-04 rationale is explicit: *"A flag that renders identical bytes with
-and without it teaches the user it worked, so the request is accounted for out loud."*
-Two paths still fail that test after this change:
-
-1. **All-disabled early return** (`:2143-2147`): when every found scope holds the
-   disabled marker, `getPluginInfo` emits the disabled cascade and returns before
-   `emitStateOnlyFetchSkip` is ever reached. `--fetch` on a disabled git-source plugin
-   fetches nothing and says nothing -- byte-identical to a bare run. This is the same
-   defect D-96-04 was written to close, on a sibling branch of the same function.
-2. **Declared path-source plugin** (`:2062-2066`): the filter is keyed on the state-only
-   arm, so a manifest-declared `path`-source plugin under `--fetch` also renders
-   byte-identical bytes with no note. `buildInstalledRow` short-circuits at `:1417`
-   before any probe exists.
-
-Case 1 is the stronger one: it is an unconditional early return in the function this
-diff edited, and the fix is one line.
-
-**Fix:** Move the skip accounting to cover the disabled branch too, and decide
-explicitly (in the catalog) whether a non-fetchable *source kind* also warrants the
-note:
-
-```ts
-if (infoFound.length === 0) {
-  const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = disabledBlocks;
-  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
-  emitDisabledFetchSkip(opts, disabledBlocks); // or fold into the cascade as a second row
-  return;
-}
-```
-
-### WR-05: The same marketplace and scope render two different headers in one invocation
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2028-2031`;
-catalog `docs/output-catalog.md` `state-only-fetch-skipped`
-
-**Issue:** A single-scope `info --fetch` on a state-only record now prints, in order:
+**Fix:** Replace the clause with one that does not over-claim and that names the
+combined shape:
 
 ```text
-● mp [user] <no autoupdate>          <- standalone info block (marketplaceDetails required)
-...
-● mp [user]                          <- fetch-skip note (list-arm header, marker omitted when false)
+If only some of the found scopes are disabled, the note shows beside the info
+block of each other scope. Those other scopes fetch only if their plugin has a
+manifest entry; a scope whose record outlived its manifest entry fetches nothing
+either, and adds its own `{not in manifest}` row to this same note.
 ```
 
-`buildFetchSkipBlock` copies `buildDisabledInventoryBlock`'s `details`-only-when-true
-convention, and `renderMpHeader` omits the marker entirely when `details.autoupdate`
-is false (`shared/notify.ts:1691-1692`), while the standalone info header always
-renders `<autoupdate>` / `<no autoupdate>`. The disabled precedent never produced both
-headers for the *same* (marketplace, scope) pair in one run; this one does, and the
-tests at `:1059` and `:1187` bake the divergence in.
+## Info
 
-Given the project's recorded position that row/header grammar is a closed-set catalog
-concern, two spellings of one header in one command's output is worth a decision rather
-than an accident.
+### IN-02: The mixed skip note is the phase's newest byte form and has no catalog fixture, so the catalog-UAT gate never sees it
 
-**Fix:** Either always stamp `details: { autoupdate }` on the skip block so the marker
-tracks the info block, or record the divergence explicitly in the catalog's
-`state-only-fetch-skipped` prose (it currently shows the bare header without comment).
+**File:** `docs/output-catalog.md:1548-1555` (missing state); pinned only at
+`tests/orchestrators/plugin/info-manifest-absent.test.ts:1065-1079`
 
-### WR-06: The hooks-parse preamble is duplicated, and the copy uses `process.cwd()` where the command's `cwd` is in scope
+**Issue:** `catalog-uat.test.ts` drives the renderer for every
+`<!-- catalog-state: STATE -->` annotation and compares it to the next fenced
+block. Both skip states carry a fixture, and both show the **singular** form:
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:521-526`
-(duplicate of `:469-471`)
+```text
+A plugin operation needs attention.
 
-**Issue:** Five lines -- `ifCtx`, `noopCompileIf`, the `parseHooksConfig(..., { skipIfMap:
-true })` call -- are copy-pasted from `readHookSummaryEntries`. Both copies build
-`ifCtx` from `process.cwd()` even though `getPluginInfo` receives an explicit
-`opts.cwd` (used for `locationsFor`) and the hydrate path threads its `cwd` through for
-exactly this purpose (`bridges/hooks/event-router.ts:667-669`). Today the value is
-inert because `skipIfMap: true` returns an empty Map without invoking `compileIf`
-(`domain/components/hooks.ts:448-450`), so this is latent, not live. But the diff
-doubled the number of sites that will be wrong the day `skipIfMap` is dropped, and a
-project-scope `info` invoked from a different cwd would then compile predicates against
-the wrong project root.
-
-**Fix:** Extract the shared preamble and thread the real cwd:
-
-```ts
-function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
-  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  return parseHooksConfig(raw, ifCtx, () => null, { skipIfMap: true });
-}
+● mp [user]
+  ⊘ alpha v1.0.0 (skipped) {already disabled}
 ```
 
-and pass `opts.cwd` down from `buildBlock` (which already computes `locationsFor(scope, cwd)`).
+The mixed run emits a different notification: a **plural** summary
+(`Some plugin operations need attention.`), two marketplace headers, and two
+rows with two different reason tokens. `:1546` now describes that behavior in
+prose ("one notification carries all of the rows in project-first scope order"),
+but shows no example of it, so the byte form is guarded by one unit test and by
+nothing in the catalog gate. This surface already catalogs its fan-out
+compositions separately (`state-only-installed-both-scopes-fan-out`), so the
+omission is a gap in the surface's own convention rather than a deliberate
+carve-out.
 
-### WR-07: `detailsField` construction is duplicated verbatim between the two cascade-block builders
+**Fix:** Add a fenced state under the `disabled-fetch-skipped` section carrying
+the literal the test already asserts:
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2028-2030`
-(duplicate of `:1938-1940`)
+```text
+<!-- catalog-state: mixed-fetch-skipped -->
 
-**Issue:** Identical four-line conditional-spread construction in
-`buildDisabledInventoryBlock` and `buildFetchSkipBlock`, including the identical
-`readonly details?: { autoupdate: boolean }` annotation. The diff took care to extract
-`derivePersistedInstalledStatus` for exactly this reason ("so the two arms cannot
-drift"); the same reasoning applies here and was not applied.
+A plugin operations need attention.   <- use the plural form the renderer emits
 
-**Fix:**
+● mp [project]
+  ⊘ alpha v1.0.0 (skipped) {already disabled}
 
-```ts
-function autoupdateDetails(autoupdate: boolean): { readonly details?: { autoupdate: boolean } } {
-  return autoupdate ? { details: { autoupdate: true } } : {};
-}
+● mp [user]
+  ⊘ alpha v2.0.0 (skipped) {not in manifest}
 ```
 
-### WR-08: `readStateOnlyHookEntries`'s `slugs.length === 0` early return is redundant with the loop it precedes
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:509-511`
-
-**Issue:** With zero slugs the `for` loop body never runs and the function returns
-`{ entries: [] }`. The caller's guard is
-`entries !== undefined && entries.length > 0` (`:981`) and `degraded` is undefined in
-both shapes, so `{}` and `{ entries: [] }` render identically. The branch encodes no
-behavior. The doc comment sells it as the D-96-03 "truthful split" (real negative vs
-marker), but the split is actually carried by `degraded`, not by the presence of
-`entries` -- which makes the comment describe a distinction the types do not enforce
-and the caller does not read.
-
-**Fix:** Drop the branch, or make the distinction real by returning a discriminated
-result (`{ kind: "none" } | { kind: "listed"; entries } | { kind: "degraded"; reason }`)
-so the caller cannot conflate the three cases.
-
-### WR-09: `info.ts` contains a literal NUL byte, which makes standard tooling treat the file as binary
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:417`
-
-**Issue:** `const key = \`${drop.event}\0${matcher ?? ""}\`` embeds a raw `U+0000` in the
-source (byte offset 17823). `grep` classifies the file as binary and refuses to print
-matches, and the review prompt for this phase had to carry a workaround instruction as
-a result. This is **pre-existing and outside the diff** (`projectDroppedHookEntries` is
-untouched), reported only because it obstructs review and tooling on the file this
-phase modifies most heavily.
-
-**Fix:** Use an escape sequence rather than a literal control character:
-
-```ts
-const key = `${drop.event} ${matcher ?? ""}`;
-```
-
-or switch the composite key to a nested `Map`/`Set<string>` keyed on a printable
-separator that cannot occur in an event name.
+(Copy the exact bytes from `info-manifest-absent.test.ts:1068-1078`; the
+`catalog-uat` driver will then hold them.)
 
 ---
 
 _Reviewed: 2026-08-09_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: standard (iteration 3, final)_
