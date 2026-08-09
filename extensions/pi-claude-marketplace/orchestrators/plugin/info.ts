@@ -514,24 +514,32 @@ async function readHookSummaryEntries(
  * hooks hydrate path uses, mirroring the write-site guard. A corrupted record
  * carrying a traversal slug is refused, never opened.
  *
- * D-96-03 truthful split: no recorded slugs returns neither entries nor a
- * marker (a real negative), while recorded slugs that cannot be listed return
- * no entries AND a marker, so silence never reads as verified absence. No
- * failure shape fails the info block -- a throw collapses through the shared
- * `narrowProbeError` ladder and a `{ok:false}` parse to `unparseable`, and the
- * caller stamps that reason while every other fact still renders.
+ * D-96-03 truthful split, carried by the RESULT DISCRIMINANT rather than by the
+ * presence of an `entries` field: `none` is a real negative (the record names no
+ * hooks container), `listed` is a completed read, and `degraded` is a container
+ * that exists but could not be listed. An optional-field shape let the caller
+ * conflate the first and third, which is exactly the case where silence must
+ * NOT read as verified absence. No failure shape fails the info block -- a throw
+ * collapses through the shared `narrowProbeError` ladder and a `{ok:false}`
+ * parse to `unparseable`, and the caller stamps that reason while every other
+ * fact still renders.
  *
  * A failure returns immediately and discards entries collected from earlier
  * slugs: a half-listed hooks block claims a completeness it does not have,
  * which is a worse lie than omitting the block and naming the failure.
  */
+type StateOnlyHookRead =
+  | { readonly kind: "none" }
+  | { readonly kind: "listed"; readonly entries: readonly HookSummaryEntry[] }
+  | { readonly kind: "degraded"; readonly reason: ContentReason };
+
 async function readStateOnlyHookEntries(
   slugs: readonly string[],
   locations: ScopedLocations,
   cwd: string,
-): Promise<{ readonly entries?: readonly HookSummaryEntry[]; readonly degraded?: ContentReason }> {
+): Promise<StateOnlyHookRead> {
   if (slugs.length === 0) {
-    return {};
+    return { kind: "none" };
   }
 
   // D-57-03: the install ledger writes zero or one slug today; iterate
@@ -550,7 +558,7 @@ async function readStateOnlyHookEntries(
       const raw = await readFile(hooksJsonPath, "utf8");
       const parsed = parseHooksForInfo(raw, cwd);
       if (!parsed.ok) {
-        return { degraded: "unparseable" };
+        return { kind: "degraded", reason: "unparseable" };
       }
 
       // No `projectDroppedHookEntries` here: the materialized file IS the
@@ -574,11 +582,11 @@ async function readStateOnlyHookEntries(
         hookDebugLog(`info: containment violation for hooks slug "${slug}": ${errorMessage(err)}`);
       }
 
-      return { degraded: narrowProbeError(err) };
+      return { kind: "degraded", reason: narrowProbeError(err) };
     }
   }
 
-  return { entries };
+  return { kind: "listed", entries };
 }
 
 /**
@@ -998,8 +1006,10 @@ function derivePersistedInstalledStatus(
  * INFO-11 / D-96-03: the `hooks` kind is the one kind the record cannot supply
  * on its own -- it holds a container slug, so the entries are read back from
  * the materialized configuration. That read is the only disk access this arm
- * makes, and its failure surfaces as the optional `degraded` reason the caller
- * appends to the row rather than as a missing block the operator cannot see.
+ * makes, and its failure surfaces as the `degraded` reason the caller appends to
+ * the row rather than as a missing block the operator cannot see. The read
+ * returns a discriminated result, so "no container recorded", "container listed
+ * as empty" and "container unlistable" cannot be conflated here.
  */
 async function composeStateOnlyComponents(
   record: MarketplaceRecord["plugins"][string],
@@ -1013,21 +1023,23 @@ async function composeStateOnlyComponents(
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
-  const { entries, degraded } = await readStateOnlyHookEntries(
-    record.resources.hooks,
-    locations,
-    cwd,
-  );
+  const hooksRead = await readStateOnlyHookEntries(record.resources.hooks, locations, cwd);
 
   return {
     components: {
       ...(agents.length > 0 && { agents }),
       ...(commands.length > 0 && { commands }),
-      ...(entries !== undefined && entries.length > 0 && { hooks: entries }),
+      // A `listed` read with zero entries renders no `hooks:` line and adds no
+      // reason: the materialized configuration exists and genuinely declares
+      // nothing. That is a different fact from `none` (no container recorded)
+      // and from `degraded` (a container that could not be listed), and the
+      // discriminant is what keeps the three from collapsing into each other.
+      ...(hooksRead.kind === "listed" &&
+        hooksRead.entries.length > 0 && { hooks: hooksRead.entries }),
       ...(mcp.length > 0 && { mcp }),
       ...(skills.length > 0 && { skills }),
     },
-    ...(degraded !== undefined && { degraded }),
+    ...(hooksRead.kind === "degraded" && { degraded: hooksRead.reason }),
   };
 }
 
