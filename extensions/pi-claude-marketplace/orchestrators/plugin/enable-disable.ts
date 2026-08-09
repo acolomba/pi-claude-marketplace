@@ -221,6 +221,17 @@ async function runEnableBranch(
   // reinstall takes for backfill (D-68-02). The structurally `unavailable`
   // arm is still rejected by that gate, and a record that was fully
   // installable keeps the strict gate.
+  //
+  // WR-03 / FORCE-05: this is a DELIBERATE departure from the "--partial is an
+  // explicit opt-in" rule, and it applies to the load-time reconcile enable
+  // too (no command typed). The precedent is the autoupdate cascade
+  // (`update.ts` -> `updateSinglePlugin`, SEV-03 / D-69-01), which likewise
+  // takes the partial path automatically: re-materializing the record's own
+  // already-degraded shape is a repair, not a new degradation the user must
+  // consent to, and `requirePartialInstallable` still blocks a structurally
+  // `unavailable` candidate either way. What the precedent also requires is
+  // that the degrade be SIGNALLED -- hence the `(partially-installed)` row
+  // with the dropped kinds on both the standalone and the orchestrated arm.
   const partial = !installed.compatibility.installable;
   // I4: thread an InstallFailureCapture so a rollback-partial enable failure
   // surfaces the per-phase rollback children in the (failed) row, matching
