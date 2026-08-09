@@ -517,24 +517,36 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * both arms (the orchestrated enable outcome carries no staged-name counts --
  * WR-06), so no soft-dep marker fires either way.
  *
- * SEV-03 parity: BOTH arms stamp `info`. The partial shortfall predates the
- * enable -- the record was already degraded when it was disabled -- so the
- * requested enable was fully carried out. Same stance the sibling
- * `plugin-backfilled` partial arm takes for a still-degraded promotion.
+ * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
+ * signals in `install.ts`'s emit order -- `{orphan rewake}`, then the per-kind
+ * `{malformed skill}` / `{malformed command}` tokens, then the dropped kinds --
+ * so the standalone verb and this projection render one brace, not two.
+ *
+ * Severity: `info` for a dropped-kind-only re-enable per SEV-03 (the partial
+ * shortfall predates the enable, so the request was fully carried out -- the
+ * stance the sibling `plugin-backfilled` partial arm takes for a still-degraded
+ * promotion). A MALFORMED component takes the `warning` raise instead: it is a
+ * degrade the ledger just produced, exactly as on the `plugin-installed` arm
+ * above (WARN-01 / D-86-03).
  */
 function enabledRowFromOutcome(
   outcome: PluginEnabledOutcome,
 ): PluginInstalledMessage | PluginPartiallyInstalledMessage {
   const unsupported = outcome.unsupported ?? [];
+  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  const reasons: ContentReason[] = [
+    ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
+    ...malformed,
+  ];
+  const severity = malformed.length > 0 ? "warning" : "info";
   if (unsupported.length > 0) {
     return {
       status: "partially-installed",
       name: outcome.plugin,
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies: [],
-      reasons: narrowUnsupportedKinds(unsupported),
-      // SEV-03: a pre-existing degradation re-materialized as requested -> info.
-      severity: "info",
+      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
+      severity,
       needsReload: true,
     };
   }
@@ -544,9 +556,9 @@ function enabledRowFromOutcome(
     name: outcome.plugin,
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: [],
-    // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
-    // reloads.
-    severity: "info",
+    ...(reasons.length > 0 && { reasons }),
+    // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads.
+    severity,
     needsReload: true,
   };
 }

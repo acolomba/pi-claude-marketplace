@@ -175,6 +175,15 @@ async function seedRealDisabledMarketplace(
      */
     unsupportedKind?: "lspServers";
     /**
+     * WARN-01 / D-86-03: write the plugin's only skill with unparseable
+     * frontmatter (`name: [unterminated` -- a closed `---` block whose inner
+     * YAML throws in `parseFrontmatter`), so the enable branch's ledger
+     * degrades it into a synthesized `disable-model-invocation` block and still
+     * installs it. Orthogonal to `unsupportedKind`: a DEGRADED component is
+     * installed-but-short, a DROPPED one is absent.
+     */
+    malformedSkill?: boolean;
+    /**
      * ENBL-07 / D-97-01: write the marketplace manifest WITHOUT the plugin
      * entry, so the enable path's PI-3 lookup throws before any ledger phase
      * runs. The state record still names the plugin (it was installed against
@@ -198,7 +207,12 @@ async function seedRealDisabledMarketplace(
   );
   const skillDir = path.join(pluginRoot, "skills", "s1");
   await mkdir(skillDir, { recursive: true });
-  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    opts.malformedSkill === true
+      ? "---\nname: [unterminated\n---\n\nBody.\n"
+      : "---\nname: s1\n---\n\nBody.\n",
+  );
   if (opts.unsupportedKind === "lspServers") {
     // The resolver's `lspServers` convention probe: a `.lsp.json` at the
     // plugin root makes the entry resolve `partially-available`.
@@ -629,6 +643,51 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
       "the supported components must be re-staged (state/disk drift otherwise)",
     );
     assert.equal(rec.version, "1.2.3", "ENBL-02 version pin preserved across re-materialization");
+  });
+});
+
+test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseable renders (installed) {malformed skill} at warning severity, matching install of the same plugin", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // The enable branch runs the SAME runInstallLedger over the SAME bridges as
+    // install, so the ledger degrades the skill identically. The row must
+    // report that: an unadorned `(installed)` at info here would say the
+    // re-enable produced a clean materialization while the ledger that produced
+    // it recorded a degrade -- the same row-contradicts-ledger class ENBL-07
+    // closed for DROPPED kinds, left open for degraded ones.
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      malformedSkill: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    // WARN-01: a degraded component is carried out but short of ideal, so the
+    // row takes the same info -> warning raise install.ts::successSeverity
+    // applies. Distinct from the SEV-03 info stance for DROPPED kinds, where
+    // the shortfall predates the enable.
+    assert.equal(notifications[0]!.severity, "warning");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user]",
+        "  ● foo-plugin v1.2.3 (installed) {malformed skill}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
   });
 });
 

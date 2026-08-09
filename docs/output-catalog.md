@@ -2135,6 +2135,34 @@ Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace
 
 ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is empty on both enable arms, so no soft-dep marker fires. Severity `info` (no summary line), matching the `install --partial` success row and the still-degraded `plugin-backfilled` arm per SEV-03: the shortfall predates the enable -- the record was already degraded when it was disabled -- so the requested enable was fully carried out and the dropped kinds ride the `{reasons}` brace rather than the severity channel. Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
 
+### Enable with a degraded component (WARN-01 / D-86-03)
+
+<!-- catalog-state: enable-degraded -->
+
+```text
+A plugin operation needs attention.
+
+● claude-plugins-official [user]
+  ● foo-plugin v1.2.3 (installed) {malformed skill}
+
+/reload to pick up changes
+```
+
+The enable branch runs the SAME install ledger over the SAME bridges as `install`, so a skill or command whose source frontmatter cannot be parsed degrades identically on a re-enable (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(installed)` -- a degraded component is installed-but-short, NOT dropped, which is what `(partially-installed)` means -- and carries one `{malformed skill}` / `{malformed command}` token per kind. Severity `warning` with the summary line, the same raise the install success row takes: unlike the ENBL-07 dropped-kind case above, this degrade is one the enable's own ledger just produced, not a shortfall that predated the enable.
+
+### Enable of a plugin with an orphan rewake handler (SURF-05 / D-63-08)
+
+<!-- catalog-state: enable-orphan-rewake -->
+
+```text
+● claude-plugins-official [user]
+  ● foo-plugin v1.2.3 (installed) {orphan rewake}
+
+/reload to pick up changes
+```
+
+The re-materialized `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on a handler WITHOUT `asyncRewake: true`. One token per plugin regardless of N orphan handlers, exactly as on the install row. Severity `info` -- the config bug names itself in the brace; the enable itself was carried out in full. When more than one signal is present they share ONE brace in the install row's emit order: `{orphan rewake, malformed skill, lsp}`.
+
 ### Idempotent enable
 
 <!-- catalog-state: enable-idempotent -->

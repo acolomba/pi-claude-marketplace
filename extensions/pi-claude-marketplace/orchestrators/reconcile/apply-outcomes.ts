@@ -27,6 +27,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 
 interface OutcomeBase {
   readonly scope: Scope;
@@ -156,23 +157,21 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
 /**
  * Plugin enable success outcome. The setPluginEnabled enable branch re-
  * materializes the plugin via installPlugin's runInstallLedger; the
- * orchestrated outcome is `{ status: "enabled", name, version?, unsupported? }`
- * (no dependencies). The projection emits an `(installed)` plugin row since
- * `enabled` is NOT a member of `PLUGIN_STATUSES` -- the cascade reuses the
- * existing transition token because an enable IS a re-install.
+ * orchestrated outcome is `{ status: "enabled", name, version? }` plus the
+ * ledger's degradation signals (no dependencies). The projection emits an
+ * `(installed)` plugin row since `enabled` is NOT a member of
+ * `PLUGIN_STATUSES` -- the cascade reuses the existing transition token
+ * because an enable IS a re-install.
+ *
+ * ENBL-07 / SURF-05 / WARN-01: the degradation signals are inherited from
+ * `EnableDegradationSignals` rather than re-declared, so the orchestrated
+ * projection cannot drift from the standalone verb -- a signal added to that
+ * shape cannot be silently dropped here. Each field is omitted when empty, so
+ * a clean enable renders byte-identically to before (NREG-01).
  */
-export interface PluginEnabledOutcome extends PluginOutcomeBase {
+export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradationSignals {
   readonly kind: "plugin-enabled";
   readonly version?: string;
-  /**
-   * ENBL-07 / FSTAT-07: the LIVE dropped-component kinds when the enable
-   * re-materialized through the partial gate. Non-empty selects the
-   * `(partially-installed)` projection carrying the kinds through the shared
-   * `narrowUnsupportedKinds` seam -- the same treatment the `plugin-backfilled`
-   * arm gives a still-degraded promotion. Omitted on a clean enable, so that
-   * row renders byte-identically to before (NREG-01).
-   */
-  readonly unsupported?: readonly string[];
 }
 
 /** Plugin enable failure outcome. */

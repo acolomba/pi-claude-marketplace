@@ -3618,6 +3618,61 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WARN-01 / D-86-03: the enable branch runs the same ledger over the same
+    // bridges as install, so a malformed-frontmatter degrade renders the same
+    // `(installed) {malformed skill}` row at the same `warning` raise. Distinct
+    // from `enable-partial`: a DEGRADED component installed short, a DROPPED
+    // one is absent.
+    "enable-degraded": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "foo-plugin",
+                version: "1.2.3",
+                dependencies: [],
+                reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SURF-05 / D-63-08: an orphan companion field is a config bug the ledger
+    // reports; it names itself in the brace without moving the severity
+    // channel, exactly as on the install row.
+    "enable-orphan-rewake": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "info",
+                needsReload: true,
+                name: "foo-plugin",
+                version: "1.2.3",
+                dependencies: [],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "enable-idempotent": {
       pi: piWithBothLoaded(),
       // Idempotent no-op -- benign reason routes to info per UXG-02 / D-28-06.

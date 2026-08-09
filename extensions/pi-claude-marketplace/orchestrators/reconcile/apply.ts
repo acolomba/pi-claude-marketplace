@@ -76,6 +76,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
+import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
@@ -639,12 +640,12 @@ interface PluginToggleAxes {
     plugin: string;
     version?: string;
     /**
-     * ENBL-07 / FSTAT-07: the enable axis' dropped-component kinds. Always
-     * absent on the disable axis (a disable drops nothing -- it unstages
-     * everything), and absent on a clean enable, so the disable arm's outcome
-     * shape is unchanged.
+     * ENBL-07 / SURF-05 / WARN-01: the enable axis' degradation signals.
+     * Always absent on the disable axis (a disable drops nothing and
+     * materializes nothing -- it unstages everything), and absent on a clean
+     * enable, so the disable arm's outcome shape is unchanged.
      */
-    unsupported?: readonly string[];
+    degradation?: EnableDegradationSignals;
   }) => PerEntryOutcome;
   readonly buildFailed: (info: {
     scope: Scope;
@@ -685,18 +686,25 @@ async function applyPluginToggles(
       });
 
       if (result.status === successStatus) {
-        // ENBL-07 / FSTAT-07: only the enable arm carries dropped-component
-        // kinds (a disable unstages everything, so it drops nothing). The
+        // ENBL-07 / SURF-05 / WARN-01: only the enable arm carries degradation
+        // signals (a disable materializes nothing, so it degrades nothing). The
         // literal comparison is what narrows the union -- `successStatus` is a
         // variable, so the guard above does not narrow on its own.
-        const unsupported = result.status === "enabled" ? (result.unsupported ?? []) : [];
+        const degradation: EnableDegradationSignals =
+          result.status === "enabled"
+            ? {
+                ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
+                ...(result.orphanRewake === true && { orphanRewake: true }),
+                ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
+              }
+            : {};
         outcomes.push(
           axes.buildSuccess({
             scope: op.scope,
             marketplace: op.marketplace,
             plugin: op.plugin,
             ...(result.version !== undefined && { version: result.version }),
-            ...(unsupported.length > 0 && { unsupported }),
+            ...(Object.keys(degradation).length > 0 && { degradation }),
           }),
         );
       } else if (result.status === "failed") {
@@ -810,12 +818,25 @@ async function applyPlan(
   await applyPluginInstalls(opts, plan, outcomes);
   await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, {
     enable: true,
-    buildSuccess: (info) => ({ kind: "plugin-enabled", ...info }),
+    // The signals ride `PluginEnabledOutcome` FLAT (it extends
+    // `EnableDegradationSignals`), so the nested carrier is spread here.
+    buildSuccess: ({ degradation, ...info }) => ({
+      kind: "plugin-enabled",
+      ...info,
+      ...degradation,
+    }),
     buildFailed: (info) => ({ kind: "plugin-enable-failed", ...info }),
   });
   await applyPluginToggles(opts, plan.pluginsToDisable, outcomes, {
     enable: false,
-    buildSuccess: (info) => ({ kind: "plugin-disabled", ...info }),
+    // `degradation` is destructured off and DISCARDED: a disable materializes
+    // nothing, so it has no degradation signals to report. Object spread
+    // bypasses the excess-property check, so dropping the field explicitly is
+    // what keeps a stray signal off the disabled outcome.
+    buildSuccess: ({ degradation: _degradation, ...info }) => ({
+      kind: "plugin-disabled",
+      ...info,
+    }),
     buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
   });
   applySourceMismatches(plan, outcomes);

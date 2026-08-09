@@ -59,6 +59,7 @@ import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -83,6 +84,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -99,6 +101,44 @@ export type EnableDisablePluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
+ * The degradation signals a re-enable's ledger run produces, carried together
+ * on every enable-success outcome so the enable row can name the same facts the
+ * `install` success row names for the SAME `runInstallLedger` invocation over
+ * the SAME bridges. `install.ts` composes exactly these three off its
+ * `installCtx`; an enable that carried none of them renders byte-identically to
+ * before (NREG-01), because each field is omitted when empty.
+ *
+ * Consumed by `freshEnableRow` (standalone verb) and `enabledRowFromOutcome`
+ * (reconcile projection) -- the two row composers must agree, so they read one
+ * shape rather than two hand-synchronized field lists.
+ */
+export interface EnableDegradationSignals {
+  /**
+   * ENBL-07 / FSTAT-07 / D-66-04: the LIVE dropped-component kinds when the
+   * re-enable went through the partial gate (the resolver's
+   * `partially-available` arm). Non-empty selects the `(partially-installed)`
+   * row over `(installed)`, so the enable row agrees with the record the ledger
+   * just wrote -- and therefore with the `list` / `info` row rendered next.
+   */
+  readonly unsupported?: readonly string[];
+  /**
+   * SURF-05 / D-63-08: a hook handler declared `rewakeMessage` /
+   * `rewakeSummary` without `asyncRewake: true`. One `{orphan rewake}` token
+   * per plugin regardless of N orphan handlers, exactly as on the install row.
+   */
+  readonly orphanRewake?: boolean;
+  /**
+   * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
+   * be parsed and installed in degraded form. Each kind contributes one
+   * `{malformed skill}` / `{malformed command}` token AND raises the row from
+   * `info` to `warning` -- the same raise `install.ts::successSeverity` applies,
+   * because a degraded component is carried out but short of ideal whichever
+   * verb materialized it.
+   */
+  readonly degradedKinds?: readonly DegradeKind[];
+}
+
+/**
  * RECON-03: discriminated outcome returned by `setPluginEnabled` in
  * orchestrated mode.
  *
@@ -113,18 +153,11 @@ export type EnableDisablePluginNotifications =
  *   structural `"not added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
-  | {
+  | ({
       readonly status: "enabled";
       readonly name: string;
       readonly version?: string;
-      /**
-       * ENBL-07 / FSTAT-07: the dropped-component kinds when the re-enable
-       * went through the partial gate. Present only when non-empty, so the
-       * orchestrated caller can pick `(partially-installed)` over
-       * `(installed)` for exactly the records `list` also renders degraded.
-       */
-      readonly unsupported?: readonly string[];
-    }
+    } & EnableDegradationSignals)
   | { readonly status: "disabled"; readonly name: string; readonly version?: string }
   | {
       readonly status: "skipped";
@@ -170,19 +203,10 @@ export interface EnableDisablePluginOptions {
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
   | { kind: "idempotent" }
-  | {
+  | ({
       kind: "fresh";
       version?: string;
-      /**
-       * ENBL-07 / FSTAT-07: the LIVE dropped-component kinds of the enable
-       * branch's re-materialization (the resolver's `partially-available`
-       * arm). Empty on a clean re-enable and on every disable. The row
-       * composer reads it to pick `(partially-installed)` over `(installed)`,
-       * so the enable row agrees with the record the ledger just wrote -- and
-       * therefore with the `list` / `info` row rendered for it next.
-       */
-      unsupported?: readonly string[];
-    }
+    } & EnableDegradationSignals)
   | { kind: "invalid-config" }
   | { kind: "not-recorded" }
   | {
@@ -265,21 +289,30 @@ async function runEnableBranch(
       };
     }
 
-    // ENBL-07 / FSTAT-07 / D-66-04: thread the LIVE resolved state out of the
-    // ledger. `partially-available` means the re-materialization dropped one
-    // or more component kinds, and the record the state phase just wrote
-    // carries `installable: false` plus that same non-empty `unsupported` kind
-    // list -- so a `(installed)` row here would contradict the
-    // `(partially-installed)` row `list` renders for the record one command
-    // later. This reads the ledger's OWN resolution, never the persisted
-    // `compatibility` block the enable gate was derived from.
-    const resolved = result.installCtx.resolved;
+    // ENBL-07 / FSTAT-07 / D-66-04 / SURF-05 / WARN-01: thread the LIVE
+    // degradation signals out of the ledger. The enable branch runs the SAME
+    // `runInstallLedger` over the SAME bridges as `install`, so all three
+    // signals `install.ts` composes off its `installCtx` are reachable here and
+    // all three are carried -- a row that named only one of them would
+    // contradict the ledger that produced it just as surely as an `(installed)`
+    // row over a `partially-available` resolution does.
+    //
+    // `unsupported` reads the ledger's OWN resolution, never the persisted
+    // `compatibility` block the enable gate was derived from: the record the
+    // state phase just wrote carries `installable: false` plus that same
+    // non-empty kind list, so a bare `(installed)` row here would contradict
+    // the `(partially-installed)` row `list` renders one command later.
+    const ledgerCtx = result.installCtx;
+    const resolved = ledgerCtx.resolved;
+    const degradedKinds = Array.from(new Set(ledgerCtx.frontmatterDegradations.map((d) => d.kind)));
     return {
       kind: "fresh",
       version: recordedVersion,
       ...(resolved.state === "partially-available" && {
         unsupported: [...resolved.unsupported],
       }),
+      ...(resolved.orphanRewake === true && { orphanRewake: true }),
+      ...(degradedKinds.length > 0 && { degradedKinds }),
     };
   } catch (err) {
     return {
@@ -870,13 +903,16 @@ function outcomeToTypedResult(args: {
             status: "enabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
-            // ENBL-07 / FSTAT-07: propagate the LIVE dropped-component kinds so
-            // the orchestrated (reconcile) caller can render the same
-            // `(partially-installed)` row the standalone verb renders. Omitted
-            // on a clean re-enable, so a fully-supported enable folds into the
-            // cascade byte-identically (NREG-01).
+            // ENBL-07 / SURF-05 / WARN-01: propagate the LIVE degradation
+            // signals so the orchestrated (reconcile) caller renders the same
+            // row the standalone verb renders. Each is omitted when empty, so a
+            // clean re-enable folds into the cascade byte-identically
+            // (NREG-01).
             ...(outcome.unsupported !== undefined &&
               outcome.unsupported.length > 0 && { unsupported: outcome.unsupported }),
+            ...(outcome.orphanRewake === true && { orphanRewake: true }),
+            ...(outcome.degradedKinds !== undefined &&
+              outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
           }
         : {
             status: "disabled",
@@ -945,18 +981,32 @@ function dispatchOutcome(args: {
  * ledger just wrote. A clean re-enable keeps the `(installed)` row byte-for-byte
  * (NREG-01).
  *
- * SEV-03 parity: BOTH arms stamp `info`. The partial shortfall predates the
- * enable -- the record was already degraded when it was disabled -- so the
- * requested enable was fully carried out and the desired state was reached.
- * Same stance as the `install --partial` success row and the still-degraded
- * `plugin-backfilled` arm; the dropped kinds are named in the `{reasons}`
- * brace, which is where that detail belongs.
+ * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
+ * signals in `install.ts`'s emit order -- `{orphan rewake}` first, then the
+ * per-kind `{malformed skill}` / `{malformed command}` tokens, then the dropped
+ * kinds -- so the brace stays byte-comparable across the two verbs that share
+ * the ledger.
+ *
+ * Severity: `info` for a dropped-kind-only re-enable per SEV-03 -- the partial
+ * shortfall predates the enable (the record was already degraded when it was
+ * disabled), so the requested enable was fully carried out and the desired
+ * state was reached, the same stance the `install --partial` success row and
+ * the still-degraded `plugin-backfilled` arm take. A MALFORMED component is a
+ * different fact: it is a degrade the ledger just produced, not a pre-existing
+ * shortfall, so it takes the same `warning` raise `install.ts::successSeverity`
+ * applies (WARN-01 / D-86-03) on whichever verb materialized it.
  */
 function freshEnableRow(
   plugin: string,
-  outcome: { readonly version?: string; readonly unsupported?: readonly string[] },
+  outcome: EnableDegradationSignals & { version?: string },
 ): EnableMsg {
   const unsupported = outcome.unsupported ?? [];
+  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  const reasons: ContentReason[] = [
+    ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
+    ...malformed,
+  ];
+  const severity = malformed.length > 0 ? "warning" : "info";
   if (unsupported.length > 0) {
     return {
       status: "partially-installed",
@@ -966,9 +1016,8 @@ function freshEnableRow(
       // never fire on either enable arm.
       dependencies: [],
       ...(outcome.version !== undefined && { version: outcome.version }),
-      reasons: narrowUnsupportedKinds(unsupported),
-      // SEV-03: a pre-existing degradation re-materialized as requested -> info.
-      severity: "info",
+      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
+      severity,
       needsReload: true,
     };
   }
@@ -978,9 +1027,10 @@ function freshEnableRow(
     name: plugin,
     dependencies: [],
     ...(outcome.version !== undefined && { version: outcome.version }),
-    // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
-    // reloads Pi resources.
-    severity: "info",
+    ...(reasons.length > 0 && { reasons }),
+    // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads Pi
+    // resources.
+    severity,
     needsReload: true,
   };
 }
