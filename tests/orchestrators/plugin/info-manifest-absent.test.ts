@@ -1417,8 +1417,10 @@ test("D-96-04: `info --fetch` on a manifest-DECLARED plugin emits NO skip note",
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     // The note is keyed on the ARM that fired, not on the flag alone. A
-    // declared plugin runs the manifest-backed arm, whose row can never carry
-    // `not in manifest` -- which is exactly what `isStateOnlyInfoBlock` reads.
+    // declared plugin runs the manifest-backed arm, which reports
+    // `stateOnly: false` on its `InfoBlock` -- the discriminant `emitFetchSkip`
+    // reads. Nothing about the rendered row is consulted, so the keying cannot
+    // drift with the reason tokens the row happens to carry.
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
