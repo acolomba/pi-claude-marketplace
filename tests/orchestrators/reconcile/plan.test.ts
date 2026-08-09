@@ -299,18 +299,22 @@ test("Plugin cell (declared+enabled-true, recorded, non-empty resources): plugin
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Build a state with a recorded plugin whose four resources arrays are all
- * empty -- the implicit "currently disabled" marker (A1). The
- * statePhase in `orchestrators/plugin/install.ts:617-664` only writes empty
- * arrays through the disable path; an installable plugin always populates
- * at least one component (the resolver's `requireInstallable` gate rules
- * out the zero-component degenerate).
+ * Build a state with a recorded plugin carrying the disabled marker -- the
+ * explicit `enabled: false` boolean (ENBL-05) -- and every `resources.*` array
+ * emptied, which is what the disable path leaves behind.
+ *
+ * `opts.unsupported` seeds the soft-degraded axis: a non-empty list derives
+ * `installable: false`, giving the disabled PARTIAL shape. The two axes are
+ * orthogonal, so the default (an empty list) is the canonical fully-available
+ * disabled record.
  */
 function stateWithDisabledRecord(
   mpName: string,
   rawSource: string,
   plugin: string,
+  opts: { readonly unsupported?: readonly string[] } = {},
 ): ExtensionState {
+  const unsupported = opts.unsupported ?? [];
   return {
     schemaVersion: 2,
     marketplaces: {
@@ -325,7 +329,12 @@ function stateWithDisabledRecord(
           [plugin]: {
             version: "1.0.0",
             resolvedSource: "/abs/whatever",
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            compatibility: {
+              installable: unsupported.length === 0,
+              notes: [],
+              supported: [],
+              unsupported: [...unsupported],
+            },
             resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             enabled: false,
             installedAt: "2025-01-01T00:00:00.000Z",
@@ -463,6 +472,60 @@ test("ENBL-02 (e): back-to-back planReconcile against same inputs returns deepEq
   // accidental same-empty-shape false positive).
   assert.equal(plan1.pluginsToEnable.length, 1);
   assert.equal(plan2.pluginsToEnable.length, 1);
+});
+
+test("ENBL-08: two identical planReconcile passes over a disabled PARTIAL both return the empty plan (fixed point)", () => {
+  // The record is the shape ENBL-05 made recognizable: soft-degraded
+  // (`installable: false` with an unsupported kind) AND explicitly disabled,
+  // every `resources.*` array empty. The config declares it disabled, so the
+  // declared-disabled branch must read it as converged. Re-planning the disable
+  // on every load would re-run the whole unstage cascade forever and the
+  // reconcile would never quiesce. The planner is pure (DIFF-01), so two
+  // identical calls prove the fixed point without an apply step.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr", {
+    unsupported: ["lspServers"],
+  });
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
+    {},
+  );
+
+  const pass1 = planReconcile(merged, state, "project");
+  const pass2 = planReconcile(merged, state, "project");
+  assert.deepEqual(pass1, emptyReconcilePlan("project"));
+  assert.deepEqual(pass2, emptyReconcilePlan("project"));
+
+  // Mutual exclusion asserted by identifier rather than left to the empty-plan
+  // equality alone: a later change that populated BOTH buckets must not be able
+  // to pass by deep-equalling some other empty-ish shape.
+  for (const plan of [pass1, pass2]) {
+    assert.ok(
+      !plan.pluginsToDisable.some((p) => p.plugin === "cr" && p.marketplace === "mp"),
+      "cr@mp must not appear in the disable bucket",
+    );
+    assert.ok(
+      !plan.pluginsToEnable.some((p) => p.plugin === "cr" && p.marketplace === "mp"),
+      "cr@mp must not appear in the enable bucket",
+    );
+  }
+});
+
+test("ENBL-05 / ENBL-08 counter-case: a config-declared-ENABLED disabled PARTIAL reaches the enable bucket", () => {
+  // The same record under the opposite declaration. This is what makes the
+  // fixed point above a property of the disabled DECLARATION rather than of a
+  // record the planner simply cannot see: before the ENBL-05 collapse the
+  // enable bucket was unreachable for a partially-installed plugin.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr", {
+    unsupported: ["lspServers"],
+  });
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+
+  const plan = planReconcile(merged, state, "project");
+  assert.deepEqual(plan.pluginsToEnable, [{ scope: "project", plugin: "cr", marketplace: "mp" }]);
+  assert.equal(plan.pluginsToDisable.length, 0);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
