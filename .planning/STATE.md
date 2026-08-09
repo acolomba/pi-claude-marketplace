@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 97
 current_phase_name: Disabled-state classification repair
 status: planning
-stopped_at: Completed 96-04-PLAN.md
-last_updated: "2026-08-09T07:01:50.986Z"
+stopped_at: Phase 97 context gathered
+last_updated: "2026-08-09T09:52:32.564Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 96 plan 04 executed; D-96-02 folded-row manifest authority pinned and the open question closed in code, tests and the output catalog
 progress:
@@ -230,6 +230,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-09T04:00:21.743Z
-**Stopped at:** Completed 96-04-PLAN.md
-**Resume file:** None
+**Last session:** 2026-08-09T09:52:32.531Z
+**Stopped at:** Phase 97 context gathered
+**Resume file:** .planning/phases/97-disabled-state-classification-repair/97-CONTEXT.md
