@@ -197,7 +197,24 @@ Plans:
 3. Missing, unreadable, malformed, and invalid manifests retain their current read-failure results, while a name absent from both a valid manifest and installation state remains `(failed) {not in manifest}`. (BOUND-01, BOUND-02)
 4. Bare info and `info --fetch` perform no network operation for the state-only fallback, asserted against injected clone and auth seams with a zero-call check rather than inferred from the control flow. (INFO-12)
 
-**Plans:** 0 plans
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 96-01-PLAN.md — pin the manifest-read-failure boundary with a record present, then split `buildBlock`'s not-in-manifest arm and render the installation record end to end with its four name-list component kinds (INFO-09, INFO-10, INFO-11, BOUND-01, BOUND-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 96-02-PLAN.md — reconstruct hook entries from the materialized configuration behind the containment guard, with the truthful degradation split (INFO-11)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 96-03-PLAN.md — assert network abstinence against injected clone and auth seams, and report a requested `--fetch` as skipped instead of swallowing it (INFO-09, INFO-12)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 96-04-PLAN.md — ratify the folded-row manifest authority with regression pins and close the open question in the source comments and the output catalog (BOUND-01, BOUND-02)
 
 ### Phase 97: Disabled-state classification repair
 
