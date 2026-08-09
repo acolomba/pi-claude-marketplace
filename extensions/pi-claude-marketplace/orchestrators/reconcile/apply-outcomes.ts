@@ -156,14 +156,23 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
 /**
  * Plugin enable success outcome. The setPluginEnabled enable branch re-
  * materializes the plugin via installPlugin's runInstallLedger; the
- * orchestrated outcome is `{ status: "enabled", name, version? }` (no
- * dependencies). The projection emits an `(installed)` plugin row since
+ * orchestrated outcome is `{ status: "enabled", name, version?, unsupported? }`
+ * (no dependencies). The projection emits an `(installed)` plugin row since
  * `enabled` is NOT a member of `PLUGIN_STATUSES` -- the cascade reuses the
  * existing transition token because an enable IS a re-install.
  */
 export interface PluginEnabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-enabled";
   readonly version?: string;
+  /**
+   * ENBL-07 / FSTAT-07: the LIVE dropped-component kinds when the enable
+   * re-materialized through the partial gate. Non-empty selects the
+   * `(partially-installed)` projection carrying the kinds through the shared
+   * `narrowUnsupportedKinds` seam -- the same treatment the `plugin-backfilled`
+   * arm gives a still-degraded promotion. Omitted on a clean enable, so that
+   * row renders byte-identically to before (NREG-01).
+   */
+  readonly unsupported?: readonly string[];
 }
 
 /** Plugin enable failure outcome. */

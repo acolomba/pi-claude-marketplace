@@ -464,6 +464,52 @@ test("SEV-05: a partial backfill (installable:false) projects to a (partially-in
   assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
 });
 
+test("ENBL-07: a reconcile enable that dropped component kinds projects to a (partially-installed) row with the dropped-kinds brace, severity warning", () => {
+  // The load-time reconcile drives setPluginEnabled for every config-declared-
+  // enabled disabled record, and ENBL-07's widened gate re-materializes a
+  // soft-degraded record with kinds dropped. FSTAT-07 / D-66-04: the row follows
+  // the resolution, so it must NOT claim the clean (installed) token the very
+  // next `list` contradicts. SEV-01: the reconcile enable carries no --partial
+  // opt-in, so the degraded arm is carried out but short -> warning.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-enabled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    unsupported: ["lspServers"],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  assert.equal(block.plugins.length, 1);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "partially-installed");
+  assert.equal(row.name, "cr");
+  assert.equal(row.severity, "warning");
+  assert.equal(row.needsReload, true);
+  assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
+});
+
+test("ENBL-07: a clean reconcile enable (no dropped kinds) keeps the (installed) row, severity info -- byte-identical to before", () => {
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-enabled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const block = msg.marketplaces[0];
+  assert.ok(block);
+  const row = block.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "info");
+  assert.equal(row.needsReload, true);
+});
+
 test("SEV-05: a backfill with no dropped kinds (degenerate empty set) renders a brace-less (partially-installed) row -- byte-identical to today", () => {
   // The no-dropped-kinds force-installed backfill renders brace-less: the shared
   // narrower returns [], so composeReasons emits no brace (D-69-04 -- rows

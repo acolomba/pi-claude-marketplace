@@ -2122,6 +2122,21 @@ D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from t
 
 Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace header is the bare always-marketplace-header form (`mp.status === undefined`, no details -- byte-identical to the install command's header; the former `(added)` token leaked from reusing the install-cascade header shape and was dropped per UAT-04); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
 
+### Partial enable -- component kinds dropped (ENBL-07)
+
+<!-- catalog-state: enable-partial -->
+
+```text
+A plugin operation needs attention.
+
+● claude-plugins-official [user]
+  ◉ foo-plugin v1.2.3 (partially-installed) {lsp}
+
+/reload to pick up changes
+```
+
+ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is empty on both enable arms, so no soft-dep marker fires. Severity `warning`, unlike the `install --partial` success row: `enable` has no `--partial` flag and derives the widened gate from the record itself, so a dropped-kind enable is carried out but short of what the user asked for (SEV-01). Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
+
 ### Idempotent enable
 
 <!-- catalog-state: enable-idempotent -->

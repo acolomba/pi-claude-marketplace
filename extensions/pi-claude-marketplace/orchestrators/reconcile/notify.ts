@@ -48,7 +48,11 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
-import type { PerEntryOutcome, PluginInstalledOutcome } from "./apply-outcomes.ts";
+import type {
+  PerEntryOutcome,
+  PluginEnabledOutcome,
+  PluginInstalledOutcome,
+} from "./apply-outcomes.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
@@ -59,6 +63,7 @@ import type {
   MarketplaceStatus,
   PluginInstalledMessage,
   PluginNotificationMessage,
+  PluginPartiallyInstalledMessage,
   Reason,
   ReconcileAppliedCascadeMessage,
 } from "../../shared/notify.ts";
@@ -499,6 +504,47 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
   };
 }
 
+/**
+ * Build the row for a realized reconcile enable.
+ *
+ * ENBL-07 / FSTAT-07 / D-66-04: a re-enable admitted through the partial gate
+ * re-materializes with one or more component kinds DROPPED, and the record it
+ * writes carries `installable: false` plus that same `unsupported` kind list -- so
+ * the clean `(installed)` row would contradict the `(partially-installed)` row
+ * `list` renders for the record immediately afterwards. The kinds compose
+ * through the shared `narrowUnsupportedKinds` seam, exactly as on the
+ * `plugin-installed` / `plugin-backfilled` arms. `dependencies` stays empty on
+ * both arms (the orchestrated enable outcome carries no staged-name counts --
+ * WR-06), so no soft-dep marker fires either way.
+ */
+function enabledRowFromOutcome(
+  outcome: PluginEnabledOutcome,
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  const unsupported = outcome.unsupported ?? [];
+  if (unsupported.length > 0) {
+    return {
+      status: "partially-installed",
+      name: outcome.plugin,
+      ...(outcome.version !== undefined && { version: outcome.version }),
+      dependencies: [],
+      reasons: narrowUnsupportedKinds(unsupported),
+      severity: "warning",
+      needsReload: true,
+    };
+  }
+
+  return {
+    status: "installed",
+    name: outcome.plugin,
+    ...(outcome.version !== undefined && { version: outcome.version }),
+    dependencies: [],
+    // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
+    // reloads.
+    severity: "info",
+    needsReload: true,
+  };
+}
+
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
@@ -584,16 +630,15 @@ function applyOutcomeToBlock(
       // empty dependencies array suppresses soft-dep markers, which is the
       // safe default for a re-materialization that wouldn't change the
       // companion-extension surface.
-      block.plugins.push({
-        status: "installed",
-        name: outcome.plugin,
-        ...(outcome.version !== undefined && { version: outcome.version }),
-        dependencies: [],
-        // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
-        // reloads.
-        severity: "info",
-        needsReload: true,
-      });
+      //
+      // ENBL-07 / FSTAT-07 / D-66-04: a re-enable that went through the partial
+      // gate dropped component kinds, so it takes the `(partially-installed)`
+      // projection instead -- the SAME split the standalone enable verb and the
+      // `plugin-backfilled` arm make, and the row the very next `list` renders
+      // for that record. SEV-01: the enable verb has no `--partial` opt-in, so
+      // the degraded arm is "carried out but short of what was asked for" and
+      // stamps `warning` (a clean re-enable stays `info`).
+      block.plugins.push(enabledRowFromOutcome(outcome));
       return;
     case "plugin-disabled":
       block.plugins.push({

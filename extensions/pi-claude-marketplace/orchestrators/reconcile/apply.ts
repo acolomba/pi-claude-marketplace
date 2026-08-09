@@ -637,6 +637,13 @@ interface PluginToggleAxes {
     marketplace: string;
     plugin: string;
     version?: string;
+    /**
+     * ENBL-07 / FSTAT-07: the enable axis' dropped-component kinds. Always
+     * absent on the disable axis (a disable drops nothing -- it unstages
+     * everything), and absent on a clean enable, so the disable arm's outcome
+     * shape is unchanged.
+     */
+    unsupported?: readonly string[];
   }) => PerEntryOutcome;
   readonly buildFailed: (info: {
     scope: Scope;
@@ -677,12 +684,18 @@ async function applyPluginToggles(
       });
 
       if (result.status === successStatus) {
+        // ENBL-07 / FSTAT-07: only the enable arm carries dropped-component
+        // kinds (a disable unstages everything, so it drops nothing). The
+        // literal comparison is what narrows the union -- `successStatus` is a
+        // variable, so the guard above does not narrow on its own.
+        const unsupported = result.status === "enabled" ? (result.unsupported ?? []) : [];
         outcomes.push(
           axes.buildSuccess({
             scope: op.scope,
             marketplace: op.marketplace,
             plugin: op.plugin,
             ...(result.version !== undefined && { version: result.version }),
+            ...(unsupported.length > 0 && { unsupported }),
           }),
         );
       } else if (result.status === "failed") {

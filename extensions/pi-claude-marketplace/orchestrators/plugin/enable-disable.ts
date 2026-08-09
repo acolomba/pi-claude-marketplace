@@ -60,6 +60,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
@@ -112,7 +113,18 @@ export type EnableDisablePluginNotifications =
  *   structural `"not added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
-  | { readonly status: "enabled"; readonly name: string; readonly version?: string }
+  | {
+      readonly status: "enabled";
+      readonly name: string;
+      readonly version?: string;
+      /**
+       * ENBL-07 / FSTAT-07: the dropped-component kinds when the re-enable
+       * went through the partial gate. Present only when non-empty, so the
+       * orchestrated caller can pick `(partially-installed)` over
+       * `(installed)` for exactly the records `list` also renders degraded.
+       */
+      readonly unsupported?: readonly string[];
+    }
   | { readonly status: "disabled"; readonly name: string; readonly version?: string }
   | {
       readonly status: "skipped";
@@ -158,7 +170,19 @@ export interface EnableDisablePluginOptions {
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
   | { kind: "idempotent" }
-  | { kind: "fresh"; version?: string }
+  | {
+      kind: "fresh";
+      version?: string;
+      /**
+       * ENBL-07 / FSTAT-07: the LIVE dropped-component kinds of the enable
+       * branch's re-materialization (the resolver's `partially-available`
+       * arm). Empty on a clean re-enable and on every disable. The row
+       * composer reads it to pick `(partially-installed)` over `(installed)`,
+       * so the enable row agrees with the record the ledger just wrote -- and
+       * therefore with the `list` / `info` row rendered for it next.
+       */
+      unsupported?: readonly string[];
+    }
   | { kind: "invalid-config" }
   | { kind: "not-recorded" }
   | {
@@ -230,7 +254,22 @@ async function runEnableBranch(
       };
     }
 
-    return { kind: "fresh", version: recordedVersion };
+    // ENBL-07 / FSTAT-07 / D-66-04: thread the LIVE resolved state out of the
+    // ledger. `partially-available` means the re-materialization dropped one
+    // or more component kinds, and the record the state phase just wrote
+    // carries `installable: false` plus that same non-empty `unsupported` kind
+    // list -- so a `(installed)` row here would contradict the
+    // `(partially-installed)` row `list` renders for the record one command
+    // later. This reads the ledger's OWN resolution, never the persisted
+    // `compatibility` block the enable gate was derived from.
+    const resolved = result.installCtx.resolved;
+    return {
+      kind: "fresh",
+      version: recordedVersion,
+      ...(resolved.state === "partially-available" && {
+        unsupported: [...resolved.unsupported],
+      }),
+    };
   } catch (err) {
     return {
       kind: "enable-failed",
@@ -820,6 +859,13 @@ function outcomeToTypedResult(args: {
             status: "enabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
+            // ENBL-07 / FSTAT-07: propagate the LIVE dropped-component kinds so
+            // the orchestrated (reconcile) caller can render the same
+            // `(partially-installed)` row the standalone verb renders. Omitted
+            // on a clean re-enable, so a fully-supported enable folds into the
+            // cascade byte-identically (NREG-01).
+            ...(outcome.unsupported !== undefined &&
+              outcome.unsupported.length > 0 && { unsupported: outcome.unsupported }),
           }
         : {
             status: "disabled",
@@ -852,16 +898,18 @@ function dispatchOutcome(args: {
   // artifacts were unstaged -- SNM-33), so the `/reload to pick up changes`
   // trailer fires via the RLD-02 OR-reduce of the per-row stamps. The disable
   // verb's non-fresh arms (idempotent / failed / not-recorded) stamp
-  // `needsReload: false`; the enable verb's `(installed)` fresh row stamps
-  // `true`.
+  // `needsReload: false`; the enable verb's `(installed)` /
+  // `(partially-installed)` fresh rows stamp `true`.
   //
   // D-04 / D-10: the verb selects its OWN CommandContext -- ENABLE_CONTEXT
-  // renders the fresh `(installed)` row, DISABLE_CONTEXT the fresh
-  // `(disabled)` row; both share byte-identical `skipped` / `failed` arms.
+  // renders the fresh `(installed)` / `(partially-installed)` row,
+  // DISABLE_CONTEXT the fresh `(disabled)` row; both share byte-identical
+  // `skipped` / `failed` arms.
   if (enable) {
     // WR-01: `composeOutcomeRow` returns `EnableMsg | DisableMsg`; the `enable`
-    // branch only ever yields an `EnableMsg` (its `fresh` arm emits `installed`,
-    // never `disabled`), so narrowing to the ENABLE_CONTEXT row type is sound.
+    // branch only ever yields an `EnableMsg` (its `fresh` arm emits `installed`
+    // or `partially-installed`, never `disabled`), so narrowing to the
+    // ENABLE_CONTEXT row type is sound.
     const enableRow = row as EnableMsg;
     notifyWithContext(ctx, pi, ENABLE_CONTEXT, [
       { name: marketplace, scope, plugins: [enableRow] },
@@ -875,6 +923,55 @@ function dispatchOutcome(args: {
       { name: marketplace, scope, plugins: [disableRow] },
     ]);
   }
+}
+
+/**
+ * ENBL-07 / FSTAT-07 / D-66-04: build the fresh-ENABLE row. A re-enable that
+ * re-materialized through the partial gate dropped one or more component kinds,
+ * so it renders `(partially-installed)` with the dropped kinds through the
+ * shared `narrowUnsupportedKinds` seam -- the SAME token, glyph and brace the
+ * `install` success cascade and the `list` inventory row use for the record the
+ * ledger just wrote. A clean re-enable keeps the `(installed)` row byte-for-byte
+ * (NREG-01).
+ *
+ * SEV-01: the degraded arm stamps `warning`, not the `info` the `install`
+ * `--partial` success row stamps. The difference is the opt-in axis, not the
+ * outcome: `install --partial` is an explicit user request for a degraded
+ * materialization (desired state reached -> info), while `enable` has no
+ * `--partial` flag and derives the widened gate from the record itself
+ * (WR-02 / WR-03), so a dropped-kind enable is "carried out but short of what
+ * was asked for" -> warning.
+ */
+function freshEnableRow(
+  plugin: string,
+  outcome: { readonly version?: string; readonly unsupported?: readonly string[] },
+): EnableMsg {
+  const unsupported = outcome.unsupported ?? [];
+  if (unsupported.length > 0) {
+    return {
+      status: "partially-installed",
+      name: plugin,
+      // WR-06: `dependencies` stays empty here -- the enable row does not yet
+      // thread the ledger's staged agent / mcp names, so the soft-dep markers
+      // never fire on either enable arm.
+      dependencies: [],
+      ...(outcome.version !== undefined && { version: outcome.version }),
+      reasons: narrowUnsupportedKinds(unsupported),
+      severity: "warning",
+      needsReload: true,
+    };
+  }
+
+  return {
+    status: "installed",
+    name: plugin,
+    dependencies: [],
+    ...(outcome.version !== undefined && { version: outcome.version }),
+    // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
+    // reloads Pi resources.
+    severity: "info",
+    needsReload: true,
+  };
 }
 
 /** Internal: build the plugin row for the outcome (bare mp header -- UAT-04). */
@@ -989,16 +1086,7 @@ function composeOutcomeRow(args: {
       // per-row `needsReload: true` stamp (RLD-02 OR-reduce), not a cascade
       // kind.
       return enable
-        ? {
-            status: "installed",
-            name: plugin,
-            dependencies: [],
-            ...(outcome.version !== undefined && { version: outcome.version }),
-            // D-03/D-06: a realized re-enable re-materializes artifacts -> info,
-            // reloads Pi resources.
-            severity: "info",
-            needsReload: true,
-          }
+        ? freshEnableRow(plugin, outcome)
         : {
             // D-06/RLD-02: a realized fresh disable unstages Pi-visible
             // artifacts, so it stamps needsReload directly -- this is what lets

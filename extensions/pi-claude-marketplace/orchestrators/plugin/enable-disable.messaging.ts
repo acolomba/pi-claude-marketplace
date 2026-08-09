@@ -5,12 +5,14 @@ import {
   composeReasons,
   installedLikeRow,
   joinTokens,
+  partiallyInstalledRow,
   pluginRow,
   renderScopeBracket,
   renderVersion,
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
+  type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
 } from "../../shared/notify.ts";
 
@@ -34,14 +36,20 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  */
 
 /**
- * enable's private status set: a fresh `installed` row, a `skipped` row
- * (already-enabled / not-installed), or a `failed` row.
+ * enable's private status set: a fresh `installed` row, a fresh
+ * `partially-installed` row (ENBL-07 re-materialized a soft-degraded record
+ * through the partial gate), a `skipped` row (already-enabled / not-installed),
+ * or a `failed` row.
  */
-export const ENABLE_STATUSES = ["installed", "skipped", "failed"] as const;
+export const ENABLE_STATUSES = ["installed", "partially-installed", "skipped", "failed"] as const;
 export type EnableStatus = (typeof ENABLE_STATUSES)[number];
 
 /** enable's row message union. */
-export type EnableMsg = PluginInstalledMessage | PluginSkippedMessage | PluginFailedMessage;
+export type EnableMsg =
+  | PluginInstalledMessage
+  | PluginPartiallyInstalledMessage
+  | PluginSkippedMessage
+  | PluginFailedMessage;
 
 /**
  * disable's private status set: a fresh `disabled` row, a `skipped` row
@@ -58,6 +66,12 @@ export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFa
  * is byte-identical to install's installed arm -- the enable verb constructs the
  * row with `dependencies: []`, so the soft-dep markers never append, but the
  * `dependencies.includes(...)` gating is preserved verbatim for byte parity.
+ *
+ * ENBL-07 / FSTAT-07 / D-66-04: the `partially-installed` arm CALLS the shared
+ * `partiallyInstalledRow` composition site (D-11), so a re-enable that drops
+ * component kinds renders the same `◉ ... (partially-installed) {kinds}` bytes
+ * the install cascade and the `list` inventory row render for the very same
+ * record.
  */
 const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
   installed: (p, probe, mpScope) =>
@@ -70,6 +84,7 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
       p.reasons,
       probe,
     ),
+  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

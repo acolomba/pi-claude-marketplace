@@ -582,12 +582,28 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
     // (which is what the pre-ENBL-05 two-axis predicate produced here) and
     // NOT the `(failed)` row the strict gate produces when the ledger is
     // handed no partial flag.
+    //
+    // FSTAT-07 / D-66-04: the row follows the RESOLUTION, not the verb. The
+    // ledger re-materialized with `lspServers` dropped and wrote a record
+    // carrying `installable: false` + that same unsupported list, so a clean
+    // `(installed)` row here would contradict the `(partially-installed)` row
+    // `list` renders for the very same record (catalog `enable-partial`).
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "realized enable routes to info severity");
-    assert.match(
+    assert.equal(
+      notifications[0]!.severity,
+      "warning",
+      "SEV-01: enable has no --partial opt-in, so a dropped-kind enable is carried out but short",
+    );
+    assert.equal(
       notifications[0]!.message,
-      /foo-plugin v1\.2\.3 \(installed\)/,
-      `expected a realized enable row; got: ${notifications[0]!.message}`,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user]",
+        "  ◉ foo-plugin v1.2.3 (partially-installed) {lsp}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
     );
     assert.ok(
       !notifications[0]!.message.includes("(skipped)"),
