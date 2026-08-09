@@ -940,6 +940,42 @@ test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` 
   });
 });
 
+// The disabled-PARTIAL half of the same carve-out. Before the ENBL-05
+// collapse the disabled-state predicate also read `compatibility.installable`,
+// so this record (`enabled: false` AND `installable: false`) was not
+// recognized as disabled by `partitionDisabledScopes` and fell through to the
+// state-only installed block, rendering `(partially-installed)` with a
+// `{not in manifest, ...}` brace over an empty component map -- the CR-01
+// defect. The row is BARE, byte-identical to the canonical disabled row above:
+// `PluginDisabledMessage` carries no `reasons` field by construction, which is
+// what makes INV-04's "never `{not in manifest}` on a disabled row" structural.
+test("ENBL-05 / ENBL-06 / CR-01: a manifest-absent DISABLED PARTIAL record renders the `(disabled)` inventory cascade, not the state-only installed block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      // The factory derives the reachable persisted shape from these two
+      // fields alone: `enabled: false`, `installable: false` (unsupported is
+      // non-empty), and every `resources.*` array emptied.
+      installed: { alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+    );
+  });
+});
+
 // D-96-04 on the all-disabled early return: that branch short-circuits every
 // probe, so `--fetch` fetched nothing there too. Without the note the run
 // renders bytes identical to a bare run -- the exact failure mode D-96-04 was

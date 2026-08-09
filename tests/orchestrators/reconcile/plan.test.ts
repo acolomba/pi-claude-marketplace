@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import {
-  isRecordedButDisabled,
-  planReconcile,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { isRecordedButDisabled } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type {
   MarketplaceConfigEntry,
@@ -627,30 +628,49 @@ test("Plugin key parser: lastIndexOf('@') admits plugin names containing '@'", (
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// T5 / PR #51: predicate-drift agreement between
-// `isRecordedButDisabled` (plan.ts) and `isCurrentlyDisabled`
-// (enable-disable.ts). The two predicates are deliberately duplicated --
-// enable-disable.ts duplicates the marker locally to avoid pulling the
-// reconcile module into the orchestrator's import graph (see the JSDoc on
-// `isCurrentlyDisabled` at enable-disable.ts). The duplication is
-// load-bearing for the convergence proof at plan-convergence.test.ts: a
-// soft-degraded (installable: false) plugin has `enabled: true` and must
-// NOT be classified as `pluginsToEnable`; both predicates read the
-// installable axis for this guard.
+// ENBL-05: the disabled-state predicate has ONE definition -- exported from
+// `persistence/state-io.ts` as the read-side twin of `toDisabledRecord` --
+// and it reads ONLY the explicit `enabled` boolean. The availability axis
+// (`compatibility.installable`) is deliberately not an input: the disable
+// orchestrator places no availability guard before writing `enabled: false`,
+// so a soft-degraded record can be explicitly disabled too, and merging the
+// two axes made every surface misread that record.
 //
-// ENBL-02: the disabled marker is now an explicit `enabled: false`
-// boolean on the install record. This replaces the old five-resource-array-
-// emptiness heuristic. The truth table collapses to two boolean axes:
-// installable x enabled.
-//
-// This drift gate has two parts:
-//   1. A matrix truth-table assertion on `isRecordedButDisabled` over
-//      `installable: true | false` x `enabled: true | false`, pinning the
-//      (installable: true, enabled: false) cell as the only "disabled" cell.
-//   2. A source-shape pin: `isCurrentlyDisabled`'s function body in
-//      enable-disable.ts must carry the same boolean axes as
-//      `isRecordedButDisabled` (installable && !enabled).
+// Two gates live below:
+//   1. A matrix truth-table assertion over
+//      `installable: true | false` x `enabled: true | false`. Every
+//      `enabled: false` cell is disabled; the (installable: false,
+//      enabled: true) cell stays NOT disabled and is the over-reach guard --
+//      it is the shape the convergence proof at plan-convergence.test.ts
+//      rests on (a soft-degraded but never-disabled plugin must not be
+//      planned as `pluginsToEnable`).
+//   2. A source gate asserting no module re-derives the predicate locally:
+//      none of the four former definition sites still contains the two-axis
+//      conjunction, and each one imports the single predicate.
 // ──────────────────────────────────────────────────────────────────────────
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+/** The four modules that each held their own copy of the predicate. */
+const FORMER_DEFINITION_SITES: ReadonlyArray<string> = [
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
+];
+
+/** The removed two-axis conjunction, in any of its parameter spellings. */
+const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;
+
+/** The single-predicate import the collapse requires of every former site. */
+const SINGLE_PREDICATE_IMPORT =
+  /import\s*\{[^}]*\bisRecordedButDisabled\b[^}]*\}\s*from\s+["'][^"']*persistence\/state-io\.ts["']/;
+
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/^\s*\/\/.*$/gm, ""); // line comments
+}
 
 interface DisabledMarkerRecord {
   compatibility: {
@@ -691,11 +711,11 @@ function recordWith(installable: boolean, enabled: boolean): DisabledMarkerRecor
   };
 }
 
-test("T5 / ENBL-02: isRecordedButDisabled truth table over installable x enabled -- only (installable:true, enabled:false) is 'disabled'", () => {
-  // ENBL-02: the disabled marker is an explicit `enabled: false` boolean.
-  // The truth table has two boolean axes: installable x enabled.
-  // Soft-degraded plugins (installable: false) are never classified as
-  // disabled regardless of their enabled field.
+test("ENBL-05: isRecordedButDisabled truth table over installable x enabled -- every enabled:false cell is disabled, regardless of availability", () => {
+  // ENBL-05: the disabled marker is the explicit `enabled: false` boolean
+  // alone. The availability axis is listed here only to prove the predicate
+  // ignores it: the two `enabled: false` cells agree, and the two
+  // `enabled: true` cells agree.
   const cases: ReadonlyArray<{
     name: string;
     installable: boolean;
@@ -709,22 +729,22 @@ test("T5 / ENBL-02: isRecordedButDisabled truth table over installable x enabled
       expected: false,
     },
     {
-      name: "installable: true,  enabled: false (the ENBL-02 disabled marker)",
+      name: "installable: true,  enabled: false (the canonical disabled record)",
       installable: true,
       enabled: false,
       expected: true,
     },
     {
-      name: "installable: false, enabled: true  (soft-degraded -- D-04; never disabled)",
+      name: "installable: false, enabled: true  (soft-degraded but never disabled -- the over-reach guard; its supported components stay materialized and plan-convergence.test.ts proves it plans nothing)",
       installable: false,
       enabled: true,
       expected: false,
     },
     {
-      name: "installable: false, enabled: false (soft-degraded disabled -- edge; never classifiable as pluginsToEnable)",
+      name: "installable: false, enabled: false (a soft-degraded record the user explicitly disabled IS disabled -- the disable orchestrator writes `enabled: false` with no availability guard)",
       installable: false,
       enabled: false,
-      expected: false,
+      expected: true,
     },
   ];
   for (const c of cases) {
@@ -732,47 +752,50 @@ test("T5 / ENBL-02: isRecordedButDisabled truth table over installable x enabled
     assert.equal(
       isRecordedButDisabled(rec),
       c.expected,
-      `T5: isRecordedButDisabled mismatch for cell -- ${c.name}`,
+      `ENBL-05: isRecordedButDisabled mismatch for cell -- ${c.name}`,
     );
   }
 });
 
-test("T5 / ENBL-02: isCurrentlyDisabled (enable-disable.ts) source-shape pin -- same installable + !enabled axes as isRecordedButDisabled (drift gate)", async () => {
-  // The two predicates are deliberately duplicated (see the JSDoc on
-  // `isCurrentlyDisabled` in enable-disable.ts) to keep the orchestrator
-  // import graph free of the reconcile module. The drift gate: assert the
-  // function body still names the same boolean axes in the same conjunction,
-  // so a hand-edit that flips one side without the other trips this test.
-  const { readFile } = await import("node:fs/promises");
-  const enableSrc = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-    "utf8",
-  );
+test("ENBL-05: the transient all-empty-resources shape with enabled: true is NOT disabled", () => {
+  // A record can legally carry `enabled: true` with every `resources.*` array
+  // empty (the post-migration / pre-self-heal shape). The predicate reads the
+  // boolean, never the arrays, so that shape stays enabled. The sibling half --
+  // an on-disk record with NO `enabled` key loading as `true` -- is the migrate
+  // fill pinned by `ENBL-02: ensurePluginEnabled fills enabled: true when
+  // absent` in tests/persistence/migrate.test.ts.
+  const emptied: DisabledMarkerRecord = {
+    ...recordWith(true, true),
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  };
+  assert.equal(isRecordedButDisabled(emptied), false);
+});
 
-  // Extract the isCurrentlyDisabled function body. The function is
-  // module-private; we match its declaration textually and assert the body
-  // carries every axis isRecordedButDisabled also tests.
-  const fnMatch = /function isCurrentlyDisabled\([\s\S]*?\): boolean \{([\s\S]*?)\n\}/.exec(
-    enableSrc,
-  );
-  assert.ok(
-    fnMatch,
-    "T5: isCurrentlyDisabled declaration not found -- has the helper been renamed or removed without updating the drift gate?",
-  );
-  const body = fnMatch[1]!;
+test("ENBL-05: no conjunctive disabled-state twin survives -- every former definition site consumes the single persistence/state-io.ts predicate (drift gate)", async () => {
+  // Inverted from the body-shape pin it replaces: instead of asserting that a
+  // named twin still carries the right body -- which a rename defeats and
+  // which cannot see a FIFTH copy appearing elsewhere -- assert that no former
+  // site re-derives the rule at all and that each one imports the one
+  // definition. Comments are stripped FIRST: the surviving JSDoc legally
+  // describes the removed conjunction in prose while explaining the collapse.
+  const offenders: string[] = [];
+  for (const rel of FORMER_DEFINITION_SITES) {
+    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
 
-  // ENBL-02: the required axes are now `compatibility.installable` and
-  // `!installed.enabled`. A drift twin that reverts to the resource-emptiness
-  // heuristic would misclassify hooks-only installed plugins as disabled
-  // (the regression D-63-04 originally caught).
-  const requiredAxes: ReadonlyArray<string> = ["compatibility.installable", "!installed.enabled"];
-  for (const axis of requiredAxes) {
-    assert.ok(
-      body.includes(axis) ||
-        // The orchestrator may alias `installed.compatibility.installable`
-        // via a local binding -- also accept the un-prefixed forms.
-        body.includes(axis.replace("compatibility.installable", "installable")),
-      `T5 drift: isCurrentlyDisabled body must reference \`${axis}\` (same axis as isRecordedButDisabled); body was:\n${body}`,
-    );
+    if (TWO_AXIS_CONJUNCTION.test(stripped)) {
+      offenders.push(
+        `${rel} re-derives the disabled state from the availability axis (${String(TWO_AXIS_CONJUNCTION)})`,
+      );
+    }
+
+    if (!SINGLE_PREDICATE_IMPORT.test(stripped)) {
+      offenders.push(`${rel} does not import isRecordedButDisabled from persistence/state-io.ts`);
+    }
   }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `ENBL-05 violation: a local disabled-state twin survives:\n  ${offenders.join("\n  ")}`,
+  );
 });

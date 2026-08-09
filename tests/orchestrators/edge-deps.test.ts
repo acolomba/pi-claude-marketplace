@@ -22,9 +22,9 @@ import {
   classifyInstalledRecord,
   classifyManifestEntry,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts";
-import { isRecordedButDisabled } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  isRecordedButDisabled,
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
