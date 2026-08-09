@@ -9,7 +9,7 @@
 // public entry point `setPluginEnabled`.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -154,7 +154,28 @@ async function readConfig(configPath: string): Promise<unknown> {
  */
 async function seedRealDisabledMarketplace(
   home: string,
-  opts: { marketplaceName: string; pluginName: string; version: string },
+  opts: {
+    marketplaceName: string;
+    pluginName: string;
+    version: string;
+    /**
+     * ENBL-07: seed the DISABLED PARTIAL shape. Writes the resolver's
+     * convention marker file for the named unsupported kind into the plugin
+     * root (`.lsp.json` for `lspServers`) so `resolveStrict` returns the
+     * partially-available arm, and seeds the record's availability
+     * discriminant to match (`installable: false` + the kind listed in
+     * `unsupported`). The plugin keeps its skill, so the degraded record
+     * still has a supported component to re-materialize.
+     */
+    unsupportedKind?: "lspServers";
+    /**
+     * ENBL-07 / D-97-01: write the marketplace manifest WITHOUT the plugin
+     * entry, so the enable path's PI-3 lookup throws before any ledger phase
+     * runs. The state record still names the plugin (it was installed against
+     * an earlier manifest).
+     */
+    omitFromManifest?: boolean;
+  },
 ): Promise<{ statePath: string; configPath: string }> {
   const scopeRoot = path.join(home, ".pi", "agent");
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
@@ -172,23 +193,42 @@ async function seedRealDisabledMarketplace(
   const skillDir = path.join(pluginRoot, "skills", "s1");
   await mkdir(skillDir, { recursive: true });
   await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  if (opts.unsupportedKind === "lspServers") {
+    // The resolver's `lspServers` convention probe: a `.lsp.json` at the
+    // plugin root makes the entry resolve `partially-available`.
+    await writeFile(path.join(pluginRoot, ".lsp.json"), JSON.stringify({ servers: {} }));
+  }
+
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: opts.marketplaceName,
-      plugins: [
-        {
-          name: opts.pluginName,
-          source: `./plugins/${opts.pluginName}`,
-          version: opts.version,
-        },
-      ],
+      plugins:
+        opts.omitFromManifest === true
+          ? []
+          : [
+              {
+                name: opts.pluginName,
+                source: `./plugins/${opts.pluginName}`,
+                version: opts.version,
+              },
+            ],
     }),
   );
 
-  // State: the KEPT disabled record -- empty resources + installable: true +
-  // the pinned version + explicit enabled: false.
+  // State: the KEPT disabled record -- empty resources + the pinned version +
+  // explicit enabled: false. `installable` mirrors the seeded availability
+  // axis, which is orthogonal to the disabled marker (ENBL-05).
+  const compatibility =
+    opts.unsupportedKind === undefined
+      ? { installable: true, notes: [], supported: [], unsupported: [] }
+      : {
+          installable: false,
+          notes: [`contains ${opts.unsupportedKind}`],
+          supported: ["skills"],
+          unsupported: [opts.unsupportedKind],
+        };
   const statePath = path.join(extRoot, "state.json");
   const state = {
     schemaVersion: 2,
@@ -204,7 +244,7 @@ async function seedRealDisabledMarketplace(
           [opts.pluginName]: {
             version: opts.version,
             resolvedSource: pluginRoot,
-            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            compatibility,
             resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             enabled: false,
             installedAt: "2026-01-01T00:00:00.000Z",
@@ -506,6 +546,150 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
       true,
       "config entry should carry enabled:true",
     );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ENBL-07: enable on a DISABLED PARTIAL record
+// ──────────────────────────────────────────────────────────────────────────
+
+test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (D-68-02 repair/promotion stance)", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // The fresh arm at the recorded version pin -- NOT the idempotent skip
+    // (which is what the pre-ENBL-05 two-axis predicate produced here) and
+    // NOT the `(failed)` row the strict gate produces when the ledger is
+    // handed no partial flag.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "realized enable routes to info severity");
+    assert.match(
+      notifications[0]!.message,
+      /foo-plugin v1\.2\.3 \(installed\)/,
+      `expected a realized enable row; got: ${notifications[0]!.message}`,
+    );
+    assert.ok(
+      !notifications[0]!.message.includes("(skipped)"),
+      "a disabled partial must never render as an idempotent skip on enable",
+    );
+
+    // The record re-materialized in place: the CURRENT manifest's supported
+    // set is what got staged (the ledger re-discovers from the manifest; only
+    // the version is pinned), and the disabled marker is cleared.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            { version: string; enabled: boolean; resources: { skills: string[] } }
+          >;
+        }
+      >;
+    };
+    const rec = state.marketplaces.mp!.plugins["foo-plugin"]!;
+    assert.equal(rec.enabled, true, "the disabled marker must be cleared by a realized enable");
+    assert.ok(
+      rec.resources.skills.length > 0,
+      "the supported components must be re-staged (state/disk drift otherwise)",
+    );
+    assert.equal(rec.version, "1.2.3", "ENBL-02 version pin preserved across re-materialization");
+  });
+});
+
+test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clean -- nothing materialized, record stays disabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // The existing resolve-failure semantics, unchanged by the widened gate:
+    // the PI-3 manifest lookup throws BEFORE any ledger phase, so
+    // `narrowEnableFailure` yields no closed-set reason and the renderer
+    // suppresses the brace, surfacing the cause via the 4-space trailer.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user]",
+        "  ⊘ foo-plugin v1.2.3 (failed)",
+        '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+      ].join("\n"),
+    );
+    assert.equal(notifications[0]!.severity, "error");
+
+    // Fail-clean: the record is untouched and no artifact was staged.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<
+        string,
+        {
+          plugins: Record<
+            string,
+            {
+              enabled: boolean;
+              resources: {
+                skills: string[];
+                prompts: string[];
+                agents: string[];
+                mcpServers: string[];
+                hooks: string[];
+              };
+            }
+          >;
+        }
+      >;
+    };
+    const rec = state.marketplaces.mp!.plugins["foo-plugin"]!;
+    assert.equal(rec.enabled, false, "the record must stay disabled after a failed enable");
+    assert.deepEqual(rec.resources.skills, []);
+    assert.deepEqual(rec.resources.prompts, []);
+    assert.deepEqual(rec.resources.agents, []);
+    assert.deepEqual(rec.resources.mcpServers, []);
+    assert.deepEqual(rec.resources.hooks, []);
+
+    const skillsTargetDir = path.join(
+      home,
+      ".pi",
+      "agent",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+    );
+    // An absent target dir and an empty one are the same fact here: the
+    // ledger never reached its staging phase.
+    const staged = await readdir(skillsTargetDir).catch((): string[] => []);
+    assert.deepEqual(staged, [], "no skill artifact may be staged by a failed enable");
   });
 });
 
