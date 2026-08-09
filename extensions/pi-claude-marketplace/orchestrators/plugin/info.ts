@@ -1991,6 +1991,96 @@ function partitionDisabledScopes(
   return { disabledBlocks, infoFound };
 }
 
+/**
+ * D-96-04: did this block come from the state-only arm? The test is exact
+ * TODAY because that arm is the only one that can stamp `not in manifest` on a
+ * NON-failed info row: every other arm either found a manifest entry (so the
+ * reason is unreachable) or renders `failed`. It is an inference from the
+ * rendered row rather than a discriminator the builder returns, so a future arm
+ * stamping the same reason on a non-failed row would silently acquire a skip
+ * note. The manifest-declared negative control in
+ * `tests/orchestrators/plugin/info-manifest-absent.test.ts` is the tripwire.
+ */
+function isStateOnlyInfoBlock(block: PluginInfoMessage): boolean {
+  return (
+    block.plugin.status !== "failed" && (block.plugin.reasons ?? []).includes("not in manifest")
+  );
+}
+
+/**
+ * D-96-04: the `--fetch`-was-skipped note for one state-only scope, shaped like
+ * `buildDisabledInventoryBlock` (same marketplace header, `details` ONLY when
+ * autoupdate is true).
+ *
+ * `severity: "warning"` is load-bearing rather than decorative: the envelope
+ * MAX-reduces its rows, so omitting it routes the whole notification to `info`
+ * with no summary line and the note reads as an ordinary success. Warning is
+ * the tri-state reading of the outcome -- the user asked for a refreshed state
+ * and did not get one -- and matches `update`'s `(skipped) {not in manifest}`
+ * precedent.
+ */
+function buildFetchSkipBlock(
+  marketplace: string,
+  scope: Scope,
+  block: PluginInfoMessage,
+  autoupdate: boolean,
+): MarketplaceRows<PluginInfoCascadeMsg> {
+  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+    ? { details: { autoupdate: true } }
+    : {};
+  const version = block.plugin.version;
+  return {
+    name: marketplace,
+    scope,
+    ...detailsField,
+    plugins: [
+      {
+        status: "skipped",
+        name: block.plugin.name,
+        reasons: ["not in manifest"],
+        severity: "warning",
+        ...(version !== undefined && { version }),
+      },
+    ],
+  };
+}
+
+/**
+ * D-96-04: report a `--fetch` the state-only arm could not carry out. A flag
+ * that renders identical bytes with and without it teaches the user it worked,
+ * so the request is accounted for out loud instead of being swallowed.
+ *
+ * IL-2: this is a SECOND notification beside the info block, for the same
+ * reason the disabled-inventory path above emits one -- the two surfaces carry
+ * incompatible message kinds, and the standalone `PluginInfoRow` status set
+ * admits no `skipped`, so folding the note into the info block would mean
+ * dropping it. The info block keeps its own bytes and its own `info` severity.
+ *
+ * One notification carries one block per state-only scope, in the caller's
+ * project-first order (MSG-GR-3).
+ */
+function emitStateOnlyFetchSkip(
+  opts: GetPluginInfoOptions,
+  blocks: readonly PluginInfoMessage[],
+): void {
+  if (opts.fetch !== true) {
+    return;
+  }
+
+  const skipBlocks = blocks
+    .filter(isStateOnlyInfoBlock)
+    .map((b) =>
+      buildFetchSkipBlock(opts.marketplace, b.marketplaceScope, b, b.marketplaceDetails.autoupdate),
+    );
+  const [first, ...remaining] = skipBlocks;
+  if (first === undefined) {
+    return;
+  }
+
+  const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = [first, ...remaining];
+  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
+}
+
 export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
   // scopes are searched; otherwise the explicit scope only.
@@ -2071,6 +2161,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       fetchCtx,
     );
     notify(opts.ctx, opts.pi, block);
+    emitStateOnlyFetchSkip(opts, [block]);
     return;
   }
 
@@ -2117,6 +2208,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       blocks: [firstInfo, ...remainingInfo],
     });
   }
+
+  emitStateOnlyFetchSkip(opts, blocks);
 
   // D-54-01 / ENBL-04: surface the disabled-inventory scopes through the
   // list-arm cascade. Mixed disabled+info renders break IL-2's single-notify

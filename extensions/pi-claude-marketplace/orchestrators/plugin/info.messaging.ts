@@ -1,10 +1,13 @@
 import {
   ICON_DISABLED,
+  ICON_UNINSTALLABLE,
   composeReasons,
   joinTokens,
+  pluginRow,
   renderScopeBracket,
   renderVersion,
   type PluginDisabledMessage,
+  type PluginSkippedMessage,
 } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -24,32 +27,47 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *     `notifyWithContext`. The `marketplace-not-added` standalone likewise stays
  *     central.
  *
- *  2. The recorded-but-disabled inventory blocks info emits when a scope holds
- *     the disabled marker ARE cascade `MarketplaceNotificationMessage` blocks
- *     carrying a `disabled` `PluginNotificationMessage` row -- byte-identical to
- *     the list surface's `disabled` row. THIS is the only cascade row info
- *     dispatches, so `PLUGIN_INFO_CONTEXT` is total over exactly the `disabled`
- *     status (D-10).
+ *  2. The cascade `MarketplaceNotificationMessage` blocks info emits BESIDE the
+ *     standalone envelope, each carrying a `PluginNotificationMessage` row
+ *     byte-identical to the list surface's. There are two:
+ *
+ *       - the recorded-but-disabled inventory row a scope holding the disabled
+ *         marker produces (`disabled`);
+ *       - the D-96-04 fetch-skip note a `--fetch` run produces when the block
+ *         came from the state-only arm and there was nothing to fetch
+ *         (`skipped`).
+ *
+ *     `PLUGIN_INFO_CONTEXT` is total over exactly those two statuses (D-10).
+ *     The standalone `PluginInfoRow` shape cannot express either one: its
+ *     status set admits neither `disabled` nor `skipped`.
  *
  * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
  * and is CALLED here, never duplicated.
  */
 
 /**
- * info's cascade-dispatched status set: just the recorded-but-disabled
- * inventory row. The standalone info-surface row statuses
+ * info's cascade-dispatched status set: the recorded-but-disabled inventory row
+ * and the D-96-04 fetch-skip note. The standalone info-surface row statuses
  * (`installed` / `available` / `unavailable` / `failed`) live on the SIBLING
  * `PluginInfoRow` shape rendered by the central standalone path, NOT here.
+ *
+ * This set is COMMAND-LOCAL: widening it amends no closed set in
+ * `shared/notify.ts` (`skipped` is already a central `PluginStatus`). What it
+ * does amend is the `as const satisfies CommandContext<...>` pin below, which
+ * makes a missing render arm a compile error rather than a runtime gap.
  */
-export const PLUGIN_INFO_STATUSES = ["disabled"] as const;
+export const PLUGIN_INFO_STATUSES = ["disabled", "skipped"] as const;
 export type PluginInfoStatus = (typeof PLUGIN_INFO_STATUSES)[number];
 
-/** info's cascade row message union (the disabled inventory row only). */
-export type PluginInfoCascadeMsg = PluginDisabledMessage;
+/** info's cascade row message union (the disabled inventory and skip rows). */
+export type PluginInfoCascadeMsg = PluginDisabledMessage | PluginSkippedMessage;
 
 /**
- * Render map total over info's cascade-dispatched status (D-10). The `disabled`
- * arm is byte-identical to the list surface's `disabled` arm.
+ * Render map total over info's cascade-dispatched statuses (D-10). Both arms
+ * are byte-identical to the list surface's: `disabled` recomposes the same
+ * tokens, and `skipped` DELEGATES to the exported `pluginRow` composer rather
+ * than re-joining them, so the fetch-skip note cannot drift from the central
+ * renderer's `skipped` arm or from `update`'s precedent.
  */
 const PLUGIN_INFO_RENDER: {
   [K in PluginInfoStatus]: RenderFn<Extract<PluginInfoCascadeMsg, { status: K }>>;
@@ -63,6 +81,7 @@ const PLUGIN_INFO_RENDER: {
       "(disabled)",
       composeReasons(undefined, false, false, probe),
     ]),
+  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
 };
 
 /**

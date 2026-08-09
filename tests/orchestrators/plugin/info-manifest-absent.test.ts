@@ -1036,3 +1036,210 @@ test("INFO-12 / NFR-5: a git-source-shaped manifest-absent record under `--fetch
     assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
   });
 });
+
+// ---------------------------------------------------------------------------
+// D-96-04: a `--fetch` the state-only arm cannot carry out is REPORTED, never
+// swallowed. Rendering identical bytes with and without the flag would teach
+// the user the flag worked, so the request is accounted for as a separate
+// `warning` note beside an info block that keeps its own bytes.
+//
+// The note is a cascade row because the standalone `PluginInfoRow` status set
+// admits no `skipped`; the IL-2 break mirrors the disabled-inventory path in
+// the same function.
+// ---------------------------------------------------------------------------
+
+/** The byte-exact single-scope skip note, shared by the D-96-04 cases. */
+const SKIP_NOTE = [
+  "A plugin operation needs attention.",
+  "",
+  "● mp [user]",
+  "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
+].join("\n");
+
+test("D-96-04: `info --fetch` on a manifest-absent record emits the skip note beside an unchanged info block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[0]!.severity, undefined, "the info block keeps info severity");
+    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(notifications[1]!.message, SKIP_NOTE);
+  });
+});
+
+test("D-96-04: bare `info` on the same record emits NO skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1, "no flag was typed, so there is nothing to account for");
+    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+  });
+});
+
+test("D-96-04: `info --fetch` on a manifest-DECLARED plugin emits NO skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // The note is keyed on the ARM that fired, not on the flag alone. A
+    // declared plugin runs the manifest-backed arm, whose row can never carry
+    // `not in manifest` -- which is exactly what `isStateOnlyInfoBlock` reads.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills/alpha-src-skill"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    for (const n of notifications) {
+      assert.ok(!n.message.includes("(skipped)"), n.message);
+    }
+  });
+});
+
+test("D-96-04: a hooks-degraded state-only record under `--fetch` still emits the skip note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // A recorded hooks slug with no materialized file: the info row carries the
+    // read marker, the skip row does not. The note is keyed on the arm that
+    // fired, not on the row being clean.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+    });
+
+    assert.equal(notifications.length, 2);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, source missing}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(notifications[1]!.message, SKIP_NOTE);
+  });
+});
+
+test("D-96-04: two state-only scopes under `--fetch` produce ONE skip notification carrying both blocks", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const projectRoot = path.join(cwd, ".pi");
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", cwd, fetch: true });
+
+    // INFO-09 / GRAM-04 boundary: the same input used to produce TWO `error`
+    // notifications, one per `(failed)` block. Both blocks are `(installed)`
+    // now, so they join ONE info-severity cascade, project-scope first.
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [project] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+
+    // ONE skip notification carrying one block per scope, same order. Two
+    // skipped rows pluralize the summary through the central counter.
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "Some plugin operations need attention.",
+        "",
+        "● mp [project]",
+        "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
+        "",
+        "● mp [user]",
+        "  ⊘ alpha v1.0.0 (skipped) {not in manifest}",
+      ].join("\n"),
+    );
+  });
+});
