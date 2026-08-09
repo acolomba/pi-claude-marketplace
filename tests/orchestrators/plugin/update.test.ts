@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -3136,12 +3136,37 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
 
       const firstNotifications = await runOnce();
       const firstRecord = await settledFields();
+      // WR-05 / RECON-05: a second identical call must not write state.json at
+      // all. What keeps the refresh from rewriting the record is the
+      // `toVersion === fromVersion` short-circuit in `preflightUpdate`, which
+      // returns the `unchanged` outcome BEFORE the disabled-record branch is
+      // reached -- so the refresh runs only when the pin genuinely moved.
+      // Comparing settled fields alone cannot see a rewrite that lands the same
+      // values; the mtime and the wall-clock `updatedAt` can, so read both
+      // BEFORE the second call.
+      const firstStat = await stat(locations.stateJsonPath);
+      const firstUpdatedAt = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ]?.updatedAt;
+
       const secondNotifications = await runOnce();
       const secondRecord = await settledFields();
 
       assert.equal(secondNotifications.length, 1);
       assert.deepEqual(secondNotifications, firstNotifications);
       assert.deepEqual(secondRecord, firstRecord, "the refresh is a fixed point");
+
+      const secondStat = await stat(locations.stateJsonPath);
+      assert.equal(
+        secondStat.mtimeMs,
+        firstStat.mtimeMs,
+        "a no-op refresh must not touch state.json (RECON-05 mtime stability)",
+      );
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.updatedAt,
+        firstUpdatedAt,
+        "a no-op refresh must not bump updatedAt while rendering (skipped) {up-to-date}",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
