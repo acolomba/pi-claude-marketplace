@@ -102,7 +102,7 @@ coverage:
         status: pass
     human_judgment: false
 
-duration: 20min
+duration: 30min
 completed: 2026-08-09
 status: complete
 ---
@@ -113,7 +113,7 @@ status: complete
 
 ## Performance
 
-- **Duration:** ~20 min
+- **Duration:** ~30 min
 - **Tasks:** 2 (Task 1 ran the TDD cycle: RED then GREEN)
 - **Files modified:** 3 (1 source, 2 test)
 - **Diff:** +185 / -15
