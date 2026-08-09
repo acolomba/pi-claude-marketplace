@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
-current_phase: 96
-current_phase_name: installation-record-backed-plugin-info
-status: ready_for_verification
+current_phase: 97
+current_phase_name: Disabled-state classification repair
+status: planning
 stopped_at: Completed 96-04-PLAN.md
-last_updated: "2026-08-09T04:00:21.775Z"
+last_updated: "2026-08-09T07:01:50.986Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 96 plan 04 executed; D-96-02 folded-row manifest authority pinned and the open question closed in code, tests and the output catalog
 progress:
@@ -21,7 +21,7 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-08 after Phase 95)
+See: .planning/PROJECT.md (updated 2026-08-09 after Phase 96)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
@@ -34,15 +34,14 @@ persistence or update-semantics changes.
 
 ## Current Position
 
-Phase: 96 (installation-record-backed-plugin-info) — READY FOR VERIFICATION
-Plan: 4 of 4
-Status: All four plans complete (INFO-09/10/11/12 + BOUND-01/02 landed, hooks
-kind reconstructed from the materialized config, the state-only arm's network
-abstinence asserted on injected seams, the skipped `--fetch` reported at warning
-severity, and D-96-02's folded-row authority ratified by four regression pins
-with the open question closed in `list.ts`, the list suite and the output
-catalog)
-Last activity: 2026-08-09 — Phase 96 plan 04 executed; npm run check green
+Phase: 97 — Disabled-state classification repair
+Plan: Not started
+Status: Ready to discuss (no CONTEXT.md yet). Phase 97 carries the CR-01
+finding from the Phase 96 review as a pending todo: soft-degraded
+(`installable: false`) disabled records bypass `partitionDisabledScopes` and
+reach the state-only info arm — exactly the predicate ENBL-05 collapses.
+Last activity: 2026-08-09 — Phase 96 complete (verification passed 15/15;
+Nyquist-compliant; threats_open 0), transitioned to Phase 97
 
 ## Roadmap Summary
 
@@ -63,10 +62,12 @@ Last activity: 2026-08-09 — Phase 96 plan 04 executed; npm run check green
   the output-catalog byte gate.
 
 - **Phase 96 — Installation-record-backed plugin info** (INFO-09..12,
-  BOUND-01/02): the substantive phase. Reorder the valid-manifest miss path,
-  reconstruct local component structure, preserve partial compatibility, add the
-  explicit network guard the reorder requires, and lock read-failure versus
-  unknown-name boundaries.
+  BOUND-01/02): COMPLETE 2026-08-09. The buildBlock arm split renders
+  manifest-absent installations from the record; containment-guarded hooks
+  reconstruction with truthful-split degradation; INFO-12 zero-call network
+  guard; visible fetch-skip note (broadened to disabled scopes in review);
+  own-manifest authority pinned and the catalog's open note closed. CR-01
+  (disabled-partial predicate) carried to Phase 97.
 
 - **Phase 97 — Disabled-state classification repair** (ENBL-05..09): collapse the
   four copies of the disabled-state predicate into one keyed only on `enabled`,
@@ -203,13 +204,15 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Discuss Phase 96 (installation-record-backed plugin info). Bring into the
-  discuss: deferred decision D-95-11 (component name fidelity on the state-only
-  info arm) and the pending todo on folded-row manifest choice
-  (`.planning/todos/pending/2026-08-08-folded-row-manifest-choice-*`).
+- Discuss Phase 97 (disabled-state classification repair). Bring into the
+  discuss: the CR-01 carrier todo
+  (`.planning/todos/pending/2026-08-09-disabled-partial-reaches-state-only-info-arm.md`)
+  — ENBL-05's single-predicate collapse fixes that arm too, and ENBL-06 must
+  widen the guard test that today covers only the installable:true half.
 
-- Then plan and execute Phases 96-98 in order; Phase 98 additionally carries
-  the notify.ts/tools.ts stale-comment reconciliation todo (DOC-08).
+- Then plan and execute Phase 98, which carries the notify.ts/tools.ts
+  stale-comment reconciliation todo (DOC-08) plus the D-96-01 divergence
+  documentation.
 
 - Verify each phase against its mapped requirements before transition.
 
