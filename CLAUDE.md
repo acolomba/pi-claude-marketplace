@@ -5,14 +5,38 @@
 ### Git
 
 - NEVER commit to the main branch.
+
 - Branch names: `main`, `features/*`, `releases/*`. New feature branches use `features/<name>`.
+
 - Worktrees are preferred for new feature work; create them under `.worktrees/`.
+
 - Git commit messages and PR titles: Follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#specification). Titles must be at least 5 characters and no more than 72 characters. Body lines must be no more than 80 characters. Avoid GSD milestone/phases mentions.
+
 - Run `pre-commit run --all-files` (or `pre-commit run --files <changed files>`) **before** attempting `git commit`. Fix any failures, restage, and re-run until clean. Do not commit and recover from hook failures after the fact -- a failed pre-commit hook means the commit did NOT happen, so iterating with `--amend` is wrong (it would alter the previous commit).
+
 - NEVER use `--no-verify` to skip the hooks.
+
 - NEVER rebase, never rewrite history. Update branches by merging.
-- When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`. The trufflehog hook's auto-updater fails to spawn child processes under the worktree sandbox even though the underlying scan succeeds; running `pre-commit run trufflehog --all-files` separately (outside `git commit`) still passes and should be done before the commit to confirm the scan is clean. Do not extend `SKIP=` to other hooks.
+
+- When committing from inside a worktree, prefix the commit with `SKIP=trufflehog`, but only after confirming the scan is clean by the filesystem route below. Do not extend `SKIP=` to other hooks.
+
+  The hook entry is `trufflehog git file://. --since-commit HEAD --results=verified --fail` -- a **git-mode** scan. In a linked worktree `.git` is a text file holding `gitdir: <main>/.git/worktrees/<name>`, not a directory, so the scan cannot find `.git/index` and aborts with:
+
+  ```text
+  error preparing repo: failed to read index file: open <worktree>/.git/index: not a directory
+  ```
+
+  This is structural, not transient. `pre-commit run trufflehog --all-files` fails identically, so it does **not** confirm anything -- run a filesystem scan over the paths you are committing instead:
+
+  ```bash
+  TH=$(find "${PRE_COMMIT_HOME:-$HOME/.cache/pre-commit}" -type f -name trufflehog -perm -u+x | head -1)
+  "$TH" filesystem <changed paths> --results=verified,unknown --fail
+  ```
+
+  `filesystem` mode scans file contents rather than git history, which is the right question at commit time: do the files being committed contain secrets. `--results=verified,unknown` is deliberately stricter than the hook's `verified`-only setting, because unverifiable candidates still warrant a look. Exit 0 with `verified_secrets: 0` and `unverified_secrets: 0` is the clean result. Committing from the main checkout is unaffected -- the hook works normally there.
+
 - When writing PR descriptions, use the `humanizer` skill if available.
+
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
 ### Versioning
