@@ -1355,7 +1355,7 @@ async function refreshDisabledRecord(
   preflight: PluginPreflight,
 ): Promise<void> {
   const { plugin, marketplace, locations } = args;
-  const { installable, toVersion } = preflight;
+  const { installable, toVersion, resolvedSha } = preflight;
   await withStateGuard(locations, (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
@@ -1369,6 +1369,17 @@ async function refreshDisabledRecord(
 
     sRecord.version = toVersion;
     sRecord.resolvedSource = installable.pluginRoot;
+    // PURL-06 / PURL-09 / D-77-02 / D-78-01: the pin and the sha-derived
+    // version move TOGETHER. For a git source `toVersion` is `shaVersion(
+    // resolvedSha)`, so writing the version without the sha leaves the record
+    // advertising the new commit while `reinstall` still pins its re-clone to
+    // the old one -- a silent revert of the update with no row saying so.
+    // Mirrors the write `finalizeUpdateRecord` makes on its all-success arm;
+    // undefined for path / github-name sources, which carry no pin.
+    if (resolvedSha !== undefined) {
+      sRecord.resolvedSha = resolvedSha;
+    }
+
     // ENBL-09: derive the availability discriminant from the resolution rather
     // than hard-coding it, so it always agrees with the unsupported list copied
     // beside it. `installable: true` next to a non-empty `unsupported` array is

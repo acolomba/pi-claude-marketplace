@@ -4140,6 +4140,69 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
   });
 });
 
+test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedSha with the sha-derived version", async () => {
+  // For a git source `toVersion` is shaVersion(resolvedSha), so a refresh that
+  // bumps `version` without `resolvedSha` leaves the record advertising the new
+  // commit while `reinstall` still pins its re-clone to the OLD one -- a silent
+  // revert of the update. The two fields must agree after the refresh.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-git-disabled-refresh-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        // Recorded at SHA_OLD; the manifest now pins SHA_NEW.
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+
+      const locations = locationsFor("project", cwd);
+      const seededState = await loadState(locations.extensionRoot);
+      const seededRecord = seededState.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(seededRecord !== undefined);
+      // Disable the record in place: the ENBL-02 marker plus the emptied
+      // resource slots a real disable leaves behind.
+      seededState.marketplaces["mp"]!.plugins["gp"] = {
+        ...seededRecord,
+        enabled: false,
+        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      };
+      await saveState(locations.extensionRoot, seededState);
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      assert.equal(record.resolvedSha, SHA_NEW, "the pin moves with the sha-derived version");
+      assert.equal(
+        record.version,
+        `sha-${(record.resolvedSha ?? "").slice(0, 12)}`,
+        "version and resolvedSha must describe the SAME commit after the refresh",
+      );
+      // The refresh never re-materializes: the record stays disabled and empty.
+      assert.equal(record.enabled, false, "the record stays disabled");
+      assertResourcesEmpty(record, "stay empty (no re-materialization)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anchors the record to the bare mirror key with the HEAD sha", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-git-unpinned-swap-"));
