@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 96
 current_phase_name: installation-record-backed-plugin-info
 status: executing
-stopped_at: Completed 96-01-PLAN.md
-last_updated: "2026-08-09T02:17:42.368Z"
+stopped_at: Completed 96-02-PLAN.md
+last_updated: "2026-08-09T02:53:18.385Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 96 plan 01 executed; installation-record-backed info arm landed with both boundaries pinned
+last_activity_desc: Phase 96 plan 02 executed; hooks kind reconstructed from the materialized config, closing INFO-11
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 25
 ---
 
@@ -35,10 +35,10 @@ persistence or update-semantics changes.
 ## Current Position
 
 Phase: 96 (installation-record-backed-plugin-info) — EXECUTING
-Plan: 2 of 4
-Status: Plan 96-01 complete (INFO-09/10/11 + BOUND-01/02 landed); plans 02-04
-remain — hooks-kind reconstruction (INFO-11 / D-96-03), the INFO-12 fetch skip
-note, and the D-96-02 folded-row catalog close
+Plan: 3 of 4
+Status: Plans 96-01 and 96-02 complete (INFO-09/10/11 + BOUND-01/02 landed,
+hooks kind reconstructed from the materialized config); plans 03-04 remain —
+the INFO-12 fetch skip note and the D-96-02 folded-row catalog close
 Last activity: 2026-08-09 — Phase 96 plan 01 executed; npm run check green
 
 ## Roadmap Summary
@@ -137,6 +137,7 @@ two integration checks.
 - [Phase 96]: INFO-09/10: a manifest-absent installation record is described from the record (installed/partially-installed with 'not in manifest' as a reason), not reported as a failure; severity for that input moves error -> info
 - [Phase 96]: The state-only row builders are synchronous and take no locations: require-await (strictTypeChecked) and noUnusedParameters reject the planned async + threaded-unused-param shape; the hooks read converts both in one edit
 - [Phase 96]: derivePersistedInstalledStatus extracted so the persisted installed/partially-installed derivation has one copy shared by the non-path and state-only info rows
+- [Phase 96]: State-only hooks degradation reuses the existing narrowProbeError reason ladder at row level; no new closed-set token
 
 ### Open decisions
 
@@ -213,9 +214,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 95 P01 | 30min | 3 tasks | 3 files |
 | Phase 95 P02 | 25min | 2 tasks | 2 files |
 | Phase 96 P01 | 25min | 3 tasks | 5 files |
+| Phase 96 P02 | 31min | 3 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-08-09T02:17:29.222Z
-**Stopped at:** Completed 96-01-PLAN.md
+**Last session:** 2026-08-09T02:53:18.352Z
+**Stopped at:** Completed 96-02-PLAN.md
 **Resume file:** None
