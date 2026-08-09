@@ -661,7 +661,9 @@ async function composeResolvedComponents(
  * Build a `PluginInfoMessage` for ONE scope-record pair. Branches:
  *   (a) Manifest read failure -> `(failed) {<reason>}` row, reason
  *       classified via `narrowProbeError`.
- *   (b) Plugin name not in manifest -> `(failed) {not in manifest}`.
+ *   (b) Plugin name not in manifest -> installation record present:
+ *       `(installed)` / `(partially-installed)` row built from the
+ *       record; no record: `(failed) {not in manifest}`.
  *   (c) Installed -> `(installed)` row + (path source -> resolved
  *       components; other sources -> `components: not resolved`).
  *   (d) Available (resolveStrict installable) -> `(available)` row.
@@ -714,11 +716,29 @@ async function buildBlock(
     };
   }
 
-  // (b) Plugin name not in manifest -> `(failed) {not in manifest}`.
-  // Same `componentsResolved: true` + empty components rationale as
-  // (a) above.
+  // (b) Plugin name not in the LOADED manifest. INFO-09 / INFO-10: an
+  // installation record that outlived its manifest entry is still
+  // installed -- the absence is a reason on an installed row, not a
+  // verdict. Only a name in NEITHER the manifest NOR the installation
+  // records is a failure (BOUND-02); that arm keeps the
+  // `componentsResolved: true` + empty components rationale of (a).
+  //
+  // The lookup is hoisted above the `entry` lookup so both branches can
+  // read it. It MUST stay below arm (a): a manifest that could not be
+  // read licenses no membership claim, so no record may rescue that
+  // block (BOUND-01).
+  const installed = mpRecord.plugins[pluginName];
   const entry = manifest.plugins.find((p) => p.name === pluginName);
   if (entry === undefined) {
+    if (installed !== undefined) {
+      return wrapBlock(
+        marketplace,
+        scope,
+        marketplaceDetails,
+        buildStateOnlyInstalledRow(pluginName, installed),
+      );
+    }
+
     return {
       kind: "plugin-info",
       marketplaceName: marketplace,
@@ -734,7 +754,6 @@ async function buildBlock(
     };
   }
 
-  const installed = mpRecord.plugins[pluginName];
   const installedVersion = installed?.version;
   const manifestVersion = entry.version;
   const description = entry.description;
@@ -793,6 +812,92 @@ function wrapBlock(
     marketplaceDetails,
     plugin,
   };
+}
+
+/**
+ * INFO-09 / INFO-10 / INFO-11 / D-96-01: describe an installation record whose
+ * marketplace manifest LOADED but no longer declares it. Every fact comes from
+ * the record: `version` (the schema declares it required, so there is nothing
+ * to fall back to), the `(installed)` / `(partially-installed)` split from the
+ * persisted `compatibility.unsupported`, and the component inventory from
+ * `resources.*`.
+ *
+ * No `description` and no `dependencies`: both are manifest-only metadata and
+ * are NOT reconstructed. `componentsResolved: true` is load-bearing -- `false`
+ * emits the external-source `components: not resolved` marker, which would
+ * deny components this arm actually knows.
+ *
+ * NFR-5 / INFO-12: the parameter list takes no `fetchCtx` and no manifest
+ * entry, and the body constructs no probe, so the arm is network-free by
+ * signature rather than by control flow.
+ */
+function buildStateOnlyInstalledRow(
+  pluginName: string,
+  record: MarketplaceRecord["plugins"][string],
+): PluginInfoRow {
+  return {
+    status: derivePersistedInstalledStatus(record),
+    name: pluginName,
+    version: record.version,
+    // INFO-10: absence FIRST, then the kind tokens. `composeReasons` joins in
+    // array order, and `narrowUnsupportedKinds` stays the sole producer of
+    // those tokens -- this wraps its output rather than replacing it (the same
+    // ordering rule `list.ts::partiallyInstalledReasons` implements).
+    reasons: ["not in manifest", ...narrowUnsupportedKinds(record.compatibility.unsupported)],
+    componentsResolved: true,
+    components: composeStateOnlyComponents(record),
+  };
+}
+
+/**
+ * FSTAT-01 / D-66-01: the single persisted-record status derivation shared by
+ * the non-path installed row and the state-only row. Extracted so the two
+ * arms cannot drift (and so `sonarjs/no-identical-functions` has one copy to
+ * look at).
+ */
+function derivePersistedInstalledStatus(
+  record: MarketplaceRecord["plugins"][string],
+): "installed" | "partially-installed" {
+  return record.compatibility.unsupported.length > 0 ? "partially-installed" : "installed";
+}
+
+/**
+ * INFO-11 / D-96-01: the component inventory for the state-only arm, read from
+ * the four name-list `resources` arrays. The names render VERBATIM as the
+ * Pi-generated installed names (`<plugin>-<skill>`, `<plugin>:<command>`,
+ * `pi-claude-marketplace-<plugin>-<agent>`); MCP servers are the sole
+ * exception by data shape, holding their raw source keys. There is no
+ * reverse-mapping to the manifest-backed arm's source names -- the divergence
+ * is documented in the output catalog, not engineered away.
+ *
+ * Sorting reuses `discoverComponentNames`' comparator so the two surfaces
+ * order identically. Entries are copied, never de-duplicated: `resources.*` is
+ * the record of what was materialized, and hiding a duplicate would hide a
+ * real state defect.
+ *
+ * INFO-11 / D-96-03: the `hooks` kind is deliberately absent. It needs a read
+ * of the materialized `hooks.json`, which lands inside this function -- no
+ * caller changes when it does.
+ */
+function composeStateOnlyComponents(
+  record: MarketplaceRecord["plugins"][string],
+): Extract<PluginInfoRow, { componentsResolved: true }>["components"] {
+  const agents = sortComponentNames(record.resources.agents);
+  const commands = sortComponentNames(record.resources.prompts);
+  const mcp = sortComponentNames(record.resources.mcpServers);
+  const skills = sortComponentNames(record.resources.skills);
+
+  return {
+    ...(agents.length > 0 && { agents }),
+    ...(commands.length > 0 && { commands }),
+    ...(mcp.length > 0 && { mcp }),
+    ...(skills.length > 0 && { skills }),
+  };
+}
+
+/** The `discoverComponentNames` ordering, applied to a persisted name list. */
+function sortComponentNames(names: readonly string[]): readonly string[] {
+  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 
 /**
@@ -961,8 +1066,7 @@ function buildNonPathInstalledRow(
   description: string | undefined,
   installedRecord: MarketplaceRecord["plugins"][string],
 ): PluginInfoRow {
-  const status =
-    installedRecord.compatibility.unsupported.length > 0 ? "partially-installed" : "installed";
+  const status = derivePersistedInstalledStatus(installedRecord);
   return {
     status,
     name: pluginName,

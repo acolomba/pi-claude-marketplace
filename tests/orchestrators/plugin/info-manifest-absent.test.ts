@@ -1,0 +1,453 @@
+// tests/orchestrators/plugin/info-manifest-absent.test.ts
+//
+// Byte-exact characterization of `getPluginInfo` blocks whose installation
+// record is ABSENT from a marketplace manifest that loaded successfully. Split
+// out of `info.test.ts` because this set has its own lifecycle: the state-only
+// arm is new behavior, while `info.test.ts` keeps the manifest-backed arms and
+// the two boundary pins (BOUND-01 / BOUND-02) it already owns.
+//
+// Requirement coverage:
+//   - INFO-09 an enabled, fully supported manifest-absent record renders
+//     `(installed) {not in manifest}` at the RECORDED version
+//   - INFO-10 the same record carrying persisted `compatibility.unsupported`
+//     kinds renders `(partially-installed)` with the absence token FIRST
+//   - INFO-11 the four name-list component kinds render from `resources.*`,
+//     sorted, with the Pi-generated installed names verbatim (D-96-01)
+//   - D-54-01 / ENBL-04 the disabled carve-out still runs BEFORE the
+//     state-only arm
+//
+// Assertions are whole-message equality against a `[...].join("\n")` literal,
+// never a partial regex match: token, glyph, spacing and ordering drift is
+// exactly the regression class these requirements exist to catch. A
+// state-only block routes to `info` severity, so `notify` is called with no
+// second argument and carries NO summary line.
+//
+// Fixture note: manifest ABSENCE is seeded by a manifest that PARSES with the
+// installed name omitted from its `plugins` array. Omitting the manifest FILE
+// instead produces a manifest read FAILURE and the bare `(failed)
+// {source missing}` row (BOUND-01) -- a different state entirely, pinned in
+// `info.test.ts`.
+
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+interface NotifyRecord {
+  message: string;
+  severity?: string;
+}
+
+function makeCtx(): {
+  ctx: ExtensionContext;
+  pi: ExtensionAPI;
+  notifications: NotifyRecord[];
+} {
+  const notifications: NotifyRecord[] = [];
+  const pi = {
+    getAllTools: (): unknown[] => [],
+  } as unknown as ExtensionAPI;
+  const ctx = {
+    ui: {
+      notify: (m: string, s?: string): void => {
+        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      },
+    },
+    pi,
+  } as unknown as ExtensionContext;
+  return { ctx, pi, notifications };
+}
+
+/**
+ * Run a callback with HOME pointing at a tmp dir so user-scope state
+ * is hermetic. Restores the original HOME afterward.
+ */
+async function withHermeticHome<T>(
+  fn: (env: { home: string; cwd: string }) => Promise<T>,
+): Promise<T> {
+  const originalHome = process.env.HOME;
+  const home = await mkdtemp(path.join(tmpdir(), "plug-info-abs-home-"));
+  const cwd = await mkdtemp(path.join(tmpdir(), "plug-info-abs-cwd-"));
+  process.env.HOME = home;
+  try {
+    return await fn({ home, cwd });
+  } finally {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+
+    // Retry rmdir: a recursive rm can race a lingering async write (a probe
+    // or clone-cache op) and hit ENOTEMPTY on rmdir; retry until it settles.
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
+interface SeedPathMarketplaceOpts {
+  readonly scope: "user" | "project";
+  readonly scopeRoot: string;
+  readonly cwd: string;
+  readonly mpName: string;
+  readonly manifest: { name: string; plugins: readonly Record<string, unknown>[] };
+  /**
+   * Installed plugin records. `disabled: true` seeds the ENBL-02
+   * empty-resources marker (recorded-but-disabled); the default seeds a
+   * populated `resources.skills` -- a production installed record always has
+   * >= 1 populated array (the empty-resources + installable:true
+   * intersection IS the disabled marker, D-54-01 / ENBL-04).
+   */
+  readonly installed?: Record<
+    string,
+    {
+      version: string;
+      disabled?: boolean;
+      /**
+       * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
+       * component-kind list. A non-empty value reproduces a recorded-installed
+       * plugin that resolved `unsupported` at install time -- the force-installed
+       * signal the deriver reads (with `installable: false`).
+       */
+      unsupported?: readonly string[];
+      /**
+       * INFO-11: per-kind override of the persisted `resources` arrays. Each
+       * omitted kind keeps its default (`[<name>-skill]` for skills, `[]` for
+       * the rest); an explicitly empty array seeds a genuinely empty kind. The
+       * state-only arm reads these arrays verbatim, so this is the only way to
+       * seed the four name-list kinds and the all-empty edge.
+       */
+      resources?: {
+        skills?: readonly string[];
+        prompts?: readonly string[];
+        agents?: readonly string[];
+        mcpServers?: readonly string[];
+        hooks?: readonly string[];
+      };
+    }
+  >;
+  /** Plugin source dirs to create under <mpRoot> so resolveStrict probes succeed. */
+  readonly installablePluginDirs?: readonly string[];
+  /** Per-plugin component dirs to create (relative to plugin root). */
+  readonly componentDirs?: Record<string, readonly string[]>;
+}
+
+/**
+ * Seed a path-source marketplace into the given scope's state.json.
+ * Writes the marketplace.json + the per-plugin source dirs so
+ * `resolveStrict`'s `statKind` probe finds them.
+ */
+async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<string> {
+  const { scope, scopeRoot, cwd, mpName, manifest } = opts;
+  const locations = locationsFor(scope, cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+
+  const mpRoot = path.join(scopeRoot, "marketplaces", mpName);
+  await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+
+  for (const rel of opts.installablePluginDirs ?? []) {
+    await mkdir(path.join(mpRoot, rel), { recursive: true });
+  }
+
+  for (const [pluginDir, components] of Object.entries(opts.componentDirs ?? {})) {
+    for (const c of components) {
+      await mkdir(path.join(mpRoot, pluginDir, c), { recursive: true });
+    }
+  }
+
+  const plugins: Record<string, unknown> = {};
+  for (const [name, info] of Object.entries(opts.installed ?? {})) {
+    const unsupported = info.unsupported ?? [];
+    const override = info.resources;
+    plugins[name] = {
+      version: info.version,
+      resolvedSource: "./placeholder",
+      compatibility: {
+        installable: unsupported.length === 0,
+        notes: [],
+        supported: [],
+        unsupported: [...unsupported],
+      },
+      resources:
+        info.disabled === true
+          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+          : {
+              skills: [...(override?.skills ?? [`${name}-skill`])],
+              prompts: [...(override?.prompts ?? [])],
+              agents: [...(override?.agents ?? [])],
+              mcpServers: [...(override?.mcpServers ?? [])],
+              hooks: [...(override?.hooks ?? [])],
+            },
+      enabled: info.disabled !== true,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
+  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
+  try {
+    const raw = await readFile(stateJsonPath, "utf8");
+    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
+  } catch {
+    /* first marketplace in scope */
+  }
+
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      ...existing.marketplaces,
+      [mpName]: {
+        name: mpName,
+        scope,
+        source: pathSource(`./${mpName}-src`),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: mpRoot,
+        plugins,
+      },
+    },
+  } as unknown as Parameters<typeof saveState>[1]);
+
+  return mpRoot;
+}
+
+// ---------------------------------------------------------------------------
+// INFO-09: a fully supported record the loaded manifest no longer declares is
+// INSTALLED, not failed. The version comes from the installation record
+// because no manifest entry exists to supply one.
+// ---------------------------------------------------------------------------
+
+test("INFO-09: a manifest-absent enabled record renders `(installed) {not in manifest}` at the recorded version", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "an installed record is not a failure");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-10: persisted unsupported kinds keep the record `(partially-installed)`
+// on the state-only arm too. `narrowUnsupportedKinds` stays the sole producer
+// of the kind tokens; the absence reason is PREPENDED around its output.
+// ---------------------------------------------------------------------------
+
+test("INFO-10: a manifest-absent record with persisted unsupported kinds renders `(partially-installed) {not in manifest, lsp}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", unsupported: ["lspServers"] } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◉ alpha v1.0.0 (partially-installed) {not in manifest, lsp}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-11 / D-96-01: the four name-list kinds come from `resources.*` and
+// render the Pi-GENERATED installed names verbatim -- no reverse-mapping to
+// the plugin author's source names. MCP servers are the sole exception by data
+// shape: the record holds their raw source keys. Kind order is the renderer's
+// fixed `agents, commands, mcp, skills`; within a kind the orchestrator sorts.
+// ---------------------------------------------------------------------------
+
+test("INFO-11: the four name-list kinds render from `resources.*`, sorted, with generated names verbatim", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          resources: {
+            skills: ["alpha-skill", "Alpha-other"],
+            prompts: ["alpha:build"],
+            agents: ["pi-claude-marketplace-alpha-review"],
+            mcpServers: ["zeta-srv", "alpha-srv"],
+          },
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    agents: pi-claude-marketplace-alpha-review",
+        "    commands: alpha:build",
+        "    mcp: alpha-srv, zeta-srv",
+        "    skills: Alpha-other, alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-11 empty edge: all five resources arrays empty on an ENABLED record.
+// The components are known and known to be NONE, so the row renders alone --
+// no per-kind lines and no `components: not resolved` marker (that marker
+// means "we did not look", which would be a lie here).
+// ---------------------------------------------------------------------------
+
+test("INFO-11: a manifest-absent record with all-empty resources renders the bare row, no `components: not resolved`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Control: the manifest DECLARES the plugin, so the manifest-backed arm runs
+// unchanged -- no `{not in manifest}` brace, and components enumerate from
+// disk as the author's SOURCE names. Proves the arm split did not leak the
+// absence reason onto the declared path, and shows the D-96-01 divergence
+// side by side (source `alpha-src-skill` here vs generated `alpha-skill` on
+// the state-only rows above).
+// ---------------------------------------------------------------------------
+
+test("INFO-09 boundary: a DECLARED plugin keeps the manifest-backed row with no `{not in manifest}` brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills/alpha-src-skill"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed)",
+        "    skills: alpha-src-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-54-01 / ENBL-04: the disabled carve-out is partitioned out of the info
+// surface BEFORE `buildBlock` runs, so a manifest-absent DISABLED record still
+// renders the list-arm `(disabled)` inventory cascade rather than the new
+// state-only installed block.
+// ---------------------------------------------------------------------------
+
+test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` inventory cascade", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+    );
+  });
+});
