@@ -176,8 +176,8 @@ test("WR-02 / CR-01: a degraded record whose newer candidate probe FAILED is `fo
 });
 
 test("WR-01 / ENBL-02: a recorded-but-disabled record is `installed`, never split into upgradable/force-upgradable", () => {
-  // The `installable: true` + `enabled: false` marker (isRecordedButDisabled)
-  // is version-frozen: even with a newer candidate that would resolve clean OR
+  // The explicit `enabled: false` marker (isRecordedButDisabled) is
+  // version-frozen: even with a newer candidate that would resolve clean OR
   // unsupported, the classifier short-circuits to `installed` so the disabled
   // record never leaks into the `update --force` candidate set. `list` renders
   // the distinct `(disabled)` token via its own pre-classifier guard.
@@ -190,6 +190,35 @@ test("WR-01 / ENBL-02: a recorded-but-disabled record is `installed`, never spli
   assert.equal(
     classifyInstalledRecord(disabled, { upgradable: true, resolved: unsupportedResolved() }),
     "installed",
+  );
+});
+
+test("ENBL-05 / WR-01: a DISABLED PARTIAL record is `installed` -- the disabled short-circuit runs ahead of the unsupported branch", () => {
+  // A degraded record can also be explicitly disabled (the disable
+  // orchestrator writes `enabled: false` with no availability guard). Once the
+  // predicate stopped reading the availability axis, this record reaches the
+  // short-circuit, and the short-circuit's position BEFORE the
+  // `unsupported.length` branch becomes load-bearing: a disabled partial is
+  // frozen `installed`, never `partially-installed`, so it stays out of the
+  // `update --partial` candidate set exactly like the canonical disabled row.
+  const disabledPartial = record(["lspServers"], { enabled: false });
+  assert.equal(disabledPartial.compatibility.installable, false, "fixture is the degraded shape");
+  assert.equal(classifyInstalledRecord(disabledPartial, { upgradable: false }), "installed");
+  assert.equal(
+    classifyInstalledRecord(disabledPartial, { upgradable: true, resolved: installable() }),
+    "installed",
+  );
+});
+
+test("ENBL-05 over-reach guard: an ENABLED soft-degraded record is still `partially-installed`", () => {
+  // The counter-case that proves the collapse did not widen "disabled" to mean
+  // "degraded". Same availability shape as the disabled partial above, only
+  // `enabled` differs -- and it alone decides the outcome.
+  const enabledPartial = record(["lspServers"], { enabled: true });
+  assert.equal(enabledPartial.compatibility.installable, false, "fixture is the degraded shape");
+  assert.equal(
+    classifyInstalledRecord(enabledPartial, { upgradable: false }),
+    "partially-installed",
   );
 });
 

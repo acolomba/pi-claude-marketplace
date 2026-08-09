@@ -370,8 +370,10 @@ interface FixturePlugin {
   /** Installed record (state-present). `compatUnsupported` non-empty -> force-installed. */
   readonly installed?: { readonly version: string; readonly compatUnsupported?: readonly string[] };
   /**
-   * Mark the installed record recorded-but-disabled (ENBL-02): `enabled: false`
-   * with `installable: true`. The canonical `isRecordedButDisabled` marker.
+   * Mark the installed record recorded-but-disabled (ENBL-05): an explicit
+   * `enabled: false`. That boolean is the whole `isRecordedButDisabled` marker
+   * -- it composes freely with `compatUnsupported`, so pairing the two yields
+   * the disabled-PARTIAL shape.
    */
   readonly disabled?: boolean;
 }
@@ -492,6 +494,16 @@ const FINER_STATUS_FIXTURE: readonly FixturePlugin[] = [
     manifestVersion: "2.0.0",
     disabled: true,
     installed: { version: "1.0.0" },
+  },
+  // ENBL-05: the disabled PARTIAL -- `enabled: false` AND a persisted
+  // `compatibility.unsupported`. It must bucket exactly like `disabled-drift`
+  // (frozen `installed`), NOT like `forced` (`partially-installed`), so a
+  // disabled record is never offered as an `update --partial` candidate.
+  {
+    name: "disabled-partial",
+    manifestVersion: "2.0.0",
+    disabled: true,
+    installed: { version: "1.0.0", compatUnsupported: ["lspServers"] },
   },
   // WR-02: degraded record (partially-installed) with a newer candidate that
   // resolves CLEAN -> force-installed-upgradable (a supported upgrade promotes
@@ -775,6 +787,44 @@ test("WR-01: a disabled + version-drifted plugin -- `list` renders `(disabled)`,
     const state = await loadState(locationsFor("project", cwd).extensionRoot);
     const record = state.marketplaces["wr01-mp"]?.plugins["disabled-drift"];
     assert.ok(record);
+    assert.equal(isRecordedButDisabled(record), true);
+  });
+});
+
+test("ENBL-05: a DISABLED PARTIAL buckets with the plain installed set, never `partially-installed` (not an `update --partial` candidate)", async () => {
+  await withHermeticProjectScope(async ({ cwd }) => {
+    await layoutFixtureMarketplace(cwd, "enbl05-mp", FINER_STATUS_FIXTURE);
+
+    const resolver = makeLocationsResolver(cwd);
+    const rows = await resolver.loadManifestForMarketplace("project", "enbl05-mp");
+    const statusByName = new Map(rows.map((r) => [r.name, r.status]));
+
+    // Present in the installed bucket, at parity with the canonical disabled
+    // record -- the disabled short-circuit runs ahead of the degrade branch.
+    assert.equal(statusByName.get("disabled-partial"), "installed");
+    assert.equal(statusByName.get("disabled-partial"), statusByName.get("disabled-drift"));
+
+    // Absent from the `partially-installed` bucket, so `update --partial`
+    // completion cannot offer it: re-staging artifacts the user deliberately
+    // unstaged is the outcome this guards against.
+    const partialBucket = rows
+      .filter(
+        (r) => r.status === "partially-installed" || r.status === "partially-installed-upgradable",
+      )
+      .map((r) => r.name);
+    assert.ok(
+      !partialBucket.includes("disabled-partial"),
+      `disabled partial must not appear in the partially-installed buckets; got ${partialBucket.join(", ")}`,
+    );
+
+    // Control: the SAME availability shape with `enabled: true` is in that
+    // bucket, so the assertion above is about `enabled`, not about degrading.
+    assert.ok(partialBucket.includes("forced"));
+
+    const state = await loadState(locationsFor("project", cwd).extensionRoot);
+    const record = state.marketplaces["enbl05-mp"]?.plugins["disabled-partial"];
+    assert.ok(record);
+    assert.equal(record.compatibility.installable, false, "fixture is the degraded shape");
     assert.equal(isRecordedButDisabled(record), true);
   });
 });
