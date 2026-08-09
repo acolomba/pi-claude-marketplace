@@ -894,7 +894,15 @@ function wrapBlock(
  *
  * NFR-5 / INFO-12: the parameter list takes no `fetchCtx` and no manifest
  * entry, and the body constructs no probe, so the arm is network-free by
- * signature rather than by control flow.
+ * signature rather than by control flow. It calls neither git-source row
+ * builder, so neither `makeFetchProbe` call site is reachable from here: a
+ * signature that cannot express a fetch is a stronger guarantee than a branch
+ * that declines one, and adding a `fetchCtx` parameter would silently dissolve
+ * it. What keeps that true under change is the zero-call suite in
+ * `tests/orchestrators/plugin/info-manifest-absent.test.ts`, which injects the
+ * clone-cache and credential seams and pins every counter on both mocks at 0
+ * for a `--fetch` run -- an assertion that can fail, not a reading of the
+ * control flow.
  */
 async function buildStateOnlyInstalledRow(
   pluginName: string,

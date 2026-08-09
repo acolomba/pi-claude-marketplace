@@ -15,6 +15,8 @@
 //     sorted, with the Pi-generated installed names verbatim (D-96-01)
 //   - D-54-01 / ENBL-04 the disabled carve-out still runs BEFORE the
 //     state-only arm
+//   - INFO-12 / NFR-5 the state-only arm reaches no network surface, asserted
+//     as call counts on the injected clone-cache and credential seams
 //
 // Assertions are whole-message equality against a `[...].join("\n")` literal,
 // never a partial regex match: token, glyph, spacing and ordering drift is
@@ -35,10 +37,21 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { getPluginInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import {
+  materializeOrRefreshPluginMirror,
+  materializePluginClone,
+  resolvePluginPin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
+import {
+  getPluginInfo,
+  type InfoCloneCacheSeam,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
+import { makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -122,6 +135,12 @@ interface SeedPathMarketplaceOpts {
        */
       unsupported?: readonly string[];
       /**
+       * INFO-12: override the persisted `resolvedSource`. The default is the
+       * local `./placeholder`; a `https://` value reproduces a git-source-shaped
+       * record, which the state-only arm must still refuse to probe.
+       */
+      resolvedSource?: string;
+      /**
        * INFO-11: per-kind override of the persisted `resources` arrays. Each
        * omitted kind keeps its default (`[<name>-skill]` for skills, `[]` for
        * the rest); an explicitly empty array seeds a genuinely empty kind. The
@@ -175,7 +194,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     const override = info.resources;
     plugins[name] = {
       version: info.version,
-      resolvedSource: "./placeholder",
+      resolvedSource: info.resolvedSource ?? "./placeholder",
       compatibility: {
         installable: unsupported.length === 0,
         notes: [],
@@ -840,5 +859,180 @@ test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` 
       notifications[0]!.message,
       ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INFO-12 / NFR-5: the state-only arm reaches no network surface.
+//
+// Before the arm split this held for free -- a manifest-absent name returned
+// its `(failed)` row before any fetch-capable builder existed. The arm now sits
+// DOWNSTREAM of `buildInfoFetchContext`, so "we do not call the network here"
+// is a claim that needs an assertion which can fail. The counters below are
+// call counts on injected doubles, never a reading of the control flow: break
+// the guard by threading a `fetchCtx` into `buildStateOnlyInstalledRow` and
+// probing, and these tests go red.
+//
+// The clone-cache seam and the credential ops are the ONLY two routes from this
+// file to a network call or a credential read, so pinning all five counters at
+// zero covers the whole boundary.
+// ---------------------------------------------------------------------------
+
+/** The real clone-cache seam over a mock gitOps (copied from `info.test.ts`). */
+function fetchSeamWith(gitOps: GitOps): InfoCloneCacheSeam {
+  return {
+    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+    materializeOrRefreshPluginMirror: (args) =>
+      materializeOrRefreshPluginMirror({ ...args, gitOps }),
+  };
+}
+
+/** The byte-exact single-scope state-only block, shared by the INFO-12 cases. */
+const STATE_ONLY_BLOCK = [
+  "● mp [user] <no autoupdate>",
+  "  ● alpha v1.0.0 (installed) {not in manifest}",
+  "    skills: alpha-skill",
+].join("\n");
+
+test("INFO-12 / NFR-5: `info --fetch` on a manifest-absent record makes ZERO clone-seam and ZERO credential-seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(gitState.cloneCalls.length, 0, "INFO-12: the state-only arm must not clone");
+    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: the state-only arm must not fetch");
+    assert.equal(
+      credState.fillCalls.length,
+      0,
+      "INFO-12: the state-only arm must not read a credential",
+    );
+    assert.equal(
+      credState.approveCalls.length,
+      0,
+      "INFO-12: the state-only arm must not store a credential",
+    );
+    assert.equal(
+      credState.rejectCalls.length,
+      0,
+      "INFO-12: the state-only arm must not erase a credential",
+    );
+
+    // The row itself is byte-identical to the bare INFO-09 render: `--fetch`
+    // changes nothing about what the arm can say.
+    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+  });
+});
+
+test("INFO-12 / NFR-5: bare `info` on a manifest-absent record makes the same ZERO seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0" } },
+    });
+
+    // The seams are supplied but `fetch` is omitted: nothing may run.
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(gitState.cloneCalls.length, 0, "INFO-12: bare info must not clone");
+    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: bare info must not fetch");
+    assert.equal(credState.fillCalls.length, 0, "INFO-12: bare info must not read a credential");
+    assert.equal(
+      credState.approveCalls.length,
+      0,
+      "INFO-12: bare info must not store a credential",
+    );
+    assert.equal(credState.rejectCalls.length, 0, "INFO-12: bare info must not erase a credential");
+    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+  });
+});
+
+test("INFO-12 / NFR-5: a git-source-shaped manifest-absent record under `--fetch` still makes ZERO seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    // A remote `resolvedSource` is the shape that WOULD drive a probe on the
+    // manifest-backed arm. The state-only arm never consults the source kind,
+    // so the counters stay at zero for exactly the same reason as above.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resolvedSource: "https://example.com/repo" } },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(gitState.cloneCalls.length, 0, "INFO-12: a remote-shaped record must not clone");
+    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: a remote-shaped record must not fetch");
+    assert.equal(
+      credState.fillCalls.length,
+      0,
+      "INFO-12: a remote-shaped record must not read a credential",
+    );
+    assert.equal(
+      credState.approveCalls.length,
+      0,
+      "INFO-12: a remote-shaped record must not store a credential",
+    );
+    assert.equal(
+      credState.rejectCalls.length,
+      0,
+      "INFO-12: a remote-shaped record must not erase a credential",
+    );
+    assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
   });
 });
