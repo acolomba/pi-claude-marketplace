@@ -94,7 +94,7 @@ import {
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
@@ -1341,19 +1341,6 @@ async function markUpdateInProgress(
  * is a truthful "we touched this record" stamp.
  */
 /**
- * ENBL-02: same rule as `reconcile/plan.ts::isRecordedButDisabled`.
- * Duplicated here to avoid pulling the reconcile module into the orchestrator's
- * import graph; the planner is the canonical owner and this predicate is the
- * deliberate same-rule mirror (`enable-disable.ts::isCurrentlyDisabled` does
- * the same for its own reasons).
- */
-function isRecordedButDisabled(
-  record: ExtensionState["marketplaces"][string]["plugins"][string],
-): boolean {
-  return record.compatibility.installable && !record.enabled;
-}
-
-/**
  * D-UPD: refresh a disabled-but-recorded plugin's version pin + resolvedSource
  * inside a withStateGuard so a future `enable` re-materializes from the
  * current manifest. Resources.* stay empty (the plugin is still disabled).
@@ -1559,8 +1546,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
 
   const { installable, fromVersion, toVersion } = preflight;
 
-  // D-UPD: a disabled-but-recorded plugin (empty resources.* + installable=true,
-  // the same marker the planner reads via isRecordedButDisabled) must NOT
+  // D-UPD: a disabled-but-recorded plugin (explicit `enabled: false` -- the
+  // single `isRecordedButDisabled` marker, degraded or not) must NOT
   // re-materialize artifacts; an `enable` after the update is the rematerialization
   // surface. Refresh the record's version + resolvedSource so a future enable
   // reads the current pin, but keep `resources.*` empty. Renders the existing

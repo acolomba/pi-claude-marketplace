@@ -52,7 +52,11 @@ import {
 import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  loadState,
+  type ExtensionState,
+} from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -69,7 +73,6 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
-import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import {
   canonicalCloneUrl,

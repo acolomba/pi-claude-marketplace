@@ -55,7 +55,7 @@ import path from "node:path";
 import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
-import { toDisabledRecord } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -168,20 +168,6 @@ type SetEnabledOutcome =
       rollbackPartials?: readonly RollbackPartial[];
     }
   | { kind: "disable-failed"; cause: Error; recordedVersion?: string };
-
-/**
- * ENBL-02: the "currently disabled" marker is an explicit `enabled: false`
- * on the plugin install record. Duplicated locally from
- * `orchestrators/reconcile/plan.ts::isRecordedButDisabled` to avoid pulling
- * the reconcile module into the orchestrator's import graph (the planner is
- * the canonical owner; this predicate is the deliberate same-rule mirror).
- */
-function isCurrentlyDisabled(installed: {
-  compatibility: { installable: boolean };
-  enabled: boolean;
-}): boolean {
-  return installed.compatibility.installable && !installed.enabled;
-}
 
 /**
  * Run the enable branch: invoke the guard-FREE `runInstallLedger` against the
@@ -472,8 +458,11 @@ export async function setPluginEnabled(
         return;
       }
 
-      // ENBL-02 idempotency: empty-resources + installable:true marker.
-      if (isCurrentlyDisabled(installed) === !enable) {
+      // ENBL-05 idempotency: the explicit `enabled: false` marker, read
+      // through the single predicate. Availability is not consulted, so a
+      // disabled PARTIAL record is idempotent on `disable` and re-materializes
+      // on `enable`, at parity with the canonical disabled record.
+      if (isRecordedButDisabled(installed) === !enable) {
         // WR-03: state-side truth alone is not enough.
         // When the targeted config carries the OPPOSITE EXPLICIT `enabled`
         // value (hand-edited config, or base/local divergence pending

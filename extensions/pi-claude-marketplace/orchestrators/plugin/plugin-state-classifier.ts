@@ -14,6 +14,7 @@
 // boundary stay at the caller, where the architecture guard
 // (tests/architecture/no-orchestrator-network.test.ts) enforces it.
 
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { assertNever } from "../../shared/errors.ts";
 
 import type { ResolvedPlugin } from "../../domain/resolver.ts";
@@ -24,7 +25,8 @@ import type { ResolvedPlugin } from "../../domain/resolver.ts";
  *
  * `disabled` is NOT produced here: `list` renders the distinct `(disabled)`
  * inventory token via its own `isRecordedButDisabled` guard ahead of the call
- * (D-54-01 / ENBL-04). The completion path has no `disabled` token, so the
+ * (D-54-01 / ENBL-04) -- the same single predicate this module consumes for its
+ * own short-circuit. The completion path has no `disabled` token, so the
  * classifier collapses a recorded-but-disabled record to `installed` (WR-01) --
  * keeping it in the no-`--partial` inventory set while excluding it from the
  * `update --partial` (upgradable/partially-upgradable) candidates, at parity with the
@@ -66,11 +68,12 @@ export type ManifestEntryClassification =
  * - `compatibility.unsupported` is the install-time degrade signal (FSTAT-01 /
  *   D-66-01): non-empty means one or more components were dropped, so the row
  *   derives `partially-installed`.
- * - `enabled` + `compatibility.installable` are the recorded-but-disabled axes
- *   (ENBL-02 -- canonical `reconcile/plan.ts::isRecordedButDisabled`): an
- *   `installable: true` record with `enabled: false` was explicitly disabled and
- *   is version-frozen, so the classifier short-circuits it to `installed`
- *   (WR-01) -- it must never split into `upgradable`/`partially-upgradable`.
+ * - `enabled` is the recorded-but-disabled axis on its own (ENBL-05 -- the
+ *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
+ *   `enabled: false` was explicitly disabled and is version-frozen, so the
+ *   classifier short-circuits it to `installed` (WR-01) -- it must never split
+ *   into `upgradable`/`partially-upgradable`. `compatibility.installable` is
+ *   read only for the caller's own purposes, never to decide disabled-ness.
  */
 export interface InstalledRecordLike {
   readonly enabled: boolean;
@@ -118,16 +121,19 @@ export function classifyInstalledRecord(
   record: InstalledRecordLike,
   candidate: UpgradeCandidate,
 ): InstalledClassification {
-  // WR-01 / ENBL-02 / D-54-01: a recorded-but-disabled record (the canonical
-  // `installable: true` + `enabled: false` marker `reconcile/plan.ts::
-  // isRecordedButDisabled` reads) is version-frozen while disabled, so it must
-  // never split into `upgradable`/`partially-upgradable`. `list` renders it as the
-  // distinct `(disabled)` token via its own pre-classifier guard; the completion
-  // path has no `disabled` token, so collapse to `installed` here -- it stays in
-  // the no-`--partial` inventory set but is excluded from `update --partial`, at
-  // parity with the frozen `(disabled)` row. Checked BEFORE the partially-installed
-  // branch so a disabled record is never mislabeled `partially-installed`.
-  if (record.compatibility.installable && !record.enabled) {
+  // WR-01 / ENBL-05 / D-54-01: a recorded-but-disabled record (the explicit
+  // `enabled: false` marker the single `isRecordedButDisabled` reads) is
+  // version-frozen while disabled, so it must never split into
+  // `upgradable`/`partially-upgradable`. `list` renders it as the distinct
+  // `(disabled)` token via its own pre-classifier guard; the completion path has
+  // no `disabled` token, so collapse to `installed` here -- it stays in the
+  // no-`--partial` inventory set but is excluded from `update --partial`, at
+  // parity with the frozen `(disabled)` row.
+  //
+  // Checked BEFORE the `unsupported.length` branch, and that precedence is now
+  // load-bearing rather than incidental: a DEGRADED record can also be disabled,
+  // and it must report `installed` (frozen), never `partially-installed`.
+  if (isRecordedButDisabled(record)) {
     return "installed";
   }
 

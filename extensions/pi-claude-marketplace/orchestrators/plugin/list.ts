@@ -57,7 +57,11 @@ import { resolveStrict, type ResolveContext } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  loadState,
+  type ExtensionState,
+} from "../../persistence/state-io.ts";
 import { assertNever, errorMessage } from "../../shared/errors.ts";
 import {
   notifyWithContext,
@@ -70,7 +74,6 @@ import {
   narrowResolverNotes as sharedNarrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
-import { isRecordedButDisabled } from "../reconcile/plan.ts";
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
@@ -413,12 +416,14 @@ async function installedRowMessage(
   const descriptionField: { readonly description?: string } =
     manifestEntry?.description === undefined ? {} : { description: manifestEntry.description };
 
-  // D-54-01 / ENBL-04: a recorded-but-disabled record (empty-resources +
-  // `installable: true` -- the canonical `isRecordedButDisabled` marker the
-  // disable orchestrator writes) renders the `(disabled)` inventory token,
-  // NOT `(installed)`. Checked BEFORE the upgradable branch: the version pin
-  // is frozen while disabled (ENBL-02), so a manifest-version drift must not
-  // surface a misleading `(upgradable)` on a plugin with no artifacts.
+  // D-54-01 / ENBL-04 / ENBL-05: a recorded-but-disabled record -- the explicit
+  // `enabled: false` the disable orchestrator writes, which is the whole
+  // `isRecordedButDisabled` marker -- renders the `(disabled)` inventory token,
+  // NOT `(installed)` and not `(partially-installed)`. A degraded record can be
+  // disabled too, and this guard catches it before the classifier does.
+  // Checked BEFORE the upgradable branch: the version pin is frozen while
+  // disabled (ENBL-02), so a manifest-version drift must not surface a
+  // misleading `(upgradable)` on a plugin with no artifacts.
   if (isRecordedButDisabled(record)) {
     return {
       // D-03/D-06: a disabled INVENTORY row (list surface) is steady state,

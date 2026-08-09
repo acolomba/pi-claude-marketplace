@@ -127,6 +127,33 @@ export function toDisabledRecord(
 }
 
 /**
+ * ENBL-05: the SOLE disabled-state predicate -- the read side of the shape
+ * {@link toDisabledRecord} writes. Every surface that asks "is this record
+ * currently disabled" consumes this one definition; a module that re-derives
+ * the rule locally is a drift twin the gate in
+ * `tests/orchestrators/reconcile/plan.test.ts` rejects.
+ *
+ * The availability axis (`compatibility.installable`) is deliberately NOT an
+ * input. The disable orchestrator is the only writer of `enabled: false` and
+ * it places no availability guard before writing, so a soft-degraded record
+ * can be explicitly disabled too; reading both axes merged those two
+ * independent facts and left the disabled partial unrecognized everywhere.
+ * Degraded-ness and disabled-ness are orthogonal: a record with
+ * `installable: false` and `enabled: true` is degraded, NOT disabled, and
+ * must keep materializing its supported components.
+ *
+ * The `resources.*` arrays are not read either: emptiness is a consequence of
+ * disabling, never the marker (a hooks-only plugin is legitimately installed
+ * with four empty arrays, and the transient post-migration shape is enabled
+ * with five).
+ *
+ * Structural parameter so every caller's record view satisfies it directly.
+ */
+export function isRecordedButDisabled(record: { readonly enabled: boolean }): boolean {
+  return !record.enabled;
+}
+
+/**
  * ST-2: per-marketplace record. `source` is `Type.Unknown()` so the schema
  * accepts whatever shape ST-6 funnel produced (PathSource | GitHubSource);
  * cross-shape validation lives in domain/source.ts. The schema's job is
