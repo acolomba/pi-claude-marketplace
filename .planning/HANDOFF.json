@@ -1,0 +1,95 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-10T11:44:50Z",
+  "phase": "99",
+  "phase_name": "post-audit-tech-debt-closure",
+  "phase_dir": ".planning/phases/99-post-audit-tech-debt-closure",
+  "plan": 1,
+  "task": 2,
+  "total_tasks": 18,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": "99-01",
+      "name": "Rename colliding staged-name arrays on both outcome interfaces (D-99-02c)",
+      "status": "done",
+      "commit": "408e7fda, d9659f68, 8c165044",
+      "progress": "stagedAgents/stagedMcpServers -> stagedAgentNames/stagedMcpServerNames on ReinstallReinstalledOutcome and PluginUpdateUpdatedOutcome plus both producers and test fixtures; TS2430 block lifted so PluginUpdateUpdatedOutcome can now extend LedgerDegradationSignals; install.ts:258 Omit deliberately untouched"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": "99-02",
+      "wave": 1,
+      "name": "Widen the ENBL-05 drift gate to destructured / bracket-access / Boolean() twins (D-99-02b)",
+      "status": "not_started"
+    },
+    {
+      "id": "99-03",
+      "wave": 1,
+      "name": "Doc deferrals: cascade skip-row catalog state + FIXTURES, nine-variant count, seven dangling RLD-04/D-08 anchors (D-99-04)",
+      "status": "not_started"
+    },
+    {
+      "id": "99-04",
+      "wave": 2,
+      "depends_on": ["99-01"],
+      "name": "Thread the malformed-component signal through update on both render surfaces (WR-12 / D-99-03)",
+      "status": "not_started"
+    },
+    {
+      "id": "99-05",
+      "wave": 3,
+      "depends_on": ["99-03", "99-04"],
+      "name": "Export the membership discriminant from domain/manifest-lookup.ts; rewire list/info/update; add a lookup drift gate (D-99-02a)",
+      "status": "not_started"
+    },
+    {
+      "id": "99-06",
+      "wave": 4,
+      "depends_on": ["99-05"],
+      "name": "Reorder the disabled branch ahead of the unchanged-version short-circuit; make the deep-equal guard load-bearing (D-99-05a)",
+      "status": "not_started"
+    },
+    {
+      "id": "99-07",
+      "wave": 5,
+      "depends_on": ["99-06"],
+      "name": "Measure residual rare-failure arms, then cover them within the locked bound (D-99-05b)",
+      "status": "not_started"
+    },
+    {
+      "id": "phase-99-tail",
+      "name": "Phase 99 gates: code review (+ --fix --auto loop), verifier, validate-phase, secure-phase, transition",
+      "status": "not_started"
+    },
+    {
+      "id": "milestone-lifecycle",
+      "name": "v1.18 close: re-audit or accept, complete-milestone, cleanup; then version bump + CHANGELOG + PR",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "All four post-audit debt groups (fragility trio, WR-12, doc deferrals, legacy carriers) land in Phase 99 before v1.18 completes; runtime UAT before archive explicitly waived",
+      "rationale": "operator selections at the audit review, 2026-08-10",
+      "phase": "99"
+    },
+    {
+      "decision": "WR-04 direction 2 in Phase 98; SEV-03 info severity for the degraded enable row; per-surface SEV-01 asymmetry on the reconcile projection",
+      "rationale": "operator rulings during phases 97-98; settled, do not revisit",
+      "phase": "97/98"
+    },
+    {
+      "decision": "Rename BOTH verbs' staged-name arrays (not just reinstall's), close all SEVEN RLD-04/D-08 sites (grep is authoritative over the prose count)",
+      "rationale": "orchestrator directive resolving research open questions 1 and 2",
+      "phase": "99"
+    }
+  ],
+  "uncommitted_files": [],
+  "next_action": "Dispatch gsd-executor for plan 99-02 (wave 1, independent of 99-01/99-03). Then 99-03, then 99-04 (wave 2 — it MUST inherit LedgerDegradationSignals directly now that 99-01 lifted the TS2430 block; reaching for Pick/Omit there is the wrong turn the plan forbids). Executors run sequentially on this worktree with the trufflehog commit protocol.",
+  "context_notes": "Autonomous run (/gsd-autonomous --interactive) over milestone v1.18 from the worktree .worktrees/manifest-independent-plugin-info (branch features/manifest-independent-plugin-info). Phases 95-98 are COMPLETE and verified (verification passed, nyquist-compliant, threats_open 0 on each); the v1.18 milestone audit ran and returned status tech_debt with 0 blockers, 22/22 requirements satisfied, 4/4 integration seams wired, 3/3 E2E flows complete. At the audit review the operator chose 'Stop - address debt first' and then selected ALL FOUR debt groups, which became Phase 99 (added to the roadmap after 98, 7 plans, checker passed first iteration). Phase 99 plan 99-01 is complete; 99-02..99-07 remain. After Phase 99 the milestone lifecycle resumes: complete-milestone v1.18 -> cleanup -> version bump + PR. Environment: run all GSD tooling from the worktree (the main checkout reports stale state); full suites need PI_SUBAGENTS_ROOT=/home/acolomba/.pi/agent/npm/node_modules/pi-subagents; commits from the worktree need the trufflehog filesystem-scan + SKIP=trufflehog protocol; IDE diagnostics on .ts files are stale noise (confirmed again at pause time: diagnostics reported five TS2551/TS2561 errors while npm run typecheck exited 0)."
+}
