@@ -35,8 +35,8 @@
 <!-- LIFE numbering continues from v1.13 (LIFE-01..03). -->
 
 - [ ] **LIFE-04**: A manifest-absent installed plugin remains fully uninstallable through its existing installation record, with every owned resource and the plugin record removed through the normal uninstall path. This already holds -- `uninstall` imports no manifest or resolver module -- so the requirement is regression coverage spanning all five resource kinds, including hooks and MCP cleanup.
-- [ ] **LIFE-05**: Targeted and bulk plugin update retain their existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; coverage must span the targeted, marketplace-bulk, and global-bulk enumeration paths.
-- [ ] **LIFE-06**: Marketplace autoupdate retains its existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; the skip originates in the shared update preflight and is re-narrowed by the cascade mapper, so cover the autoupdate-on-marketplace-update path explicitly.
+- [x] **LIFE-05**: Targeted and bulk plugin update retain their existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; coverage must span the targeted, marketplace-bulk, and global-bulk enumeration paths.
+- [x] **LIFE-06**: Marketplace autoupdate retains its existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; the skip originates in the shared update preflight and is re-narrowed by the cascade mapper, so cover the autoupdate-on-marketplace-update path explicitly.
 
 ### Enable/Disable State Classification
 
@@ -109,8 +109,8 @@ Which phases cover which requirements.
 | ENBL-08 | Phase 97 | Complete |
 | ENBL-09 | Phase 97 | Complete |
 | LIFE-04 | Phase 98 | Pending |
-| LIFE-05 | Phase 98 | Pending |
-| LIFE-06 | Phase 98 | Pending |
+| LIFE-05 | Phase 98 | Complete |
+| LIFE-06 | Phase 98 | Complete |
 | COMPAT-01 | Phase 98 | Complete |
 | DOC-08 | Phase 98 | Pending |
 

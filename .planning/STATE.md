@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: lifecycle-regression-and-contract-documentation
 status: executing
-stopped_at: Completed 98-04-PLAN.md
-last_updated: "2026-08-10T04:07:03.114Z"
-last_activity: 2026-08-09
-last_activity_desc: "Phase 98 plan 03 complete — WR-02 and WR-04 closed: a stale-gate enable failure names its dropped kinds and points at update --partial, and a disabled record reaches the update refresh short-circuit with no flag typed"
+stopped_at: Completed 98-05-PLAN.md
+last_updated: "2026-08-10T04:23:14.219Z"
+last_activity: 2026-08-10
+last_activity_desc: "Phase 98 plan 05 complete — LIFE-05 and LIFE-06 pinned: the manifest-absent skip row is byte-locked on all three update enumeration targets and on both halves of the autoupdate cascade, plus the idempotency and no-state-write edges"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 75
 ---
 
@@ -35,8 +35,8 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 ## Current Position
 
 Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
-Plan: 5 of 6
-Status: Executing Phase 98 — plans 01-04 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04 pinned; COMPAT-01 gated by one enumeration-equality contract test)
+Plan: 6 of 6
+Status: Executing Phase 98 — plans 01-05 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04, LIFE-05 and LIFE-06 pinned; COMPAT-01 gated by one enumeration-equality contract test). Plan 06 (DOC-08 accuracy sweep) remains
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -191,6 +191,8 @@ two integration checks.
 - [Phase 98]: Enumeration equality over count pins for closed-set gates: notify-closed-set-locks owns lengths, compat-01-no-expansion owns membership
 - [Phase 98]: Architecture gates delegate a clause through a shared non-test helper (tests/helpers/source-scan.ts), never by importing another *.test.ts module
 - [Phase 98]: PLUGIN_INSTALL_RECORD_SCHEMA is exported as a test-only widening so the COMPAT-01 gate reads the record key set off the schema rather than a hand-maintained list
+- [Phase 98]: The bulk enumeration bodies carry the plural-cardinality tally line the targeted body omits; the skip row itself is byte-identical across all three update targets.
+- [Phase 98]: The end-to-end autoupdate case uses user scope with a hermetic home, because the single-plugin update reads the process working directory itself.
 
 ### Open decisions
 
@@ -279,9 +281,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P02 | 20min | 3 tasks | 1 file |
 | Phase 98 P03 | 55min | 2 tasks | 7 files |
 | Phase 98 P04 | 30min | 2 tasks | 4 files |
+| Phase 98 P05 | 16min | 3 tasks | 2 files |
 
 ## Session
 
-**Last session:** 2026-08-10T04:06:52.448Z
-**Stopped at:** Completed 98-04-PLAN.md
+**Last session:** 2026-08-10T04:23:06.066Z
+**Stopped at:** Completed 98-05-PLAN.md
 **Resume file:** None
