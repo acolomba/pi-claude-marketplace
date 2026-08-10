@@ -325,7 +325,7 @@ Plans:
 
 - [x] 99-01-PLAN.md — Rename the colliding staged-name string arrays on BOTH outcome interfaces (D-99-02c; the enabler that unblocks 99-04)
 - [x] 99-02-PLAN.md — Widen the ENBL-05 drift gate to the destructured, bracket-access and Boolean twin spellings (D-99-02b)
-- [ ] 99-03-PLAN.md — Close the three 98-06 documentation deferrals: cascade skip-row catalog state, nine-variant count, seven dangling anchor sites (D-99-04)
+- [x] 99-03-PLAN.md — Close the three 98-06 documentation deferrals: cascade skip-row catalog state, nine-variant count, seven dangling anchor sites (D-99-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-02-PLAN.md
-last_updated: "2026-08-10T12:13:57.006Z"
+stopped_at: Completed 99-03-PLAN.md
+last_updated: "2026-08-10T15:12:00.000Z"
 last_activity: 2026-08-10
-last_activity_desc: "Phase 99 plan 02 complete — D-99-02b closed: three non-global patterns (`DESTRUCTURED_ENABLED_BINDING`, `BRACKET_ENABLED_ACCESS`, `BOOLEAN_ENABLED_COERCION`) widen the ENBL-05 drift gate so a destructured binding, a bracket access, or a `Boolean()` coercion of `enabled` can no longer install a second definition of disabled behind a green gate. Each proven TRUE on its twin and FALSE on both negative controls, plus a membership + non-global wiring pin; 202-file walk green, test-only change"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 19
-  percent: 79
+  completed_plans: 20
+  percent: 83
+last_activity_desc: "Phase 99 plan 03 complete — D-99-04 closed: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -34,8 +34,25 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 2 of 7 complete (wave 1 in progress)
-Status: Ready to execute
+Plan: 3 of 7 complete (wave 1 done; next is 99-04, wave 2)
+Status: Executing
+Plan 99-03 closed D-99-04, the documentation-deferral group, without changing a
+single code line — `git diff -U0 extensions/` filtered to non-comment lines is
+empty. The version-less autoupdate cascade skip row now has the catalog state
+`update-autoupdate-cascade-not-in-manifest`, shipped in the SAME commit as its
+`catalog-uat` FIXTURES entry so neither direction of the gate could pass on a
+half-landed pair. The description-bearing variant count was re-derived from the
+nine plugin-row interfaces in `notify.ts` that declare `description?`, not
+incremented: `MarketplaceInfoMessage` and `PluginInfoRowBase` also declare it
+but are not list-surface plugin rows, so they stay excluded. The dangling
+anchor pair is gone from SEVEN paired sites, not six — research was right and
+both 99-CONTEXT and the 98-06 note undercounted; the two extra sites are both
+in `shared/notify.ts` (the `PLUGIN_STATUSES` doc block and the parenthesised
+one after `PL-4` in `composePluginLinesWith`). `grep -rn "RLD-04" extensions/`
+now returns nothing, while `grep -rln "D-08"` returns exactly the eight
+excluded files, none of which appears in the diff. Gate green: 3389 unit (1
+pre-existing platform-conditional skip) + 18 integration, 0 fail.
+
 Plan 99-02 closed D-99-02b, the second of the fragility trio, without touching
 a production line. Three named non-global patterns join `INLINE_REDERIVATIONS`:
 `DESTRUCTURED_ENABLED_BINDING`, `BRACKET_ENABLED_ACCESS` and
