@@ -158,9 +158,9 @@ interface PluginRow {
  */
 export function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
   switch (status) {
-    // RLD-04 / D-08: the list orchestrator emits the steady-state inventory
-    // row as `installed`; it projects to the same `installed` tool surface as
-    // the cascade transition and the `upgradable` list row.
+    // The list orchestrator emits the steady-state inventory row as
+    // `installed`; it projects to the same `installed` tool surface as the
+    // cascade transition and the `upgradable` list row.
     // FSTAT-02 / FSTAT-04 / D-66-03: both derived partial states flatten to the
     // `installed` tool surface -- a partially-installed plugin is recorded-installed
     // (degraded, but present), and a partially-upgradable plugin is currently a
@@ -324,8 +324,8 @@ function pluginScopeOrFallback(
   marketplaceScope: "user" | "project",
 ): "user" | "project" {
   switch (p.status) {
-    // RLD-04 / D-08: the `installed` inventory row joins `upgradable` as a
-    // scope-bearing list-surface variant.
+    // The `installed` inventory row joins `upgradable` as a scope-bearing
+    // list-surface variant.
     // FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are scope-bearing
     // list-surface variants (each carries the optional `scope?`), so they join
     // the orphan-fold scope arm.
@@ -400,8 +400,9 @@ function pluginReasons(p: PluginNotificationMessage): readonly string[] | undefi
  */
 function pluginVersion(p: PluginNotificationMessage): string | undefined {
   switch (p.status) {
-    // RLD-04 / D-08: the `installed` inventory row carries `version?: string`
-    // like the other optional-version variants.
+    // D-15-04: the `installed` inventory row carries `version?: string` like
+    // every other optional-version variant; only `updated` differs, with its
+    // required `from` / `to` pair.
     case "installed":
     case "upgradable":
     case "available":

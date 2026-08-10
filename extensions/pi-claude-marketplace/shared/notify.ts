@@ -665,12 +665,18 @@ export interface TransitionMessageBase extends MessageBase {
  * (`(installed) {orphan rewake, requires pi-subagents}`). The resolver-side
  * `resolved.orphanRewake === true` plugins are pushed into `reasons[]`.
  *
- * RLD-04 / D-08: this arm ALSO carries the list-surface steady-state inventory
- * row (the former `present` status, now collapsed into `installed`). The list
+ * This arm ALSO carries the list-surface steady-state inventory row. The list
  * orchestrator emits it with `needsReload: false` so the OR-reduce reload-hint
- * (RLD-02) stays suppressed for inventory, and OMITS `reasons` so the
- * orphan-rewake brace never leaks onto a steady-state row. `description?` is the
- * PL-4 optional second line, populated only on the list surface from the
+ * (RLD-02) stays suppressed for inventory. It DOES stamp `reasons` on that row:
+ * INV-01 added the `{not in manifest}` absence brace, so the field is shared by
+ * both surfaces and the row is not structurally bare. What separates them is
+ * the KIND of fact each stamps, and that split is documented convention rather
+ * than a render-path gate (D-95-01 / D-95-02): a steady-state inventory row may
+ * state DURABLE facts about the record -- an absence stays true across reloads
+ * until the manifest or the installation changes -- but not TRANSIENT
+ * conditions tied to a pending action, which is why `orphan rewake` stays an
+ * install-cascade reason and never appears on an inventory row. `description?`
+ * is the PL-4 optional second line, populated only on the list surface from the
  * manifest entry; cascade install rows never carry it.
  */
 export interface PluginInstalledMessage extends TransitionMessageBase {
@@ -2035,17 +2041,23 @@ export function composeReasons(
  * available.
  *
  * Soft-dep marker injection: only the `installed` / `updated` /
- * `reinstalled` arms carry `dependencies`; those arms
- * pass `p.dependencies.includes("agents")` / `p.dependencies.includes("mcp")`
- * to `composeReasons`. The other 7 arms pass `false` for both
- * declares-flags so the soft-dep markers cannot leak onto rows that
- * structurally never declare a soft dep.
+ * `reinstalled` / `partially-installed` arms declare `dependencies`; those
+ * arms pass `p.dependencies.includes("agents")` /
+ * `p.dependencies.includes("mcp")` to `composeReasons`. The other 15 arms pass
+ * `false` for both declares-flags so the soft-dep markers cannot leak onto
+ * rows that structurally never declare a soft dep. `partially-installed` is
+ * the one arm whose field is OPTIONAL (WR-03): the success cascades thread the
+ * staged counts, the inventory rows omit them.
  *
- * Per-variant `composeReasons` first argument:
- *  - 5 reasons-less variants (installed, updated, reinstalled,
- *  uninstalled, available) pass `undefined`;
- *  - 5 reasons-bearing variants (unavailable, upgradable, skipped,
- *  failed, manual recovery) pass `p.reasons`.
+ * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
+ *  - 10 reasons-less variants (updated, reinstalled, uninstalled, available,
+ *  remote, disabled, will install, will uninstall, will enable, will disable)
+ *  pass `undefined` -- or, on the arms that can carry no marker of any kind
+ *  (remote and the four pending-tense rows), drop the call entirely;
+ *  - 9 reasons-bearing variants (installed, unavailable, upgradable, failed,
+ *  skipped, manual recovery, partially-installed, partially-upgradable,
+ *  partially-available) pass `p.reasons`. `installed` is the one arm whose
+ *  field is OPTIONAL, so it passes a possibly-undefined value.
  *
  * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):
@@ -2182,15 +2194,15 @@ function renderPluginRow(
   mpScope: Scope,
 ): string {
   switch (p.status) {
-    // `installed` (cascade transition AND the RLD-04 / D-08 list-surface
-    // inventory row) -- SURF-05 / D-63-08 threads the optional `reasons`
-    // brace through composeReasons; soft-dep markers append into the SAME
-    // brace block per MSG-GR-4 (a plugin with orphan-rewake AND a missing
-    // companion extension renders as
-    // `(installed) {orphan rewake, requires pi-subagents}`). The list
-    // inventory row OMITS `reasons` (the orphan-rewake warning is an
-    // install-cascade surface, not a steady-state inventory surface), so it
-    // renders byte-identically to a bare `(installed)` row.
+    // `installed` (cascade transition AND the list-surface inventory row) --
+    // SURF-05 / D-63-08 threads the optional `reasons` brace through
+    // composeReasons; soft-dep markers append into the SAME brace block per
+    // MSG-GR-4 (a plugin with orphan-rewake AND a missing companion extension
+    // renders as `(installed) {orphan rewake, requires pi-subagents}`). BOTH
+    // surfaces can carry a brace: INV-01 stamps `{not in manifest}` on the
+    // list inventory row. The brace is omitted only when the composed list is
+    // empty, which is the ordinary case on both surfaces -- not a property of
+    // the inventory row.
     case "installed":
       return joinTokens([
         ICON_INSTALLED,
@@ -2334,9 +2346,10 @@ function renderPluginRow(
       // DIFF-02: pending-tense row for a recorded plugin newly
       // declared `enabled: true` after being locally disabled. Reuses
       // ICON_INSTALLED. The bucket is populated only when the recorded-
-      // but-disabled marker (empty resources + installable true) is paired
-      // with a config entry whose `enabled !== false`; the arm is always
-      // present so enable-wiring stays type-complete.
+      // but-disabled marker -- the record's explicit `enabled: false` boolean
+      // and nothing else, per ENBL-05 -- is paired with a config entry whose
+      // `enabled !== false`; the arm is always present so enable-wiring stays
+      // type-complete.
       return joinTokens([
         ICON_INSTALLED,
         p.name,
@@ -2345,7 +2358,7 @@ function renderPluginRow(
       ]);
     case "will disable":
       // DIFF-02: pending-tense row for a recorded plugin newly declared
-      // `enabled: false`. Uses ICON_DISABLED (`◌`) -- the same glyph the
+      // `enabled: false`. Uses ICON_DISABLED (`◍`) -- the same glyph the
       // realized `(disabled)` inventory row uses; this mirrors the precedent
       // that realized + pending-tense rows for the same row class share a
       // glyph (`●` for `(installed)` / `(will install)`, `○` for
@@ -2359,7 +2372,7 @@ function renderPluginRow(
     case "disabled":
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
       // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
-      // (`◌`) glyph, the same glyph the `(will disable)` pending-tense row
+      // (`◍`) glyph, the same glyph the `(will disable)` pending-tense row
       // carries. NO reasons -- the variant carries none; composeReasons
       // receives undefined + both soft-dep flags false (the inventory row
       // never emits soft-dep markers).

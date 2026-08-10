@@ -4,14 +4,20 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 37-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 38-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 37-entry set.
+ * 38-entry set.
+ *
+ * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
+ * joined the set as the truthful marker for a dropped component kind that has
+ * no carve-out of its own. `COMPAT-01` pins the membership by enumeration and
+ * `notify-closed-set-locks.test.ts` pins the length, so the two sentences above
+ * cannot drift from the tuple again without a red test.
  *
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
