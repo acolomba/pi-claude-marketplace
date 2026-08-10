@@ -2473,3 +2473,43 @@ test("LIFE-04: manifest-absent uninstall removes only the owned mcp.json server"
     }
   });
 });
+
+test("LIFE-04: manifest-absent uninstall of a record with no resources still converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-life04-empty-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // An inventory record with nothing on disk -- the shape a disabled
+      // record persists -- is the input most likely to be mishandled by an
+      // unguarded loop. Seeded directly because seedFullPlugin pre-stages
+      // artifacts; every real cascade arm therefore runs against empty input.
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: manifestPathFor(cwd),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+      assert.equal(await pathExists(manifestPathFor(cwd)), false, "manifest absent before call");
+
+      const { ctx, pi, notifications } = makeCtx();
+      await assert.doesNotReject(
+        uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" }),
+      );
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false, "record removed");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, LIFE_04_UNINSTALLED_ROW);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
