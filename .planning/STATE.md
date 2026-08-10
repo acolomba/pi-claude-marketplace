@@ -37,8 +37,7 @@ Phase: Milestone v1.17 complete (Phases 90-94 archived to
 .planning/milestones/v1.17-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-10 — Completed quick task 260810-b7w: Add pi-plugins
-competitive analysis doc
+Last activity: 2026-08-05 — Milestone v1.17 completed and archived
 
 ## Milestone Summary
 
@@ -59,7 +58,6 @@ predates review-fix commit 96cb08c5 (narrative staleness only).
 |---|-------------|------|--------|-----------|
 | 260802-v2z | amend v1.17 env-parity planning docs per validation findings | 2026-08-02 | 1ce8f203 | [260802-v2z-amend-v1-17-env-parity-planning-docs-per](./quick/260802-v2z-amend-v1-17-env-parity-planning-docs-per/) |
 | 260804-gcs | Fix applyPathLedger non-owned PATH stripping | 2026-08-04 | aeef0882 | [260804-gcs-fix-applypathledger-non-owned-path-strip](./quick/260804-gcs-fix-applypathledger-non-owned-path-strip/) |
-| 260810-b7w | Add pi-plugins competitive analysis doc | 2026-08-10 | 1d6e4455 | [260810-b7w-add-docs-competitive-analysis-pi-plugins](./quick/260810-b7w-add-docs-competitive-analysis-pi-plugins/) |
 
 ## Decisions
 
