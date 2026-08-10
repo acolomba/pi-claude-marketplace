@@ -4,17 +4,17 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: Lifecycle regression and contract documentation
-status: planning
+status: executing
 stopped_at: Phase 98 context gathered
-last_updated: "2026-08-10T01:08:02.728Z"
+last_updated: "2026-08-10T02:00:16.857Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 11
+  total_plans: 17
   completed_plans: 11
-  percent: 75
+  percent: 65
 ---
 
 # Project State
@@ -36,7 +36,7 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 
 Phase: 98 — Lifecycle regression and contract documentation
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
