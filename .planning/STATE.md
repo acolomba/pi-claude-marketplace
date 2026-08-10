@@ -366,3 +366,11 @@ dispatch, but 99-02 had already landed as `5481856c`/`07d4e31a`/`6bafbf30`
 with its SUMMARY written). Reconciled and proceeding to
 `/gsd-autonomous --interactive --from 99` (execute 99-03 onward, phase tail,
 then v1.18 milestone close).
+
+**Resumed again:** 2026-08-10 — pause handoff `f9dce10b` reconciled clean this
+time: HANDOFF.json, `.continue-here.md`, STATE.md and `git log` all agree that
+99-01 and 99-02 are complete with SUMMARYs on disk, the tree is clean, and no
+async job is outstanding. HANDOFF.json consumed and removed (one-shot artifact);
+`.continue-here.md` retained, since it still carries the 99-04 blocking
+constraint. Proceeding to `/gsd-autonomous --interactive --from 99` — dispatch
+99-03 (wave 1), then 99-04..99-07, the phase tail, and the v1.18 close.
