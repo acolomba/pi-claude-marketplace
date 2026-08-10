@@ -227,19 +227,19 @@ interface EntityErrorRow {
  * the same ledger run. Each field is omitted when empty, so a clean install's
  * outcome shape is unchanged (NREG-01).
  *
- * WR-03: the intersection is a `Pick` of the three signals this outcome
- * genuinely populates, NOT the whole shape. Every field of the shared shape is
- * optional, so intersecting all five never made a missing one a compile error --
- * it only advertised `stagedAgents` / `stagedMcpServers` that `installPlugin`
- * never writes, which a consumer would read as `undefined` and take for "no
- * agents staged". Those two facts already ride the REQUIRED `declaresAgents` /
+ * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
+ * field it keeps is populated below. Each field of the shared shape is optional,
+ * so intersecting all five never made a missing one a compile error -- it only
+ * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
+ * writes, which a consumer reads as `undefined` and takes for "no agents
+ * staged". Those two facts already ride the REQUIRED `declaresAgents` /
  * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
- * and the reconcile projection), so dropping the optional twins removes a
- * duplicate vocabulary rather than a signal. `unsupported` stays and is
- * populated: an install admitted through the partial gate drops component kinds,
- * and an outcome that omitted them would contradict the `(partially-installed)`
- * row `list` renders one command later -- the same contradiction the shared
- * shape exists to prevent on the enable side.
+ * and the reconcile projection), so excluding the optional twins removes a
+ * duplicate vocabulary rather than a signal. The dropped-component
+ * `unsupported` kind list stays and is populated: an install admitted through
+ * the partial gate drops component kinds, and an outcome silent about them would
+ * contradict the `(partially-installed)` row `list` renders one command later --
+ * the same contradiction the shared shape exists to prevent on the enable side.
  */
 export type InstallPluginOutcome =
   | ({
@@ -249,7 +249,7 @@ export type InstallPluginOutcome =
       readonly declaresMcp: boolean;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
-    } & Pick<LedgerDegradationSignals, "unsupported" | "orphanRewake" | "degradedKinds">)
+    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
   | {
       /**
        * Collapsed failure shape. All failure variants (`already-installed`,

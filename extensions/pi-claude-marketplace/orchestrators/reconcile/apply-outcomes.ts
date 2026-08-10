@@ -124,8 +124,8 @@ export interface PluginInstalledOutcome
  * -- or whose skill frontmatter is unparseable -- rendered a clean row naming
  * neither fact, which is the contradiction the shared shape exists to prevent.
  * The dropped-kind list is NOT inherited: this arm carries the re-resolved
- * `unsupported` field below, which is that same fact read off the backfill's own
- * offline resolution.
+ * `unsupported` kind list below, which is that same fact read off the backfill's
+ * own offline resolution.
  */
 export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
