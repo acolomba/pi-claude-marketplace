@@ -97,6 +97,14 @@ const RAW_LOOKUP_ARROW = /\.plugins\s*\.find\s*\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\.
  * the arrow, where the expression pattern above cannot see it. The bridging
  * segment is bounded and lazy (no nested quantifier) so the pattern stays
  * linear on adversarial input.
+ *
+ * WR-05: the bridge is bounded but not scoped -- it can run past the end of the
+ * `.find(` call and reach a `return <ident>.name ===` in unrelated code up to
+ * 160 characters later, flagging a file that never re-derived the rule.
+ * Deliberate: scoping it would need brace matching a regex cannot do, and for a
+ * drift gate a false positive an author reads and dismisses costs less than a
+ * copy that slips through. Same fail-closed trade as the ENBL-05 destructured
+ * pattern (`tests/orchestrators/reconcile/plan.test.ts`).
  */
 const RAW_LOOKUP_BLOCK_BODY = /\.plugins\s*\.find\s*\([\s\S]{0,160}?\breturn\s+\w+\.name\s*===/;
 

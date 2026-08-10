@@ -741,12 +741,22 @@ const PREDICATE_DEFINITION_SITE = "extensions/pi-claude-marketplace/persistence/
 const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;
 
 /**
- * D-99-02b: a destructure that BINDS the `enabled` key off a record. Matching
- * the binding rather than a bare `!enabled` is what holds the pattern to the
- * plugin-record axis -- a bare identifier cannot be told apart from any
- * unrelated local. `[^{}]*` never crosses a nested brace, and the `=` must
- * follow the closing brace, so an object LITERAL carrying an `enabled` property
- * (its `=` precedes the brace) cannot reach the match.
+ * D-99-02b: a destructure that BINDS the `enabled` key. `[^{}]*` never crosses a
+ * nested brace, and the `=` must follow the closing brace, so an object LITERAL
+ * carrying an `enabled` property (its `=` precedes the brace) cannot reach the
+ * match.
+ *
+ * WR-05: unlike its two siblings this pattern carries NO axis anchor, and that
+ * is deliberate rather than an oversight. The source of a destructure is an
+ * arbitrary expression -- `record`, `sRecord`, `mp.plugins[plugin]`, a function
+ * parameter -- so any anchor tight enough to exclude the config-declaration axis
+ * is a naming heuristic that a real record-axis twin walks straight past, and a
+ * drift gate that misses a twin has failed at the only job it has. The pattern
+ * therefore FAILS CLOSED: it also flags a destructure off a config entry, which
+ * is a false positive an author resolves by keeping that axis's established
+ * non-destructured `entry.enabled !== false` spelling. `DELIBERATE_OVER_REACH`
+ * below pins that reach as data, so the property is proven either way instead of
+ * asserted in prose.
  */
 const DESTRUCTURED_ENABLED_BINDING = /\{[^{}]*\benabled\b[^{}]*\}\s*=(?![=>])/;
 
@@ -772,10 +782,13 @@ const BOOLEAN_ENABLED_COERCION = /Boolean\s*\([^)]*\.enabled\b[^)]*\)/;
  * identifier would otherwise hide from them (D-99-02b). Deliberately does NOT
  * match `entry.enabled !== false`: that is the CONFIG-declaration axis
  * (`persistence/config-io.ts`), a different fact about a different object,
- * whose default is enabled-when-absent -- which is why each widened pattern
- * keeps its leading `.`, `[` or `Boolean(` anchor rather than matching a bare
- * `enabled`. Every member is non-global: a `/g/` regex carries `lastIndex`
- * across `.test()` calls and would silently skip alternating files in the walk.
+ * whose default is enabled-when-absent -- which is why the two ACCESS-shape
+ * patterns keep their leading `[` or `Boolean(` anchor rather than matching a
+ * bare `enabled`. WR-05: the destructured pattern has no such anchor and cannot
+ * have one; it fails closed onto the config axis by design, pinned as data in
+ * `DELIBERATE_OVER_REACH`. Every member is non-global: a `/g/` regex carries
+ * `lastIndex` across `.test()` calls and would silently skip alternating files
+ * in the walk.
  */
 const INLINE_REDERIVATIONS: ReadonlyArray<RegExp> = [
   /!\s*[\w.]+\.enabled\b/,
@@ -822,6 +835,29 @@ const ESCAPING_TWIN_SPELLINGS: ReadonlyArray<{
 const NON_REDERIVATIONS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
   { label: "config-declaration axis", line: "if (entry.enabled !== false) {" },
   { label: "legitimate predicate call", line: "if (isRecordedButDisabled(record)) {" },
+];
+
+/**
+ * WR-05: the shapes `DESTRUCTURED_ENABLED_BINDING` flags even though they are
+ * NOT record-axis rederivations. Held as DATA next to the controls above so the
+ * gate's actual reach is pinned rather than described: a future author who
+ * tightens the pattern to exclude these has to delete this list to do it, which
+ * is the conversation that tightening deserves. The trade is deliberate -- see
+ * the pattern's own comment for why no anchor can separate the two axes here,
+ * and why a false positive is the cheaper failure for a drift gate.
+ *
+ * The reach stops at the `=`: a TYPE-annotated destructured parameter
+ * (`{ scope, enabled }: Args = defaults`) puts `: Args` between the brace and
+ * the `=` and is not matched at all. That is a limit of matching the BINDING
+ * rather than the use, and it is recorded here so the next reader does not
+ * mistake the over-reach below for the pattern's full extent.
+ */
+const DELIBERATE_OVER_REACH: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
+  { label: "config-declaration destructure", line: "const { enabled } = entry;" },
+  {
+    label: "untyped destructured parameter",
+    line: "function f({ scope, enabled } = defaults) {",
+  },
 ];
 
 /** Every `.ts` file under the extension source tree, repo-relative. */
@@ -977,7 +1013,7 @@ test("ENBL-05: no disabled-state twin survives ANYWHERE in the extension tree --
     for (const re of INLINE_REDERIVATIONS) {
       if (re.test(stripped)) {
         offenders.push(
-          `${rel} re-derives the disabled state inline (${String(re)}) -- call isRecordedButDisabled instead`,
+          `${rel} re-derives the disabled state inline (${String(re)}) -- call isRecordedButDisabled instead, OR, if this is the config-declaration axis, keep its non-destructured \`entry.enabled !== false\` spelling (WR-05: the destructured pattern fails closed onto that axis)`,
         );
       }
     }
@@ -1012,6 +1048,19 @@ test("ENBL-05: the drift gate flags the destructured, bracket-access and Boolean
     assert.ok(
       !INLINE_REDERIVATIONS.some((re) => re.test(control.line)),
       `ENBL-05: a rederivation pattern over-reaches onto the ${control.label} -- ${control.line}`,
+    );
+  }
+});
+
+test("ENBL-05 / WR-05: the destructured pattern's fail-closed reach is pinned, not assumed (D-99-02b)", () => {
+  // The pattern's comment says it flags a destructure off ANY object because no
+  // anchor can separate the record axis from the config axis at a destructure.
+  // A claim about a gate's reach that only a comment carries is a claim the
+  // next edit can silently falsify, so the reach is asserted here as data.
+  for (const shape of DELIBERATE_OVER_REACH) {
+    assert.ok(
+      DESTRUCTURED_ENABLED_BINDING.test(shape.line),
+      `ENBL-05: the destructured pattern no longer reaches the ${shape.label} -- ${shape.line}. If that narrowing is intended, the pattern's fail-closed rationale needs rewriting with it.`,
     );
   }
 });
