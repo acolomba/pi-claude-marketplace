@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-07-PLAN.md — all 7 plans done, phase gates next
-last_updated: "2026-08-10T18:20:00.000Z"
+stopped_at: Phase 99 code review + fix loop complete; verifier gate next
+last_updated: "2026-08-10T20:05:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
@@ -34,9 +34,69 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 7 of 7 complete — all plan work done, phase gates remain
-Status: Plans complete; code review, verifier, validate-phase and secure-phase
-still to run before the phase closes.
+Plan: 7 of 7 complete. Code review + fix loop done (iteration 1).
+Status: Verifier, validate-phase and secure-phase still to run before the phase
+closes. `npm run check` green at HEAD: 3413 unit + 18 integration, 0 fail.
+
+### Code review and fix loop (iteration 1)
+
+The review found 11 (1 critical, 5 warning, 5 info). All six in-scope findings
+are dispositioned; four Info remain open and out of scope.
+
+**CR-01 was a real user-visible defect, not a style point.** Both `update.ts`
+and `marketplace/update.ts` tested `partialDegrade` BEFORE reaching
+`updatedRowFromOutcome`, and the inline row they returned carried only the
+dropped kinds — so `update --partial` on a `partially-available` candidate with
+an unparseable `SKILL.md` rendered no `{malformed skill}`, no severity raise and
+no summary line. The autoupdate cascade reaches that path with NO user flag,
+because `updateSinglePlugin` sets `partial: true` itself. It also contradicted a
+catalog paragraph shipped in this same phase asserting the two axes are
+independent. Fixed by routing BOTH row forms of the `updated` partition through
+`updatedRowFromOutcome`, so a mapper can no longer pick a form and return ahead
+of a signal. The review's suggested emit order was wrong — `composeReasons`
+imposes no order, it joins caller order — so the established
+malformed-then-dropped order (`install.ts:1844`, and the catalog's
+`enable-orphan-rewake` state) was used instead, making the update row read
+identically to install's.
+
+**WR-04 was partially refuted, correctly.** `RLD-04` was restored at SIX of the
+seven sites, not seven: at `notify.ts:3766` the sentence is about the
+description field on list inventory rows and is already anchored by the live
+`PL-4` beside it, so `RLD-04` was incidental there. `D-08` stays dropped at all
+seven — its removal was always sound. NOTE: `.planning/ROADMAP.md:42` still
+records the original false premise ("neither of which is defined in any
+surviving artifact"); `RLD-04` IS defined at
+`.planning/milestones/notification-refactor-REQUIREMENTS.md:30` and cited in a
+live test title at `tests/shared/notify-v2.test.ts:1299`. That line was left
+untouched and should be corrected before the milestone archives.
+
+**WR-05's proposed fix was refuted with evidence.** The suggested
+`(?:\w*[Rr]ecord\w*|\w*[Pp]lugin\w*)` anchor is a naming heuristic that misses
+`const { enabled } = mp.plugins[plugin];`, `= rec;` and `= r;`. For a drift gate
+a dismissible false positive costs less than a twin that slips through, so the
+broad pattern was kept and the two comments claiming precision it lacks were
+corrected, with the real reach pinned as data in a new `DELIBERATE_OVER_REACH`
+list. The review's second example also does not match: `function f({ scope,
+enabled }: Args = defaults)` puts `: Args` between the brace and the `=`.
+
+WR-01 populated `orphanRewake` off the re-resolved candidate and pinned the
+three facts the verb spells elsewhere as `?: never`; WR-03 moved the composer to
+a new leaf `orchestrators/plugin/update-row.ts` so `marketplace/update.ts` no
+longer reaches the plugin-update ledger. Two new closed-set states shipped with
+catalog annotation and byte fixture in the same commit
+(`update-degraded-and-dropped`, `update-orphan-rewake`). No `Pick`/`Omit` was
+reintroduced, `install.ts` is absent from the diff, the suppression count is
+still 4, and no gate regex gained `g`.
+
+**Open item needing a ruling.** WR-02's fix adds a pre-lock projection compare
+so an idempotent disabled refresh no longer takes the `retries: 0` scope lock
+(previously a `StateLockHeldError` there aborted the whole direct-path batch).
+That compare reads the record snapshot `preflightUpdate` loaded OUTSIDE any
+lock, so it is advisory: if another process rewrites the record between the
+snapshot and the check, this run skips a refresh it would have written, and the
+next update writes it. The in-transaction guard is unchanged and still decides
+whether the write happens. This is a real, if narrow, behaviour change rather
+than a pure optimisation.
 
 Plan 99-07 closed D-99-05b and vindicated its own measure-then-scope ordering.
 The carrier's 2026-06-12 per-file table was wrong in BOTH directions: measured
