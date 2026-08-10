@@ -20,7 +20,7 @@ catalog-synchronized in the same commit.
 ## Implementation Decisions
 
 ### Operator decisions (audit review, 2026-08-10)
-- **D-99-01:** All four debt groups land in this phase; none re-deferred.
+- **D-99-01:** [informational] All four debt groups land in this phase; none re-deferred.
   Runtime UAT before archive was explicitly waived (coverage judged
   sufficient).
 - **D-99-02 (fragility trio):** (a) export the `ManifestLookup` discriminant
