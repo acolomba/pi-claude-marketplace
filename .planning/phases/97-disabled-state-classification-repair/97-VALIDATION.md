@@ -3,7 +3,7 @@ phase: 97
 slug: disabled-state-classification-repair
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-09
@@ -40,17 +40,17 @@ created: 2026-08-09
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 97-01 T1 (tracer) | 97-01 | 1 | ENBL-05, ENBL-06 | T-97-02, T-97-06 | Predicate stays narrow (soft-degraded ENABLED records keep materializing); no local twin can re-appear | unit + integration (byte-exact) | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/plugin/info-manifest-absent.test.ts tests/orchestrators/reconcile/plan-convergence.test.ts tests/orchestrators/edge-deps.test.ts && npm run typecheck` | ✅ | ⬜ pending |
-| 97-01 T2 | 97-01 | 1 | ENBL-05 | T-97-02 | Classifier precedence pinned in both directions | unit | `node --test tests/orchestrators/plugin/plugin-state-classifier.test.ts tests/orchestrators/edge-deps.test.ts` | ✅ | ⬜ pending |
-| 97-02 T1 | 97-02 | 2 | ENBL-06 | T-97-05 | Disabled row is bare; no reason brace can leak a manifest-absence claim | integration (byte-exact) | `node --test tests/orchestrators/plugin/list.test.ts` | ✅ | ⬜ pending |
-| 97-02 T2 | 97-02 | 2 | ENBL-06 | T-97-09 | Skip note reports the true cause | integration (byte-exact) | `node --test tests/orchestrators/plugin/info-manifest-absent.test.ts` | ✅ | ⬜ pending |
-| 97-02 T3 | 97-02 | 2 | ENBL-06 | T-97-08 | Binding contract prose matches shipped trigger | architecture (byte gate) + lint | `node --test tests/architecture/catalog-uat.test.ts && npm run lint && npm run format:check` | ✅ | ⬜ pending |
-| 97-03 T1 | 97-03 | 2 | ENBL-07 | T-97-04, T-97-10, T-97-11 | Partial gate widens to the partially-available arm only; unavailable still rejected; fail-clean before any ledger phase | integration (byte-exact) | `node --test tests/orchestrators/plugin/enable-disable.test.ts && npm run typecheck && npm run lint` | ✅ | ⬜ pending |
-| 97-03 T2 | 97-03 | 2 | ENBL-07 | T-97-11 | Idempotent disable runs no cascade (proven by unchanged state bytes) | integration (byte-exact) | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ✅ | ⬜ pending |
-| 97-04 T1 | 97-04 | 2 | ENBL-08 | T-97-01 (high), T-97-13 | Load-time backfill cannot re-materialize or re-enable a user-disabled plugin | unit (seam) | `node --test tests/orchestrators/reconcile/backfill.test.ts && npm run typecheck && npm run lint` | ✅ | ⬜ pending |
-| 97-04 T2 | 97-04 | 2 | ENBL-08 | T-97-12 | Planner is a fixed point; no repeated unstage cascade | unit (pure planner) | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/reconcile/plan-convergence.test.ts` | ✅ | ⬜ pending |
-| 97-05 T1 | 97-05 | 2 | ENBL-09 | T-97-03 | Persisted availability discriminant agrees with the unsupported list | integration (state assertion) | `node --test tests/orchestrators/plugin/update.test.ts && npm run typecheck && npm run lint` | ✅ | ⬜ pending |
-| 97-05 T2 | 97-05 | 2 | ENBL-09 | T-97-14, T-97-15 | No artifact re-staged on disk; operation is a fixed point | integration | `node --test tests/orchestrators/plugin/update.test.ts` | ✅ | ⬜ pending |
+| 97-01 T1 (tracer) | 97-01 | 1 | ENBL-05, ENBL-06 | T-97-02, T-97-06 | Predicate stays narrow (soft-degraded ENABLED records keep materializing); no local twin can re-appear | unit + integration (byte-exact) | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/plugin/info-manifest-absent.test.ts tests/orchestrators/reconcile/plan-convergence.test.ts tests/orchestrators/edge-deps.test.ts && npm run typecheck` | ✅ | ✅ green |
+| 97-01 T2 | 97-01 | 1 | ENBL-05 | T-97-02 | Classifier precedence pinned in both directions | unit | `node --test tests/orchestrators/plugin/plugin-state-classifier.test.ts tests/orchestrators/edge-deps.test.ts` | ✅ | ✅ green |
+| 97-02 T1 | 97-02 | 2 | ENBL-06 | T-97-05 | Disabled row is bare; no reason brace can leak a manifest-absence claim | integration (byte-exact) | `node --test tests/orchestrators/plugin/list.test.ts` | ✅ | ✅ green |
+| 97-02 T2 | 97-02 | 2 | ENBL-06 | T-97-09 | Skip note reports the true cause | integration (byte-exact) | `node --test tests/orchestrators/plugin/info-manifest-absent.test.ts` | ✅ | ✅ green |
+| 97-02 T3 | 97-02 | 2 | ENBL-06 | T-97-08 | Binding contract prose matches shipped trigger | architecture (byte gate) + lint | `node --test tests/architecture/catalog-uat.test.ts && npm run lint && npm run format:check` | ✅ | ✅ green |
+| 97-03 T1 | 97-03 | 2 | ENBL-07 | T-97-04, T-97-10, T-97-11 | Partial gate widens to the partially-available arm only; unavailable still rejected; fail-clean before any ledger phase | integration (byte-exact) | `node --test tests/orchestrators/plugin/enable-disable.test.ts && npm run typecheck && npm run lint` | ✅ | ✅ green |
+| 97-03 T2 | 97-03 | 2 | ENBL-07 | T-97-11 | Idempotent disable runs no cascade (proven by unchanged state bytes) | integration (byte-exact) | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ✅ | ✅ green |
+| 97-04 T1 | 97-04 | 2 | ENBL-08 | T-97-01 (high), T-97-13 | Load-time backfill cannot re-materialize or re-enable a user-disabled plugin | unit (seam) | `node --test tests/orchestrators/reconcile/backfill.test.ts && npm run typecheck && npm run lint` | ✅ | ✅ green |
+| 97-04 T2 | 97-04 | 2 | ENBL-08 | T-97-12 | Planner is a fixed point; no repeated unstage cascade | unit (pure planner) | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/reconcile/plan-convergence.test.ts` | ✅ | ✅ green |
+| 97-05 T1 | 97-05 | 2 | ENBL-09 | T-97-03 | Persisted availability discriminant agrees with the unsupported list | integration (state assertion) | `node --test tests/orchestrators/plugin/update.test.ts && npm run typecheck && npm run lint` | ✅ | ✅ green |
+| 97-05 T2 | 97-05 | 2 | ENBL-09 | T-97-14, T-97-15 | No artifact re-staged on disk; operation is a fixed point | integration | `node --test tests/orchestrators/plugin/update.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -95,11 +95,28 @@ checks is environmental, not a phase regression.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-08-09 — full suite exit 0 with `PI_SUBAGENTS_ROOT` set; all three red-proofs recorded in the plan SUMMARYs
+
+---
+
+## Validation Audit 2026-08-09
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 11 task rows COVERED: every automated command is a subset of `npm run
+check`, green at the post-review-loop gate (3331 unit + 18 integration, exit
+0). The review fix loop added coverage beyond the strategy: two new catalog
+byte states (`enable-degraded`, `enable-orphan-rewake`), the clone-GC
+assertion on the disabled update arm, and the mtime/`updatedAt` idempotency
+pin.
