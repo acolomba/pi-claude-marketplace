@@ -2068,6 +2068,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
+    // SURF-05 / D-63-08 / WR-01: the update re-materializes `hooks/hooks.json`,
+    // so it can introduce a handler declaring `rewakeMessage` / `rewakeSummary`
+    // without `asyncRewake: true` exactly as install, enable and backfill can.
+    // Read off the re-resolved candidate, the same source `enable-disable.ts`
+    // reads. Without this the one verb that INHERITS the signal was the one
+    // verb whose row could never carry it.
+    ...(installable.orphanRewake === true && { orphanRewake: true }),
     // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
     // `partially-available` degraded it -- carry the dropped kinds so the cascade
     // renders `(partially-installed)` instead of `(updated)`. Empty for a clean

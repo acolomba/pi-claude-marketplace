@@ -159,6 +159,13 @@ interface PluginUpdateBase {
  * signal added to that shape reaches this outcome instead of silently missing
  * from the one verb that redeclared it. Every member arrives OPTIONAL, so a
  * clean update's outcome shape is unchanged (NREG-01).
+ *
+ * WR-01: inheriting a signal is only half the claim -- the verb has to POPULATE
+ * and RENDER it, or the shape promises a reach the rows do not have. Two of the
+ * five are live here (`degradedKinds`, `orphanRewake`); the other three are
+ * pinned `never` below because this outcome already spells the same three facts
+ * in its own REQUIRED fields, and two spellings of one fact on one type is what
+ * D-99-02c's rename set out to remove.
  */
 export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegradationSignals {
   readonly partition: "updated";
@@ -173,6 +180,24 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    */
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
+  /**
+   * WR-01: the three inherited signals this verb spells elsewhere, pinned to
+   * `never` so a producer cannot populate a second spelling of a fact the
+   * outcome already carries. `never` still satisfies the inherited optional
+   * `boolean` / `string[]`, so the inheritance itself is untouched and a signal
+   * ADDED to `LedgerDegradationSignals` tomorrow still lands here unpinned --
+   * which is the property the inheritance exists for.
+   *
+   *  - the inherited `unsupported` array is `partialDegrade.kinds` here, which
+   *    pairs the dropped kinds with the `newlyDegraded` verdict that makes them
+   *    actionable.
+   *  - `stagedAgents` / `stagedMcpServers` are the presence half of
+   *    `stagedAgentNames` / `stagedMcpServerNames`, already reduced to the
+   *    required `declaresAgents` / `declaresMcp` predicates above.
+   */
+  readonly unsupported?: never;
+  readonly stagedAgents?: never;
+  readonly stagedMcpServers?: never;
   /**
    * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the partial-degrade signal for a
    * `--partial` update whose candidate re-resolved `partially-available`. Present

@@ -5628,6 +5628,65 @@ test("WR-12: an update that degrades BOTH kinds emits both reasons in the canoni
   });
 });
 
+test("WR-01 / SURF-05: an update that materializes an orphan-rewake handler names it on the `(updated)` row", async () => {
+  // `update` re-materializes `hooks/hooks.json`, so it introduces this config
+  // bug exactly as install, enable and backfill do -- and it is the one verb
+  // that INHERITS the shared signal shape, so a bare row here made the
+  // inheritance's own claim false. The token names itself and moves NO severity
+  // channel: the update was carried out in full.
+  const { _resetForTest } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-orphan-"));
+    try {
+      _resetForTest();
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            // rewakeMessage WITHOUT asyncRewake: true -- the resolver's
+            // `detectOrphanRewake` sets `orphanRewake` on the candidate.
+            hooksJson: {
+              PreToolUse: [
+                {
+                  matcher: "",
+                  hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "wake me" }],
+                },
+              ],
+            },
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "● mp [project]\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated) {orphan rewake}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      assert.equal(notifications[0]?.severity, undefined, "orphan rewake stays info");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CR-01: a --partial update that drops a kind AND degrades a component names BOTH axes on one row", async () => {
   // The two axes are independent and the row its own axis owns names each of
   // them. The dropped kind picks the row FORM; the malformed component adds its

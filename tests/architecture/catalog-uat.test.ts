@@ -1894,6 +1894,35 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SURF-05 / D-63-08 / WR-01: the update verb's orphan-rewake row. Same token
+    // and same info severity as the install / enable / backfill rows -- the
+    // config bug names itself in the brace and moves no severity channel.
+    "update-orphan-rewake": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "info",
+                needsReload: true,
+                name: "alpha",
+                from: "1.0.0",
+                to: "1.0.1",
+                dependencies: [],
+                reasons: ["orphan rewake"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // CR-01 / WARN-01 / FSTAT-07: the dropped-kind and malformed-component axes
     // firing on one ledger run. The drop picks the row FORM
     // (`partially-installed`, post-update version, no arrow); the malformed

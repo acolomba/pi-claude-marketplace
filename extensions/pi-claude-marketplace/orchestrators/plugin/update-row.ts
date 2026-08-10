@@ -17,7 +17,11 @@ import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { PluginPartiallyInstalledMessage, PluginUpdatedMessage } from "../../shared/notify.ts";
+import type {
+  ContentReason,
+  PluginPartiallyInstalledMessage,
+  PluginUpdatedMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateUpdatedOutcome } from "../types.ts";
 
@@ -52,7 +56,7 @@ export interface UpdatedRowSeverity {
  * threaded onto one form while a caller short-circuits past it on the other
  * (CR-01).
  *
- * The partition carries two INDEPENDENT degradation axes and the row names
+ * The partition carries three INDEPENDENT degradation axes and the row names
  * whichever are present:
  *
  *  - FSTAT-07 / D-66-04, the DROPPED-kind axis: a `--partial` update whose
@@ -67,12 +71,17 @@ export interface UpdatedRowSeverity {
  *    source frontmatter would not parse is WRITTEN in degraded form, not
  *    dropped, so it names its kind and takes the info -> warning raise exactly
  *    as on the install, enable and reinstall arms.
+ *  - SURF-05 / D-63-08 / WR-01, the ORPHAN-REWAKE axis: the re-materialized
+ *    `hooks/hooks.json` declares `rewakeMessage` / `rewakeSummary` on a handler
+ *    without `asyncRewake: true`. One token per plugin regardless of N orphan
+ *    handlers, and it moves NO severity channel -- the config bug names itself
+ *    in the brace while the update itself was carried out in full.
  *
- * An update can do both at once, and the row then carries both braces' tokens
- * in the install row's established emit order (malformed kinds first, then the
- * dropped kinds -- `docs/output-catalog.md`, `enable-orphan-rewake`). A clean
- * update composes no reasons and keeps the caller's severity, so its row is
- * byte-identical to before (NREG-01).
+ * An update can do all three at once, and the row then carries every token in
+ * ONE brace in the install row's established emit order -- orphan rewake, then
+ * malformed kinds, then dropped kinds (`docs/output-catalog.md`,
+ * `enable-orphan-rewake`). A clean update composes no reasons and keeps the
+ * caller's severity, so its row is byte-identical to before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
  * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers on BOTH
@@ -87,6 +96,12 @@ export function updatedRowFromOutcome(
   baseSeverity: UpdatedRowSeverity,
 ): PluginUpdatedMessage | PluginPartiallyInstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  // Emit order, shared by both row forms below: orphan rewake, then the
+  // malformed kinds, then whatever the dropped-kind form appends.
+  const written: readonly ContentReason[] = [
+    ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
+    ...malformed,
+  ];
   const dependencies = outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp);
   const dropped = outcome.partialDegrade;
   if (dropped !== undefined && dropped.kinds.length > 0) {
@@ -96,7 +111,7 @@ export function updatedRowFromOutcome(
       scope: rowScope,
       version: outcome.toVersion,
       dependencies,
-      reasons: [...malformed, ...narrowUnsupportedKinds(dropped.kinds)],
+      reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds)],
       severity: malformed.length > 0 ? "warning" : baseSeverity.partiallyInstalled,
       needsReload: true,
     };
@@ -111,7 +126,9 @@ export function updatedRowFromOutcome(
     dependencies,
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
-    ...(malformed.length > 0 && { reasons: malformed }),
+    ...(written.length > 0 && { reasons: written }),
+    // Only the MALFORMED axis moves the severity channel: an orphan rewake is a
+    // config bug the row names, not a shortfall in what the update carried out.
     severity: malformed.length > 0 ? "warning" : baseSeverity.updated,
     needsReload: true,
   };

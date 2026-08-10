@@ -973,6 +973,19 @@ This is the MALFORMED-component axis, not the dropped-kind axis. A kind the reso
 
 Severity `warning` with the summary line, the same raise the install, enable and reinstall surfaces take for the same class of degrade: this one the update's own ledger just produced. The raise applies on BOTH surfaces that render this row -- the manual update cascade and the marketplace autoupdate cascade -- because a degraded component is short of ideal whichever surface reports it. It is orthogonal to each surface's own success-severity policy, so the autoupdate cascade's deliberate silence about an absent companion (WR-01) is unaffected. The trailing tally is unchanged: the count is taken by PARTITION, so a degraded update is still one update. A clean update renders the brace-less rows above unchanged.
 
+### Update that materializes an orphan-rewake handler (SURF-05 / D-63-08 / WR-01)
+
+<!-- catalog-state: update-orphan-rewake -->
+
+```text
+● official [user]
+  ● alpha v1.0.0 → v1.0.1 (updated) {orphan rewake}
+
+/reload to pick up changes
+```
+
+The re-materialized `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on a handler WITHOUT `asyncRewake: true`. `update` re-materializes that file exactly as install, enable and backfill do, so it can introduce the same config bug and now names it the same way: one token per plugin regardless of N orphan handlers, read off the re-resolved candidate. Severity `info` -- the config bug names itself in the brace; the update itself was carried out in full, so this axis moves no severity channel (unlike the malformed-component axis below it). When more than one signal is present they share ONE brace in the install row's emit order: `{orphan rewake, malformed skill, lsp}`.
+
 ### Update that both drops a kind and degrades a component (CR-01 / WARN-01 / FSTAT-07)
 
 <!-- catalog-state: update-degraded-and-dropped -->
