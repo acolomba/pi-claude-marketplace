@@ -2177,14 +2177,16 @@ export function partiallyInstalledRow(
  * reason set; `dependencies` drives the `{requires pi-subagents}` /
  * `{requires pi-mcp}` markers via `composeReasons`.
  *
- * WR-13: which callers thread `reasons`, over the seven command arms folded
- * here -- the five `(installed)` arms (install, enable, list, import, reconcile)
- * and the `(reinstalled)` arm (WR-09) pass `p.reasons`; the `(updated)` arm is
- * the ONE caller that still passes `undefined`, because `PluginUpdatedMessage`
- * carries no `reasons` field. That gap is a known one: `update` stages through
- * the same bridges and can degrade a component exactly as install / enable /
- * reinstall do, but neither its outcome nor its message can name the kind, so a
- * degraded update renders a clean `(updated)` row.
+ * WR-13 / WR-12: which callers thread `reasons`, over the seven command arms
+ * folded here -- ALL of them now pass `p.reasons`: the five `(installed)` arms
+ * (install, enable, list, import, reconcile), the `(reinstalled)` arm (WR-09),
+ * and the `(updated)` arm (WR-12). The `(updated)` arm was the last caller
+ * passing `undefined`, because `PluginUpdatedMessage` carried no `reasons`
+ * field; since `update` stages through the same bridges and degrades a
+ * component exactly as install / enable / reinstall do, that gap rendered a
+ * clean `(updated)` row over a degraded component. The field is optional on
+ * every one of these message types, so a caller with nothing to report still
+ * composes the brace-less row byte for byte.
  */
 export function installedLikeRow(
   icon: string,

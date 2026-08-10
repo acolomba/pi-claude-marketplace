@@ -1997,6 +1997,7 @@ function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
   return Array.from(
     new Set<DegradeKind>([
       ...(handles.skills.result.degraded.length > 0 ? ["skill" as const] : []),
+      ...(handles.commands.result.degraded.length > 0 ? ["command" as const] : []),
     ]),
   );
 }

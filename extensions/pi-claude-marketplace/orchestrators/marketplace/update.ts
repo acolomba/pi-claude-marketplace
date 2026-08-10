@@ -118,6 +118,10 @@ import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { NO_PROVIDER_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+// WR-12: the `(updated)` row composer only. The plugin-update LEDGER stays
+// behind the injected `pluginUpdate` seam -- this module still never calls it
+// directly.
+import { updatedRowFromOutcome } from "../plugin/update.ts";
 
 import {
   DEFAULT_GIT_OPS,
@@ -759,17 +763,11 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
         };
       }
 
-      return {
-        status: "updated",
-        name: outcome.name,
-        scope,
-        from: outcome.fromVersion,
-        to: outcome.toVersion,
-        dependencies,
-        // D-03/D-06: realized update transition -> info, reloads Pi resources.
-        severity: "info",
-        needsReload: true,
-      };
+      // WR-12: composed by the SAME composer the manual update cascade calls, so
+      // the two surfaces cannot report one ledger run differently. The `info`
+      // base severity is this surface's own WR-01 policy (above); the composer
+      // applies only the orthogonal WARN-01 malformed-component raise on top.
+      return updatedRowFromOutcome(outcome, scope, "info");
     }
 
     case "unchanged":

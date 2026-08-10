@@ -66,6 +66,11 @@ export type UpdateRowMsg =
 export const UPDATE_CONTEXT = {
   Messaging: { label: "Marketplace update" },
   render: {
+    // WR-12: thread the optional `reasons` brace, as the central
+    // `renderPluginRow` arm and the manual update cascade's map both do. This
+    // map is the THIRD render surface reached by an `(updated)` row and the one
+    // the autoupdate cascade actually dispatches through, so leaving it unthreaded
+    // raises the severity while still dropping the brace.
     updated: (p, probe, mpScope) =>
       joinTokens([
         ICON_INSTALLED,
@@ -74,7 +79,7 @@ export const UPDATE_CONTEXT = {
         composeVersionArrow(p.from, p.to),
         "(updated)",
         composeReasons(
-          undefined,
+          p.reasons,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
           probe,
