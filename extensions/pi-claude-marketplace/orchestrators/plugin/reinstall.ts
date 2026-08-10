@@ -86,7 +86,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
@@ -338,27 +338,20 @@ export async function reinstallPlugin(
 
   // Single-plugin reinstall success is a 1-row cascade carrying a
   // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
-  // both emit one notify() call with structured payloads. Severity (undefined
-  // / info) + the `/reload to pick up changes` trailer are computed by
-  // notify() -- the `reinstalled` status is in the state-changing variant set,
-  // so the reload-hint always fires here.
+  // both emit one notify() call with structured payloads. The `/reload to pick
+  // up changes` trailer is computed by notify() -- the `reinstalled` status is
+  // in the state-changing variant set, so the reload-hint always fires here.
   //
-  // Per-row scope is OMITTED (orphan-fold) since it matches the
-  // marketplace block's scope on the single-plugin surface.
-  // IN-02: no `version !== ""` defensive spread. `resolvePluginVersion`
-  // always returns a non-empty string. The renderer suppresses the
-  // `v<version>` token on undefined / empty
-  // anyway, so the behavior is preserved against the legacy-state-with-
-  // empty-version case.
-  const reinstalledRow: PluginReinstalledMessage = {
-    status: "reinstalled",
-    name: plugin,
-    dependencies: dependenciesFromOutcome(locked.outcome),
-    version: locked.outcome.version,
-    // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
-    severity: "info",
-    needsReload: true,
-  };
+  // WR-09: the ONE row composer, shared with the bulk cascade mapper. Two
+  // reinstall surfaces disagreeing about a degrade the same ledger produced is
+  // the drift the shared signal exists to close, so neither surface composes the
+  // row itself -- including its severity, which the composer raises to `warning`
+  // for a degraded component. `undefined` is the orphan-fold scope decision this
+  // branch always makes: the row's scope matches its marketplace block.
+  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(
+    locked.outcome,
+    undefined,
+  );
   notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
     { name: marketplace, scope, plugins: [reinstalledRow] },
   ]);
@@ -894,6 +887,48 @@ function isManualRecoveryOutcome(
 }
 
 /**
+ * Compose the success row for one reinstalled plugin. The SOLE composer for
+ * that row: the standalone verb and the bulk cascade mapper both call it, so
+ * the two surfaces cannot report the same ledger run differently (WR-09).
+ *
+ * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
+ * `dependencies: Dependency[]` tuple per SNM-06. The renderer's per-row soft-dep
+ * probe fires `{requires pi-subagents}` / `{requires pi-mcp}` when the companion
+ * extension is unloaded.
+ *
+ * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
+ * takes the info -> warning raise, exactly as on the install, enable and backfill
+ * arms. `reinstall` was the last ledger-driven verb whose outcome carried the
+ * signal but whose row discarded it -- a bare `(reinstalled)` row over a record
+ * `list` renders as degraded one command later. A clean reinstall composes no
+ * reasons and stays info, so its row is byte-identical to before (NREG-01).
+ *
+ * `rowScope` is the caller's orphan-fold decision: `undefined` suppresses the
+ * `[<scope>]` bracket per `renderScopeBracket`.
+ */
+function reinstalledRowFromOutcome(
+  outcome: ReinstallReinstalledOutcome,
+  rowScope: Scope | undefined,
+): PluginReinstalledMessage {
+  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  return {
+    status: "reinstalled",
+    name: outcome.name,
+    dependencies: dependenciesFromOutcome(outcome),
+    // IN-02: the spread is not defensive -- `resolvePluginVersion` always
+    // returns a non-empty string. It keeps a legacy record carrying an empty
+    // version from putting an empty slot in the payload; the renderer suppresses
+    // the `v<version>` token either way.
+    ...(outcome.version !== "" && { version: outcome.version }),
+    ...(rowScope !== undefined && { scope: rowScope }),
+    ...(malformed.length > 0 && { reasons: malformed }),
+    // D-03/D-06: realized reinstall transition -> reloads Pi resources.
+    severity: malformed.length > 0 ? "warning" : "info",
+    needsReload: true,
+  };
+}
+
+/**
  * Map a `ReinstallPluginOutcome` to its `PluginNotificationMessage`
  * representation. The variant set covers `reinstalled` / `skipped` /
  * `failed` / `manual recovery` per the catalog states.
@@ -915,24 +950,8 @@ function outcomeToPluginMessage(
 ): ReinstallMsg {
   const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
   switch (outcome.partition) {
-    case "reinstalled": {
-      // CMC-13: `declaresAgents` / `declaresMcp` are
-      // required booleans. Map to the `dependencies: Dependency[]`
-      // tuple per SNM-06. The renderer's per-row soft-dep probe
-      // fires `{requires pi-subagents}` / `{requires pi-mcp}` markers
-      // when the companion extension is unloaded.
-      const dependencies = dependenciesFromOutcome(outcome);
-      return {
-        status: "reinstalled",
-        name: outcome.name,
-        dependencies,
-        ...(outcome.version !== "" && { version: outcome.version }),
-        ...(rowScope !== undefined && { scope: rowScope }),
-        // D-03/D-06: realized reinstall transition -> info, reloads Pi resources.
-        severity: "info",
-        needsReload: true,
-      };
-    }
+    case "reinstalled":
+      return reinstalledRowFromOutcome(outcome, rowScope);
 
     case "skipped": {
       const reasons = narrowReasons(outcome.notes);

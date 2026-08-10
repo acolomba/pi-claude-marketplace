@@ -685,6 +685,23 @@ Plugin reinstall: 1 success
 
 The `reinstalled` variant carries `dependencies` (D-15-02); both markers fire because both companions are unloaded. OUT-03/D-04: the single `reinstalled` row is the one success in the plural-operation tally.
 
+### Reinstall with a degraded component (WARN-01 / D-86-03 / WR-09)
+
+<!-- catalog-state: reinstall-degraded-component -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 (reinstalled) {malformed skill}
+
+Plugin reinstall: 1 warning
+
+/reload to pick up changes
+```
+
+A reinstall drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(reinstalled)` -- a degraded component is reinstalled-but-short, not dropped -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable and backfill rows use. Severity `warning` with the summary line, the same raise those surfaces take for the same class of degrade: this one the reinstall's own ledger just produced. OUT-03/D-04: the tally counts by STAMPED severity, so the raised row lands in `1 warning` rather than `1 success` -- the operation completed, short of ideal, and the tally says so without a second vocabulary. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the one signal, so the two surfaces cannot disagree. A clean reinstall renders the brace-less rows above unchanged.
+
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
 <!-- catalog-state: single-mp-mixed-outcomes -->

@@ -54,6 +54,9 @@ export type ReinstallMsg =
 const REINSTALL_RENDER: {
   [K in ReinstallStatus]: RenderFn<Extract<ReinstallMsg, { status: K }>>;
 } = {
+  // WR-09: threads the optional `reasons` brace, matching the central arm. A
+  // reinstall that degraded a component names the kind here; a clean one passes
+  // an undefined list and renders the same brace-less row as before.
   reinstalled: (p, probe, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
@@ -61,7 +64,7 @@ const REINSTALL_RENDER: {
       mpScope,
       renderVersion(p.version),
       "(reinstalled)",
-      undefined,
+      p.reasons,
       probe,
     ),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),

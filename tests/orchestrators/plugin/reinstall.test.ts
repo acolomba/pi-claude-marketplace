@@ -3519,6 +3519,143 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
   });
 });
 
+test("WR-09: the standalone reinstall row names the degraded kind and takes the warning raise", async () => {
+  // The outcome-level case above proves the signal is COLLECTED. This one proves
+  // the verb's own row READS it. `install`, standalone `enable`, and both
+  // reconcile projections already name the kind; a bare `(reinstalled)` row here
+  // would contradict the `(partially-installed)`-class record `list` renders one
+  // command later -- the same contradiction the shared signal shape exists to
+  // prevent, one surface over.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr09-row-"));
+    try {
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      await writeFile(
+        path.join(seeded.pluginRoot, "skills", "tool", "SKILL.md"),
+        "---\nname: [unterminated\n---\n\n# Bad\nBody.\n",
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(
+        first.message,
+        [
+          "A plugin operation needs attention.",
+          "",
+          "● mp [project]",
+          "  ● hello v1.0.0 (reinstalled) {malformed skill}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      );
+      // WARN-01: the raise reaches the Pi API severity argument, not just the
+      // summary line.
+      assert.equal(first.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09: a clean reinstall row is byte-identical to before -- no brace, no raise", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr09-clean-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.equal(
+        first.message,
+        ["● mp [project]", "  ● hello v1.0.0 (reinstalled)", "", "/reload to pick up changes"].join(
+          "\n",
+        ),
+      );
+      assert.equal(first.severity, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09: the bulk cascade mapper composes the same brace and raise as the standalone row", () => {
+  // reinstall has TWO row composers -- the standalone verb's and this cascade
+  // mapper -- and they read the same outcome. One naming the degrade while the
+  // other renders a bare success row would be the very drift the shared signal
+  // exists to close, so the mapper is pinned beside the verb.
+  const degraded = __test_outcomeToPluginMessage(
+    {
+      partition: "reinstalled",
+      name: "good",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      stagedAgents: [],
+      stagedMcpServers: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      resourcesChanged: true,
+      degradedKinds: ["skill"],
+    },
+    "project",
+  );
+  assert.equal(degraded.status, "reinstalled");
+  assert.ok(degraded.status === "reinstalled");
+  assert.deepEqual([...(degraded.reasons ?? [])], ["malformed skill"]);
+  assert.equal(degraded.severity, "warning");
+
+  // And the clean arm keeps the field absent, not present-and-empty: an empty
+  // array would render the same today but is a different shape to reason about.
+  const clean = __test_outcomeToPluginMessage(
+    {
+      partition: "reinstalled",
+      name: "good",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      stagedAgents: [],
+      stagedMcpServers: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      resourcesChanged: true,
+    },
+    "project",
+  );
+  assert.equal(Object.hasOwn(clean, "reasons"), false);
+  assert.equal(clean.severity, "info");
+});
+
 test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-clean-"));

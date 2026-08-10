@@ -704,8 +704,15 @@ export interface PluginUpdatedMessage extends TransitionMessageBase {
 }
 
 /**
- * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06);
- * no `reasons`.
+ * `(reinstalled)` -- reinstall cascade row. Carries `dependencies` (SNM-06).
+ *
+ * WR-09: `reasons` is OPTIONAL here, exactly as on `PluginInstalledMessage` and
+ * for the same reason. A reinstall drives the same bridges as an install, so a
+ * component whose source frontmatter no longer parses degrades identically, and
+ * the row that reports the transition has to be able to name it (WARN-01 /
+ * D-86-03). Absent `reasons` renders the legacy brace-less row byte-for-byte:
+ * `composeReasons` returns `""` for an undefined list and `joinTokens` collapses
+ * the empty slot.
  */
 export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly status: "reinstalled";
@@ -713,6 +720,7 @@ export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2050,14 +2058,15 @@ export function composeReasons(
  * staged counts, the inventory rows omit them.
  *
  * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
- *  - 10 reasons-less variants (updated, reinstalled, uninstalled, available,
- *  remote, disabled, will install, will uninstall, will enable, will disable)
- *  pass `undefined` -- or, on the arms that can carry no marker of any kind
- *  (remote and the four pending-tense rows), drop the call entirely;
- *  - 9 reasons-bearing variants (installed, unavailable, upgradable, failed,
- *  skipped, manual recovery, partially-installed, partially-upgradable,
- *  partially-available) pass `p.reasons`. `installed` is the one arm whose
- *  field is OPTIONAL, so it passes a possibly-undefined value.
+ *  - 9 reasons-less variants (updated, uninstalled, available, remote, disabled,
+ *  will install, will uninstall, will enable, will disable) pass `undefined` --
+ *  or, on the arms that can carry no marker of any kind (remote and the four
+ *  pending-tense rows), drop the call entirely;
+ *  - 10 reasons-bearing variants (installed, reinstalled, unavailable,
+ *  upgradable, failed, skipped, manual recovery, partially-installed,
+ *  partially-upgradable, partially-available) pass `p.reasons`. `installed` and
+ *  `reinstalled` are the two arms whose field is OPTIONAL, so they pass a
+ *  possibly-undefined value.
  *
  * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):
@@ -2231,6 +2240,10 @@ function renderPluginRow(
           probe,
         ),
       ]);
+    // `reinstalled` -- WR-09 threads the optional `reasons` brace exactly as the
+    // `installed` arm above, so a reinstall that degraded a component names the
+    // kind instead of rendering a bare success row over it. Soft-dep markers
+    // append into the SAME brace per MSG-GR-4.
     case "reinstalled":
       return joinTokens([
         ICON_INSTALLED,
@@ -2239,7 +2252,7 @@ function renderPluginRow(
         renderVersion(p.version),
         "(reinstalled)",
         composeReasons(
-          undefined,
+          p.reasons,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
           probe,

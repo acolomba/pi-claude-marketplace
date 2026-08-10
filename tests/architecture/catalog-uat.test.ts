@@ -1327,6 +1327,35 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WARN-01 / WR-09: a component the reinstall's own ledger degraded names
+    // its kind on the `(reinstalled)` row and takes the info -> warning raise,
+    // matching the install / enable / backfill arms.
+    "reinstall-degraded-component": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "single-mp-mixed-outcomes": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
