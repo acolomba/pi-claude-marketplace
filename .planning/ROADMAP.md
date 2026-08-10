@@ -39,9 +39,19 @@ unless noted. Decision records live in
 
    Two corrections to the premise. There is no render-map suppression to
    reverse (see the criterion-2 correction above). And the recorded rationale
-   cites `RLD-04` / `D-08`, neither of which is defined in any surviving
-   artifact — they appear only in source comments, and "orphan-rewake" appears
-   nowhere but two `list.ts` comments. Do not carry those anchors forward.
+   cites `RLD-04` / `D-08`, of which only `D-08` is undefined — it appears
+   only in source comments, where it also carries several unrelated meanings,
+   so it is not carried forward. `RLD-04` IS defined, at
+   `.planning/milestones/notification-refactor-REQUIREMENTS.md:30`, and is
+   cited in a live test title at `tests/shared/notify-v2.test.ts:1299`; it
+   stays a valid anchor. "orphan-rewake" appears nowhere but two `list.ts`
+   comments.
+
+   > Corrected during Phase 99. The original text said neither anchor was
+   > defined in any surviving artifact, and `RLD-04` was dropped from seven
+   > source comments on that basis before the phase's own review caught it;
+   > the anchor was restored at the six sites whose sentences state its
+   > content.
 
 2. **Component name fidelity on the state-only info arm — DEFERRED to Phase 96
    discuss (D-95-11).** `resources.*` holds Pi-generated installed names; `info`
