@@ -900,6 +900,80 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
   });
 });
 
+// ─── LIFE-06 / D-98-13: the manifest-absent skip on the autoupdate cascade ────
+//
+// The skip has ONE origin -- the shared update preflight, which stamps
+// `partition: "skipped"` with `reasons: ["not in manifest"]` for an installed
+// record whose entry the refreshed manifest no longer lists. The cascade adds a
+// second half: `cascadeAutoupdates` passes the outcome through untouched (only a
+// THROW is caught and converted), and `outcomeToCascadePluginMessage` re-narrows
+// it via `narrowSkipReason`. That narrower would also reach `not in manifest`
+// from its permissive notes-substring fallback, so the case below pins the
+// carry-through explicitly: the reason must survive because the preflight set
+// it, not because the fallback guessed it.
+//
+// The cascade skip row carries NO version token -- the mapper's `skipped` arm
+// forwards name, scope, and reasons only.
+
+test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through, leaving the record untouched", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await seedGithubMarketplace({
+      cwd,
+      name: "auto-skip",
+      ref: "main",
+      autoupdate: true,
+      plugins: { hello: makePluginRecord() },
+    });
+
+    const readRecord = async (): Promise<
+      ExtensionState["marketplaces"][string]["plugins"][string] | undefined
+    > => {
+      const state = await loadState(locations.extensionRoot);
+      return state.marketplaces["auto-skip"]?.plugins["hello"];
+    };
+
+    const before = await readRecord();
+    assert.ok(before !== undefined);
+
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+    // The exact outcome shape the shared preflight produces for a record whose
+    // manifest entry is gone: the recorded version as `fromVersion`, and the
+    // reason ALREADY narrowed.
+    const pluginUpdate: PluginUpdateFn = (plugin) =>
+      Promise.resolve<PluginUpdateOutcome>({
+        partition: "skipped",
+        name: plugin,
+        fromVersion: "0.0.1",
+        notes: ["not in manifest"],
+        reasons: ["not in manifest"],
+        declaresAgents: false,
+        declaresMcp: false,
+      });
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "auto-skip",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
+
+    // A skipped plugin is a fixed point for the cascade: nothing is written, so
+    // a repeated `marketplace update` finds the same record.
+    assert.deepEqual(await readRecord(), before);
+  });
+});
+
 test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabetically (regardless of status)", async () => {
   // The MU-7 partition headers (`Updated:` / `Unchanged:` / `Skipped:` /
   // `Failed:`) are not emitted; cascade rows interleave alphabetically by
