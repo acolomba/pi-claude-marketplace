@@ -653,8 +653,17 @@ function applyOutcomeToBlock(
       // gate dropped component kinds, so it takes the `(partially-installed)`
       // projection instead -- the SAME split the standalone enable verb and the
       // `plugin-backfilled` arm make, and the row the very next `list` renders
-      // for that record. SEV-03: both arms stay `info` -- the degradation
-      // predates the enable, so the requested transition was fully carried out.
+      // for that record.
+      //
+      // Severity splits on WHICH degradation the ledger reported, not on which
+      // projection arm was picked. A dropped-kind shortfall PREDATES the enable
+      // (the record was already degraded when it was disabled), so the
+      // requested transition was fully carried out and the row stays `info` --
+      // SEV-03 parity with the `install --partial` success row and the
+      // still-degraded `plugin-backfilled` arm. A malformed-frontmatter degrade
+      // is one this enable's own ledger just produced, so it raises to
+      // `warning` -- WARN-01 parity with the install row for the same ledger
+      // run. Both are composed by `enabledRowFromOutcome`.
       block.plugins.push(enabledRowFromOutcome(outcome));
       return;
     case "plugin-disabled":
