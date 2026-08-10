@@ -1911,6 +1911,19 @@ The degenerate case: a backfill `(partially-installed)` row whose re-resolved dr
 Reconcile: 1 success
 ```
 
+### Load-time enable whose companion extension is unloaded (WR-06)
+
+The load-time reconcile re-enabled a config-declared-enabled disabled record, and the ledger staged at least one agent. The projected row derives its `dependencies` from the ledger's staged counts through the SAME seam the standalone `enable` row uses, so the `{requires pi-subagents}` marker fires here too -- it no longer depends on which surface drove the enable. Severity stays `info`: this projection applies the companion raise on NEITHER of its two arms (the sibling `plugin-installed` arm carries the marker at `info` as well), so the two arms of one file agree. The standalone `enable` verb, whose severity rule is the SEV-01 composition, DOES raise -- the marker is the shared fact, the severity stance is per surface.
+
+<!-- catalog-state: reconcile-enable-soft-dep -->
+
+```text
+● local-mp [user]
+  ● hello v1.0.0 (installed) {requires pi-subagents}
+
+Reconcile: 1 success
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
@@ -2133,7 +2146,7 @@ Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace
 /reload to pick up changes
 ```
 
-ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is empty on both enable arms, so no soft-dep marker fires. Severity `info` (no summary line), matching the `install --partial` success row and the still-degraded `plugin-backfilled` arm per SEV-03: the shortfall predates the enable -- the record was already degraded when it was disabled -- so the requested enable was fully carried out and the dropped kinds ride the `{reasons}` brace rather than the severity channel. Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
+ENBL-07 widens the enable ledger's admission gate for a record disabled while soft-degraded (`compatibility.installable: false`), so the re-materialization runs through `requirePartialInstallable` and drops one or more component kinds. The row follows the resolution rather than the verb: plugin row = `PluginPartiallyInstalledMessage` with the dedicated `◉` glyph and the dropped kinds composed through the shared `narrowUnsupportedKinds` seam (FSTAT-07 / D-66-04) -- the same token, glyph and brace `list` renders for the record the enable just wrote, and the reason a `(installed)` row here would contradict the very next `list`. `dependencies` is derived from the ledger's staged counts on BOTH enable arms (WR-06), so a partial re-enable that still staged an agent or an MCP server carries the soft-dep marker alongside the dropped kinds. Severity `info` (no summary line), matching the `install --partial` success row and the still-degraded `plugin-backfilled` arm per SEV-03: the shortfall predates the enable -- the record was already degraded when it was disabled -- so the requested enable was fully carried out and the dropped kinds ride the `{reasons}` brace rather than the severity channel. Reload-hint fires -- a partial re-materialization is still a realized transition. A fully-supported re-enable renders the `enable-fresh` row above unchanged.
 
 ### Enable with a degraded component (WARN-01 / D-86-03)
 

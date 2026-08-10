@@ -169,16 +169,21 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
  * Plugin enable success outcome. The setPluginEnabled enable branch re-
  * materializes the plugin via installPlugin's runInstallLedger; the
  * orchestrated outcome is `{ status: "enabled", name, version? }` plus the
- * ledger's degradation signals (no dependencies). The projection emits an
- * `(installed)` plugin row since `enabled` is NOT a member of
- * `PLUGIN_STATUSES` -- the cascade reuses the existing transition token
- * because an enable IS a re-install.
+ * ledger's degradation signals. The projection emits an `(installed)` plugin
+ * row since `enabled` is NOT a member of `PLUGIN_STATUSES` -- the cascade
+ * reuses the existing transition token because an enable IS a re-install.
  *
  * ENBL-07 / SURF-05 / WARN-01: the degradation signals are inherited from
  * `EnableDegradationSignals` rather than re-declared, so the orchestrated
  * projection cannot drift from the standalone verb -- a signal added to that
  * shape cannot be silently dropped here. Each field is omitted when empty, so
  * a clean enable renders byte-identically to before (NREG-01).
+ *
+ * SEV-01 / D-98-02: the inherited signals include the ledger's staged-agent and
+ * staged-MCP verdicts, from which `enabledRowFromOutcome` derives the row's
+ * `dependencies` list -- the same derivation the standalone enable row runs. The
+ * row carries no `dependencies` field of its own for that reason: the list is
+ * derived from the signals, never passed in beside them.
  */
 export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradationSignals {
   readonly kind: "plugin-enabled";

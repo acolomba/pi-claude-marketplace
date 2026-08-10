@@ -721,6 +721,81 @@ test("WARN-01 / NREG-01: a plugin-installed outcome with no degradedKinds is unc
   );
 });
 
+test("WR-06: a reconcile enable that staged an agent projects a row declaring the agents dependency", () => {
+  // The `{requires pi-subagents}` marker is a renderer concern driven by the
+  // row's `dependencies` list, so the projection's contract is that list: an
+  // empty one suppresses the marker no matter what the ledger staged. The
+  // sibling install arm has always carried it; this arm hard-coded [].
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-enabled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    stagedAgents: true,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.deepEqual(row.status === "installed" ? [...row.dependencies] : "absent", ["agents"]);
+});
+
+test("WR-06: the partially-installed enable arm carries the dependency list alongside the dropped-kind tokens", () => {
+  // Both arms of the composer derive from the same signals: a re-enable that
+  // dropped a kind AND staged an agent must not lose either fact. Reason order
+  // stays contractual -- orphan rewake, malformed kinds, then dropped kinds.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-enabled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    unsupported: ["lspServers"],
+    orphanRewake: true,
+    stagedAgents: true,
+    stagedMcpServers: true,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "partially-installed");
+  // `dependencies` is optional on the partially-installed row shape (the
+  // list/info inventory surface omits it), so read it through the same
+  // nullish fallback the row composer's consumers use.
+  assert.deepEqual(
+    row.status === "partially-installed" ? [...(row.dependencies ?? [])] : "absent",
+    ["agents", "mcp"],
+  );
+  assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", [
+    "orphan rewake",
+    "lsp",
+  ]);
+});
+
+test("WR-06 / NREG-01: an enable outcome that staged neither agents nor MCP servers keeps the empty dependency list", () => {
+  // The regression guard for the derivation: an unaffected enable projection
+  // must render byte-identically, which means no dependency and no marker.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-enabled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.deepEqual(row, {
+    status: "installed",
+    name: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("IN-07: a plugin-installed outcome carrying orphanRewake renders (installed) {orphan rewake} at info severity", () => {
   // D-98-01: the install arm and the enable arm run the SAME ledger over the
   // SAME bridges, so a fresh reconcile install of a plugin whose hook handler

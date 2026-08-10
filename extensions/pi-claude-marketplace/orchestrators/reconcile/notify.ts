@@ -44,6 +44,7 @@ import { assertNever } from "../../shared/errors.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { enableRowDependencies } from "../plugin/shared.ts";
 
 import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
@@ -474,9 +475,9 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
 /**
  * `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
  * successful enable re-materializes the plugin via installPlugin, so the
- * projection emits the `installed` row (with empty dependencies -- the
- * orchestrated EnableDisablePluginOutcome does not carry declaresAgents /
- * declaresMcp). The reverse asymmetry (a successful disable maps to
+ * projection emits the `installed` row, deriving its `dependencies` from the
+ * ledger's staged-count signals exactly as the install arm derives its own
+ * (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
  * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
  */
 /**
@@ -523,9 +524,14 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * the clean `(installed)` row would contradict the `(partially-installed)` row
  * `list` renders for the record immediately afterwards. The kinds compose
  * through the shared `narrowUnsupportedKinds` seam, exactly as on the
- * `plugin-installed` / `plugin-backfilled` arms. `dependencies` stays empty on
- * both arms (the orchestrated enable outcome carries no staged-name counts --
- * WR-06), so no soft-dep marker fires either way.
+ * `plugin-installed` / `plugin-backfilled` arms.
+ *
+ * SEV-01 / WR-06: `dependencies` is DERIVED on both arms from the ledger's
+ * staged-agent / staged-MCP verdicts through the same `enableRowDependencies`
+ * seam the standalone enable row uses, so the `{requires pi-subagents}` /
+ * `{requires pi-mcp}` markers fire on a projected re-enable exactly as they do
+ * on the sibling install arm. A re-enable that staged neither renders
+ * byte-identically to before (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
  * signals in `install.ts`'s emit order -- `{orphan rewake}`, then the per-kind
@@ -549,12 +555,13 @@ function enabledRowFromOutcome(
     ...malformed,
   ];
   const severity = malformed.length > 0 ? "warning" : "info";
+  const dependencies = enableRowDependencies(outcome);
   if (unsupported.length > 0) {
     return {
       status: "partially-installed",
       name: outcome.plugin,
       ...(outcome.version !== undefined && { version: outcome.version }),
-      dependencies: [],
+      dependencies,
       reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
       severity,
       needsReload: true,
@@ -565,7 +572,7 @@ function enabledRowFromOutcome(
     status: "installed",
     name: outcome.plugin,
     ...(outcome.version !== undefined && { version: outcome.version }),
-    dependencies: [],
+    dependencies,
     ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads.
     severity,

@@ -893,6 +893,11 @@ function outcomeToTypedResult(args: {
             ...(outcome.orphanRewake === true && { orphanRewake: true }),
             ...(outcome.degradedKinds !== undefined &&
               outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
+            // SEV-01 / D-98-02: the staged-count verdicts cross the orchestrated
+            // boundary too, so the reconcile projection derives the SAME
+            // dependency list the standalone row derives.
+            ...(outcome.stagedAgents === true && { stagedAgents: true }),
+            ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
           }
         : {
             status: "disabled",

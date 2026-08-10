@@ -76,7 +76,10 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
-import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type {
+  EnableDegradationSignals,
+  EnableDisablePluginOutcome,
+} from "../plugin/enable-disable.ts";
 
 /**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
@@ -660,6 +663,27 @@ interface PluginToggleAxes {
   }) => PerEntryOutcome;
 }
 
+/**
+ * Lift the enable arm's degradation signals off the orchestrated outcome. Each
+ * field is omitted when empty (`exactOptionalPropertyTypes`), so a clean enable
+ * yields `{}` and its projected row is byte-identical (NREG-01).
+ *
+ * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
+ * projected row's dependency list, mirroring the install arm's
+ * `dependenciesFromInstall` derivation.
+ */
+function degradationFromEnable(
+  result: Extract<EnableDisablePluginOutcome, { status: "enabled" }>,
+): EnableDegradationSignals {
+  return {
+    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
+    ...(result.orphanRewake === true && { orphanRewake: true }),
+    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
+    ...(result.stagedAgents === true && { stagedAgents: true }),
+    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+  };
+}
+
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,
   ops: ReconcilePlan["pluginsToEnable"] | ReconcilePlan["pluginsToDisable"],
@@ -696,13 +720,7 @@ async function applyPluginToggles(
         // literal comparison is what narrows the union -- `successStatus` is a
         // variable, so the guard above does not narrow on its own.
         const degradation: EnableDegradationSignals =
-          result.status === "enabled"
-            ? {
-                ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
-                ...(result.orphanRewake === true && { orphanRewake: true }),
-                ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
-              }
-            : {};
+          result.status === "enabled" ? degradationFromEnable(result) : {};
         outcomes.push(
           axes.buildSuccess({
             scope: op.scope,

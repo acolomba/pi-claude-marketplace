@@ -4291,6 +4291,36 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // WR-06 / SEV-01: the projected enable row derives `dependencies` from the
+    // ledger's staged counts, so the soft-dep marker fires on the load-time
+    // surface too. Severity stays `info` -- this projection applies the
+    // companion raise on neither arm, so its enable arm agrees with its
+    // install arm; the standalone verb owns the SEV-01 composition.
+    "reconcile-enable-soft-dep": {
+      pi: piWithNothingLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: ["agents"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
 
