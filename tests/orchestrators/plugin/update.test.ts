@@ -3040,6 +3040,105 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
   });
 });
 
+test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lists", async () => {
+  // The WR-02 skip compares a projection of the PERSISTED compatibility block
+  // against a projection of a FRESHLY RESOLVED one. `disabledPinProjection`
+  // stringifies `notes` / `supported` / `unsupported` positionally, so the skip
+  // holds only while the resolver emits those lists in the same order on every
+  // resolution of the same input. That contingency is invisible: if any list
+  // ever became set-derived, `readdir`-ordered, or `Promise.all`-ordered, the
+  // projections would differ on every run of every disabled plugin, the
+  // `retries: 0` lock would be acquired unconditionally again, and the
+  // batch-abort regression WR-02 exists to prevent would come back silently.
+  //
+  // The fixture above cannot see that: its lists are one element long at most,
+  // and a one-element list has no order to lose. This one seeds two supported
+  // kinds, two unsupported kinds and their notes, so a re-ordering resolver
+  // fails HERE -- as a `(failed) {lock held}` row -- instead of in production.
+  //
+  // Deliberately NOT fixed by sorting inside the projection: a sort would make
+  // the test pass while hiding the dependency, and the round trip through
+  // state.json is the property that actually has to hold.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr08-order-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true, hasCommand: true } },
+      });
+      // Declares `themes` AND `monitors` -- two unsupported kinds, each with its
+      // own `contains <kind>` note.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.0.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      // Pass one settles the record with resolver-derived lists, in resolver
+      // order. `partial` because a CLEAN disabled record has consented to
+      // nothing (WR-01).
+      const first = makeCtx();
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      // Fixture-rot guard: if the seeds stop producing multi-element lists this
+      // test silently degrades into a duplicate of the WR-02 one above.
+      const settled = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(settled !== undefined);
+      assert.ok(
+        settled.compatibility.supported.length >= 2,
+        `supported must carry >=2 entries for order to be observable: ${JSON.stringify(settled.compatibility.supported)}`,
+      );
+      assert.ok(
+        settled.compatibility.unsupported.length >= 2,
+        `unsupported must carry >=2 entries for order to be observable: ${JSON.stringify(settled.compatibility.unsupported)}`,
+      );
+      assert.ok(
+        settled.compatibility.notes.length >= 2,
+        `notes must carry >=2 entries for order to be observable: ${JSON.stringify(settled.compatibility.notes)}`,
+      );
+
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        const { ctx, pi, notifications } = makeCtx();
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          partial: true,
+        });
+
+        assert.equal(notifications.length, 1);
+        assert.doesNotMatch(
+          notifications[0]!.message,
+          /lock held|\(failed\)/,
+          "the re-derived lists compared equal to the persisted ones, so no lock was needed -- a `lock held` row here means the resolver's emit order stopped being stable across resolutions",
+        );
+      } finally {
+        await release();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resources empty (no re-materialization)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-d-upd-"));

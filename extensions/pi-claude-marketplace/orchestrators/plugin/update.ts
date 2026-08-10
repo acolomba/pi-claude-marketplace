@@ -1401,6 +1401,17 @@ async function markUpdateInProgress(
  * `updatedAt` is deliberately absent: the refresh derives it from the wall
  * clock, so a projection carrying it would differ from itself on every call and
  * the guard could never hold.
+ *
+ * Element order WITHIN `notes` / `supported` / `unsupported` is significant,
+ * and that is a real dependence on the resolver, not an accident of this
+ * function. The projection is compared against one built from a record written
+ * by an EARLIER resolution, so a resolver whose emit order varies between two
+ * resolutions of the same input makes every disabled plugin read as moved: the
+ * RECON-05 no-write guard stops holding, and `disabledRefreshWouldWrite` starts
+ * acquiring the `retries: 0` lock on every pass. Sorting here would hide that
+ * rather than fix it, so the contingency is pinned by a test instead -- see the
+ * WR-08 case in `tests/orchestrators/plugin/update.test.ts`, which round-trips
+ * multi-element lists through `state.json`.
  */
 function disabledPinProjection(
   version: string,
