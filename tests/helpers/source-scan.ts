@@ -57,14 +57,19 @@ export function stripComments(src: string): string {
  * requirement-anchored failure message, keeping each gate's own wording with
  * its own requirement IDs.
  *
- * A target that does not exist is skipped rather than failed: a gate may be
- * authored before the file it will guard, and its assertions fire as soon as
- * that file lands.
+ * WR-06: a target that does not exist FAILS. Skipping it silently meant that
+ * renaming, moving, or deleting a guarded file turned the gate green over zero
+ * inspected files -- the same "greened on a file it never read" failure mode the
+ * `readFile`-over-`grep` choice above exists to prevent, arriving by a different
+ * door. A gate authored ahead of the file it will guard names that file in
+ * `opts.allowMissing`, which makes the wait explicit and temporary instead of
+ * implicit and permanent.
  */
 export async function assertNoForbiddenSurface(
   targets: ReadonlyArray<string>,
   patterns: ReadonlyArray<{ readonly name: string; readonly pattern: RegExp }>,
   describeViolation: (offenders: ReadonlyArray<string>) => string,
+  opts: { readonly allowMissing?: ReadonlyArray<string> } = {},
 ): Promise<void> {
   const offenders: string[] = [];
 
@@ -75,6 +80,10 @@ export async function assertNoForbiddenSurface(
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
+        assert.ok(
+          opts.allowMissing?.includes(rel),
+          `source-scan: target ${rel} does not exist, so this gate inspected nothing for it. A renamed or deleted target silently uncovers the gate; add it to allowMissing only while it is genuinely unwritten.`,
+        );
         continue;
       }
 

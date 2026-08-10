@@ -323,7 +323,10 @@ test("COMPAT-01: the default state still declares the current schema version", (
 test("COMPAT-01: the network clause is covered by the orchestrator-network gate", async () => {
   // DELEGATION (D-98-09): the NFR-5 gate runs the actual assertion. This clause
   // only proves the two info surfaces are still in its target list, so removing
-  // one there fails here rather than silently uncovering the clause.
+  // one there fails here rather than silently uncovering the clause. WR-06: that
+  // the named files still EXIST is the shared scanner's job -- it fails on a
+  // missing target rather than skipping it, so a rename cannot leave both gates
+  // green over a file neither read.
   const src = await readStrippedSource(NETWORK_GATE_REL);
   const missing = [
     "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
