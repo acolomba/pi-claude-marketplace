@@ -1599,8 +1599,6 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // artifacts; an `enable` after the update is the rematerialization surface.
   // ENBL-09: refresh the record's version, resolvedSource and compatibility so
   // a future enable reads the current pin, but keep `resources.*` empty.
-  // Renders the existing `unchanged` byte form -- the artifact state really is
-  // unchanged.
   if (isRecordedButDisabled(preflight.record)) {
     await refreshDisabledRecord(args, preflight);
     // PURL-06 / D-78-01: the refresh re-pointed resolvedSource + resolvedSha at
@@ -1620,11 +1618,26 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       }
     }
 
+    // WR-02: NOT the `unchanged` partition. `unchanged` means "the resolved
+    // version matched the record exactly; nothing was written", and it renders
+    // `{up-to-date}` -- a claim about the VERSION. This arm is reachable only
+    // when the version MOVED (`preflightUpdate` returns `unchanged` on
+    // `toVersion === fromVersion` before the disabled branch is reached), and
+    // the refresh above just rewrote that version along with the source, the sha
+    // and the compatibility block. `up-to-date` is therefore the one fact the
+    // row cannot claim. Report the skip that actually happened and name why
+    // nothing was materialized: the record is disabled. Both tokens are
+    // inherited closed-set members; `already disabled` is idempotent, so the row
+    // keeps its info severity and emits no summary line.
+    // `fromVersion` is deliberately omitted: the record no longer holds it (the
+    // refresh just moved the pin), so rendering it in the row's version slot
+    // would trade one stale claim for another. The row makes no version claim,
+    // which is the same slot shape the `unchanged` projection rendered here.
     return {
-      partition: "unchanged",
+      partition: "skipped",
       name: plugin,
-      fromVersion,
-      toVersion: fromVersion,
+      notes: [],
+      reasons: ["already disabled"] as const,
       declaresAgents: false,
       declaresMcp: false,
     };

@@ -2998,11 +2998,11 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // D-UPD: rendered status reuses the existing `unchanged` byte form
-      // (`(skipped) {up-to-date}`) -- no new catalog token introduced. The
-      // user-visible artifact state really IS unchanged (no re-materialization).
+      // D-UPD / WR-02: the rendered status is the inherited `(skipped)` token
+      // naming the reason nothing was materialized -- NOT `{up-to-date}`, which
+      // would claim the version is settled in the very call that moved it.
       assert.equal(notifications.length, 1);
-      assert.match(notifications[0]!.message, /\(skipped\) \{up-to-date\}/);
+      assert.match(notifications[0]!.message, /\(skipped\) \{already disabled\}/);
 
       // State: record's version + resolvedSource refreshed (the next `enable`
       // re-materializes from the now-current pin); resources.* stay empty
@@ -3078,13 +3078,14 @@ test("WR-04: a targeted update with NO partial flag reaches the disabled-record 
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // The unchanged partition's byte form -- NOT the partially-upgradable
-      // decline row with its remediation trailer, which is what the strict gate
-      // produced before the record-derived widening.
+      // The re-pin skip row -- NOT the partially-upgradable decline row with its
+      // remediation trailer, which is what the strict gate produced before the
+      // record-derived widening. WR-02: the reason names why nothing was
+      // materialized; `{up-to-date}` would deny the pin move asserted below.
       assert.equal(notifications.length, 1);
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" + "  ⊘ hello (skipped) {up-to-date}",
+        "● mp [project]\n" + "  ⊘ hello (skipped) {already disabled}",
       );
 
       const after = await loadState(locations.extensionRoot);
@@ -3335,7 +3336,7 @@ test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stag
       assert.equal(notifications.length, 1);
       assert.equal(
         notifications[0]?.message,
-        "● mp [project]\n" + "  ⊘ hello (skipped) {up-to-date}",
+        "● mp [project]\n" + "  ⊘ hello (skipped) {already disabled}",
       );
 
       // The defect this guards is re-staging on disk, so assert on disk: the
@@ -3434,7 +3435,19 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
       const secondRecord = await settledFields();
 
       assert.equal(secondNotifications.length, 1);
-      assert.deepEqual(secondNotifications, firstNotifications);
+      // WR-02: the two calls did DIFFERENT things, so their rows differ. The
+      // first moved the pin and says so with the skip reason that names why
+      // nothing was materialized; the second is a genuine no-op reached through
+      // the `toVersion === fromVersion` short-circuit, and `{up-to-date}` is a
+      // true statement only there.
+      assert.equal(
+        firstNotifications[0]?.message,
+        "● mp [project]\n  ⊘ hello (skipped) {already disabled}",
+      );
+      assert.equal(
+        secondNotifications[0]?.message,
+        "● mp [project]\n  ⊘ hello (skipped) {up-to-date}",
+      );
       assert.deepEqual(secondRecord, firstRecord, "the refresh is a fixed point");
 
       const secondStat = await stat(locations.stateJsonPath);
