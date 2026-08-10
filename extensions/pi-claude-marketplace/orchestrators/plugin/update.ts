@@ -1080,10 +1080,18 @@ async function preflightUpdate(
     },
   );
 
+  // WR-04 / D-98-04: derive the gate from the RECORD as well as the caller
+  // flag, the same record-derived stance the enable branch takes (ENBL-07 /
+  // D-69-01). The strict gate exists so a degrade is never materialized without
+  // consent, and a disabled record materializes nothing: the D-UPD short-circuit
+  // below rewrites only version, resolvedSource, resolvedSha, compatibility and
+  // the updated-at stamp inside a state guard, leaving every `resources.*` array
+  // empty. Without this widening a disabled PARTIAL record is declined by the
+  // one command that can re-pin it against the current manifest entry.
   const candidate = await resolveUpdateCandidate(entry, mp.marketplaceRoot, clone.probe, {
     plugin,
     fromVersion: record.version,
-    partial: args.partial === true,
+    partial: args.partial === true || isRecordedButDisabled(record),
   });
   if ("partition" in candidate) {
     return candidate;

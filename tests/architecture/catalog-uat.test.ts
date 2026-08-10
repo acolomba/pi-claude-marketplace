@@ -1925,6 +1925,34 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-04 / D-98-04: a targeted `update` against a DISABLED record whose
+    // candidate re-resolves `partially-available`. The record-derived gate
+    // admits it with no flag typed, the D-UPD short-circuit refreshes the
+    // record's metadata and stages nothing, so the row is the existing
+    // `unchanged` byte form -- no new token, no trailer.
+    "disabled-record-refresh": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "hello",
+                reasons: ["up-to-date"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,

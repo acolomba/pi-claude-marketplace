@@ -942,6 +942,8 @@ A plugin operation needs attention.
     Re-run with --partial to update with the supported components.
 ```
 
+WR-04 / D-98-04: this decline is for an ENABLED record. A DISABLED record takes the carve-out below instead -- `preflightUpdate` derives the candidate gate from the record as well as the flag, so a disabled record never reaches this row.
+
 A TARGETED `update <plugin>@<marketplace>` (no `--partial`) whose candidate re-resolves `partially-available` declines the upgrade and renders the resolver-state-driven `(partially-upgradable)` token with the `●` glyph (XSURF-03) -- consistent with how `list` describes the same plugin, NOT the misleading `⊘ (skipped) {no longer installable}` (the plugin IS installable with `--partial`). The degrade reason is sourced through the SAME `narrowUnsupportedKinds` seam the `list (partially-upgradable)` inventory row uses, so the `{lsp}` brace is byte-identical across the two surfaces. Because `--partial` can degrade-update the supported components, the row carries a 4-space-indented update-worded `--partial` hint trailer pointing the user at the flag. The user explicitly named this plugin, so the decline is actionable -> severity `warning` (SEV-04 / D-69-02): the cascade prepends the `A plugin operation needs attention.` summary line. Single cardinality, so no trailing tally. The per-row bytes are identical to the bulk form below -- only the threaded invocation cardinality changes the stamped severity. No reload-hint (nothing changed on disk).
 
 ### Partially-upgradable skip, bulk update (SEV-04 / D-69-02)
@@ -957,6 +959,17 @@ Plugin update: nothing to update
 ```
 
 The SAME partially-upgradable candidate skipped by a BULK `update @<marketplace>` (or bare `update`) the user did NOT individually target is benign -> severity `info` (SEV-04 / D-69-02). The per-row `(partially-upgradable) {lsp}` bytes + the `--partial` trailer are the Phase-73 lock, identical to the targeted form above; this is a zero-realized-transition bulk cascade -- one info `partially-upgradable` decline (partition `skipped`, NOT `updated`), 0 updated, 0 failures/warnings. UGRM-01/UGRM-02: the cascade BODY still renders the declined row + trailer, but the headline is the never-silent no-op constant `Plugin update: nothing to update` (the `partially-upgradable` decline contributes 0 to the updated count, so the override's 0-count success category collapses to `""`; the orchestrator owns the headline rather than letting it vanish). No reload-hint.
+
+### Disabled-record refresh, no flag needed (WR-04 / D-98-04)
+
+<!-- catalog-state: disabled-record-refresh -->
+
+```text
+● mp [project]
+  ⊘ hello (skipped) {up-to-date}
+```
+
+A targeted `update <plugin>@<marketplace>` against a DISABLED record whose candidate re-resolves `partially-available`. `preflightUpdate` derives the candidate gate's partial argument from the record as well as the caller flag (the same record-derived stance the enable branch takes, ENBL-07 / D-69-01), so the candidate is admitted with no flag typed and the D-UPD short-circuit refreshes the record: `version`, `resolvedSource`, `resolvedSha` and the `compatibility` block are rewritten inside a state guard so a later `enable` reads the current pin. Nothing is materialized -- every `resources.*` array stays empty and the record stays disabled -- which is why the strict gate's do-not-materialize-an-unconsented-degrade rule does not apply here, and why the row reuses the existing `unchanged` byte form: the artifact state really is unchanged. `--partial` stays admissible and reaches the same short-circuit. Severity `info` -- `up-to-date` is in the benign closed set, so no summary line. Single cardinality, so no trailing tally. No reload-hint (nothing changed on disk).
 
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 

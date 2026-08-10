@@ -2912,11 +2912,14 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
 
 // ─── ENBL-09: update vs a DISABLED PARTIAL ──────────────────────────────────
 //
-// Every test below passes `partial: true`. Without it `resolveUpdateCandidate`
-// runs the strict `requireInstallable` gate, the degraded candidate throws, and
-// the throw is converted into a skipped outcome BEFORE the disabled-record
-// short-circuit is reached -- so a test without the flag would prove nothing
-// about the short-circuit at all.
+// WR-04 / D-98-04: the disabled-record short-circuit is reachable BOTH ways.
+// `preflightUpdate` derives the candidate gate's partial argument from the
+// record as well as the caller flag, so a disabled record admits a
+// partially-available candidate with no flag typed -- `update` is the only
+// command that can re-pin such a record, and a disabled record stages nothing.
+// The flagged cases below stay valid: `partial: true` remains admissible and
+// reaches the same short-circuit. The flagless case is the one that proves
+// reachability without the flag.
 
 /** Assert every one of the five resource slots is empty on a disabled record. */
 function assertResourcesEmpty(record: PluginRecord, why: string): void {
@@ -2926,6 +2929,64 @@ function assertResourcesEmpty(record: PluginRecord, why: string): void {
   assert.deepEqual([...record.resources.mcpServers], [], `mcpServers ${why}`);
   assert.deepEqual([...record.resources.hooks], [], `hooks ${why}`);
 }
+
+test("WR-04: a targeted update with NO partial flag reaches the disabled-record short-circuit and refreshes the pin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr04-noflag-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      // The candidate resolves `partially-available`, which the STRICT gate
+      // rejects -- the record's disabled-ness is what widens the gate here.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // The unchanged partition's byte form -- NOT the partially-upgradable
+      // decline row with its remediation trailer, which is what the strict gate
+      // produced before the record-derived widening.
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n" + "  ⊘ hello (skipped) {up-to-date}",
+      );
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "the version pin refreshes without the flag");
+      assert.equal(
+        rec.compatibility.installable,
+        false,
+        "availability stays derived from the partially-available resolution",
+      );
+      assert.ok(
+        rec.compatibility.unsupported.length > 0,
+        `unsupported list stays non-empty: ${JSON.stringify(rec.compatibility.unsupported)}`,
+      );
+      assert.equal(rec.enabled, false, "the record stays disabled");
+      assertResourcesEmpty(rec, "stay empty (the refresh stages nothing)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("ENBL-09: the disabled-record refresh derives compatibility.installable from the resolution -- degraded stays degraded", async () => {
   await withHermeticHome(async () => {
