@@ -752,6 +752,28 @@ const INLINE_REDERIVATIONS: ReadonlyArray<RegExp> = [
   /\.enabled\s*!==\s*true/,
 ];
 
+/**
+ * D-99-02b: the twin spellings a gate built only from `!` and comparison
+ * operators adjacent to an identifier path cannot see -- a `(`, a `[` or a bare
+ * bound identifier each break the match. Held as DATA rather than described in
+ * prose, so the proof below cannot be satisfied (or defeated) by comment text.
+ */
+const ESCAPING_TWIN_SPELLINGS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
+  { label: "destructured binding", line: "const { enabled } = record;" },
+  { label: "bracket access", line: 'if (!record["enabled"]) {' },
+  { label: "Boolean() coercion", line: "if (Boolean(record.enabled) === false) {" },
+];
+
+/**
+ * The shapes every rederivation pattern must LEAVE ALONE: the config-declaration
+ * axis (`persistence/config-io.ts`, a different object whose default is
+ * enabled-when-absent) and a legitimate call into the single predicate.
+ */
+const NON_REDERIVATIONS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
+  { label: "config-declaration axis", line: "if (entry.enabled !== false) {" },
+  { label: "legitimate predicate call", line: "if (isRecordedButDisabled(record)) {" },
+];
+
 /** Every `.ts` file under the extension source tree, repo-relative. */
 async function extensionSourceFiles(): Promise<readonly string[]> {
   const out: string[] = [];
@@ -916,6 +938,25 @@ test("ENBL-05: no disabled-state twin survives ANYWHERE in the extension tree --
     [],
     `ENBL-05 violation: a local disabled-state twin survives:\n  ${offenders.join("\n  ")}`,
   );
+});
+
+test("ENBL-05: the drift gate flags the destructured, bracket-access and Boolean() twin spellings (D-99-02b)", () => {
+  // The whole-tree walk proves no twin survives in the tree TODAY; it cannot
+  // prove the gate would see one that landed tomorrow. These literals stand in
+  // for that future twin, so the gate's reach is pinned rather than assumed.
+  for (const twin of ESCAPING_TWIN_SPELLINGS) {
+    assert.ok(
+      INLINE_REDERIVATIONS.some((re) => re.test(twin.line)),
+      `ENBL-05: no rederivation pattern flags the ${twin.label} twin -- ${twin.line}`,
+    );
+  }
+
+  for (const control of NON_REDERIVATIONS) {
+    assert.ok(
+      !INLINE_REDERIVATIONS.some((re) => re.test(control.line)),
+      `ENBL-05: a rederivation pattern over-reaches onto the ${control.label} -- ${control.line}`,
+    );
+  }
 });
 
 test("ENBL-05: every former definition site imports the single persistence/state-io.ts predicate", async () => {
