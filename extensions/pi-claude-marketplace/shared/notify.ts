@@ -692,7 +692,15 @@ export interface PluginInstalledMessage extends TransitionMessageBase {
 /**
  * `(updated)` -- update cascade row. Carries REQUIRED `from` / `to`
  * so the renderer can compose the `v1.0 → v1.2` arrow form;
- * `dependencies` REQUIRED; no `reasons`.
+ * `dependencies` REQUIRED.
+ *
+ * WR-12: `reasons` is OPTIONAL here, exactly as on `PluginInstalledMessage` and
+ * `PluginReinstalledMessage` and for the same reason. An update drives the same
+ * bridges as an install, so a component whose source frontmatter no longer
+ * parses degrades identically, and the row that reports the transition has to be
+ * able to name it (WARN-01 / D-86-03). Absent `reasons` renders the legacy
+ * brace-less row byte-for-byte: `composeReasons` returns `""` for an undefined
+ * list and `joinTokens` collapses the empty slot.
  */
 export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
@@ -701,6 +709,7 @@ export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly to: string;
   readonly dependencies: readonly Dependency[];
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2234,6 +2243,10 @@ function renderPluginRow(
           probe,
         ),
       ]);
+    // `updated` -- WR-12 threads the optional `reasons` brace exactly as the
+    // `installed` and `reinstalled` arms do, so an update that degraded a
+    // component names the kind instead of rendering a bare success row over it.
+    // Soft-dep markers append into the SAME brace per MSG-GR-4.
     case "updated":
       return joinTokens([
         ICON_INSTALLED,
@@ -2242,7 +2255,7 @@ function renderPluginRow(
         composeVersionArrow(p.from, p.to),
         "(updated)",
         composeReasons(
-          undefined,
+          p.reasons,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
           probe,

@@ -59,6 +59,10 @@ export type UpdateMsg =
  * (both declares-flags hard-`false`).
  */
 const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status: K }>> } = {
+  // WR-12: thread the optional `reasons` brace. This map -- not the central
+  // `renderPluginRow` arm -- is what actually renders this verb's rows, so a fix
+  // applied only centrally would raise the severity while still dropping the
+  // brace.
   updated: (p, probe, mpScope) =>
     installedLikeRow(
       ICON_INSTALLED,
@@ -66,7 +70,7 @@ const UPDATE_RENDER: { [K in UpdateStatus]: RenderFn<Extract<UpdateMsg, { status
       mpScope,
       composeVersionArrow(p.from, p.to),
       "(updated)",
-      undefined,
+      p.reasons,
       probe,
     ),
   // FSTAT-07 / D-66-04: a partial update whose candidate re-resolved `partially-available`

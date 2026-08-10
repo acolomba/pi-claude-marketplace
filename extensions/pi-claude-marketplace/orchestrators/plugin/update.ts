@@ -115,7 +115,11 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  skipSeverity,
+} from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -151,10 +155,20 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type {
+  ContentReason,
+  PluginFailedMessage,
+  PluginUpdatedMessage,
+} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
+import type {
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  PluginUpdateSkippedOutcome,
+  PluginUpdateUpdatedOutcome,
+} from "../types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // updatePlugins -- direct entrypoint (PUP-1 three forms)
@@ -1897,6 +1911,14 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
+  // WARN-01 / WR-12 / D-99-03: the same per-kind degrade collection install and
+  // reinstall make off their ledger handles, read here off the handles the
+  // bridges returned. A component whose SOURCE frontmatter would not parse is
+  // written in synthesized form rather than failing the ledger, so the row
+  // reporting the transition has to be able to name it -- otherwise `list`
+  // renders the record's degraded state one command later over a row that
+  // claimed a clean update.
+  const degradedKinds = collectDegradedKinds(handles);
   await dropPluginCompletionCache(args);
   // S5: an invalid config file silently skipped the write-back while the
   // success notify proceeded. Direct-path callers now surface the abort as a
@@ -1941,6 +1963,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
     declaresMcp: stagedMcpServerNames.length > 0,
+    // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
+    // rather than present-and-empty, so its shape is unchanged (NREG-01).
+    ...(degradedKinds.length > 0 && { degradedKinds }),
     // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
     // `partially-available` degraded it -- carry the dropped kinds so the cascade
     // renders `(partially-installed)` instead of `(updated)`. Empty for a clean
@@ -1960,6 +1985,20 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
       },
     }),
   };
+}
+
+/**
+ * WARN-01 / WR-12 / D-99-03: the component kinds this update staged in degraded
+ * form. Extracted from the success-outcome body so that body stays under the
+ * cognitive-complexity ceiling. Collection order is skill before command, the
+ * same order `malformedReasonsForKinds` enforces on emit.
+ */
+function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
+  return Array.from(
+    new Set<DegradeKind>([
+      ...(handles.skills.result.degraded.length > 0 ? ["skill" as const] : []),
+    ]),
+  );
 }
 
 async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
@@ -2130,21 +2169,7 @@ function outcomeToCascadePluginMessage(
         };
       }
 
-      return {
-        status: "updated",
-        name: outcome.name,
-        scope: target.scope,
-        from: outcome.fromVersion,
-        to: outcome.toVersion,
-        // declared kinds drive the renderer-time soft-dep
-        // marker (MSG-SD-3). The renderer narrows on `dependencies`
-        // membership + the notify-time probe.
-        dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-        // D-03/D-06: realized update transition -> reloads Pi resources.
-        // SEV-01: info, raised to warning above on a missing declared companion.
-        severity: successSeverity,
-        needsReload: true,
-      };
+      return updatedRowFromOutcome(outcome, target.scope, successSeverity);
     case "unchanged":
       // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
       // unchanged renders as `(skipped) {up-to-date}`.
@@ -2219,6 +2244,52 @@ function outcomeToCascadePluginMessage(
 }
 
 /** Derive the v2 Dependency[] tuple from the outcome's declared kinds. */
+/**
+ * Compose the success row for one updated plugin. The SOLE composer for that
+ * row: the manual update cascade and the marketplace autoupdate cascade both
+ * call it, so the two surfaces cannot report the same ledger run differently
+ * (the WR-09 lesson, one verb over).
+ *
+ * WARN-01 / WR-12 / D-99-03: a component this ledger degraded names its kind and
+ * takes the info -> warning raise, exactly as on the install, enable and
+ * reinstall arms. A clean update composes no reasons and keeps the caller's
+ * severity, so its row is byte-identical to before (NREG-01).
+ *
+ * `baseSeverity` is the caller's own success-severity policy, which the two
+ * surfaces set differently and deliberately: the manual cascade raises on an
+ * absent declared companion (SEV-01), while the autoupdate cascade stays `info`
+ * for that condition (WR-01 -- a background operation must not warn about a
+ * companion the user is not present to install). The malformed-component raise
+ * is a SEPARATE axis and applies on both, because a degraded component is
+ * carried out but short of ideal whichever surface reports it.
+ *
+ * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
+ * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers; the
+ * renderer narrows on membership plus the notify-time probe.
+ *
+ * D-03/D-06: a realized update transition always reloads Pi resources.
+ */
+export function updatedRowFromOutcome(
+  outcome: PluginUpdateUpdatedOutcome,
+  rowScope: Scope,
+  baseSeverity: "info" | "warning",
+): PluginUpdatedMessage {
+  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  return {
+    status: "updated",
+    name: outcome.name,
+    scope: rowScope,
+    from: outcome.fromVersion,
+    to: outcome.toVersion,
+    dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
+    // Optional spread, not a required key: an unaffected row renders the legacy
+    // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
+    ...(malformed.length > 0 && { reasons: malformed }),
+    severity: malformed.length > 0 ? "warning" : baseSeverity,
+    needsReload: true,
+  };
+}
+
 function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),

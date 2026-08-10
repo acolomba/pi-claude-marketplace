@@ -10,6 +10,7 @@
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
+import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
 export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";
 
@@ -150,8 +151,16 @@ interface PluginUpdateBase {
  * from one to the other. `stagedAgentNames` / `stagedMcpServerNames` are the
  * names of resources that were actually written during the update
  * (WR-04 / RH-5 input).
+ *
+ * WR-12 / D-99-03: INHERITS `LedgerDegradationSignals` rather than declaring a
+ * private `degradedKinds` of its own. `update` stages through the same skills
+ * and commands bridges as install, enable and reinstall, so it degrades a
+ * component the same way and must report it the same way; inheriting means a
+ * signal added to that shape reaches this outcome instead of silently missing
+ * from the one verb that redeclared it. Every member arrives OPTIONAL, so a
+ * clean update's outcome shape is unchanged (NREG-01).
  */
-export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
+export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegradationSignals {
   readonly partition: "updated";
   readonly fromVersion: string;
   readonly toVersion: string;
