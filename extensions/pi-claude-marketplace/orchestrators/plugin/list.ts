@@ -26,9 +26,9 @@
 // derived from the plugin's installed resources (state-recorded).
 // `notify` owns the single softDepStatus(pi) probe per call
 // and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
-// when (declares AND companion unloaded). The list orchestrator stamps the
-// steady-state inventory row `installed` with `needsReload: false`, so the
-// OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
+// when (declares AND companion unloaded). RLD-04: the list orchestrator
+// stamps the steady-state inventory row `installed` with `needsReload: false`,
+// so the OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
 // changes` trailer on plain list invocations.
 //
 // Contract (from PRD §5.3.1):
@@ -101,12 +101,13 @@ import type { Scope } from "../../shared/types.ts";
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
  * bucketing logic (installed / upgradable / available / unavailable) typed.
  * Maps 1:1 onto the PluginNotificationMessage list-surface discriminator
- * subset per shared/notify.ts. The installed bucket emits the `installed`
- * token with `needsReload: false` (the stamped flag suppresses the OR-reduce
- * reload-hint on steady-state list invocations); the PL-1 `--installed` filter
- * treats `installed`, `upgradable`, and `disabled` as the installed bucket (a
- * disabled plugin IS recorded -- the catalog's `disabled-inventory` state sits
- * under the installed inventory; D-54-01 / ENBL-04).
+ * subset per shared/notify.ts. RLD-04: the installed bucket emits the
+ * `installed` token with `needsReload: false` (the stamped flag suppresses the
+ * OR-reduce reload-hint on steady-state list invocations); the PL-1
+ * `--installed` filter treats `installed`, `upgradable`, and `disabled` as the
+ * installed bucket (a disabled plugin IS recorded -- the catalog's
+ * `disabled-inventory` state sits under the installed inventory; D-54-01 /
+ * ENBL-04).
  */
 type PluginRenderStatus =
   | "installed"
@@ -1099,7 +1100,7 @@ export async function loadPluginListPayload(
         "user",
         projectScopedManifest,
       );
-      // `installedRowMessage` emits `status: "installed"` with
+      // RLD-04: `installedRowMessage` emits `status: "installed"` with
       // `needsReload: false` for the steady-state inventory row. The
       // carry-over filter MUST discriminate on `"installed"` (plus the
       // `"upgradable"` and ENBL-04 `"disabled"` arms) so orphan-folded rows
@@ -1200,9 +1201,10 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
   // SNM-11: `available` / `unavailable` variants have no `scope` field by
   // construction; the other list-surface variants (`installed` /
   // `upgradable`) carry an optional `scope`. The status-narrowing switch
-  // is the only safe access path under TS strict. The list orchestrator emits
-  // the steady-state inventory row as `installed` (with `needsReload: false`);
-  // the same `installed` token also carries the cascade transition. The body
+  // is the only safe access path under TS strict. RLD-04: the list orchestrator
+  // emits the steady-state inventory row as `installed` (with
+  // `needsReload: false`); the same `installed` token also carries the cascade
+  // transition. The body
   // `return p.scope ?? marketplaceScope` preserves the cross-scope orphan-fold
   // scope on a `PluginInstalledMessage` (SNM-11 / D-13-18) instead of silently
   // overwriting it with `marketplaceScope`.

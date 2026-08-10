@@ -456,9 +456,9 @@ export function notifyStopHookOverrideCap(ctx: ExtensionContext, pluginId: strin
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * The list-only inventory row uses `"installed"` with `needsReload: false`
- * (the list surface's reload-suppression is carried by the stamped
- * `needsReload` flag, not by a separate status token). The four
+ * RLD-04: the list-only inventory row uses `"installed"` with
+ * `needsReload: false` (the list surface's reload-suppression is carried by the
+ * stamped `needsReload` flag, not by a separate status token). The four
  * `"will *"` entries are the DIFF-02 pending-tense tokens; the
  * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. Per RLD-02 the
  * `/reload to pick up changes` trailer is driven by the OR-reduce of the
