@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Phase 99 code review + fix loop complete; verifier gate next
-last_updated: "2026-08-10T20:05:00.000Z"
+stopped_at: Phase 99 review loop converged (2 iterations); verifier gate next
+last_updated: "2026-08-10T21:40:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
@@ -34,9 +34,73 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 7 of 7 complete. Code review + fix loop done (iteration 1).
+Plan: 7 of 7 complete. Review loop CONVERGED after 2 iterations.
 Status: Verifier, validate-phase and secure-phase still to run before the phase
-closes. `npm run check` green at HEAD: 3413 unit + 18 integration, 0 fail.
+closes. `npm run check` green at HEAD: 3417 unit + 18 integration, 0 fail.
+
+### Review iteration 2 (the fix pass reviewed)
+
+0 critical, 3 warning, 6 info. Every iteration-1 finding confirmed genuinely
+closed — the `?: never` pins were proven with a scratch `tsc` probe (a
+`PluginUpdateUpdatedOutcome` passed to `enableRowDependencies` now raises
+TS2379; `partition?: never` is what does the work, because TypeScript's
+weak-type rule already rejected shapes with no properties in common). Both of
+the fixer's iteration-1 refutations were independently verified sound.
+
+**WR-02 was referred to the reviewer by operator decision and ACCEPTED.** The
+decisive evidence is that the in-transaction guard was never fully TOCTOU-safe
+either: both callers derive the `next` side from `nextDisabledPin(preflight,…)`,
+and `preflight.installable` / `preflight.toVersion` come from `preflightUpdate`,
+which does its `loadState` and `resolveUpdateCandidate` OUTSIDE any lock. The
+pre-lock compare widens an already-open window rather than opening a new class
+of one. The skip is fail-clean (NFR-3), recovery is re-running `update` with no
+restart (NFR-2), and every writer that could move the record writes a
+manifest-coherent value — so no strand.
+
+The three new warnings are fixed. **WR-06 was worse than "a missing rule".**
+`ARCHITECTURE.md:208` claimed `eslint-plugin-import-x`'s no-cycle rule enforced
+the D-11 boundary; no such rule existed. Adding it naively would NOT have fixed
+this: `import-x/no-cycle` walks the graph through import-x's own resolution,
+which only follows the extensions in `settings["import-x/extensions"]` (default
+`.js`/`.mjs`/`.cjs`) — on a `.ts`-only tree it walks a one-node graph and greens
+on any cycle. Confirmed on a minimal config: a deliberate two-file `.ts` cycle
+reported clean with defaults, caught once `.ts` was listed. So the rule anyone
+might have added to satisfy the doc would have been a green gate gating nothing.
+`tests/architecture/import-boundaries.test.ts` now pins the setting as well as
+the rule. Second, `no-cycle` alone does NOT gate WR-03's edge: re-adding the
+exact removed import stayed green, correctly, because that edge is not yet a
+cycle — the return path does not exist, and `no-cycle` fires only once a graph
+is already circular, so the first of two edges always lands green. The
+preventive half is a directed-edge grep gate (both directions, ledger modules
+only, `import type` included), mutation-tested by re-adding the import.
+
+Two further pre-existing falsehoods surfaced and are now recorded rather than
+carried: `bridges/hooks/` holds a real cycle knot (`event-router.ts` <->
+`dispatch.ts` <-> `async-rewake/registry.ts`, 8 errors tree-wide) which is why
+the rule's glob stops at `orchestrators/`; and the doc's claim that
+`orchestrators/plugin/` may not import `add.ts`/`remove.ts`/`update.ts` was
+ALREADY false — `orchestrators/plugin/bootstrap.ts:41-42` imports
+`marketplace/add.ts` and `marketplace/autoupdate.ts` deliberately, as a
+composer. The D-11 comment it was generalised from (`install.ts:59`) is
+file-scoped and correct; the doc over-generalised it.
+
+Lint cost of the new rule: `npm run lint` 99.6s -> 114.0s (+14%). A tree-wide
+variant was 130.8s and red.
+
+WR-07 corrected the `update.ts:1536` comment that claimed the in-lock compare is
+"TOCTOU-safe" when only its `current` half is live. WR-08 pinned the
+projection's order-stability contingency with a ROUND-TRIP test rather than a
+defensive sort — the real contract is cross-run stability, not any particular
+order, so a deterministic reorder is harmless and must not fail; reversing the
+persisted list order turns the row into `(failed) {lock held}`, verified by
+mutation, and a fixture-rot guard asserts each list carries >=2 entries.
+
+**Deliberately left open.** The `enable-orphan-rewake` section
+(`docs/output-catalog.md:2287`) carries the identical inaccuracy in a section
+this phase never edited — named in a commit body, not fixed. Five iteration-2
+Info findings remain open. One process note worth carrying forward:
+`catalog-uat` pins only the FENCED blocks, so catalog PROSE is unguarded, which
+is how the falsified example survived being copied into a new section.
 
 ### Code review and fix loop (iteration 1)
 
