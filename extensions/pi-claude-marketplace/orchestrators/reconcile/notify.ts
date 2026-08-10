@@ -51,6 +51,7 @@ import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type {
   PerEntryOutcome,
+  PluginBackfilledOutcome,
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
@@ -580,6 +581,59 @@ function enabledRowFromOutcome(
   };
 }
 
+/**
+ * Build the row for a load-time backfill.
+ *
+ * WR-04: the backfill runs the same class of ledger as the install and enable
+ * arms, so it names the same two degradation signals in `install.ts`'s emit
+ * order -- `{orphan rewake}`, then the per-kind `{malformed skill}` /
+ * `{malformed command}` tokens, then (on the degraded arm) the dropped kinds.
+ * A backfill that reports neither renders byte-identically to before (NREG-01).
+ *
+ * Severity: a backfill is a benign promotion (re-materializing now-supported
+ * components), NOT a new degradation, so a still-degraded arm stays `info` per
+ * SEV-03 -- the newly-degrades warning fires on the autoupdate cascade, not
+ * here. A MALFORMED component takes the `warning` raise on either arm: it is a
+ * degrade this backfill's own ledger just produced, exactly as on the
+ * `plugin-installed` and `plugin-enabled` arms (WARN-01 / D-86-03).
+ */
+function backfilledRowFromOutcome(
+  outcome: PluginBackfilledOutcome,
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  const reasons: ContentReason[] = [
+    ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
+    ...malformed,
+  ];
+  const severity = malformed.length > 0 ? "warning" : "info";
+  if (outcome.installable) {
+    return {
+      status: "installed",
+      name: outcome.plugin,
+      ...(outcome.version !== undefined && { version: outcome.version }),
+      dependencies: outcome.dependencies,
+      ...(reasons.length > 0 && { reasons }),
+      severity,
+      needsReload: true,
+    };
+  }
+
+  return {
+    status: "partially-installed",
+    name: outcome.plugin,
+    ...(outcome.version !== undefined && { version: outcome.version }),
+    dependencies: outcome.dependencies,
+    // SEV-05 / D-69-04: populate the factual `{reasons}` brace from the
+    // re-resolved dropped-component kinds through the SAME shared
+    // `narrowUnsupportedKinds` seam the install/list/info surfaces use -- no
+    // per-state reasons mechanism. An empty set renders brace-less
+    // (byte-identical to a no-dropped-kinds backfill).
+    reasons: [...reasons, ...narrowUnsupportedKinds(outcome.unsupported)],
+    severity,
+    needsReload: true,
+  };
+}
+
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
@@ -615,36 +669,7 @@ function applyOutcomeToBlock(
       // `dependencies` for the soft-dep markers; a partial re-materialize (still
       // degraded) renders a `partially-installed` row. Both fold into THIS single
       // applied cascade -- no second notify() (RECON-04).
-      if (outcome.installable) {
-        block.plugins.push({
-          status: "installed",
-          name: outcome.plugin,
-          ...(outcome.version !== undefined && { version: outcome.version }),
-          dependencies: outcome.dependencies,
-          severity: "info",
-          needsReload: true,
-        });
-      } else {
-        block.plugins.push({
-          status: "partially-installed",
-          name: outcome.plugin,
-          ...(outcome.version !== undefined && { version: outcome.version }),
-          dependencies: outcome.dependencies,
-          // SEV-05 / D-69-04: populate the factual `{reasons}` brace from the
-          // re-resolved dropped-component kinds through the SAME shared
-          // `narrowUnsupportedKinds` seam the install/list/info surfaces use --
-          // no per-state reasons mechanism. An empty set renders brace-less
-          // (byte-identical to a no-dropped-kinds backfill).
-          reasons: narrowUnsupportedKinds(outcome.unsupported),
-          // SEV-03 / A3: a backfill is a benign promotion (re-materializing
-          // now-supported components), NOT a new degradation, so it stays info.
-          // The SEV-03 newly-degrades warning fires only on the autoupdate
-          // cascade, not on this load-time backfill row.
-          severity: "info",
-          needsReload: true,
-        });
-      }
-
+      block.plugins.push(backfilledRowFromOutcome(outcome));
       return;
     case "plugin-uninstalled":
       block.plugins.push({

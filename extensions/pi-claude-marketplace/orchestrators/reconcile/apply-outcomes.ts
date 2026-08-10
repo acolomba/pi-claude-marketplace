@@ -24,7 +24,6 @@
 // field the renderer reads.
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
@@ -78,8 +77,19 @@ export interface MpRemovePartialOutcome extends OutcomeBase {
  * `("agents" | "mcp")[]` derived from `InstallPluginOutcome.declaresAgents`
  * / `declaresMcp` so the renderer's `PluginInstalledMessage` arm fires soft-
  * dep markers correctly when companion extensions are unloaded.
+ *
+ * WR-04: the two ledger-degradation signals are INHERITED from the shared shape
+ * rather than re-declared here, so all three ledger-driven arms (install,
+ * enable, backfill) read one vocabulary and none can be given a signal the
+ * others silently lack. `orphanRewake` pushes one `orphan rewake` token onto the
+ * row -- one per plugin regardless of N orphan handlers -- and moves no severity
+ * channel; `degradedKinds` pushes one `malformed skill` / `malformed command`
+ * token per kind and raises the row from `info` to `warning`. A
+ * degraded-but-installed component keeps the `(installed)` row: NOT
+ * `(partially-installed)`, which is for DROPPED supported components.
  */
-export interface PluginInstalledOutcome extends PluginOutcomeBase {
+export interface PluginInstalledOutcome
+  extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-installed";
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
@@ -94,30 +104,6 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
    * surfacing channel.
    */
   readonly postCommitWarnings?: readonly string[];
-  /**
-   * SURF-05 / D-63-08: the re-materialized `hooks/hooks.json` declared
-   * `rewakeMessage` / `rewakeSummary` on a handler WITHOUT `asyncRewake: true`.
-   * Propagated verbatim from `InstallPluginOutcome.orphanRewake`. The reconcile
-   * `plugin-installed` arm reads this to push one `orphan rewake` token onto
-   * the row -- one per plugin regardless of N orphan handlers, exactly as the
-   * sibling `plugin-enabled` arm already does for the same ledger run (IN-07).
-   * The token names a config bug; it moves no severity channel. Omitted when
-   * false so a clean install renders byte-identically (NREG-01).
-   */
-  readonly orphanRewake?: boolean;
-  /**
-   * WARN-01 / CLASS-01 / D-86-03: the degraded-component kinds whose SOURCE
-   * frontmatter could not be parsed by Pi's own `parseFrontmatter` but which
-   * still installed in degraded form. Propagated verbatim from
-   * `InstallPluginOutcome.degradedKinds`. The reconcile `plugin-installed`
-   * arm reads this to push one `malformed skill` / `malformed command` token
-   * per kind onto the `(installed)` row and raise that row from `info` to
-   * `warning` severity. A degraded-but-installed component keeps the
-   * `(installed)` row -- NOT `(partially-installed)`, which is for DROPPED
-   * supported components. Omitted when empty so a clean install renders
-   * byte-identically (NREG-01).
-   */
-  readonly degradedKinds?: readonly DegradeKind[];
 }
 
 /**
@@ -130,8 +116,19 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
  * `installable` is the RE-RESOLVED installability: `true` selects the
  * `(installed)` row (unsupported set now empty -> fully promoted), `false`
  * selects the `(partially-installed)` row (partial re-materialize, still degraded).
+ *
+ * WR-04: the backfill runs the same class of ledger the install and enable arms
+ * run, so it INHERITS the same two ledger-degradation signals rather than
+ * declaring a narrower vocabulary of its own. Without them, a backfill of a
+ * plugin whose `hooks.json` declares `rewakeMessage` without `asyncRewake: true`
+ * -- or whose skill frontmatter is unparseable -- rendered a clean row naming
+ * neither fact, which is the contradiction the shared shape exists to prevent.
+ * The dropped-kind list is NOT inherited: this arm carries the re-resolved
+ * `unsupported` field below, which is that same fact read off the backfill's own
+ * offline resolution.
  */
-export interface PluginBackfilledOutcome extends PluginOutcomeBase {
+export interface PluginBackfilledOutcome
+  extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-backfilled";
   readonly version?: string;
   readonly dependencies: readonly Dependency[];

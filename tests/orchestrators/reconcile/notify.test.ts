@@ -464,6 +464,77 @@ test("SEV-05: a partial backfill (installable:false) projects to a (partially-in
   assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", ["lsp"]);
 });
 
+test("WR-04: a backfill that orphaned a rewake names it on the promoted row, exactly as the install and enable arms do", () => {
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    installable: true,
+    unsupported: [],
+    orphanRewake: true,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "orphan rewake",
+  ]);
+  // The orphan token names a config bug; it moves no severity channel.
+  assert.equal(row.severity, "info");
+});
+
+test("WR-04: a backfill whose ledger degraded a component names the kind and raises the row to warning", () => {
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    installable: false,
+    unsupported: ["lspServers"],
+    orphanRewake: true,
+    degradedKinds: ["skill"],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "partially-installed");
+  // install.ts's emit order: orphan rewake, then the malformed kinds, then the
+  // dropped kinds.
+  assert.deepEqual(row.status === "partially-installed" ? [...row.reasons] : "absent", [
+    "orphan rewake",
+    "malformed skill",
+    "lsp",
+  ]);
+  // WARN-01: a malformed component is a degrade THIS ledger produced, so it
+  // takes the raise the sibling arms take -- the still-degraded backfill alone
+  // stays info (SEV-03).
+  assert.equal(row.severity, "warning");
+});
+
+test("WR-04: a backfill reporting neither signal renders byte-identically to before", () => {
+  const clean: PerEntryOutcome = {
+    kind: "plugin-backfilled",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: ["agents"],
+    installable: true,
+    unsupported: [],
+  };
+  const row = buildReconcileAppliedCascade([clean]).marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "info");
+  assert.equal(Object.hasOwn(row, "reasons"), false, "no brace on a clean backfill");
+});
+
 test("ENBL-07: a reconcile enable that dropped component kinds projects to a (partially-installed) row with the dropped-kinds brace, severity info", () => {
   // The load-time reconcile drives setPluginEnabled for every config-declared-
   // enabled disabled record, and ENBL-07's widened gate re-materializes a

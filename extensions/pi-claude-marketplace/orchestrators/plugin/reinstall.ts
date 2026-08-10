@@ -118,6 +118,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -1713,6 +1714,16 @@ function successOutcome(
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
+  // WARN-01 / WR-04 / D-86-03: the same per-kind degrade collection
+  // `install.ts` makes off its ledger context, read here off the prepared
+  // handles the bridges returned. Skill before command by collection order,
+  // matching the install emit order.
+  const degradedKinds = Array.from(
+    new Set<DegradeKind>([
+      ...(handles.skills.result.degraded.length > 0 ? (["skill"] as const) : []),
+      ...(handles.commands.result.degraded.length > 0 ? (["command"] as const) : []),
+    ]),
+  );
   // CMC-13: surface effective-state per-row soft-dep
   // predicates so cascade rendering can emit `{requires pi-subagents}` /
   // `{requires pi-mcp}` iff (declares AND companion unloaded). The
@@ -1731,6 +1742,7 @@ function successOutcome(
     declaresAgents: resources.agents.length > 0,
     declaresMcp: resources.mcpServers.length > 0,
     resourcesChanged: resourcesChanged(oldRecord.resources, resources),
+    ...(degradedKinds.length > 0 && { degradedKinds }),
   };
 }
 

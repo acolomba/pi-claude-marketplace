@@ -7,6 +7,7 @@
 // D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
+import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 
@@ -48,6 +49,16 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  /**
+   * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
+   * could not be parsed and which re-materialized in degraded form. The
+   * reinstall primitive drives the load-time backfill, so without this the
+   * backfill projection renders a clean row over a ledger that just degraded a
+   * component -- the contradiction the install and enable arms already avoid by
+   * carrying the same signal. Omitted when nothing degraded, so a clean
+   * reinstall's outcome shape is unchanged (NREG-01).
+   */
+  readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
 }
 

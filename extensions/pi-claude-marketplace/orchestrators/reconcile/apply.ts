@@ -1237,6 +1237,14 @@ async function maybeBackfillPlugin(
     // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
     // the brace-less `(installed)` row, so its unsupported set is empty.
     unsupported: resolved.state === "partially-available" ? resolved.unsupported : [],
+    // SURF-05 / WARN-01 / WR-04: the other two ledger signals, threaded exactly
+    // as the install and enable arms thread them. The orphan-rewake fact rides
+    // this backfill's own offline resolution; the malformed-frontmatter kinds
+    // ride the reinstall outcome, because the re-materialize is what produced
+    // them. Each is omitted when empty (NREG-01).
+    ...(resolved.orphanRewake === true && { orphanRewake: true }),
+    ...(outcome.degradedKinds !== undefined &&
+      outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
   });
   return false;
 }

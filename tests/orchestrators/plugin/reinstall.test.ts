@@ -3475,3 +3475,75 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// WARN-01 / WR-04: the reinstall outcome carries the degraded-component kinds
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-04: a reinstall whose source frontmatter no longer parses reports the degraded kind on its outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-degraded-"));
+    try {
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      // Break the skill's frontmatter at the SOURCE. The bridge installs it in
+      // degraded form rather than failing, which is the fact the outcome has to
+      // carry: the load-time backfill drives this same primitive, and a row that
+      // named nothing would contradict the ledger that produced it.
+      await writeFile(
+        path.join(seeded.pluginRoot, "skills", "tool", "SKILL.md"),
+        "---\nname: [unterminated\n---\n\n# Bad\nBody.\n",
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(outcome.partition === "reinstalled");
+      assert.deepEqual([...(outcome.degradedKinds ?? [])], ["skill"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-clean-"));
+    try {
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", command: "old command" },
+        install: true,
+      });
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.ok(outcome.partition === "reinstalled");
+      assert.equal(Object.hasOwn(outcome, "degradedKinds"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
