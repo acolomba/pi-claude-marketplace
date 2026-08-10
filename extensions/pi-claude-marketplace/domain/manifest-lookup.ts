@@ -11,6 +11,9 @@
 
 import type { MarketplaceManifest } from "./manifest.ts";
 
+/** One validated `plugins[]` element of a marketplace manifest. */
+type ManifestPluginEntry = MarketplaceManifest["plugins"][number];
+
 /**
  * An installed record's resolution against the manifest its own marketplace
  * record names, as a single discriminated value:
@@ -27,7 +30,7 @@ import type { MarketplaceManifest } from "./manifest.ts";
  * third itself, and every consumer then switches on the same union.
  */
 export type ManifestLookup =
-  | { readonly kind: "declared"; readonly entry: MarketplaceManifest["plugins"][number] }
+  | { readonly kind: "declared"; readonly entry: ManifestPluginEntry }
   | { readonly kind: "absent" }
   | { readonly kind: "unverified" };
 
@@ -43,9 +46,13 @@ export type ManifestLookup =
  * surface continues rendering past a failed read (list does, per BOUND-03 /
  * D-95-05), returns a `(failed)` row (info does) or lets the read throw
  * (update does) is a per-surface I/O decision, not a domain fact.
+ *
+ * The parameter is the `plugins` collection alone rather than the whole
+ * `MarketplaceManifest`: the rule reads nothing else, and `update` holds its
+ * cached read as a narrowing whose array is `readonly`.
  */
 export function lookupDeclaredPlugin(
-  manifest: MarketplaceManifest,
+  manifest: { readonly plugins: readonly ManifestPluginEntry[] },
   pluginName: string,
 ): Extract<ManifestLookup, { kind: "declared" | "absent" }> {
   const entry = manifest.plugins.find((p) => p.name === pluginName);

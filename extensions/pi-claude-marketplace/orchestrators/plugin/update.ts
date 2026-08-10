@@ -84,6 +84,7 @@ import {
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
+import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import {
@@ -1036,12 +1037,17 @@ async function preflightUpdate(
   // nonexistent name -- it must classify as `(failed) {not in manifest}` like
   // `install`, not the misleading `(skipped) {not installed}` that the
   // installed-state-first ordering produced.
+  //
+  // The read is unguarded on purpose: a manifest this verb cannot read is a
+  // throw, not a row, so the membership question is asked only of a manifest
+  // that was actually parsed. `lookupDeclaredPlugin` (D-99-02a) is the one
+  // writing of that question, shared with `list` and `info`.
   const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
+  const lookup = lookupDeclaredPlugin(manifest, plugin);
 
   const record = mp.plugins[plugin];
   if (record === undefined) {
-    if (entryRaw === undefined) {
+    if (lookup.kind === "absent") {
       // Not installed AND absent from the manifest -> failed {not in manifest}
       // (matches install.ts's `not-in-manifest` arm). No `fromVersion` since
       // there is no install record to read a version from.
@@ -1068,7 +1074,7 @@ async function preflightUpdate(
     };
   }
 
-  if (entryRaw === undefined) {
+  if (lookup.kind === "absent") {
     // Installed but no longer listed in the refreshed manifest -> skipped
     // {not in manifest} with the recorded `fromVersion` (preserved behavior).
     return {
@@ -1082,6 +1088,7 @@ async function preflightUpdate(
     };
   }
 
+  const entryRaw = lookup.entry;
   if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
     return {
       partition: "skipped",

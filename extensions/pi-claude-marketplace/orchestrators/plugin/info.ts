@@ -41,6 +41,7 @@ import {
   type HookConfigParseResult,
   type HooksConfig,
 } from "../../domain/components/hooks.ts";
+import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
   resolveStrict,
@@ -849,13 +850,15 @@ async function buildBlock(
   // records is a failure (BOUND-02); that arm keeps the
   // `componentsResolved: true` + empty components rationale of (a).
   //
-  // The lookup is hoisted above the `entry` lookup so both branches can
-  // read it. It MUST stay below arm (a): a manifest that could not be
-  // read licenses no membership claim, so no record may rescue that
-  // block (BOUND-01).
+  // The record read is hoisted above the membership lookup so both
+  // branches can read it. Both MUST stay below arm (a): a manifest that
+  // could not be read licenses no membership claim, so no record may
+  // rescue that block (BOUND-01) -- which is why `lookupDeclaredPlugin`
+  // (D-99-02a) is reachable only on the successful-read path and answers
+  // `declared` or `absent`, never "unknown".
   const installed = mpRecord.plugins[pluginName];
-  const entry = manifest.plugins.find((p) => p.name === pluginName);
-  if (entry === undefined) {
+  const lookup = lookupDeclaredPlugin(manifest, pluginName);
+  if (lookup.kind === "absent") {
     if (installed !== undefined) {
       return wrapBlock(
         marketplace,
@@ -875,6 +878,7 @@ async function buildBlock(
     });
   }
 
+  const entry = lookup.entry;
   const installedVersion = installed?.version;
   const manifestVersion = entry.version;
   const description = entry.description;
