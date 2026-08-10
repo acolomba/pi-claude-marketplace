@@ -985,7 +985,7 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * snapshot; reinstallPlugin self-locks and re-reads fresh state per plugin
  * (CR-01).
  *
- * WR-03: the snapshot predates applyPlan, which may have re-materialized a
+ * RECON-04 single-emit: the snapshot predates applyPlan, which may have re-materialized a
  * partially-installed plugin in the SAME load (e.g. a disable/enable that emits its
  * own transition row). Skip any plugin already represented in this scope's
  * accumulated outcomes so a single load can never emit two rows for one plugin
@@ -1037,8 +1037,8 @@ async function scanForceInstalledBackfills(
 
 /**
  * Per-plugin fault isolation for one scanned record. Applies the D-68-03
- * partially-installed filter, the ENBL-08 disabled-record filter and the WR-03
- * already-touched dedupe (all three benign skips returning `false`), then runs
+ * partially-installed filter, the ENBL-08 disabled-record filter and the
+ * RECON-04 already-touched dedupe (all three benign skips returning `false`), then runs
  * `maybeBackfillPlugin` inside a try/catch.
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
@@ -1082,7 +1082,7 @@ async function backfillOnePluginIsolated(
     return false;
   }
 
-  // WR-03: applyPlan already touched this plugin this load -- don't double-emit /
+  // RECON-04: applyPlan already touched this plugin this load -- don't double-emit /
   // re-materialize over it.
   if (alreadyTouched.has(`${marketplace} ${plugin}`)) {
     return false;
@@ -1105,8 +1105,8 @@ async function backfillOnePluginIsolated(
 /**
  * Test seam (mirrors reinstall.ts's `__test_*` exports): run one scan in
  * isolation over a caller-supplied `outcomes` array. Pre-populating that array
- * stands in for a same-load applyPlan transition, which is the input the WR-03
- * dedupe reads; passing it empty exercises the scan's own filters instead.
+ * stands in for a same-load applyPlan transition, which is the input the
+ * RECON-04 dedupe reads; passing it empty exercises the scan's own filters instead.
  *
  * ENBL-05: the planner's enable bucket is keyed on the `enabled` boolean alone,
  * so a partially-installed plugin CAN reach it through a real plan. The seam is

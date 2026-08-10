@@ -8,7 +8,7 @@
 // guard-free install ledger) + `saveConfig` + a single terminal `notify()`
 // per IL-2.
 //
-// CR-01 locking model: exactly ONE per-scope lock owns the
+// Locking model: exactly ONE per-scope lock owns the
 // whole critical section. The enable branch calls `runInstallLedger` (the
 // guard-FREE ledger body exported by install.ts) against THIS transaction's
 // state snapshot -- calling `installPlugin` here would nest a second
@@ -18,7 +18,7 @@
 // ledger's state mutation is what gets saved (no outer stale-snapshot
 // clobber; ST-7 / D-06 single-writer preserved).
 //
-// WR-01 save discipline: `tx.save()` fires ONLY on the
+// Save discipline: `tx.save()` fires ONLY on the
 // `fresh` arms. The `invalid-config` / `idempotent` / `not-recorded` /
 // `*-failed` arms return without saving, so state.json's mtime is UNCHANGED
 // on every abort/no-op -- exactly what the catalog's CFG-03 states claim.
@@ -225,7 +225,7 @@ type SetEnabledOutcome =
  * per ENBL-02, so the PI-15 "already installed" sanity throw must not fire
  * for the re-materialization). Returns the outcome sentinel.
  *
- * CR-01: `installPlugin` MUST NOT be called here -- it opens its own
+ * `installPlugin` MUST NOT be called here -- it opens its own
  * `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
  * (`retries: 0`) is not re-entrant, so the nested acquisition would throw
  * `StateLockHeldError` and every fresh enable would fail.
@@ -246,7 +246,7 @@ async function runEnableBranch(
   // arm is still rejected by that gate, and a record that was fully
   // installable keeps the strict gate.
   //
-  // WR-03 / FORCE-05: this is a DELIBERATE departure from the "--partial is an
+  // FORCE-05 / D-69-01: this is a DELIBERATE departure from the "--partial is an
   // explicit opt-in" rule, and it applies to the load-time reconcile enable
   // too (no command typed). The precedent is the autoupdate cascade
   // (`update.ts` -> `updateSinglePlugin`, SEV-03 / D-69-01), which likewise
@@ -297,7 +297,7 @@ async function runEnableBranch(
     // contradict the ledger that produced it just as surely as an `(installed)`
     // row over a `partially-available` resolution does.
     //
-    // `unsupported` reads the ledger's OWN resolution, never the persisted
+    // The `unsupported` kind list reads the ledger's OWN resolution, never the persisted
     // `compatibility` block the enable gate was derived from: the record the
     // state phase just wrote carries `installable: false` plus that same
     // non-empty kind list, so a bare `(installed)` row here would contradict
@@ -330,7 +330,7 @@ async function runEnableBranch(
  * (PRESERVING `version` / `resolvedSource` / `compatibility` / `installedAt`
  * per ENBL-02). Returns the outcome sentinel.
  *
- * WR-04: parameters carry the REAL types (`ScopedLocations` and the state
+ * Parameters carry the REAL types (`ScopedLocations` and the state
  * record shape) so the `cascadeUnstagePlugin` call type-checks without
  * casts -- an argument-order swap or a schema field rename is a COMPILE
  * error here, not a runtime corruption.
@@ -351,7 +351,7 @@ async function runDisableBranch(
     // surfacing the failure.
     applyPartialCascadeFold(installed, cascade.dropped);
     installed.updatedAt = new Date().toISOString();
-    // WR-03: when the partial cascade DID succeed in unstaging the
+    // When the partial cascade DID succeed in unstaging the
     // on-disk hooks.json (cascade.dropped.hooks is non-empty), drop the
     // parsed-config cache entry and rebuild the routing table in lockstep
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
@@ -384,7 +384,7 @@ async function runDisableBranch(
   // than mutating in place) so the branded type survives to the assignment.
   const disabled = toDisabledRecord(installed, new Date().toISOString());
 
-  // WR-03: the cascade unstaged the on-disk hooks.json via removeHookConfig;
+  // The cascade unstaged the on-disk hooks.json via removeHookConfig;
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
@@ -394,7 +394,7 @@ async function runDisableBranch(
 }
 
 /**
- * WR-03: drop the parsed-config cache entry for a disabled plugin and
+ * Drop the parsed-config cache entry for a disabled plugin and
  * rebuild the routing table in lockstep. Wrapped in try/catch so a cache
  * mutation throw cannot escalate a successful disable into a failure --
  * the cache is rebuilt from state.json on the next /reload's factory-time
@@ -430,7 +430,7 @@ function dropCachedHooks(
 }
 
 /**
- * WR-04: the REAL state-record shape (the exact type
+ * The REAL state-record shape (the exact type
  * `cascadeUnstagePlugin` requires), aliased for readability. No local
  * structural mirror -- a schema field rename surfaces as a compile error in
  * this module instead of being silenced by an `as never` cast.
@@ -529,10 +529,10 @@ export async function setPluginEnabled(
   let outcome: SetEnabledOutcome | undefined;
 
   try {
-    // CR-01 / WR-01: a single per-scope lock owns the whole critical section.
+    // A single per-scope lock owns the whole critical section.
     // The closure sequences CFG-03 load, ENBL-02 idempotency, the
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
-    // WR-09 / UAT-05 config write-back -- splitting it would require
+    // UAT-05 config write-back -- splitting it would require
     // additional state-snapshot threading and obscure the save-vs-throw
     // discipline.
     // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -556,7 +556,7 @@ export async function setPluginEnabled(
       // disabled PARTIAL record is idempotent on `disable` and re-materializes
       // on `enable`, at parity with the canonical disabled record.
       if (isRecordedButDisabled(installed) === !enable) {
-        // WR-03: state-side truth alone is not enough.
+        // State-side truth alone is not enough.
         // When the targeted config carries the OPPOSITE EXPLICIT `enabled`
         // value (hand-edited config, or base/local divergence pending
         // reconcile), skipping here would leave the config diverged -- and
@@ -630,7 +630,7 @@ export async function setPluginEnabled(
 
       // Config write-back via the SOLE sanctioned saveConfig seam (SPLIT-02).
       //
-      // WR-09: SKIPPED in orchestrated mode. A
+      // RECON-03: SKIPPED in orchestrated mode. A
       // reconcile-driven call derives the desired state FROM the merged
       // config (base + local), so the declaration already exists by
       // construction -- possibly ONLY in `claude-plugins.local.json` (the
@@ -638,7 +638,7 @@ export async function setPluginEnabled(
       // copy the local override's `enabled` flag into the shared BASE file
       // and clobber a user-authored base declaration. The config is the
       // reconcile's INPUT; only standalone commands author declarations.
-      // CR-02: when the scope's MERGED config view does
+      // CMP-3: when the scope's MERGED config view does
       // not declare the marketplace (CMP-3 clone-adoption legacy, or a
       // hand-pruned config), declare it in the SAME batched patch -- a bare
       // plugin key would otherwise be a dangling declaration the planner
@@ -712,7 +712,7 @@ export async function setPluginEnabled(
 }
 
 /**
- * WR-04: closed-set reason for an orchestrated transaction
+ * Closed-set reason for an orchestrated transaction
  * throw. The transaction body also runs loadConfig, writeConfigEntry /
  * saveConfig, and tx.save() -- an EACCES on the config write or a disk-full
  * on state save is NOT a lock conflict. Only a genuine StateLockHeldError
@@ -953,7 +953,7 @@ function dispatchOutcome(args: {
   // DISABLE_CONTEXT the fresh `(disabled)` row; both share byte-identical
   // `skipped` / `failed` arms.
   if (enable) {
-    // WR-01: `composeOutcomeRow` returns `EnableMsg | DisableMsg`; the `enable`
+    // D-10: `composeOutcomeRow` returns `EnableMsg | DisableMsg`; the `enable`
     // branch only ever yields an `EnableMsg` (its `fresh` arm emits `installed`
     // or `partially-installed`, never `disabled`), so narrowing to the
     // ENABLE_CONTEXT row type is sound.
@@ -962,7 +962,7 @@ function dispatchOutcome(args: {
       { name: marketplace, scope, plugins: [enableRow] },
     ]);
   } else {
-    // WR-01: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
+    // D-10: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
     // arm emits `disabled`, never `installed`), so narrowing to the
     // DISABLE_CONTEXT row type is sound.
     const disableRow = row as DisableMsg;
@@ -1011,7 +1011,7 @@ function freshEnableRow(
     return {
       status: "partially-installed",
       name: plugin,
-      // WR-06: `dependencies` stays empty here -- the enable row does not yet
+      // SEV-01: `dependencies` stays empty here -- the enable row does not yet
       // thread the ledger's staged agent / mcp names, so the soft-dep markers
       // never fire on either enable arm.
       dependencies: [],
@@ -1069,7 +1069,7 @@ function composeOutcomeRow(args: {
         needsReload: false,
       };
     case "not-recorded":
-      // WR-03: the marketplace container is PRESENT but the plugin row is
+      // ATTR-08: the marketplace container is PRESENT but the plugin row is
       // absent from state.json (never installed, or concurrently
       // uninstalled). The established taxonomy (ATTR-08, reinstall/update
       // precedent) reserves `{not in manifest}` for "plugin absent from a
