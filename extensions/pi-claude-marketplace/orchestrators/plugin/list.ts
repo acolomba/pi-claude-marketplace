@@ -52,6 +52,7 @@
 //   - `tests/architecture/no-orchestrator-network.test.ts` greps this source
 //     after stripComments and asserts zero gitOps surface.
 
+import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict, type ResolveContext } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
@@ -327,22 +328,6 @@ function partiallyInstalledReasons(
   const kinds = narrowUnsupportedKinds(record.compatibility.unsupported);
   return notInManifest ? ["not in manifest", ...kinds] : kinds;
 }
-
-/**
- * An installed record's resolution against the manifest its own marketplace
- * record names, as a single discriminated value:
- *
- *   - `declared`   -- the manifest was read and declares the record; its entry
- *                     drives the PL-5 version compare and the PL-4 description.
- *   - `absent`     -- the manifest was read and does NOT declare the record.
- *                     The only state that warrants the INV-01 absence brace.
- *   - `unverified` -- the manifest could not be read, so nothing is claimed
- *                     about membership either way (BOUND-03 / D-95-05).
- */
-type ManifestLookup =
-  | { readonly kind: "declared"; readonly entry: MarketplaceManifest["plugins"][number] }
-  | { readonly kind: "absent" }
-  | { readonly kind: "unverified" };
 
 /**
  * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
@@ -875,19 +860,21 @@ type ScopedManifest =
  *
  * BOUND-03 / D-95-05: a failed read is `unverified`, so the row keeps its bare
  * `(installed)` form -- the row is preserved and only the unverified claim is
- * suppressed. INV-01: a successful read that omits the record IS an absence,
- * on the fold path as much as on a same-scope block.
+ * suppressed. That arm is decided HERE and stays here: list is the only surface
+ * that continues rendering past a failed read, so it is an I/O fact about this
+ * surface, not a membership fact the domain rule could hold.
  *
- * Membership is exact string identity -- no case folding, no Unicode
- * normalization.
+ * INV-01: a successful read that omits the record IS an absence, on the fold
+ * path as much as on a same-scope block. That half is `lookupDeclaredPlugin`
+ * (D-99-02a) -- the one writing of exact string identity, shared with `info`
+ * and `update` so no surface can judge absence by a different rule.
  */
 function manifestLookupFor(scopedManifest: ScopedManifest, pluginName: string): ManifestLookup {
   if (!scopedManifest.ok) {
     return { kind: "unverified" };
   }
 
-  const entry = scopedManifest.manifest.plugins.find((p) => p.name === pluginName);
-  return entry === undefined ? { kind: "absent" } : { kind: "declared", entry };
+  return lookupDeclaredPlugin(scopedManifest.manifest, pluginName);
 }
 
 /**
