@@ -5663,3 +5663,240 @@ test("NREG-01: a clean update row is byte-identical to before -- no brace, no ra
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rare failure and rollback arms (D-99-05b). Each case below reaches one arm
+// no happy-path test touches, and asserts the arm's observable consequence --
+// the rendered row, the closed-set reason, or the state the abort left behind.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("WR-05: a bare-form update whose scope state is unreadable fails on the synthetic `(update)` row", async () => {
+  // The bare form has no marketplace identity to attribute an enumerate
+  // failure to, so it cannot reuse the `<marketplace>` synthetic-row path the
+  // `@mp` / `pl@mp` forms take. A truncated state.json is the cheapest real
+  // producer: loadState parses eagerly and throws out of enumerateTargets.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-bare-enumfail-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({ ctx, pi, cwd, target: { kind: "all" } });
+
+      assert.equal(notifications.length, 1, "the enumerate failure emits exactly one notify");
+      const body = notifications[0]?.message ?? "";
+      // The placeholder occupies BOTH the marketplace-header slot and the row
+      // name -- there is no real identity for either. The scope falls back to
+      // `user` because the bare form carried no explicit scope.
+      assert.match(body, /\n● \(update\) \[user\]\n/, `expected the (update) header in:\n${body}`);
+      assert.match(
+        body,
+        /⊘ \(update\) \(failed\) \{unreadable manifest\}/,
+        `expected the (update) row in:\n${body}`,
+      );
+      // The cause chain is the only carrier of which file could not be read.
+      assert.match(body, /cause: state\.json at .* is not valid JSON/, `no cause in:\n${body}`);
+      assert.equal(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thrown past the other bridges", async () => {
+  // writeHookConfig atomically renames onto <hooksDir>/<plugin>/hooks.json.
+  // A leftover DIRECTORY at that exact path makes the rename fail with EISDIR
+  // while every other bridge commits normally -- the fail-continue contract.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-phase3a-hooks-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: true,
+            hooksJson: {
+              hooks: { SessionStart: [{ hooks: [{ type: "command", command: "x" }] }] },
+            },
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      await mkdir(path.join(locations.hooksDir, "hello", "hooks.json"), { recursive: true });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /hooks/, `the failing bridge must be named in:\n${body}`);
+      assert.match(
+        body,
+        /plugin-uninstall \+ plugin-install for "hello"\./,
+        `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
+      );
+
+      // The version does NOT advance and the intent-mark survives: the record
+      // reports "swap incomplete" until the user reinstalls.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, "1.0.0", "a failed bridge leaves the version at fromVersion");
+      assert.equal(record.compatibility.installable, false);
+      assert.ok(record.compatibility.notes.includes("update-in-progress"));
+      // Fail-continue: the skills bridge committed even though hooks did not.
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+      // The hooks inventory keeps its pre-update value, matching the disk.
+      assert.deepEqual([...record.resources.hooks], []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Wrap the clone-cache seam so `mutate` runs after the new clone materializes.
+ * Materialization sits between preflight's state read and the intent-mark's
+ * re-read, which is exactly the window the ST-9 guards defend: another process
+ * writing state.json while this update holds a stale snapshot of it.
+ */
+function seamMutatingStateMidUpdate(
+  gitOps: GitOps,
+  mutate: () => Promise<void>,
+): UpdateCloneCacheSeam {
+  const base = seamWith(gitOps);
+  return {
+    ...base,
+    materializePluginClone: async (args) => {
+      const result = await base.materializePluginClone(args);
+      await mutate();
+      return result;
+    },
+  };
+}
+
+test("ST-9: a version that advanced under an in-flight update aborts on the intent-mark", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-st9-advanced-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const mid = await loadState(locations.extensionRoot);
+          const mp = mid.marketplaces["mp"];
+          assert.ok(mp !== undefined, "the racing writer needs the marketplace to be present");
+          const racing = mp.plugins["gp"];
+          assert.ok(racing !== undefined, "the racing writer needs a record to advance");
+          mp.plugins["gp"] = { ...racing, version: "sha-cccccccccccc" };
+          await saveState(locations.extensionRoot, mid);
+        }),
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /⊘ gp \(failed\) \{concurrently updated\}/,
+        `the version drift must reach the closed-set reason in:\n${body}`,
+      );
+      assert.match(body, /was concurrently updated; expected version/, `no cause in:\n${body}`);
+
+      // The abort happens BEFORE the intent-mark writes, so the racing
+      // writer's record survives untouched -- no half-applied swap.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(record !== undefined);
+      assert.equal(record.version, "sha-cccccccccccc", "the racing write is not overwritten");
+      assert.equal(record.resolvedSha, SHA_OLD, "no swap landed");
+      assert.deepEqual(
+        record.compatibility.notes,
+        [],
+        "no update-in-progress mark was left behind",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ST-9: a record uninstalled under an in-flight update aborts instead of resurrecting it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-st9-uninstalled-"));
+    try {
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir: path.join(cwd, "repo-fixture-new"),
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+
+      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamMutatingStateMidUpdate(gitOps, async () => {
+          const mid = await loadState(locations.extensionRoot);
+          const mp = mid.marketplaces["mp"];
+          assert.ok(mp !== undefined, "the racing writer needs the marketplace to be present");
+          delete mp.plugins["gp"];
+          await saveState(locations.extensionRoot, mid);
+        }),
+      });
+
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(
+        body,
+        /⊘ gp \(failed\) \{concurrently uninstalled\}/,
+        `the vanished record must reach the closed-set reason in:\n${body}`,
+      );
+      assert.match(body, /was concurrently uninstalled/, `no cause in:\n${body}`);
+
+      // The uninstall stands: an update must never write back a record the
+      // user just removed.
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"],
+        undefined,
+        "the update must not resurrect the uninstalled record",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
