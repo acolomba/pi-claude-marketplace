@@ -340,8 +340,8 @@ test("PRL-08/11 happy: success preserves installed version, restages resources, 
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(outcome.version, "1.0.0");
       assert.equal(outcome.resourcesChanged, true);
-      assert.deepEqual(outcome.stagedAgents, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
-      assert.deepEqual(outcome.stagedMcpServers, ["server1"]);
+      assert.deepEqual(outcome.stagedAgentNames, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual(outcome.stagedMcpServerNames, ["server1"]);
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
@@ -1560,8 +1560,8 @@ test("D-19-02: manual-recovery outcome folds into cascade plugins[] as PluginMan
       marketplace: "mp",
       scope: "project",
       version: "1.0.0",
-      stagedAgents: [],
-      stagedMcpServers: [],
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
       resourcesChanged: true,
@@ -3621,8 +3621,8 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
       marketplace: "mp",
       scope: "project",
       version: "1.0.0",
-      stagedAgents: [],
-      stagedMcpServers: [],
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
       resourcesChanged: true,
@@ -3644,8 +3644,8 @@ test("WR-09: the bulk cascade mapper composes the same brace and raise as the st
       marketplace: "mp",
       scope: "project",
       version: "1.0.0",
-      stagedAgents: [],
-      stagedMcpServers: [],
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
       resourcesChanged: true,

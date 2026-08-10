@@ -23,17 +23,26 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
   readonly resourcesChanged: boolean;
-  readonly stagedAgents: readonly string[];
-  readonly stagedMcpServers: readonly string[];
+  /**
+   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. Named apart
+   * from `LedgerDegradationSignals.stagedAgents` / `.stagedMcpServers`
+   * (`plugin/shared.ts`), which are presence FLAGS carrying a count verdict
+   * only. A name list and a boolean answer different questions -- `which
+   * resources were written` versus `did the row declare the companion` -- so
+   * the two must not be confusable at a producer or a consumer site.
+   */
+  readonly stagedAgentNames: readonly string[];
+  readonly stagedMcpServerNames: readonly string[];
   /**
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks
-   * `stagedAgents.length > 0` / `stagedMcpServers.length > 0` per-outcome;
-   * these flags surface them through the typed outcome so cascade rendering
+   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0`
+   * per-outcome; these flags surface them through the typed outcome so
+   * cascade rendering
    * (`PluginCascadeRow.declaresAgents` / `.declaresMcp`) consumes the
    * effective-state-at-render-time signal without re-deriving from the
-   * stagedAgents / stagedMcpServers arrays at the renderer site).
+   * staged-name arrays at the renderer site).
    *
    * MSG-SD-3: per-row markers fire on `(reinstalled)` rows only. These
    * flags live ONLY on this reinstalled arm; the `(skipped)` and
