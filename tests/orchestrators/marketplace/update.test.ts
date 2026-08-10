@@ -15,6 +15,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
+import { updateSinglePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -34,6 +35,7 @@ import type {
   PluginUpdateOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotifyRecord {
@@ -187,6 +189,19 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+/**
+ * Read one installed plugin record straight off disk. Used to compare a record
+ * before and after an operation that must not write to it.
+ */
+async function readPluginRecord(
+  extensionRoot: string,
+  marketplace: string,
+  plugin: string,
+): Promise<ExtensionState["marketplaces"][string]["plugins"][string] | undefined> {
+  const state = await loadState(extensionRoot);
+  return state.marketplaces[marketplace]?.plugins[plugin];
 }
 
 test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplaces)` EmptyToken and NO reload hint", async () => {
@@ -658,28 +673,55 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
 // as the catch-all (the path/github classification did not collapse).
 // ───────────────────────────────────────────────────────────────────────────
 
-/** Seed a path-source marketplace pointing at an on-disk dir under the cwd. */
+/**
+ * Seed a path-source marketplace pointing at an on-disk dir under the cwd.
+ *
+ * `scope`, `autoupdate`, and `plugins` are optional and each default to the
+ * original behavior (project scope, no autoupdate entry, no installed plugins),
+ * so every caller that omits them seeds exactly what it seeded before.
+ */
 async function seedPathMarketplace(opts: {
   cwd: string;
   name: string;
   marketplaceRoot: string;
+  scope?: Scope;
+  autoupdate?: boolean;
+  plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
 }): Promise<void> {
-  const locations = locationsFor("project", opts.cwd);
+  const scope = opts.scope ?? "project";
+  const locations = locationsFor(scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   await saveState(locations.extensionRoot, {
     schemaVersion: 1,
     marketplaces: {
       [opts.name]: {
         name: opts.name,
-        scope: "project",
+        scope,
         source: pathSource(opts.marketplaceRoot),
         addedFromCwd: opts.cwd,
         manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: opts.marketplaceRoot,
-        plugins: {},
+        plugins: opts.plugins ?? {},
+        ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
   });
+
+  // SPLIT-01: autoupdate lives in claude-plugins.json, so the state-side flag
+  // above is not enough -- the orchestrators read it through
+  // loadMergedScopeConfig. Mirror the github helper's paired config write.
+  if (opts.autoupdate !== undefined) {
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          [opts.name]: { source: opts.marketplaceRoot, autoupdate: opts.autoupdate },
+        },
+      },
+      locations.scopeRoot,
+    );
+  }
 }
 
 test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
@@ -926,14 +968,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
       plugins: { hello: makePluginRecord() },
     });
 
-    const readRecord = async (): Promise<
-      ExtensionState["marketplaces"][string]["plugins"][string] | undefined
-    > => {
-      const state = await loadState(locations.extensionRoot);
-      return state.marketplaces["auto-skip"]?.plugins["hello"];
-    };
-
-    const before = await readRecord();
+    const before = await readPluginRecord(locations.extensionRoot, "auto-skip", "hello");
     assert.ok(before !== undefined);
 
     const { ctx, pi, notifications } = makeCtx();
@@ -970,7 +1005,77 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
 
     // A skipped plugin is a fixed point for the cascade: nothing is written, so
     // a repeated `marketplace update` finds the same record.
-    assert.deepEqual(await readRecord(), before);
+    assert.deepEqual(await readPluginRecord(locations.extensionRoot, "auto-skip", "hello"), before);
+  });
+});
+
+test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders `(skipped) {not in manifest}`", async () => {
+  // Deliberately USER scope. `updateSinglePlugin` takes no cwd -- it reads
+  // `process.cwd()` itself -- and `locationsFor("project", cwd)` composes
+  // `<cwd>/.pi`, so a project-scope fixture under a temporary directory would
+  // never be found by the real function. User-scope locations ignore the working
+  // directory entirely and derive from the agent dir, which the hermetic home
+  // controls. Do NOT "simplify" this back to project scope by changing the
+  // process working directory: that setting is process-global and corrupts
+  // sibling cases when a file's tests run concurrently.
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("user", cwd);
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "mp-e2e-skip-"));
+    try {
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "0.0.1" }),
+      );
+      // The manifest DECLARES the entry at install time...
+      await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "e2e-mp",
+          plugins: [{ name: "hello", source: "./plugins/hello", version: "0.0.1" }],
+        }),
+      );
+
+      await seedPathMarketplace({
+        cwd,
+        name: "e2e-mp",
+        marketplaceRoot,
+        scope: "user",
+        autoupdate: true,
+        plugins: { hello: makePluginRecord() },
+      });
+
+      // ...and the marketplace drops it afterwards.
+      await writeFile(manifestPath, JSON.stringify({ name: "e2e-mp", plugins: [] }));
+
+      const before = await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello");
+      assert.ok(before !== undefined);
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({
+        ctx,
+        pi,
+        name: "e2e-mp",
+        scope: "user",
+        cwd,
+        gitOps,
+        // The REAL implementation, so the skip travels its whole route: the
+        // shared preflight originates it and the cascade mapper re-narrows it.
+        pluginUpdate: updateSinglePlugin,
+      });
+
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
+
+      assert.deepEqual(await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello"), before);
+    } finally {
+      await rm(marketplaceRoot, { recursive: true, force: true });
+    }
   });
 });
 
