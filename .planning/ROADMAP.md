@@ -329,7 +329,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 99-04-PLAN.md — Thread the malformed-component degradation signal through `update` on both render surfaces, with catalog state, fixture and style-guide amendment (WR-12 / D-99-03)
+- [x] 99-04-PLAN.md — Thread the malformed-component degradation signal through `update` on both render surfaces, with catalog state, fixture and style-guide amendment (WR-12 / D-99-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

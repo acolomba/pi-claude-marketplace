@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-03-PLAN.md
-last_updated: "2026-08-10T15:12:00.000Z"
+stopped_at: Completed 99-04-PLAN.md
+last_updated: "2026-08-10T16:05:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 20
-  percent: 83
-last_activity_desc: "Phase 99 plan 03 complete — D-99-04 closed: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+  completed_plans: 21
+  percent: 88
+last_activity_desc: "Phase 99 plan 04 complete — WR-12 / D-99-03 closed: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -34,8 +34,39 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 3 of 7 complete (wave 1 done; next is 99-04, wave 2)
+Plan: 4 of 7 complete (waves 1-2 done; next is 99-05, wave 3)
 Status: Executing
+Plan 99-04 closed WR-12 / D-99-03, the update-verb degradation gap. The signal
+the skills and commands bridges already return is now collected at the
+success-outcome site, carried on the updated outcome, and rendered — so a
+plugin whose skill was written to disk in synthesized, non-model-invocable form
+stops getting a clean `(updated)` row that `list` contradicts one command
+later. The blocking constraint held: `PluginUpdateUpdatedOutcome extends
+PluginUpdateBase, LedgerDegradationSignals` at `types.ts:163` is DIRECT
+inheritance, with no `Pick` and no `Omit` anywhere in the file, and typecheck
+passed on the first run after the edit — 99-01's rename had genuinely removed
+the TS2430 collision. `install.ts`'s deliberate `Omit` was not touched.
+
+Three findings worth carrying forward. **There is a third render surface**, not
+the two the plan named: `orchestrators/marketplace/update.messaging.ts:69`, the
+autoupdate cascade's own render map. Left unthreaded it failed exactly as the
+plan's prohibition predicted — the composer raised severity while the row still
+dropped the brace. **The two central `case "updated":` arms belong to different
+unions**: `notify.ts:1745` is `renderMpHeader`'s marketplace header (no plugin,
+no version arrow, no reasons — correctly untouched); `notify.ts:2237` is
+`renderPluginRow`'s plugin row, which was passing `undefined`. **The tally was
+deliberately not touched**: update's tally is an override counted by partition,
+so a degraded update is still one update, unlike reinstall whose tally is the
+default severity math and reports `1 warning`. That asymmetry lives in the
+tally mechanism each verb already had, not in this change.
+
+The composer keeps taking a caller-supplied `baseSeverity` rather than deriving
+one, because the two cascades apply deliberately different policies (manual
+raises on an absent companion per SEV-01; autoupdate stays silent per WR-01). A
+self-deriving composer would have silently changed one of them. The malformed
+raise is applied on top as an orthogonal axis. Gate green: 3394 unit + 18
+integration, 0 fail.
+
 Plan 99-03 closed D-99-04, the documentation-deferral group, without changing a
 single code line — `git diff -U0 extensions/` filtered to non-comment lines is
 empty. The version-less autoupdate cascade skip row now has the catalog state
