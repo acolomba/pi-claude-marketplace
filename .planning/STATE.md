@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
-current_phase_name: Lifecycle regression and contract documentation
+current_phase_name: lifecycle-regression-and-contract-documentation
 status: executing
-stopped_at: Phase 98 context gathered
-last_updated: "2026-08-10T02:00:16.857Z"
+stopped_at: Completed 98-01-PLAN.md
+last_updated: "2026-08-10T02:49:18.021Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 11
-  percent: 65
+  completed_plans: 12
+  percent: 71
 ---
 
 # Project State
@@ -34,9 +34,9 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 
 ## Current Position
 
-Phase: 98 — Lifecycle regression and contract documentation
-Plan: Not started
-Status: Ready to execute
+Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
+Plan: 2 of 6
+Status: Executing Phase 98 — plan 01 complete (IN-07 and WR-06 carriers landed)
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -59,7 +59,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-09 — Phase 97 complete, transitioned to Phase 98
+Last activity: 2026-08-09 — Phase 98 plan 01 complete: IN-07 orphan-rewake threading and WR-06 enable soft-dep markers landed on one shared ledger-signal shape; two catalog states added, no closed set gained a member
 
 ## Roadmap Summary
 
@@ -181,6 +181,8 @@ two integration checks.
 - [Phase 97 fix loop]: Operator ruling — the degraded ENABLE row stamps info for row-level consistency with install --partial and the backfilled partial arm (SEV-03 parity); the shortfall predates the enable. A malformed-frontmatter degrade still raises warning (WARN-01 parity with install)
 - [Phase 97 fix loop]: Enable's degradation signals are one exported EnableDegradationSignals shape intersected into both outcome arms, so a fourth signal cannot be dropped on one consumer
 - [Phase 97 fix loop]: The disabled-state drift gate walks the whole extension tree instead of a definition-site allowlist, making the state-io "SOLE predicate" claim structurally true
+- [Phase 98]: IN-07/WR-06 carriers share one LedgerDegradationSignals shape in orchestrators/plugin/shared.ts — install.ts and enable-disable.ts both intersect it, so the next signal asymmetry is a compile error (the reverse import direction would close a module cycle)
+- [Phase 98]: The reconcile enable projection keeps the malformed-only severity rule: its enable arm now agrees with its install arm, which never applied the companion raise; the standalone enable verb owns the SEV-01 composition. Marker is the shared fact, severity stance is per surface.
 
 ### Open decisions
 
@@ -265,9 +267,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 97 P03 | 25min | 2 tasks | 2 files |
 | Phase 97 P04 | 30min | 2 tasks | 3 files |
 | Phase 97 P05 | 25min | 2 tasks | 2 files |
+| Phase 98 P01 | 50 | 3 tasks | 10 files |
 
 ## Session
 
-**Last session:** 2026-08-10T01:08:02.688Z
-**Stopped at:** Phase 98 context gathered
-**Resume file:** .planning/phases/98-lifecycle-regression-and-contract-documentation/98-CONTEXT.md
+**Last session:** 2026-08-10T02:49:17.983Z
+**Stopped at:** Completed 98-01-PLAN.md
+**Resume file:** None
