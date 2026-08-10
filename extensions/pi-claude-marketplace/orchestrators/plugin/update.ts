@@ -116,11 +116,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import {
-  companionSeverity,
-  malformedReasonsForKinds,
-  skipSeverity,
-} from "../../shared/notify-reasons.ts";
+import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -144,6 +140,7 @@ import {
   resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
+import { outcomeDependencies, updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -155,21 +152,11 @@ import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginUpdatedMessage,
-} from "../../shared/notify.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type {
-  PluginUpdateFn,
-  PluginUpdateOutcome,
-  PluginUpdateSkippedOutcome,
-  PluginUpdateUpdatedOutcome,
-} from "../types.ts";
+import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // updatePlugins -- direct entrypoint (PUP-1 three forms)
@@ -2357,60 +2344,6 @@ function outcomeToCascadePluginMessage(
       // discriminated union; any future partition must update this switch.
       return assertNever(outcome);
   }
-}
-
-/** Derive the v2 Dependency[] tuple from the outcome's declared kinds. */
-/**
- * Compose the success row for one updated plugin. The SOLE composer for that
- * row: the manual update cascade and the marketplace autoupdate cascade both
- * call it, so the two surfaces cannot report the same ledger run differently
- * (the WR-09 lesson, one verb over).
- *
- * WARN-01 / WR-12 / D-99-03: a component this ledger degraded names its kind and
- * takes the info -> warning raise, exactly as on the install, enable and
- * reinstall arms. A clean update composes no reasons and keeps the caller's
- * severity, so its row is byte-identical to before (NREG-01).
- *
- * `baseSeverity` is the caller's own success-severity policy, which the two
- * surfaces set differently and deliberately: the manual cascade raises on an
- * absent declared companion (SEV-01), while the autoupdate cascade stays `info`
- * for that condition (WR-01 -- a background operation must not warn about a
- * companion the user is not present to install). The malformed-component raise
- * is a SEPARATE axis and applies on both, because a degraded component is
- * carried out but short of ideal whichever surface reports it.
- *
- * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers; the
- * renderer narrows on membership plus the notify-time probe.
- *
- * D-03/D-06: a realized update transition always reloads Pi resources.
- */
-export function updatedRowFromOutcome(
-  outcome: PluginUpdateUpdatedOutcome,
-  rowScope: Scope,
-  baseSeverity: "info" | "warning",
-): PluginUpdatedMessage {
-  const malformed = malformedReasonsForKinds(outcome.degradedKinds);
-  return {
-    status: "updated",
-    name: outcome.name,
-    scope: rowScope,
-    from: outcome.fromVersion,
-    to: outcome.toVersion,
-    dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-    // Optional spread, not a required key: an unaffected row renders the legacy
-    // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
-    ...(malformed.length > 0 && { reasons: malformed }),
-    severity: malformed.length > 0 ? "warning" : baseSeverity,
-    needsReload: true,
-  };
-}
-
-function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
-  return [
-    ...(declaresAgents ? (["agents"] as const) : []),
-    ...(declaresMcp ? (["mcp"] as const) : []),
-  ];
 }
 
 /**

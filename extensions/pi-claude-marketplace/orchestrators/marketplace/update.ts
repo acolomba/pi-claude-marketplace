@@ -118,10 +118,12 @@ import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { NO_PROVIDER_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
-// WR-12: the `(updated)` row composer only. The plugin-update LEDGER stays
-// behind the injected `pluginUpdate` seam -- this module still never calls it
-// directly.
-import { updatedRowFromOutcome } from "../plugin/update.ts";
+// WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
+// that holds it rather than from the plugin-update ledger. The ledger stays
+// behind the injected `pluginUpdate` seam -- and now stays out of this module's
+// import graph too, so no future edge can close an
+// `orchestrators/marketplace` <-> `orchestrators/plugin` cycle here.
+import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import {
   DEFAULT_GIT_OPS,
