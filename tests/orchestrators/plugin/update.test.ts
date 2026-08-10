@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   pluginCloneKey,
@@ -2972,6 +2974,71 @@ test("WB-01: --local update targets the local file; base file untouched", async 
 });
 
 // ─── D-UPD: update vs disabled plugin ──────────────────────────────────────
+
+test("WR-02 / NFR-3: an already-current disabled record does not take the scope lock", async () => {
+  // The disabled record now falls THROUGH the unchanged-version short-circuit
+  // so a moved source or a changed compatibility block still refreshes. That
+  // put a `retries: 0` lock acquisition on a path that had been lock-free, so a
+  // scope where nothing moved started throwing StateLockHeldError under
+  // contention -- and the bare-form batch aborts on that throw, taking every
+  // target after the disabled plugin with it.
+  //
+  // The first update settles the record; the second one has nothing to write,
+  // so it must complete against a HELD lock.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr02-lockfree-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+      });
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      // Pass one: settles resolvedSource and the compatibility block.
+      const first = makeCtx();
+      await updatePlugins({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        const { ctx, pi, notifications } = makeCtx();
+        await updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // D-99-05a row contract: an unchanged version reports the ARTIFACT
+        // state, which genuinely is unchanged. The point of the assertion is
+        // the row it is NOT -- the `(failed) {lock held}` the unconditional
+        // acquisition produced.
+        assert.equal(notifications.length, 1);
+        assert.match(notifications[0]!.message, /\(skipped\) \{up-to-date\}/);
+        assert.doesNotMatch(notifications[0]!.message, /lock held|\(failed\)/);
+      } finally {
+        await release();
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resources empty (no re-materialization)", async () => {
   await withHermeticHome(async () => {

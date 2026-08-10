@@ -1424,6 +1424,81 @@ function disabledPinProjection(
   ]);
 }
 
+/** The compatibility block a disabled-record refresh would write, plus its projection. */
+interface NextDisabledPin {
+  readonly compatibility: {
+    readonly installable: boolean;
+    readonly notes: string[];
+    readonly supported: string[];
+    readonly unsupported: string[];
+  };
+  readonly projection: string;
+}
+
+/**
+ * D-99-05a: the values a refresh WOULD write, derived from the preflight
+ * resolution alone. `shaFallback` is the sha the record keeps when this source
+ * carries no pin -- read from the live record inside the transaction and from
+ * the preflight snapshot outside it, which is the only difference between the
+ * two callers.
+ *
+ * ENBL-09: the availability discriminant is DERIVED from the resolution rather
+ * than hard-coded, so it always agrees with the unsupported list copied beside
+ * it. `installable: true` next to a non-empty `unsupported` array is a record
+ * whose two fields contradict each other, and every downstream classifier reads
+ * a different token off the same record.
+ */
+function nextDisabledPin(
+  preflight: PluginPreflight,
+  shaFallback: string | undefined,
+): NextDisabledPin {
+  const { installable, toVersion, resolvedSha } = preflight;
+  const compatibility = {
+    installable: installable.state === "installable",
+    notes: [...installable.notes],
+    supported: [...installable.supported],
+    unsupported: [...installable.unsupported],
+  };
+  return {
+    compatibility,
+    projection: disabledPinProjection(
+      toVersion,
+      installable.pluginRoot,
+      // The sha the record would END UP with: a path / github-name source
+      // carries no pin and leaves the recorded one alone, so comparing against a
+      // bare `undefined` would read every such refresh as a move.
+      resolvedSha ?? shaFallback,
+      compatibility,
+    ),
+  };
+}
+
+/**
+ * WR-02 / NFR-3: would the refresh below write anything, judged from the record
+ * `preflightUpdate` already loaded? A disabled record at an unchanged version
+ * now falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
+ * lock. On a scope where nothing moved, that turned a previously lock-free
+ * no-op into a `StateLockHeldError` whenever another process held the lock --
+ * and the bare-form batch aborts on that throw, taking every target after the
+ * disabled one with it. A plugin with nothing to write must not pay for the
+ * lock.
+ *
+ * The snapshot is read outside the lock, so this answer is advisory: the
+ * in-transaction guard re-derives it against the LIVE record and remains the
+ * TOCTOU-safe authority for whether the write happens.
+ */
+function disabledRefreshWouldWrite(preflight: PluginPreflight): boolean {
+  const { record } = preflight;
+  const next = nextDisabledPin(preflight, record.resolvedSha);
+  const current = disabledPinProjection(
+    record.version,
+    record.resolvedSource,
+    record.resolvedSha,
+    record.compatibility,
+  );
+  return next.projection !== current;
+}
+
 /**
  * D-UPD: refresh a disabled-but-recorded plugin's version pin, resolvedSource
  * and compatibility block under the scope lock so a future `enable`
@@ -1460,33 +1535,18 @@ async function refreshDisabledRecord(
       return false;
     }
 
-    // ENBL-09: derive the availability discriminant from the resolution rather
-    // than hard-coding it, so it always agrees with the unsupported list copied
-    // beside it. `installable: true` next to a non-empty `unsupported` array is
-    // a record whose two fields contradict each other, and every downstream
-    // classifier reads a different token off the same record.
-    const nextCompatibility = {
-      installable: installable.state === "installable",
-      notes: [...installable.notes],
-      supported: [...installable.supported],
-      unsupported: [...installable.unsupported],
-    };
-    // The sha the record would END UP with: a path / github-name source carries
-    // no pin and leaves the recorded one alone, so comparing against a bare
-    // `undefined` would read every such refresh as a move.
-    const next = disabledPinProjection(
-      toVersion,
-      installable.pluginRoot,
-      resolvedSha ?? sRecord.resolvedSha,
-      nextCompatibility,
-    );
+    // Re-derived against the LIVE record: `disabledRefreshWouldWrite` asked the
+    // same question of the pre-lock snapshot to decide whether to open this
+    // transaction at all, but only this comparison is TOCTOU-safe.
+    const next = nextDisabledPin(preflight, sRecord.resolvedSha);
+    const nextCompatibility = next.compatibility;
     const current = disabledPinProjection(
       sRecord.version,
       sRecord.resolvedSource,
       sRecord.resolvedSha,
       sRecord.compatibility,
     );
-    if (next === current) {
+    if (next.projection === current) {
       return false;
     }
 
@@ -1524,7 +1584,12 @@ async function runDisabledRecordRefresh(
 ): Promise<PluginUpdateOutcome> {
   const { plugin } = args;
   const { fromVersion, toVersion } = preflight;
-  const wrote = await refreshDisabledRecord(args, preflight);
+  // WR-02 / NFR-3: skip the whole transaction -- and therefore the `retries: 0`
+  // scope lock -- when the snapshot says nothing can have moved. The refresh's
+  // own in-transaction guard stays the authority on whether the write happens.
+  const wrote = disabledRefreshWouldWrite(preflight)
+    ? await refreshDisabledRecord(args, preflight)
+    : false;
 
   // PURL-06 / D-78-01: a refresh that moved the pin re-pointed resolvedSource +
   // resolvedSha at the clone `preflightUpdate` just materialized, so the OLD
