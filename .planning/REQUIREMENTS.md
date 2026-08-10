@@ -34,7 +34,7 @@
 
 <!-- LIFE numbering continues from v1.13 (LIFE-01..03). -->
 
-- [ ] **LIFE-04**: A manifest-absent installed plugin remains fully uninstallable through its existing installation record, with every owned resource and the plugin record removed through the normal uninstall path. This already holds -- `uninstall` imports no manifest or resolver module -- so the requirement is regression coverage spanning all five resource kinds, including hooks and MCP cleanup.
+- [x] **LIFE-04**: A manifest-absent installed plugin remains fully uninstallable through its existing installation record, with every owned resource and the plugin record removed through the normal uninstall path. This already holds -- `uninstall` imports no manifest or resolver module -- so the requirement is regression coverage spanning all five resource kinds, including hooks and MCP cleanup.
 - [x] **LIFE-05**: Targeted and bulk plugin update retain their existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; coverage must span the targeted, marketplace-bulk, and global-bulk enumeration paths.
 - [x] **LIFE-06**: Marketplace autoupdate retains its existing `(skipped) {not in manifest}` behavior for a recorded plugin whose entry is absent from the successfully loaded manifest. This already holds; the skip originates in the shared update preflight and is re-narrowed by the cascade mapper, so cover the autoupdate-on-marketplace-update path explicitly.
 
@@ -66,7 +66,7 @@ migration, no schema-version bump, and no persisted change.
 <!-- DOC numbering continues from v1.17 (DOC-06/07). -->
 
 - [x] **COMPAT-01**: The feature introduces no manifest snapshot, orphan field, state-schema migration, status token, reason token, glyph, or new network path; it derives the read-surface condition from the valid manifest and existing installation record. The network clause is already enforced for both `info` surfaces by the existing architecture gate. Any new source-scanning gate must read files directly rather than shelling out to `grep`: a line tool that classifies a file as binary reports nothing and exits cleanly, which would green a clause on a file it never inspected. The premise this rule was written from no longer holds on its own terms -- `orchestrators/plugin/info.ts` holds its hook-dedup separator as a `\u0000` ESCAPE with an inline comment saying why, so the file is ordinary text and a line tool would in fact read it. The rule stands regardless, because it is about what a scanner can silently skip rather than about one file; `tests/architecture/compat-01-no-expansion.test.ts` records the resolution in its header so the point is not re-litigated.
-- [ ] **DOC-08**: `docs/output-catalog.md` and `docs/prd/pi-claude-marketplace-prd.md` document the manifest-independent list/info behavior, partial-install preservation, failure boundary, and unchanged lifecycle behavior. This also settles four known documentation defects: the PRD's PL-6 row and its section 5.3.1 flowchart still describe the retired v1 manifest-failure renderer; the output catalog's brace-bearing-variant count is stale; `(partially-installed)` is missing from the catalog's status-token reference table despite being a closed-set member; and the `notify-reasons.ts` header comments still describe a 37-entry reason set that now holds 38. The disabled-state repair is documented too: `(disabled)` now covers the partial case, and the reconcile comment asserting that only the disable orchestrator writes `enabled: false` is corrected.
+- [x] **DOC-08**: `docs/output-catalog.md` and `docs/prd/pi-claude-marketplace-prd.md` document the manifest-independent list/info behavior, partial-install preservation, failure boundary, and unchanged lifecycle behavior. This also settles four known documentation defects: the PRD's PL-6 row and its section 5.3.1 flowchart still describe the retired v1 manifest-failure renderer; the output catalog's brace-bearing-variant count is stale; `(partially-installed)` is missing from the catalog's status-token reference table despite being a closed-set member; and the `notify-reasons.ts` header comments still describe a 37-entry reason set that now holds 38. The disabled-state repair is documented too: `(disabled)` now covers the partial case, and the reconcile comment asserting that only the disable orchestrator writes `enabled: false` is corrected.
 
 ## Future Requirements
 
@@ -108,11 +108,11 @@ Which phases cover which requirements.
 | ENBL-07 | Phase 97 | Complete |
 | ENBL-08 | Phase 97 | Complete |
 | ENBL-09 | Phase 97 | Complete |
-| LIFE-04 | Phase 98 | Pending |
+| LIFE-04 | Phase 98 | Complete |
 | LIFE-05 | Phase 98 | Complete |
 | LIFE-06 | Phase 98 | Complete |
 | COMPAT-01 | Phase 98 | Complete |
-| DOC-08 | Phase 98 | Pending |
+| DOC-08 | Phase 98 | Complete |
 
 **Coverage:**
 

@@ -4,17 +4,17 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: lifecycle-regression-and-contract-documentation
-status: executing
-stopped_at: Completed 98-05-PLAN.md
-last_updated: "2026-08-10T04:23:14.219Z"
+status: verifying
+stopped_at: Completed 98-06-PLAN.md
+last_updated: "2026-08-10T04:59:44.093Z"
 last_activity: 2026-08-10
-last_activity_desc: "Phase 98 plan 05 complete — LIFE-05 and LIFE-06 pinned: the manifest-absent skip row is byte-locked on all three update enumeration targets and on both halves of the autoupdate cascade, plus the idempotency and no-state-write edges"
+last_activity_desc: "Phase 98 plan 06 complete — DOC-08 closed: the catalog's variant enumerations, token table and glyph roster re-derived from the runtime constants, the PRD's manifest-failure row rewritten to the BOUND-01 output, the list decision flowchart redrawn around the ManifestLookup discriminant, and six source-comment sites re-anchored with no executable line changed. Full check green (CHECK_EXIT=0)"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 17
-  completed_plans: 16
-  percent: 75
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -36,7 +36,21 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 
 Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
 Plan: 6 of 6
-Status: Executing Phase 98 — plans 01-05 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04, LIFE-05 and LIFE-06 pinned; COMPAT-01 gated by one enumeration-equality contract test). Plan 06 (DOC-08 accuracy sweep) remains
+Status: Phase complete — ready for verification. All six plans landed: the
+four Phase-97 carriers (IN-07, WR-06, WR-02, WR-04), LIFE-04/05/06
+characterization coverage, the COMPAT-01 no-expansion contract gate, and the
+DOC-08 accuracy sweep. Plan 06 closed DOC-08 last, as sequenced, so the
+documentation describes what the first five plans actually shipped: all ten
+named defects corrected in place (none by deletion), the three additional
+falsified PRD statements folded in, the section 5.3.1 flowchart REDRAWN to
+the ManifestLookup decision path per D-98-07, and three further falsified
+comments found and fixed at adjacent sites in `notify.ts`. Phase gate green
+(CHECK_EXIT=0: typecheck, lint, format, 3366 unit + 18 integration tests, 0
+fail). Three documentation-only deferrals recorded in 98-06-SUMMARY.md: the
+autoupdate cascade skip row has no catalog state (adding one is a catalog
+amendment this plan excluded), the catalog's description-bearing variant
+count is stale in an untouched section, and `RLD-04`/`D-08` survive at six
+source sites outside the plan's `tools.ts` scope.
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -193,6 +207,9 @@ two integration checks.
 - [Phase 98]: PLUGIN_INSTALL_RECORD_SCHEMA is exported as a test-only widening so the COMPAT-01 gate reads the record key set off the schema rather than a hand-maintained list
 - [Phase 98]: The bulk enumeration bodies carry the plural-cardinality tally line the targeted body omits; the skip row itself is byte-identical across all three update targets.
 - [Phase 98]: The end-to-end autoupdate case uses user scope with a hermetic home, because the single-plugin update reads the process working directory itself.
+- [Phase 98]: DOC-08 counts are re-derived from the message interfaces: 9 reason-bearing and 4 dep-bearing variants of the 19 plugin statuses, each stated with its runtime constant and the gate that pins it
+- [Phase 98]: The list decision flowchart is redrawn around the ManifestLookup discriminant, with a note that the unverified arm is reachable only on the cross-scope fold
+- [Phase 98]: The PRD's non-member (present) token was replaced by (remote) rather than deleted, and PL-6 names where the never-silently-disappear guarantee now lives (INV-01) so the rewrite reads as a relocation, not a shrink
 
 ### Open decisions
 
@@ -282,9 +299,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P03 | 55min | 2 tasks | 7 files |
 | Phase 98 P04 | 30min | 2 tasks | 4 files |
 | Phase 98 P05 | 16min | 3 tasks | 2 files |
+| Phase 98 P06 | 27min | 3 tasks | 8 files |
 
 ## Session
 
-**Last session:** 2026-08-10T04:23:06.066Z
-**Stopped at:** Completed 98-05-PLAN.md
+**Last session:** 2026-08-10T04:59:33.836Z
+**Stopped at:** Completed 98-06-PLAN.md
 **Resume file:** None

@@ -262,7 +262,7 @@ Plans:
 3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, because a line tool that classifies a file as binary reports nothing and exits cleanly, greening a clause on a file it never read. The premise the rule was written from is resolved: `orchestrators/plugin/info.ts` holds its hook-dedup separator as an ESCAPE with an inline comment saying why, so the file is ordinary text today. The rule stands on the silent-skip hazard alone. (COMPAT-01)
 4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, including the repaired disabled-partial case, and the known documentation defects named in DOC-08 are corrected. (DOC-08)
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -281,7 +281,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 98-06-PLAN.md — bounded documentation accuracy sweep: output catalog, design document with a redrawn flowchart, and four source-comment sites (DOC-08)
+- [x] 98-06-PLAN.md — bounded documentation accuracy sweep: output catalog, design document with a redrawn flowchart, and four source-comment sites (DOC-08)
 
 ## Progress
 
@@ -290,7 +290,7 @@ Plans:
 | 95. Manifest-independent installed inventory | v1.18 | 2/2 | Complete    | 2026-08-08 |
 | 96. Installation-record-backed plugin info | v1.18 | 4/4 | Complete    | 2026-08-09 |
 | 97. Disabled-state classification repair | v1.18 | 5/5 | Complete    | 2026-08-09 |
-| 98. Lifecycle regression and contract documentation | v1.18 | 5/6 | In Progress|  |
+| 98. Lifecycle regression and contract documentation | v1.18 | 6/6 | In Progress|  |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
