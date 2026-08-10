@@ -3535,6 +3535,177 @@ test("D-99-05a: a disabled record whose source moved under an unchanged version 
   });
 });
 
+test("D-99-05a: a disabled record with nothing to move performs NO write", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-noop-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.1.0");
+      await saveState(locations.extensionRoot, state);
+
+      // Settle the record first: one update moves the seeded placeholder source
+      // onto the current pluginRoot, so the call under test faces a record that
+      // already holds exactly what the refresh derives.
+      const settling = makeCtx();
+      await updatePlugins({
+        ctx: settling.ctx,
+        pi: settling.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      const settledBytes = await readFile(locations.stateJsonPath, "utf8");
+      const settledStat = await stat(locations.stateJsonPath);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // Assert the WRITE, not the row. The row renders the same bytes whether
+      // the refresh no-ops or rewrites the record with identical values, so a
+      // row assertion cannot tell a guarded no-op from an unguarded rewrite --
+      // which is exactly how the guard came to look like dead code. The bytes
+      // catch a rewrite (`updatedAt` would move); the mtime catches even a
+      // byte-identical one.
+      assert.equal(
+        await readFile(locations.stateJsonPath, "utf8"),
+        settledBytes,
+        "a refresh with nothing to move must leave state.json byte-identical",
+      );
+      assert.equal(
+        (await stat(locations.stateJsonPath)).mtimeMs,
+        settledStat.mtimeMs,
+        "RECON-05: state.json must not be rewritten at all",
+      );
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-99-05a: an unsupported kind gained under an unchanged version degrades the refreshed record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-drift-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      // The entry gains an unsupported kind at the SAME version -- the
+      // compatibility block moves while the pin does not.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      const record = makeDisabledPluginRecord("1.1.0");
+      // Pre-seed the current source so the compatibility block is the ONLY
+      // fact that moves.
+      record.resolvedSource = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      state.marketplaces["mp"]!.plugins["hello"] = record;
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        // WR-01: a CLEAN disabled record has consented to nothing, so its
+        // degrade still needs the flag typed.
+        partial: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "the version pin never moved");
+      assert.equal(
+        rec.compatibility.installable,
+        false,
+        "a later enable gates on the CURRENT availability discriminant",
+      );
+      assert.ok(
+        rec.compatibility.unsupported.length > 0,
+        `the dropped kinds are recorded: ${JSON.stringify(rec.compatibility.unsupported)}`,
+      );
+      assert.equal(rec.enabled, false);
+      assertResourcesEmpty(rec, "stay empty (still disabled)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version promotes the refreshed record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-promote-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      // No `makeCandidateUnsupported` here: the entry the record remembers as
+      // partial now resolves fully supported at the same version.
+
+      const state = await loadState(locations.extensionRoot);
+      const record = makeDisabledPartialPluginRecord("1.1.0");
+      record.resolvedSource = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      state.marketplaces["mp"]!.plugins["hello"] = record;
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
+
+      // The counter-case half: the degrade above is satisfied by writing a
+      // constant `false`, and this one by a constant `true`. Only the pair
+      // shows the discriminant is DERIVED from the resolution.
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "the version pin never moved");
+      assert.equal(rec.compatibility.installable, true, "availability follows the resolution up");
+      assert.deepEqual([...rec.compatibility.unsupported], [], "the stale dropped kind is cleared");
+      assert.equal(rec.enabled, false, "promotion of the availability axis never enables");
+      assertResourcesEmpty(rec, "stay empty (still disabled)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── S5: invalid config write-back no longer silently skips ─────────────────
 
 test("S5: update success + invalid config write-back surfaces a warning row (no longer silently skipped)", async () => {
