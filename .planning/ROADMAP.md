@@ -259,7 +259,7 @@ Plans:
 
 1. Uninstall after manifest-entry removal removes every owned resource and the installation record through the existing path, with coverage spanning all five resource kinds including hooks and MCP cleanup. (LIFE-04)
 2. Targeted, marketplace-bulk, and global-bulk plugin update plus marketplace autoupdate all continue to render `(skipped) {not in manifest}` for the state-only record. (LIFE-05, LIFE-06)
-3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, which silently skips `orchestrators/plugin/info.ts` because that file contains a NUL byte. (COMPAT-01)
+3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, because a line tool that classifies a file as binary reports nothing and exits cleanly, greening a clause on a file it never read. The premise the rule was written from is resolved: `orchestrators/plugin/info.ts` holds its hook-dedup separator as an ESCAPE with an inline comment saying why, so the file is ordinary text today. The rule stands on the silent-skip hazard alone. (COMPAT-01)
 4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, including the repaired disabled-partial case, and the known documentation defects named in DOC-08 are corrected. (DOC-08)
 
 **Plans:** 5/6 plans executed
