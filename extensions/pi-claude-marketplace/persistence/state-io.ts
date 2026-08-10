@@ -50,8 +50,13 @@ import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate
  * fills `enabled: true` for all existing records via `ensurePluginEnabled`
  * before validation runs, so v1.0..v1.13 state.json files load cleanly.
  * `enabled: false` is the sole disable marker; `true` means active.
+ *
+ * COMPAT-01: exported so the no-expansion gate reads the record's key set off
+ * this single source of truth rather than a hand-maintained field list that
+ * would drift. No production consumer imports it; the schema stays the sole
+ * validation boundary for the persisted record.
  */
-const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
+export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   version: Type.String(),
   resolvedSource: Type.String(),
   // D-77-02 / PURL-09: the full 40-hex resolved commit sha for git-source
