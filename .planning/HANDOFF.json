@@ -1,11 +1,11 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-10T11:44:50Z",
+  "timestamp": "2026-08-10T13:05:15Z",
   "phase": "99",
   "phase_name": "post-audit-tech-debt-closure",
   "phase_dir": ".planning/phases/99-post-audit-tech-debt-closure",
-  "plan": 1,
-  "task": 2,
+  "plan": 2,
+  "task": 4,
   "total_tasks": 18,
   "status": "paused",
   "completed_tasks": [
@@ -15,15 +15,16 @@
       "status": "done",
       "commit": "408e7fda, d9659f68, 8c165044",
       "progress": "stagedAgents/stagedMcpServers -> stagedAgentNames/stagedMcpServerNames on ReinstallReinstalledOutcome and PluginUpdateUpdatedOutcome plus both producers and test fixtures; TS2430 block lifted so PluginUpdateUpdatedOutcome can now extend LedgerDegradationSignals; install.ts:258 Omit deliberately untouched"
+    },
+    {
+      "id": "99-02",
+      "name": "Widen the ENBL-05 drift gate to destructured / bracket-access / Boolean() twins (D-99-02b)",
+      "status": "done",
+      "commit": "5481856c, 07d4e31a, 6bafbf30",
+      "progress": "Three non-global patterns (DESTRUCTURED_ENABLED_BINDING, BRACKET_ENABLED_ACCESS, BOOLEAN_ENABLED_COERCION) added to INLINE_REDERIVATIONS in tests/orchestrators/reconcile/plan.test.ts. Each proven TRUE on its twin literal and FALSE on both negative controls (entry.enabled !== false config axis, isRecordedButDisabled call), plus a membership pin and a re.global === false pin over every member. Dry-run over all 202 stripped extension sources BEFORE the first edit returned zero hits, so no pattern was narrowed after the fact and no exemption was added. Suite 35/35; lint, typecheck, format all exit 0. Test-only: no production line touched."
     }
   ],
   "remaining_tasks": [
-    {
-      "id": "99-02",
-      "wave": 1,
-      "name": "Widen the ENBL-05 drift gate to destructured / bracket-access / Boolean() twins (D-99-02b)",
-      "status": "not_started"
-    },
     {
       "id": "99-03",
       "wave": 1,
@@ -79,17 +80,27 @@
       "phase": "99"
     },
     {
-      "decision": "WR-04 direction 2 in Phase 98; SEV-03 info severity for the degraded enable row; per-surface SEV-01 asymmetry on the reconcile projection",
-      "rationale": "operator rulings during phases 97-98; settled, do not revisit",
-      "phase": "97/98"
-    },
-    {
       "decision": "Rename BOTH verbs' staged-name arrays (not just reinstall's), close all SEVEN RLD-04/D-08 sites (grep is authoritative over the prose count)",
       "rationale": "orchestrator directive resolving research open questions 1 and 2",
       "phase": "99"
+    },
+    {
+      "decision": "99-02's bracket and Boolean() patterns flag the ACCESS shape, not the comparison; the destructuring pattern flags the BINDING, never a bare identifier",
+      "rationale": "neither bracket nor Boolean spelling has a legitimate use in the tree, so an unconditional match is simpler AND stricter than enumerating every negation; a bare `!enabled` cannot be told apart from an unrelated local, so a bare-identifier pattern would be a false-positive engine",
+      "phase": "99"
+    },
+    {
+      "decision": "A drift-gate pattern needs three assertions, not one: TRUE on its twin, FALSE on each excluded axis, and membership in the array the walk iterates",
+      "rationale": "a pattern that passes its self-test but never reaches the array is a gate that proves itself while seeing nothing; the deletion probe confirmed the membership pin fires",
+      "phase": "99"
+    },
+    {
+      "decision": "WR-04 direction 2 in Phase 98; SEV-03 info severity for the degraded enable row; per-surface SEV-01 asymmetry on the reconcile projection",
+      "rationale": "operator rulings during phases 97-98; settled, do not revisit",
+      "phase": "97/98"
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Dispatch gsd-executor for plan 99-02 (wave 1, independent of 99-01/99-03). Then 99-03, then 99-04 (wave 2 — it MUST inherit LedgerDegradationSignals directly now that 99-01 lifted the TS2430 block; reaching for Pick/Omit there is the wrong turn the plan forbids). Executors run sequentially on this worktree with the trufflehog commit protocol.",
-  "context_notes": "Autonomous run (/gsd-autonomous --interactive) over milestone v1.18 from the worktree .worktrees/manifest-independent-plugin-info (branch features/manifest-independent-plugin-info). Phases 95-98 are COMPLETE and verified (verification passed, nyquist-compliant, threats_open 0 on each); the v1.18 milestone audit ran and returned status tech_debt with 0 blockers, 22/22 requirements satisfied, 4/4 integration seams wired, 3/3 E2E flows complete. At the audit review the operator chose 'Stop - address debt first' and then selected ALL FOUR debt groups, which became Phase 99 (added to the roadmap after 98, 7 plans, checker passed first iteration). Phase 99 plan 99-01 is complete; 99-02..99-07 remain. After Phase 99 the milestone lifecycle resumes: complete-milestone v1.18 -> cleanup -> version bump + PR. Environment: run all GSD tooling from the worktree (the main checkout reports stale state); full suites need PI_SUBAGENTS_ROOT=/home/acolomba/.pi/agent/npm/node_modules/pi-subagents; commits from the worktree need the trufflehog filesystem-scan + SKIP=trufflehog protocol; IDE diagnostics on .ts files are stale noise (confirmed again at pause time: diagnostics reported five TS2551/TS2561 errors while npm run typecheck exited 0)."
+  "next_action": "Dispatch gsd-executor for plan 99-03 (wave 1, independent of 99-04..07). Then 99-04 (wave 2 — it MUST inherit LedgerDegradationSignals directly now that 99-01 lifted the TS2430 block; reaching for Pick/Omit there is the wrong turn the plan forbids). Resume the autonomous flow with `/gsd-autonomous --interactive --from 99` — its execute step finds the 99-01 and 99-02 SUMMARYs and continues at 99-03. Executors run sequentially on this worktree with the trufflehog commit protocol.",
+  "context_notes": "Autonomous run (/gsd-autonomous --interactive) over milestone v1.18 from the worktree .worktrees/manifest-independent-plugin-info (branch features/manifest-independent-plugin-info). Phases 95-98 are COMPLETE and verified (verification passed, nyquist-compliant, threats_open 0 on each); the v1.18 milestone audit returned status tech_debt with 0 blockers, 22/22 requirements satisfied, 4/4 integration seams wired, 3/3 E2E flows complete. At the audit review the operator chose 'Stop - address debt first' and then selected ALL FOUR debt groups, which became Phase 99 (7 plans, checker passed first iteration). Plans 99-01 and 99-02 are complete; 99-03..99-07 remain. NOTE FOR THE NEXT RESUME: the previous HANDOFF.json went stale — it named 99-02 as the next dispatch while 99-02 had already landed as three commits with its SUMMARY written, and STATE.md carried 99-02's counters under 99-01's narrative. This session reconciled that (SUMMARY committed, STATE narrative restored to 99-02, ROADMAP checkbox already ticked) before pausing. When resuming, trust the SUMMARY files and `git log` over any counter. Environment: run all GSD tooling from the worktree (the main checkout reports stale state); full suites need PI_SUBAGENTS_ROOT=/home/acolomba/.pi/agent/npm/node_modules/pi-subagents; commits from the worktree need the trufflehog filesystem-scan + SKIP=trufflehog protocol; IDE diagnostics on .ts files are stale noise."
 }

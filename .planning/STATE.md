@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
-status: in_progress
-stopped_at: Completed 99-01-PLAN.md
-last_updated: "2026-08-10T11:37:37.871Z"
+current_phase_name: post-audit-tech-debt-closure
+status: executing
+stopped_at: Completed 99-02-PLAN.md
+last_updated: "2026-08-10T12:13:57.006Z"
 last_activity: 2026-08-10
-last_activity_desc: "Phase 99 plan 01 complete — D-99-02c closed: the colliding `readonly string[]` staged-name pairs renamed to `stagedAgentNames` / `stagedMcpServerNames` on BOTH `ReinstallReinstalledOutcome` and `PluginUpdateUpdatedOutcome`, freeing the bare spellings for the `LedgerDegradationSignals` booleans and lifting the TS2430 block on plan 99-04. Typecheck, lint, format and the four affected suites green; COMPAT-01 gate unchanged"
+last_activity_desc: "Phase 99 plan 02 complete — D-99-02b closed: three non-global patterns (`DESTRUCTURED_ENABLED_BINDING`, `BRACKET_ENABLED_ACCESS`, `BOOLEAN_ENABLED_COERCION`) widen the ENBL-05 drift gate so a destructured binding, a bracket access, or a `Boolean()` coercion of `enabled` can no longer install a second definition of disabled behind a green gate. Each proven TRUE on its twin and FALSE on both negative controls, plus a membership + non-global wiring pin; 202-file walk green, test-only change"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 18
-  percent: 75
-current_phase_name: post-audit-tech-debt-closure
+  completed_plans: 19
+  percent: 79
 ---
 
 # Project State
@@ -33,9 +33,27 @@ verified.
 
 ## Current Position
 
-Phase: 99 — post-audit tech-debt closure
-Plan: 1 of 7 complete (wave 1 in progress)
-Status: In progress
+Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
+Plan: 2 of 7 complete (wave 1 in progress)
+Status: Ready to execute
+Plan 99-02 closed D-99-02b, the second of the fragility trio, without touching
+a production line. Three named non-global patterns join `INLINE_REDERIVATIONS`:
+`DESTRUCTURED_ENABLED_BINDING`, `BRACKET_ENABLED_ACCESS` and
+`BOOLEAN_ENABLED_COERCION`. The bracket and `Boolean()` forms flag the ACCESS
+rather than the comparison — neither spelling has a legitimate use in the tree,
+so an unconditional match is both simpler and stricter than enumerating every
+negation someone might invent, and requiring the `.enabled` read inside the
+parens leaves the nine `Type.Boolean()` typebox declarations untouched. The
+destructuring form matches the BINDING, never a bare identifier, because
+`!enabled` alone is indistinguishable from any unrelated local; `[^{}]*` plus a
+required `=` after the closing brace keeps it off object literals. All three
+were dry-run over the 202 stripped extension sources before the first edit —
+zero hits, so no pattern was narrowed after the fact and no exemption was
+needed. Each carries three assertions, not one: TRUE on its twin, FALSE on both
+negative controls, and membership in the array the walk iterates (a deletion
+probe confirmed the membership pin fires). Suite 35/35; lint, typecheck and
+format 0.
+
 Plan 99-01 closed D-99-02c, the first of the fragility trio. The two
 `readonly string[]` staged-name pairs are renamed `stagedAgentNames` /
 `stagedMcpServerNames` on BOTH outcome interfaces — `ReinstallReinstalledOutcome`
@@ -99,7 +117,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-10 — Phase 98 complete
+Last activity: 2026-08-10 — Phase 99 plan 99-02 complete
 
 ## Roadmap Summary
 
@@ -333,9 +351,18 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P05 | 16min | 3 tasks | 2 files |
 | Phase 98 P06 | 27min | 3 tasks | 8 files |
 | Phase 99 P01 | 12min | 2 tasks | 6 files |
+| Phase 99 P02 | 12min | 2 tasks | 1 file |
 
 ## Session
 
 **Last session:** 2026-08-10T11:37:37.555Z
-**Stopped at:** Completed 99-01-PLAN.md
-**Resume file:** None
+**Stopped at:** Completed 99-02-PLAN.md
+**Resume file:** .planning/phases/99-post-audit-tech-debt-closure/.continue-here.md
+(retained until Phase 99 closes — it carries the 99-04 blocking constraint
+against reintroducing the Pick/Omit workaround 99-01 lifted)
+
+**Resumed:** 2026-08-10 — HANDOFF.json was stale (it named 99-02 as the next
+dispatch, but 99-02 had already landed as `5481856c`/`07d4e31a`/`6bafbf30`
+with its SUMMARY written). Reconciled and proceeding to
+`/gsd-autonomous --interactive --from 99` (execute 99-03 onward, phase tail,
+then v1.18 milestone close).

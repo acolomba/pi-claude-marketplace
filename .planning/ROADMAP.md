@@ -318,13 +318,13 @@ Plans:
 4. The autoupdate cascade skip row has a catalog state with a FIXTURES entry; the description-bearing variant count is corrected; the residual `RLD-04`/`D-08` anchors are re-anchored or dropped at the six named sites (skipping the four files where `D-08` legitimately means something else).
 5. A disabled record whose `resolvedSource` moved while the version pin did not is refreshed rather than left stale; the rare-failure-arm coverage sweep lands the tests named in the 2026-06-12 todo (bounded to its named arms in update/reinstall/install).
 
-**Plans:** 1/7 plans executed
+**Plans:** 2/7 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 99-01-PLAN.md — Rename the colliding staged-name string arrays on BOTH outcome interfaces (D-99-02c; the enabler that unblocks 99-04)
-- [ ] 99-02-PLAN.md — Widen the ENBL-05 drift gate to the destructured, bracket-access and Boolean twin spellings (D-99-02b)
+- [x] 99-02-PLAN.md — Widen the ENBL-05 drift gate to the destructured, bracket-access and Boolean twin spellings (D-99-02b)
 - [ ] 99-03-PLAN.md — Close the three 98-06 documentation deferrals: cascade skip-row catalog state, nine-variant count, seven dangling anchor sites (D-99-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
