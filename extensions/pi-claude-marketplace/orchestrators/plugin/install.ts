@@ -228,7 +228,13 @@ interface EntityErrorRow {
  * outcome shape is unchanged (NREG-01).
  *
  * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
- * field it keeps is populated below. Each field of the shared shape is optional,
+ * field it keeps is populated below. WR-11: the type operator is an EXCLUSION,
+ * so it cannot state that second half on its own -- a signal added to the shared
+ * shape would widen this arm with a field nothing here writes. The key set is
+ * pinned bidirectionally by `COMPAT-01: the install outcome inherits exactly the
+ * signals installPlugin populates` in
+ * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
+ * either a widening or a narrowing. Each field of the shared shape is optional,
  * so intersecting all five never made a missing one a compile error -- it only
  * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
  * writes, which a consumer reads as `undefined` and takes for "no agents

@@ -93,6 +93,9 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
 
+import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
 const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
 
@@ -110,6 +113,15 @@ const GLYPH_DECLARATION = new RegExp(GLYPH_DECLARATION_SOURCE);
 async function readStrippedSource(rel: string): Promise<string> {
   return stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
 }
+
+/**
+ * WR-11: the ledger degradation signals the `installed` outcome arm actually
+ * inherits, computed FROM the production type rather than by restating its
+ * exclusion list. Both halves are live: widen the arm (drop an exclusion) or
+ * widen the shared shape (add a signal) and this key set grows.
+ */
+type InstalledOutcome = Extract<InstallPluginOutcome, { status: "installed" }>;
+type InstallSignalKey = keyof InstalledOutcome & keyof LedgerDegradationSignals;
 
 test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
   assert.deepEqual(
@@ -341,6 +353,35 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
       "version",
     ],
     "COMPAT-01: no field may be added to or removed from the persisted install record.",
+  );
+});
+
+test("COMPAT-01: the install outcome inherits exactly the signals installPlugin populates", () => {
+  // WR-11: the `installed` arm inherits the shared ledger-signal shape MINUS the
+  // two staged-count verdicts. `Omit` is an EXCLUSION, so a sixth signal added
+  // to that shape widens this arm AUTOMATICALLY with a field `installPlugin`
+  // never writes -- and a consumer reads the absent field as "none" and believes
+  // it. (`Pick` would drift the other way, silently dropping the new signal.)
+  //
+  // `Record<InstallSignalKey, true>` is bidirectional: a signal added to the
+  // shared shape fails to compile here as a MISSING property, and one removed
+  // fails as an EXCESS one. Either direction lands the author in this clause,
+  // where the choice is explicit -- populate the signal at `installPlugin`'s
+  // return, or exclude it in the `Omit`.
+  const populated: Record<InstallSignalKey, true> = {
+    unsupported: true,
+    orphanRewake: true,
+    degradedKinds: true,
+  };
+
+  // The gate is the object literal's TYPE; this runtime clause reports it. The
+  // member names are deliberately not restated as string literals: the D-75-01
+  // vocabulary guard forbids the quoted dropped-component key anywhere under
+  // tests/architecture, and a derived expected list would be a tautology.
+  assert.equal(
+    Object.keys(populated).length,
+    3,
+    "COMPAT-01 / WR-11: the install outcome carries exactly the three ledger signals installPlugin writes.",
   );
 });
 
