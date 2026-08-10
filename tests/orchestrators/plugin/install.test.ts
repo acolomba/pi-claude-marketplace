@@ -4879,3 +4879,65 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rollback arms (D-99-05b): a phase that throws after earlier phases committed
+// must unwind them, and the assertion is on what the unwind left behind.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no record", async () => {
+  // The hooks bridge writes its config atomically -- there is no staging dir,
+  // so its undo is a real removal rather than the discard the other bridges
+  // do. Failing the mcp phase (the slot after hooks) is what makes that
+  // removal run; occupying <scopeRoot>/mcp.json with a directory fails the
+  // phase without touching any earlier one.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-unwind-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        hooksJson: { hooks: { SessionStart: [{ hooks: [{ type: "command", command: "x" }] }] } },
+        mcpServers: { server1: { command: "node", args: ["s.js"] } },
+      });
+
+      await mkdir(locations.mcpJsonPath, { recursive: true });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      const allText = notifications.map((n) => n.message).join("\n");
+      assert.match(allText, /⊘ hello v0\.0\.1 \(failed\)/, `no failed row in:\n${allText}`);
+
+      // The unwind is what these assert: nothing the earlier phases wrote may
+      // outlive the failed install, or the next attempt collides with itself.
+      const survives = async (p: string): Promise<boolean> =>
+        stat(p).then(
+          () => true,
+          () => false,
+        );
+      assert.equal(
+        await survives(path.join(locations.hooksDir, "hello", "hooks.json")),
+        false,
+        "the hooks config the hooks phase wrote must be removed by its undo",
+      );
+      assert.equal(
+        await survives(path.join(locations.skillsTargetDir, "hello-tool")),
+        false,
+        "the skills the first phase staged must not survive the failure",
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["hello"],
+        undefined,
+        "a failed install must write no record",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

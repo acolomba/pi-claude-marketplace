@@ -3684,3 +3684,116 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rare failure arms (D-99-05b). Each case reaches one arm no happy-path test
+// touches, and asserts the arm's observable consequence.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("S5: a reinstall whose config write-back cannot parse reports the skip beside the success", async () => {
+  // The artifacts reinstall and the config entry does NOT get written. Pre-S5
+  // that second half was silent, so the config and the disk drifted with no
+  // trace. The row must name the config file by basename only -- an absolute
+  // path in an operator-facing row leaks the scope root.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-s5-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", command: "old command" },
+        install: true,
+      });
+      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(outcome.partition, "reinstalled", "the artifacts still reinstall");
+      const allText = notifications.map((n) => n.message).join("\n");
+      assert.match(allText, /\(reinstalled\)/, `success row still emitted in:\n${allText}`);
+      assert.match(allText, /\(failed\) \{invalid manifest\}/, `no S5 row in:\n${allText}`);
+      assert.match(allText, /claude-plugins\.json/, `basename missing in:\n${allText}`);
+      assert.ok(
+        !allText.includes(locations.configJsonPath),
+        `the absolute config path must not leak: ${allText}`,
+      );
+      assert.ok(
+        notifications.some((n) => n.severity === "error"),
+        "the skipped write-back is an error severity, not a silent success",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-10: a source that stopped being installable fails with the typed reason, not the substring fallback", async () => {
+  // The manifest entry's source is rewritten to a git-flavored URL after the
+  // path-source install. requireInstallable raises a typed shape error, and
+  // the reason must come from that shape -- the notes-substring fallback would
+  // land on the permissive `not in manifest` and misdescribe the failure.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-shape-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill" },
+        install: true,
+      });
+
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "hello", version: "1.0.0", source: { source: "unsupported-kind" } }],
+        }),
+        "utf8",
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(outcome.partition, "failed");
+      const allText = notifications.map((n) => n.message).join("\n");
+      assert.doesNotMatch(
+        allText,
+        /\{not in manifest\}/,
+        `the substring fallback must not win over the typed shape in:\n${allText}`,
+      );
+      // The shape switch maps `not-installable` to the source-classification
+      // reason, which is the fact the operator needs: the entry now points at
+      // a kind this install cannot be reproduced from.
+      assert.match(
+        allText,
+        /⊘ hello \(failed\) \{source mismatch\}/,
+        `the typed shape reason must reach the row in:\n${allText}`,
+      );
+      assert.equal(errorNotifications(notifications).length, 1);
+
+      // A failed reinstall leaves the installed record and its artifacts alone.
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.ok(after.marketplaces["mp"]?.plugins["hello"] !== undefined);
+      assert.match(await readSkill(cwd), /old skill/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
