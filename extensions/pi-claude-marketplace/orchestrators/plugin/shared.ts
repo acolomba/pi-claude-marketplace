@@ -28,7 +28,53 @@ import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/**
+ * The degradation signals ONE `runInstallLedger` run produces, carried together
+ * on every success outcome of every verb that drives that ledger -- `install`
+ * and the enable branch alike. Both verbs run the SAME ledger over the SAME
+ * bridges, so a signal one row names and the other omits is a row that
+ * contradicts its own ledger.
+ *
+ * The shape lives here, in the module `install.ts` and `enable-disable.ts` BOTH
+ * already import, rather than in either of them: `enable-disable.ts` imports
+ * `runInstallLedger` from `install.ts`, so declaring it there and importing it
+ * back would close a module cycle (IN-07 / D-98-01).
+ *
+ * Consumed by `freshEnableRow` (standalone enable), `enabledRowFromOutcome` and
+ * `installedRowFromOutcome` (reconcile projections), and the standalone install
+ * row -- the row composers must agree, so they read ONE shape rather than
+ * hand-synchronized field lists. Every field is optional and omitted when
+ * empty, so an unaffected outcome renders byte-identically (NREG-01).
+ */
+export interface LedgerDegradationSignals {
+  /**
+   * ENBL-07 / FSTAT-07 / D-66-04: the LIVE dropped-component kinds when the run
+   * went through the partial gate (the resolver's `partially-available` arm).
+   * Non-empty selects the `(partially-installed)` row over `(installed)`, so
+   * the row agrees with the record the ledger just wrote -- and therefore with
+   * the `list` / `info` row rendered next.
+   */
+  readonly unsupported?: readonly string[];
+  /**
+   * SURF-05 / D-63-08: a hook handler declared `rewakeMessage` /
+   * `rewakeSummary` without `asyncRewake: true`. One `{orphan rewake}` token
+   * per plugin regardless of N orphan handlers, on whichever verb materialized
+   * it. Names itself in the brace without moving the severity channel.
+   */
+  readonly orphanRewake?: boolean;
+  /**
+   * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
+   * be parsed and installed in degraded form. Each kind contributes one
+   * `{malformed skill}` / `{malformed command}` token AND raises the row from
+   * `info` to `warning` -- the same raise `install.ts::successSeverity`
+   * applies, because a degraded component is carried out but short of ideal
+   * whichever verb materialized it.
+   */
+  readonly degradedKinds?: readonly DegradeKind[];
+}
 
 /**
  * Generated-name candidates produced by `domain/name.ts` generators for the

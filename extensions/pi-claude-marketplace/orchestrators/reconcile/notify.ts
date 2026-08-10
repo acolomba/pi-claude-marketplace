@@ -490,15 +490,25 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * today: `info`, no reasons brace (NREG-01). The reconcile-applied cascade
  * suppresses the /reload trailer at the kind level (RECON-04), so `needsReload`
  * never surfaces a hint.
+ *
+ * SURF-05 / D-63-08 / IN-07: the row also carries the ledger's orphan-rewake
+ * signal, in the emit order `install.ts` and the sibling enable projection both
+ * use -- `{orphan rewake}` first, then the per-kind malformed tokens. The
+ * orphan token moves no severity channel: the malformed rule alone decides
+ * `warning` versus `info`.
  */
 function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
   const degradedReasons = malformedReasonsForKinds(outcome.degradedKinds);
+  const reasons: ContentReason[] = [
+    ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
+    ...degradedReasons,
+  ];
   return {
     status: "installed",
     name: outcome.plugin,
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: outcome.dependencies,
-    ...(degradedReasons.length > 0 && { reasons: degradedReasons }),
+    ...(reasons.length > 0 && { reasons }),
     severity: degradedReasons.length > 0 ? "warning" : "info",
     needsReload: true,
   };

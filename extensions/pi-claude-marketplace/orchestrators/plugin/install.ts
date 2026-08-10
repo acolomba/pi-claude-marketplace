@@ -150,6 +150,7 @@ import {
   resolvePluginVersion,
   selectConfigWriteTarget,
   synthesizeAdoptedMarketplaceSource,
+  type LedgerDegradationSignals,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -219,24 +220,24 @@ interface EntityErrorRow {
  * remain (consumed by `orchestrators/import/execute.ts` for its
  * cascade-row composition) -- NFR-7's discriminated-outcome contract
  * is unchanged.
+ *
+ * IN-07 / D-98-01: the `installed` arm INTERSECTS the shared
+ * `LedgerDegradationSignals` shape rather than re-declaring the ledger's
+ * degradation fields. The enable branch's success outcome intersects the same
+ * shape, so a signal added to one row's vocabulary cannot be silently dropped
+ * from the other -- the asymmetry class becomes a compile error instead of a
+ * review finding. Each field is omitted when empty, so a clean install's
+ * outcome shape is unchanged (NREG-01).
  */
 export type InstallPluginOutcome =
-  | {
+  | ({
       readonly status: "installed";
       readonly resourcesChanged: boolean;
       readonly declaresAgents: boolean;
       readonly declaresMcp: boolean;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
-      /**
-       * WARN-01 / D-86-03: the component kinds that degraded on a
-       * frontmatter-parse failure (synthesized skill / neutralized command).
-       * The orchestrated reconcile composer reads this to push the
-       * `{malformed skill}` / `{malformed command}` token onto its installed
-       * row. Absent when nothing degraded.
-       */
-      readonly degradedKinds?: readonly DegradeKind[];
-    }
+    } & LedgerDegradationSignals)
   | {
       /**
        * Collapsed failure shape. All failure variants (`already-installed`,
@@ -1861,6 +1862,10 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     declaresAgents: installCtx.stagedAgentNames.length > 0,
     declaresMcp: installCtx.stagedMcpServerNames.length > 0,
     ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
+    // SURF-05 / D-63-08 / IN-07: the same orphan-rewake fact the standalone row
+    // above reports, carried on the outcome so the orchestrated reconcile
+    // projection can name it too. Omitted when false (NREG-01).
+    ...(installCtx.resolved.orphanRewake === true && { orphanRewake: true }),
     ...(degradedKinds.length > 0 && { degradedKinds }),
   };
 }

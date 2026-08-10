@@ -721,6 +721,81 @@ test("WARN-01 / NREG-01: a plugin-installed outcome with no degradedKinds is unc
   );
 });
 
+test("IN-07: a plugin-installed outcome carrying orphanRewake renders (installed) {orphan rewake} at info severity", () => {
+  // D-98-01: the install arm and the enable arm run the SAME ledger over the
+  // SAME bridges, so a fresh reconcile install of a plugin whose hook handler
+  // declares a rewake message without `asyncRewake` must name the same fact the
+  // re-enable arm already names. An orphan companion field is a config bug the
+  // ledger reports, not a shortfall in what was carried out, so it rides the
+  // brace without moving the severity channel.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    dependencies: [],
+    orphanRewake: true,
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "info");
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "orphan rewake",
+  ]);
+});
+
+test("IN-07: an installed row carrying BOTH orphanRewake and a malformed kind emits {orphan rewake, malformed skill} in that order at warning severity", () => {
+  // Emit order is contractual: the orphan-rewake token precedes the per-kind
+  // malformed tokens, so the brace stays byte-comparable with the standalone
+  // install row and with the sibling enable projection. Severity is decided by
+  // the malformed rule alone -- the orphan token moves no severity channel.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    dependencies: [],
+    orphanRewake: true,
+    degradedKinds: ["skill"],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "installed");
+  assert.equal(row.severity, "warning");
+  assert.deepEqual(row.status === "installed" ? [...(row.reasons ?? [])] : "absent", [
+    "orphan rewake",
+    "malformed skill",
+  ]);
+});
+
+test("IN-07 / NREG-01: an install outcome carrying no degradation signal projects the row shape unchanged", () => {
+  // The whole row is pinned by value: a signal-free install must gain no
+  // `reasons` key at all (an empty brace would be a byte change), keep `info`,
+  // and keep every other field it carries today.
+  const outcome: PerEntryOutcome = {
+    kind: "plugin-installed",
+    scope: "project",
+    marketplace: "mp",
+    plugin: "cr",
+    version: "1.0.0",
+    dependencies: [],
+  };
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.deepEqual(row, {
+    status: "installed",
+    name: "cr",
+    version: "1.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("dangling-reference mismatch (plugin attributed) -> child (failed) {dangling reference} plugin row (WR-03 / PURL-06)", () => {
   const plan: ReconcilePlan = {
     ...emptyPlan("project"),

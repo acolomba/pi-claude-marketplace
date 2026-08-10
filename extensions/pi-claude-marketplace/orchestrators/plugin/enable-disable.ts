@@ -80,11 +80,11 @@ import {
 } from "./shared.ts";
 
 import type { InstallFailureCapture } from "./install.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -101,42 +101,15 @@ export type EnableDisablePluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 /**
- * The degradation signals a re-enable's ledger run produces, carried together
- * on every enable-success outcome so the enable row can name the same facts the
- * `install` success row names for the SAME `runInstallLedger` invocation over
- * the SAME bridges. `install.ts` composes exactly these three off its
- * `installCtx`; an enable that carried none of them renders byte-identically to
- * before (NREG-01), because each field is omitted when empty.
+ * The degradation signals a re-enable's ledger run produces. An alias of the
+ * shared `LedgerDegradationSignals` shape, kept under the enable-side name its
+ * consumers already import (`reconcile/apply-outcomes.ts`, `reconcile/apply.ts`).
  *
- * Consumed by `freshEnableRow` (standalone verb) and `enabledRowFromOutcome`
- * (reconcile projection) -- the two row composers must agree, so they read one
- * shape rather than two hand-synchronized field lists.
+ * The shape itself lives in `./shared.ts` because `install.ts` intersects it
+ * too and this module imports `runInstallLedger` from `install.ts` -- declaring
+ * it here would close a module cycle (IN-07 / D-98-01).
  */
-export interface EnableDegradationSignals {
-  /**
-   * ENBL-07 / FSTAT-07 / D-66-04: the LIVE dropped-component kinds when the
-   * re-enable went through the partial gate (the resolver's
-   * `partially-available` arm). Non-empty selects the `(partially-installed)`
-   * row over `(installed)`, so the enable row agrees with the record the ledger
-   * just wrote -- and therefore with the `list` / `info` row rendered next.
-   */
-  readonly unsupported?: readonly string[];
-  /**
-   * SURF-05 / D-63-08: a hook handler declared `rewakeMessage` /
-   * `rewakeSummary` without `asyncRewake: true`. One `{orphan rewake}` token
-   * per plugin regardless of N orphan handlers, exactly as on the install row.
-   */
-  readonly orphanRewake?: boolean;
-  /**
-   * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
-   * be parsed and installed in degraded form. Each kind contributes one
-   * `{malformed skill}` / `{malformed command}` token AND raises the row from
-   * `info` to `warning` -- the same raise `install.ts::successSeverity` applies,
-   * because a degraded component is carried out but short of ideal whichever
-   * verb materialized it.
-   */
-  readonly degradedKinds?: readonly DegradeKind[];
-}
+export type EnableDegradationSignals = LedgerDegradationSignals;
 
 /**
  * RECON-03: discriminated outcome returned by `setPluginEnabled` in

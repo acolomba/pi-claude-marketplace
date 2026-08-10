@@ -95,6 +95,17 @@ export interface PluginInstalledOutcome extends PluginOutcomeBase {
    */
   readonly postCommitWarnings?: readonly string[];
   /**
+   * SURF-05 / D-63-08: the re-materialized `hooks/hooks.json` declared
+   * `rewakeMessage` / `rewakeSummary` on a handler WITHOUT `asyncRewake: true`.
+   * Propagated verbatim from `InstallPluginOutcome.orphanRewake`. The reconcile
+   * `plugin-installed` arm reads this to push one `orphan rewake` token onto
+   * the row -- one per plugin regardless of N orphan handlers, exactly as the
+   * sibling `plugin-enabled` arm already does for the same ledger run (IN-07).
+   * The token names a config bug; it moves no severity channel. Omitted when
+   * false so a clean install renders byte-identically (NREG-01).
+   */
+  readonly orphanRewake?: boolean;
+  /**
    * WARN-01 / CLASS-01 / D-86-03: the degraded-component kinds whose SOURCE
    * frontmatter could not be parsed by Pi's own `parseFrontmatter` but which
    * still installed in degraded form. Propagated verbatim from

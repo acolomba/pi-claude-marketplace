@@ -601,6 +601,11 @@ async function applyPluginInstalls(
             result.postCommitWarnings.length > 0 && {
               postCommitWarnings: result.postCommitWarnings,
             }),
+          // SURF-05 / D-63-08 / IN-07: propagate the orphan-rewake flag so the
+          // reconcile composer pushes the `orphan rewake` token onto the
+          // `(installed)` row, exactly as the enable arm below already does for
+          // the same ledger run. Omitted when false (NREG-01).
+          ...(result.orphanRewake === true && { orphanRewake: true }),
           // WARN-01 / D-86-03: propagate the degraded-component kinds so the
           // reconcile composer can raise the `(installed)` row to `warning`
           // and push the `malformed skill` / `malformed command` token.
