@@ -3,10 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
-current_phase_name: lifecycle-regression-and-contract-documentation
-status: verifying
-stopped_at: Completed 98-06-PLAN.md
-last_updated: "2026-08-10T04:59:44.093Z"
+status: completed
+stopped_at: Phase 98 complete — all v1.18 phases done, milestone ready to close
+last_updated: "2026-08-10T08:39:40.657Z"
 last_activity: 2026-08-10
 last_activity_desc: "Phase 98 plan 06 complete — DOC-08 closed: the catalog's variant enumerations, token table and glyph roster re-derived from the runtime constants, the PRD's manifest-failure row rewritten to the BOUND-01 output, the list decision flowchart redrawn around the ManifestLookup discriminant, and six source-comment sites re-anchored with no executable line changed. Full check green (CHECK_EXIT=0)"
 progress:
@@ -15,28 +14,28 @@ progress:
   total_plans: 17
   completed_plans: 17
   percent: 100
+current_phase_name: lifecycle-regression-and-contract-documentation
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-09 after Phase 97)
+See: .planning/PROJECT.md (updated 2026-08-10 after Phase 98)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Phase 98 — lifecycle-regression-and-contract-documentation
-The new read behavior and the disabled-state repair ship without mutation,
-persistence, network, or public-contract regressions; the output catalog,
-PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
+**Current focus:** Milestone v1.18 close — audit, complete, cleanup, then
+version bump + PR. All four phases (95-98) complete and verified.
 
 ## Current Position
 
-Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification. All six plans landed: the
+Phase: 98
+Plan: Not started
+Status: All phases complete — milestone v1.18 ready to close
+Phase 98 closed 2026-08-10 with all gates green. Six plans landed the
 four Phase-97 carriers (IN-07, WR-06, WR-02, WR-04), LIFE-04/05/06
 characterization coverage, the COMPAT-01 no-expansion contract gate, and the
 DOC-08 accuracy sweep. Plan 06 closed DOC-08 last, as sequenced, so the
@@ -44,13 +43,21 @@ documentation describes what the first five plans actually shipped: all ten
 named defects corrected in place (none by deletion), the three additional
 falsified PRD statements folded in, the section 5.3.1 flowchart REDRAWN to
 the ManifestLookup decision path per D-98-07, and three further falsified
-comments found and fixed at adjacent sites in `notify.ts`. Phase gate green
-(CHECK_EXIT=0: typecheck, lint, format, 3366 unit + 18 integration tests, 0
-fail). Three documentation-only deferrals recorded in 98-06-SUMMARY.md: the
-autoupdate cascade skip row has no catalog state (adding one is a catalog
-amendment this plan excluded), the catalog's description-bearing variant
-count is stale in an untouched section, and `RLD-04`/`D-08` survive at six
-source sites outside the plan's `tools.ts` scope.
+comments found and fixed at adjacent sites in `notify.ts`. The
+three-iteration review fix loop finished all_fixed (14 findings: 13 fixed, 1
+carried): the CR-01 stale-gate trailer now names a working remedy, the WR-01
+narrowing made consent-free degradation of a clean disabled record
+impossible, the WR-02 refresh row stopped claiming `{up-to-date}`, the
+reinstall row composes its degradation reasons through one shared composer,
+the COMPAT-01 gate's glyph clause and the source-scan helper both fail loud,
+and the `Omit` drift channel got a compile-time completeness pin. The
+WR-12 update-verb degradation gap is a backlog carrier
+(2026-08-10-update-verb-drops-degradation-signals.md). Verification passed
+5/5 roadmap criteria and 9/9 requirement IDs with independently re-run
+suites; nyquist-compliant; threats_open 0. Final gate green (3386 unit + 18
+integration, 0 fail). Three documentation-only deferrals recorded in
+98-06-SUMMARY.md (autoupdate-cascade catalog state, stale variant count in
+an untouched section, residual `RLD-04`/`D-08` anchors outside scope).
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -73,7 +80,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-09 — Phase 98 plan 02 complete: LIFE-04 pinned by six per-kind uninstall cases on a manifest-absent record; seedFullPlugin extended with the missing hooks kind and the mcp case proves removal is scoped to the keys the record owns
+Last activity: 2026-08-10 — Phase 98 complete
 
 ## Roadmap Summary
 
@@ -113,9 +120,15 @@ Last activity: 2026-08-09 — Phase 98 plan 02 complete: LIFE-04 pinned by six p
   update arm.
 
 - **Phase 98 — Lifecycle regression and contract documentation** (LIFE-04..06,
-  COMPAT-01, DOC-08): no lifecycle production changes expected — pin
-  uninstall/update/autoupdate non-regression, assert no persistence/token/network
-  expansion, and reconcile the output catalog, PRD, and design doc.
+  COMPAT-01, DOC-08 + the four folded Phase-97 carriers): COMPLETE 2026-08-10.
+  Landed IN-07/WR-06/WR-02/WR-04 as code (shared `LedgerDegradationSignals`,
+  soft-dep markers and remediation trailer on enable, disabled records
+  reachable by update without `--partial` under a consent-preserving gate),
+  pinned uninstall per-kind / update three-path / autoupdate non-regression,
+  authored the COMPAT-01 enumeration-equality gate (mutation-proven), and
+  reconciled the catalog, PRD (flowchart redrawn), and source comments. The
+  review loop additionally repaired the reinstall row's dropped degradation
+  reasons and hardened both scanning gates to fail loud.
 
 ## Milestone Context
 
@@ -268,15 +281,15 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Discuss, plan, and execute Phase 98. It carries the notify.ts/tools.ts
-  stale-comment reconciliation todo (DOC-08), the D-96-01 divergence
-  documentation, and the Phase 97 review-loop carriers in
-  `.planning/todos/pending/` (WR-02/WR-04/WR-06 enable-surface warnings and
-  the IN-07 install-arm orphan-rewake asymmetry, all `resolves_phase: 98`).
+- Milestone lifecycle: audit v1.18, complete, cleanup. Run runtime UAT
+  before archiving; skip the git tag at milestone close (tags track npm
+  releases, not GSD milestones). All four phases are complete and verified;
+  the five phase-98 carrier todos are closed; three backlog todos remain
+  pending (rare-failure-arms sweep, stale-resolvedSource-on-unchanged-version,
+  update-verb-drops-degradation-signals) for the next milestone's discuss.
 
-- After Phase 98: milestone lifecycle — audit, complete v1.18, cleanup. Run
-  runtime UAT before archiving; skip the git tag at milestone close (tags
-  track npm releases).
+- After close: version bump + PR per CLAUDE.md (package.json,
+  sonar-project.properties, package-lock.json, CHANGELOG.md).
 
 ## Performance Metrics
 
@@ -303,6 +316,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-10T04:59:33.836Z
-**Stopped at:** Completed 98-06-PLAN.md
+**Last session:** 2026-08-10T08:45:00.000Z
+**Stopped at:** Phase 98 complete — all v1.18 phases done, milestone lifecycle next
 **Resume file:** None
