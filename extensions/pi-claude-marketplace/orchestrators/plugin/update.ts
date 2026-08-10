@@ -140,7 +140,7 @@ import {
   resolveInstalledPluginTarget,
   resolvePluginVersion,
 } from "./shared.ts";
-import { outcomeDependencies, updatedRowFromOutcome } from "./update-row.ts";
+import { updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -2245,34 +2245,21 @@ function outcomeToCascadePluginMessage(
   );
   switch (outcome.partition) {
     case "updated":
-      // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
-      // `partially-available` degraded it -- report `(partially-installed)` with the
-      // dropped-component detail instead of `(updated)`. This reads the LIVE
-      // candidate resolution of the just-completed update -- NOT the persisted
-      // `compatibility.unsupported` record the `list` / non-path `info`
-      // derivers read; they agree here only because the update just wrote that
-      // record. A clean candidate keeps `(updated)` (FSTAT-03 -- no lingering
-      // partial state). partially-installed is a realized transition
-      // (TRANSITION_STATUS_LIST), so it stamps the same info-severity + reload
-      // as the updated row. WR-03: thread `dependencies` (the same
-      // declared-kinds gate the `(updated)` row uses) so the soft-dep
-      // `{requires pi-subagents}` / `{requires pi-mcp}` markers fire on a
-      // degraded update exactly as on a clean one.
-      if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
-        return {
-          status: "partially-installed",
-          name: outcome.name,
-          scope: target.scope,
-          version: outcome.toVersion,
-          dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
-          reasons: narrowUnsupportedKinds(outcome.partialDegrade.kinds),
-          // SEV-01: info, raised to warning on a missing declared companion.
-          severity: successSeverity,
-          needsReload: true,
-        };
-      }
-
-      return updatedRowFromOutcome(outcome, target.scope, successSeverity);
+      // CR-01: BOTH row forms of this partition -- the clean `(updated)` row and
+      // the FSTAT-07 / D-66-04 dropped-kind `(partially-installed)` row -- are
+      // composed by the shared composer. A mapper that picked the partial form
+      // itself short-circuited past the composer, so the malformed-component
+      // axis WR-12 threaded onto the clean row silently vanished on a
+      // `--partial` update that also degraded a component.
+      //
+      // SEV-01: this surface stamps info raised to warning on a missing declared
+      // companion, on both forms -- an explicit `--partial` opt-in does not
+      // raise on the drop itself (the autoupdate surface, where the user did not
+      // opt in, is the one that raises for that; SEV-03 / D-69-01).
+      return updatedRowFromOutcome(outcome, target.scope, {
+        updated: successSeverity,
+        partiallyInstalled: successSeverity,
+      });
     case "unchanged":
       // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
       // unchanged renders as `(skipped) {up-to-date}`.

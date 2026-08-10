@@ -5628,6 +5628,64 @@ test("WR-12: an update that degrades BOTH kinds emits both reasons in the canoni
   });
 });
 
+test("CR-01: a --partial update that drops a kind AND degrades a component names BOTH axes on one row", async () => {
+  // The two axes are independent and the row its own axis owns names each of
+  // them. The dropped kind picks the row FORM; the malformed component adds its
+  // token to the same brace and carries the info -> warning raise. Before the
+  // composer owned both forms, the cascade mapper picked `partially-installed`
+  // itself and returned before the malformed axis was ever read, so this row
+  // named the dropped kind alone at info severity -- contradicting the record
+  // `list` renders one command later, which is the contradiction WR-12 exists
+  // to close.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-cr01-both-axes-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      // Dropped-kind axis: the candidate re-resolves `partially-available`.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+      // Malformed axis: the SUPPORTED skill still materializes, in synthesized
+      // form, because its frontmatter will not parse.
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", "skills", "tool", "SKILL.md"),
+        UNPARSEABLE_FRONTMATTER,
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◉ hello v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      // The malformed raise reaches the Pi API severity argument. The drop alone
+      // stays info on this surface (the `--partial` opt-in is explicit), so a
+      // warning here can only have come from the malformed axis.
+      assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("NREG-01: a clean update row is byte-identical to before -- no brace, no raise", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-clean-"));

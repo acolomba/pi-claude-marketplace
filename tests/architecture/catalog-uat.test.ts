@@ -1894,6 +1894,40 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // CR-01 / WARN-01 / FSTAT-07: the dropped-kind and malformed-component axes
+    // firing on one ledger run. The drop picks the row FORM
+    // (`partially-installed`, post-update version, no arrow); the malformed
+    // component adds its token to the same brace, in the install row's emit
+    // order (malformed first). Both cascade surfaces compose this through the
+    // one `updatedRowFromOutcome` seam, so neither can name one axis and
+    // swallow the other.
+    "update-degraded-and-dropped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-installed",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                scope: "user",
+                version: "1.0.1",
+                dependencies: [],
+                reasons: ["malformed skill", "unsupported component"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // SEV-04 / D-69-02 / XSURF-03: a TARGETED `update <plugin>@<marketplace>`
     // that declines a partially-upgradable candidate (no `--partial`) is actionable
     // -> warning. The decline flips to the `partially-upgradable` token (consistent

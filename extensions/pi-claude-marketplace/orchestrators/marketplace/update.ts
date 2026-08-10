@@ -115,7 +115,6 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { NO_PROVIDER_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
@@ -718,16 +717,6 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
   // fails at compile time.
   switch (outcome.partition) {
     case "updated": {
-      // CMC-13: declared kinds drive the per-row soft-dep marker (MSG-SD-3).
-      // The renderer narrows on `dependencies` membership ("agents" / "mcp") +
-      // the notify-time probe; we forward the boolean flags as the conventional
-      // Dependency[] representation. Shared by the `(updated)` and the degraded
-      // `(partially-installed)` arms (WR-03: a partially-installed row carries
-      // dependencies exactly like a clean update row).
-      const dependencies = [
-        ...(outcome.declaresAgents ? (["agents"] as const) : []),
-        ...(outcome.declaresMcp ? (["mcp"] as const) : []),
-      ];
       // SEV-01 / WR-01: the missing-soft-dep-companion `warning` stamp is
       // deliberately NOT applied on this autoupdate cascade surface. SEV-01
       // targets the interactive install / manual-update success arms, where the
@@ -752,24 +741,17 @@ function outcomeToCascadePluginMessage(outcome: PluginUpdateOutcome, scope: Scop
       // plugin that was ALREADY partially-installed (prior `partially-available` non-empty)
       // is benign -> `info`. The manual `update --partial` opt-in stays info on its
       // own renderer; the warning fires ONLY on this autoupdate surface.
-      if (outcome.partialDegrade !== undefined && outcome.partialDegrade.kinds.length > 0) {
-        return {
-          status: "partially-installed",
-          name: outcome.name,
-          scope,
-          version: outcome.toVersion,
-          dependencies,
-          reasons: narrowUnsupportedKinds(outcome.partialDegrade.kinds),
-          severity: outcome.partialDegrade.newlyDegraded ? "warning" : "info",
-          needsReload: true,
-        };
-      }
-
-      // WR-12: composed by the SAME composer the manual update cascade calls, so
-      // the two surfaces cannot report one ledger run differently. The `info`
-      // base severity is this surface's own WR-01 policy (above); the composer
+      // WR-12 / CR-01: BOTH row forms are composed by the SAME composer the
+      // manual update cascade calls, so the two surfaces cannot report one
+      // ledger run differently -- and no mapper can pick a form itself and
+      // short-circuit past a signal the composer threads. The base severities
+      // below are this surface's own policy (WR-01 silence on the clean row,
+      // the SEV-03 newly-degraded raise on the dropped-kind row); the composer
       // applies only the orthogonal WARN-01 malformed-component raise on top.
-      return updatedRowFromOutcome(outcome, scope, "info");
+      return updatedRowFromOutcome(outcome, scope, {
+        updated: "info",
+        partiallyInstalled: outcome.partialDegrade?.newlyDegraded === true ? "warning" : "info",
+      });
     }
 
     case "unchanged":

@@ -14,63 +14,115 @@
 // that cycle whatever either ledger grows into next.
 
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { PluginUpdatedMessage } from "../../shared/notify.ts";
+import type { PluginPartiallyInstalledMessage, PluginUpdatedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateUpdatedOutcome } from "../types.ts";
 
 /**
- * Compose the success row for one updated plugin. The SOLE composer for that
- * row: the manual update cascade and the marketplace autoupdate cascade both
- * call it, so the two surfaces cannot report the same ledger run differently
- * (the WR-09 lesson, one verb over).
+ * The caller's own success-severity policy for the `updated` partition, one
+ * entry per row form the partition can take. The two cascade surfaces set them
+ * differently and deliberately, so the composer takes the policy rather than
+ * deriving it:
  *
- * WARN-01 / WR-12 / D-99-03: a component this ledger degraded names its kind and
- * takes the info -> warning raise, exactly as on the install, enable and
- * reinstall arms. A clean update composes no reasons and keeps the caller's
- * severity, so its row is byte-identical to before (NREG-01).
+ *  - the manual update cascade raises the clean row on an absent declared
+ *    companion (SEV-01) and applies that same stamp to the dropped-kind row,
+ *    because a `--partial` degrade is an explicit opt-in (it never raises on
+ *    the drop itself);
+ *  - the autoupdate cascade stays `info` for an absent companion (WR-01 -- a
+ *    background operation must not warn about a companion the user is not
+ *    present to install) but DOES raise the dropped-kind row when the degrade
+ *    is new (SEV-03 / D-69-01).
+ */
+export interface UpdatedRowSeverity {
+  /** Base for the clean `(updated)` row. */
+  readonly updated: "info" | "warning";
+  /** Base for the dropped-kind `(partially-installed)` row. */
+  readonly partiallyInstalled: "info" | "warning";
+}
+
+/**
+ * Compose the success row for one updated plugin, in whichever form the
+ * outcome's signals select. The SOLE composer for that partition: the manual
+ * update cascade and the marketplace autoupdate cascade both call it, so the
+ * two surfaces cannot report the same ledger run differently (the WR-09 lesson,
+ * one verb over), and BOTH row forms are composed here so a signal cannot be
+ * threaded onto one form while a caller short-circuits past it on the other
+ * (CR-01).
  *
- * `baseSeverity` is the caller's own success-severity policy, which the two
- * surfaces set differently and deliberately: the manual cascade raises on an
- * absent declared companion (SEV-01), while the autoupdate cascade stays `info`
- * for that condition (WR-01 -- a background operation must not warn about a
- * companion the user is not present to install). The malformed-component raise
- * is a SEPARATE axis and applies on both, because a degraded component is
- * carried out but short of ideal whichever surface reports it.
+ * The partition carries two INDEPENDENT degradation axes and the row names
+ * whichever are present:
+ *
+ *  - FSTAT-07 / D-66-04, the DROPPED-kind axis: a `--partial` update whose
+ *    candidate re-resolved `partially-available` dropped the unsupported kinds,
+ *    so the row reports `(partially-installed)` with the dropped-component
+ *    detail instead of `(updated)`. This reads the LIVE candidate resolution of
+ *    the just-completed update -- NOT the persisted `compatibility.unsupported`
+ *    the `list` / non-path `info` derivers read; they agree here only because
+ *    the update just wrote that record. A clean candidate keeps `(updated)`
+ *    (FSTAT-03 -- no lingering partial state).
+ *  - WARN-01 / WR-12 / D-99-03, the MALFORMED-component axis: a component whose
+ *    source frontmatter would not parse is WRITTEN in degraded form, not
+ *    dropped, so it names its kind and takes the info -> warning raise exactly
+ *    as on the install, enable and reinstall arms.
+ *
+ * An update can do both at once, and the row then carries both braces' tokens
+ * in the install row's established emit order (malformed kinds first, then the
+ * dropped kinds -- `docs/output-catalog.md`, `enable-orphan-rewake`). A clean
+ * update composes no reasons and keeps the caller's severity, so its row is
+ * byte-identical to before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers; the
- * renderer narrows on membership plus the notify-time probe.
+ * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers on BOTH
+ * forms (WR-03); the renderer narrows on membership plus the notify-time probe.
  *
- * D-03/D-06: a realized update transition always reloads Pi resources.
+ * D-03/D-06: a realized update transition always reloads Pi resources, and
+ * `partially-installed` is a realized transition too.
  */
 export function updatedRowFromOutcome(
   outcome: PluginUpdateUpdatedOutcome,
   rowScope: Scope,
-  baseSeverity: "info" | "warning",
-): PluginUpdatedMessage {
+  baseSeverity: UpdatedRowSeverity,
+): PluginUpdatedMessage | PluginPartiallyInstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  const dependencies = outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp);
+  const dropped = outcome.partialDegrade;
+  if (dropped !== undefined && dropped.kinds.length > 0) {
+    return {
+      status: "partially-installed",
+      name: outcome.name,
+      scope: rowScope,
+      version: outcome.toVersion,
+      dependencies,
+      reasons: [...malformed, ...narrowUnsupportedKinds(dropped.kinds)],
+      severity: malformed.length > 0 ? "warning" : baseSeverity.partiallyInstalled,
+      needsReload: true,
+    };
+  }
+
   return {
     status: "updated",
     name: outcome.name,
     scope: rowScope,
     from: outcome.fromVersion,
     to: outcome.toVersion,
-    dependencies: outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp),
+    dependencies,
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
     ...(malformed.length > 0 && { reasons: malformed }),
-    severity: malformed.length > 0 ? "warning" : baseSeverity,
+    severity: malformed.length > 0 ? "warning" : baseSeverity.updated,
     needsReload: true,
   };
 }
 
-/** Derive the v2 Dependency[] tuple from the outcome's declared kinds. */
-export function outcomeDependencies(
-  declaresAgents: boolean,
-  declaresMcp: boolean,
-): readonly Dependency[] {
+/**
+ * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
+ * private: both row forms take it from the one composer above, so no caller can
+ * hand-derive a third spelling of the same tuple (IN-05).
+ */
+function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
     ...(declaresMcp ? (["mcp"] as const) : []),

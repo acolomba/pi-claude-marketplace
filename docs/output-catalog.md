@@ -969,9 +969,26 @@ A plugin operation needs attention.
 
 An update drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(updated)` -- the transition happened, and the component is updated-but-short -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable, reinstall and backfill rows use. A plugin that degrades both kinds renders one brace in that seam's canonical order: `{malformed skill, malformed command}`.
 
-This is the MALFORMED-component axis, not the dropped-kind axis. A kind the resolver cannot support at all is DROPPED, and a `--partial` update reports that with the `(partially-installed)` row and its dropped-component brace. A malformed component is written, not dropped, so it stays on the `(updated)` row. The two axes are independent: an update can drop one kind and degrade another, and each names itself on the row its own axis owns.
+This is the MALFORMED-component axis, not the dropped-kind axis. A kind the resolver cannot support at all is DROPPED, and a `--partial` update reports that with the `(partially-installed)` row and its dropped-component brace. A malformed component is written, not dropped, so it stays on the `(updated)` row. The two axes are independent: an update can drop one kind and degrade another, and each names itself on the row its own axis owns -- see the combined state below.
 
 Severity `warning` with the summary line, the same raise the install, enable and reinstall surfaces take for the same class of degrade: this one the update's own ledger just produced. The raise applies on BOTH surfaces that render this row -- the manual update cascade and the marketplace autoupdate cascade -- because a degraded component is short of ideal whichever surface reports it. It is orthogonal to each surface's own success-severity policy, so the autoupdate cascade's deliberate silence about an absent companion (WR-01) is unaffected. The trailing tally is unchanged: the count is taken by PARTITION, so a degraded update is still one update. A clean update renders the brace-less rows above unchanged.
+
+### Update that both drops a kind and degrades a component (CR-01 / WARN-01 / FSTAT-07)
+
+<!-- catalog-state: update-degraded-and-dropped -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ◉ alpha v1.0.1 (partially-installed) {malformed skill, unsupported component}
+
+/reload to pick up changes
+```
+
+The two axes above firing on one ledger run. The DROPPED kind picks the row form -- `(partially-installed)` with the `◉` glyph, carrying the post-update version rather than the arrow, exactly as the dropped-kind state does on its own -- and the MALFORMED component adds its own token to the same brace. Both tokens ride ONE brace in the install row's established emit order (malformed kinds first, then the dropped kinds; see `enable-orphan-rewake`), because a reader scanning a column of rows should meet the same token in the same position on every surface.
+
+Both cascade surfaces compose this row through the one `updatedRowFromOutcome` seam, so neither can name one axis and swallow the other. The malformed raise applies here as it does on the `(updated)` row: severity `warning` with the summary line, whatever the surface's own base policy for the dropped kind was (the manual `--partial` opt-in stays `info` for the drop alone; the autoupdate cascade raises a NEWLY-degrading drop on its own). The reload-hint fires -- `partially-installed` is a realized transition. Dropping a kind with no malformed component renders `autoupdate-partially-installed-already-degraded` unchanged.
 
 ### Partially-upgradable decline, targeted update (SEV-04 / D-69-02)
 

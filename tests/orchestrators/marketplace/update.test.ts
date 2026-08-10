@@ -1628,6 +1628,35 @@ test("SEV-03 / D-69-01: an ALREADY-degraded force outcome (newlyDegraded=false) 
   assert.equal(msg.severity, "info");
 });
 
+test("CR-01: an autoupdate outcome that drops a kind AND degrades a component names both axes and raises", () => {
+  // The autoupdate cascade reaches the dropped-kind row with NO user flag
+  // (`updateSinglePlugin` sets `partial: true` unconditionally), so this is the
+  // path where a swallowed malformed axis is least visible. `newlyDegraded` is
+  // false, which pins the SEV-03 base severity at info -- a warning here can
+  // only have come from the malformed axis, not from the drop.
+  const outcome: PluginUpdateOutcome = {
+    partition: "updated",
+    name: "degraded-plugin",
+    fromVersion: "0.9.0",
+    toVersion: "1.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    degradedKinds: ["skill"],
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+  };
+  const msg = __test_outcomeToCascadePluginMessage(outcome, "user");
+  assert.equal(msg.status, "partially-installed");
+  if (msg.status !== "partially-installed") {
+    throw new Error("unreachable: narrowed above");
+  }
+
+  // Emit order is the install row's: malformed kinds first, then dropped kinds.
+  assert.deepEqual(msg.reasons, ["malformed skill", "lsp"]);
+  assert.equal(msg.severity, "warning");
+});
+
 test("SEV-03: a clean updated outcome (no unsupportedKinds) still renders (updated), not force-installed", () => {
   const outcome: PluginUpdateOutcome = {
     partition: "updated",
