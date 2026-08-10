@@ -456,9 +456,9 @@ export function notifyStopHookOverrideCap(ctx: ExtensionContext, pluginId: strin
  * renderer emits the discriminator literal directly into the `(<status>)`
  * brace slot.
  *
- * RLD-04 / D-08: the list-only inventory row uses `"installed"` with
- * `needsReload: false` (the list surface's reload-suppression is carried by the
- * stamped `needsReload` flag, not by a separate status token). The four
+ * The list-only inventory row uses `"installed"` with `needsReload: false`
+ * (the list surface's reload-suppression is carried by the stamped
+ * `needsReload` flag, not by a separate status token). The four
  * `"will *"` entries are the DIFF-02 pending-tense tokens; the
  * trailing `"disabled"` entry is the D-54-01 / ENBL-04 token. Per RLD-02 the
  * `/reload to pick up changes` trailer is driven by the OR-reduce of the
@@ -3748,7 +3748,7 @@ function composePluginLinesWith(
 ): string[] {
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
-  // PL-4 (RLD-04 / D-08): the list inventory rows (`installed` / `upgradable`
+  // PL-4: the list inventory rows (`installed` / `upgradable`
   // / `available` / `remote` / `unavailable` / `partially-available` /
   // `disabled` / `partially-installed` / `partially-upgradable`) carry the
   // manifest description; cascade `installed` rows never set `description`, so

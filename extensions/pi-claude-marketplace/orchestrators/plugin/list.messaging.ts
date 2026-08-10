@@ -34,11 +34,10 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
  * and is CALLED here, never duplicated.
  *
- * RLD-04 / D-08: the list surface's steady-state inventory row uses the
- * `installed` status with `needsReload: false` -- the stamped flag carries the
- * reload-suppression (the OR-reduce reload-hint, RLD-02, never fires on a
- * steady-state list). The former `present` token has been collapsed into
- * `installed`.
+ * The list surface's steady-state inventory row uses the `installed` status
+ * with `needsReload: false` -- the stamped flag carries the reload-suppression
+ * (the OR-reduce reload-hint, RLD-02, never fires on a steady-state list). The
+ * former `present` token has been collapsed into `installed`.
  */
 
 /**
