@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: lifecycle-regression-and-contract-documentation
 status: executing
-stopped_at: Completed 98-01-PLAN.md
-last_updated: "2026-08-10T02:49:18.021Z"
+stopped_at: Completed 98-02-PLAN.md
+last_updated: "2026-08-10T03:12:00.000Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
+last_activity_desc: Phase 98 plan 02 complete — LIFE-04 pinned with six per-kind uninstall cases on a manifest-absent record; the seed factory now covers all five resource kinds (hooks was missing) and the mcp case proves ownership-scoped removal
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 12
-  percent: 71
+  completed_plans: 13
+  percent: 76
 ---
 
 # Project State
@@ -35,8 +35,8 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 ## Current Position
 
 Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
-Plan: 2 of 6
-Status: Executing Phase 98 — plan 01 complete (IN-07 and WR-06 carriers landed)
+Plan: 3 of 6
+Status: Executing Phase 98 — plans 01-02 complete (IN-07 and WR-06 carriers landed; LIFE-04 pinned)
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -59,7 +59,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-09 — Phase 98 plan 01 complete: IN-07 orphan-rewake threading and WR-06 enable soft-dep markers landed on one shared ledger-signal shape; two catalog states added, no closed set gained a member
+Last activity: 2026-08-09 — Phase 98 plan 02 complete: LIFE-04 pinned by six per-kind uninstall cases on a manifest-absent record; seedFullPlugin extended with the missing hooks kind and the mcp case proves removal is scoped to the keys the record owns
 
 ## Roadmap Summary
 
@@ -183,6 +183,9 @@ two integration checks.
 - [Phase 97 fix loop]: The disabled-state drift gate walks the whole extension tree instead of a definition-site allowlist, making the state-io "SOLE predicate" claim structurally true
 - [Phase 98]: IN-07/WR-06 carriers share one LedgerDegradationSignals shape in orchestrators/plugin/shared.ts — install.ts and enable-disable.ts both intersect it, so the next signal asymmetry is a compile error (the reverse import direction would close a module cycle)
 - [Phase 98]: The reconcile enable projection keeps the malformed-only severity rule: its enable arm now agrees with its install arm, which never applied the companion raise; the standalone enable verb owns the SEV-01 composition. Marker is the shared fact, severity stance is per surface.
+- [Phase 98]: LIFE-04 coverage asserts one resource kind per case (D-98-12) so a single bridge-arm regression turns exactly one case red; the shared (uninstalled) row constant makes "the kind mix does not move the row" structural rather than six coincidences
+- [Phase 98]: An ownership-scoped removal is proven by seeding a differently-owned neighbour and asserting it survives — asserting only the owned key's absence would pass under a document-clobbering rewrite
+- [Phase 98]: The manifest-absent property of every uninstall fixture is now asserted explicitly before each call rather than left incidental, so a future fixture that starts writing a marketplace.json fails loudly instead of silently weakening the coverage
 
 ### Open decisions
 
@@ -268,9 +271,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 97 P04 | 30min | 2 tasks | 3 files |
 | Phase 97 P05 | 25min | 2 tasks | 2 files |
 | Phase 98 P01 | 50 | 3 tasks | 10 files |
+| Phase 98 P02 | 20min | 3 tasks | 1 file |
 
 ## Session
 
-**Last session:** 2026-08-10T02:49:17.983Z
-**Stopped at:** Completed 98-01-PLAN.md
+**Last session:** 2026-08-10T03:12:00.000Z
+**Stopped at:** Completed 98-02-PLAN.md
 **Resume file:** None
