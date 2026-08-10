@@ -333,7 +333,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 99-05-PLAN.md — Export the manifest-membership discriminant from `domain/` and rewire list, info and update onto it, behind a drift gate (D-99-02a)
+- [x] 99-05-PLAN.md — Export the manifest-membership discriminant from `domain/` and rewire list, info and update onto it, behind a drift gate (D-99-02a)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 

@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-04-PLAN.md
-last_updated: "2026-08-10T16:05:00.000Z"
+stopped_at: Completed 99-05-PLAN.md
+last_updated: "2026-08-10T16:52:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 21
-  percent: 88
-last_activity_desc: "Phase 99 plan 04 complete — WR-12 / D-99-03 closed: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+  completed_plans: 22
+  percent: 92
+last_activity_desc: "Phase 99 plan 05 complete — D-99-02a closed, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -34,8 +34,41 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 4 of 7 complete (waves 1-2 done; next is 99-05, wave 3)
+Plan: 5 of 7 complete (waves 1-3 done; next is 99-06, wave 4)
 Status: Executing
+Plan 99-05 closed D-99-02a, which the milestone audit's integration checker
+called the largest remaining warning. The membership rule — exact string
+identity on the manifest's plugin names, no case folding, no Unicode
+normalization — was written three times and guarded on a successful read in
+only one of them. It now lives once in `domain/manifest-lookup.ts`, which
+exports `ManifestLookup` (three arms) and `lookupDeclaredPlugin`. The
+derivation's return type is deliberately narrowed to `declared | absent`, so it
+CANNOT express what a failed read means; each surface keeps deciding that for
+itself, preserving the asymmetry that is contract rather than duplication
+(BOUND-03 / D-95-05): list keeps its soft-read wrapper and `unverified` arm,
+info catches and returns a `(failed)` row, update lets it throw.
+
+`tests/architecture/manifest-lookup-drift.test.ts` walks the whole extension
+tree with three non-global patterns (arrow-expression, block-body, and
+destructured `({ name }) =>`), exempting the domain module plus five sites that
+each state what they look the value up FOR (install, reinstall, reconcile
+pending, reconcile apply, edge-deps). A staleness clause asserts every
+allowlist entry still matches, so an exemption cannot outlive its site, and the
+presence half asserts all three surfaces import the derivation.
+
+Behaviour-preserving as required: NO existing test assertion was edited. List
+stayed at 90/90 identical to its pre-edit baseline and the info/update/
+catalog-uat set at 192/192. One deviation: `loadCachedMarketplaceManifest`
+returns a `readonly` plugins array, which is not assignable to
+`MarketplaceManifest["plugins"]` (TS2345), so the derivation's parameter is the
+collection structurally — `{ readonly plugins: readonly ManifestPluginEntry[] }`
+— which is also all the rule reads; the `declared` arm's entry type is
+unchanged. Task 3 carried `tdd="true"` but gated code tasks 1-2 had already
+made correct, so rather than deliberately breaking production code for a RED
+commit, the obligation was met by running the gate's patterns over `info.ts`
+and `update.ts` at `cb3bd8d3` (pre-rewire, both flag) plus six planted twins
+and three over-reach controls. Gate green: 3398 unit + 18 integration, 0 fail.
+
 Plan 99-04 closed WR-12 / D-99-03, the update-verb degradation gap. The signal
 the skills and commands bridges already return is now collected at the
 success-outcome site, carried on the updated outcome, and rendered — so a
