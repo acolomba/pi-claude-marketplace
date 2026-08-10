@@ -13,7 +13,8 @@
 
 - Both projects install Claude Code plugins into Pi, and each makes the opposite trade. They support three component kinds and install a plugin whole. We support five kinds, allow partial installs, and degrade when a soft dependency is absent.
 - Their depth is in trust, network hardening, plugin user configuration, and an interactive terminal manager. We have none of these.
-- Our depth is in component coverage, hook fidelity, offline guarantees, and migration away from Claude Code. They have none of these.
+- Our depth is in component coverage, enforced offline guarantees, and migration away from Claude Code. They attempt all three and stop short of each: three component kinds against our five, an offline promise that no gate enforces, and adoption that reads marketplace declarations but never the installed plugin set.
+- Hooks are the one axis where neither side leads outright. We activate ten Claude events and run an async-rewake lane they leave dormant. They intercept subagent lifecycle events we do not support, and they run eight handlers at once where we run one.
 - They translate no slash commands and no Claude agents. Both are explicit non-goals for them. Both work for us.
 - They are the larger tree: 79,579 lines over 417 TypeScript files against our 57,552 lines over 202 files. Their Node floor is `>=24` because they use `node:sqlite`. Ours is `>=20.19.0`.
 - The two positions differ more than the two feature sets do. They sell a native Pi plugin system that also reads Claude and Codex formats. We sell access to the Claude plugin ecosystem from Pi. Their frame lets them call a missing Claude feature a foreign non-goal rather than a gap.
@@ -432,7 +433,7 @@ Our Node floor is `>=20.19.0` and theirs is `>=24`, because they use `node:sqlit
 
 We register exactly two tools (`edge/handlers/tools.ts`), and mutating tools are explicitly out of scope. `pi_claude_marketplace_list` takes no parameters and returns one line per marketplace in the form `[<scope>] <name> -- <N> plugin(s) -- <source.logical>`, plus a structured `details.marketplaces` field. `pi_claude_marketplace_plugin_list` takes optional `marketplace`, `scope`, `installed`, `available`, and `unavailable` parameters, and returns rendered lines plus `details.plugins[]`. It flattens our rich status set into three buckets. The values `upgradable`, `partially-installed`, and `partially-upgradable` become `installed`. The value `remote` becomes `available`. The values `partially-available` and `disabled` become `unavailable`. Tools never call `ctx.ui.notify` and return an `AgentToolResult`. Whether they expose equivalent LLM-callable tools is UNVERIFIED.
 
-### Their declared limitations
+## Their declared limitations
 
 These are their own self-documented limitations at this commit, not our findings:
 
@@ -502,6 +503,8 @@ Two of the five component kinds are missing by design. No slash commands, no Cla
 Plugin user configuration stops at the first secret. Their secret store returns unavailable on every platform, and the tree holds no Keychain, libsecret, or Windows Credential Manager code. Trust cannot be revoked through the product either. The primitive is exported, and nothing calls it.
 
 The problem most likely to bite a user is the reliability one. Four consecutive releases walked back over-aggressive fail-closed platform guards, and their own author calls the third of them "the third round of the same anti-pattern in this adapter." The Node `>=24` floor follows from `node:sqlite` and shuts out a large installed base. Their documentation disagrees with their code in four places, including a terminal manager described with five sections that the code no longer has. And nobody has yet starred, forked, or filed an issue against the repository.
+
+The section "Their declared limitations" above carries the fuller list, in their own words rather than ours.
 
 ### Our strengths
 
@@ -623,7 +626,7 @@ One more caution about their documentation. Four drifts between their documentat
 
 ## Prioritized recommendations
 
-The size column repeats the sizing that the research gives. Where the research states no size, the cell reads "Not stated."
+The size column carries the estimate made during the source review. Where that review reached no estimate, the cell reads "Not stated."
 
 | #   | Recommendation                                                 | Why this rank                                                                                                                                                                                | Size            | Reuses on our side                                                                           |
 | --- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------- |
