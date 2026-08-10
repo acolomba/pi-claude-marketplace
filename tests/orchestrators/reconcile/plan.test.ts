@@ -1016,6 +1016,26 @@ test("ENBL-05: the drift gate flags the destructured, bracket-access and Boolean
   }
 });
 
+test("ENBL-05: every widened pattern reaches the source walk, and no pattern is global (D-99-02b)", () => {
+  // A pattern proven against its twin literal but left out of the array is a
+  // gate that passes its own self-test while seeing nothing. Membership is the
+  // link between the proof above and the walk that consumes it.
+  for (const twin of ESCAPING_TWIN_SPELLINGS) {
+    assert.ok(
+      INLINE_REDERIVATIONS.includes(twin.pattern),
+      `ENBL-05: the ${twin.label} pattern is proven but never reaches the source walk`,
+    );
+  }
+
+  for (const re of INLINE_REDERIVATIONS) {
+    assert.equal(
+      re.global,
+      false,
+      `ENBL-05: ${String(re)} is global -- lastIndex carries across .test() calls and would skip alternating files in the walk`,
+    );
+  }
+});
+
 test("ENBL-05: every former definition site imports the single persistence/state-io.ts predicate", async () => {
   // The absence walk above proves no site re-derives the rule; this pins the
   // other half of the collapse -- the four modules that each carried a copy
