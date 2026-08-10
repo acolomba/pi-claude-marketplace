@@ -3744,6 +3744,72 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partia
   });
 });
 
+test("WR-03: the installed outcome of a partial install carries the dropped kinds, and a clean install carries none", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-unsupported-"));
+    const cleanCwd = await mkdtemp(path.join(tmpdir(), "install-wr03-clean-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "degraded",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        skills: [{ sourceName: "tool" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd: cleanCwd,
+        marketplaceRoot: path.join(cleanCwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "clean",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi } = makeCtx();
+      const degraded = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "degraded",
+        partial: true,
+      });
+
+      // The outcome names what the ledger dropped. Without it an orchestrated
+      // caller has the facts only for a bare `(installed)` row, which would
+      // contradict the `(partially-installed)` row `list` renders for the same
+      // record one command later.
+      assert.ok(degraded.status === "installed");
+      assert.ok(
+        (degraded.unsupported ?? []).length > 0,
+        `the partial install reports its dropped kinds: ${JSON.stringify(degraded.unsupported)}`,
+      );
+
+      const clean = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd: cleanCwd,
+        marketplace: "mp",
+        plugin: "clean",
+      });
+
+      // NREG-01: a clean install omits the field entirely.
+      assert.ok(clean.status === "installed");
+      assert.equal(clean.unsupported, undefined);
+      assert.equal(Object.hasOwn(clean, "unsupported"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+      await rm(cleanCwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-03: a (partially-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));

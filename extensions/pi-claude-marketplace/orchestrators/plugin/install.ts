@@ -223,11 +223,23 @@ interface EntityErrorRow {
  *
  * IN-07 / D-98-01: the `installed` arm INTERSECTS the shared
  * `LedgerDegradationSignals` shape rather than re-declaring the ledger's
- * degradation fields. The enable branch's success outcome intersects the same
- * shape, so a signal added to one row's vocabulary cannot be silently dropped
- * from the other -- the asymmetry class becomes a compile error instead of a
- * review finding. Each field is omitted when empty, so a clean install's
+ * degradation fields, so the enable branch and this one read ONE vocabulary for
+ * the same ledger run. Each field is omitted when empty, so a clean install's
  * outcome shape is unchanged (NREG-01).
+ *
+ * WR-03: the intersection is a `Pick` of the three signals this outcome
+ * genuinely populates, NOT the whole shape. Every field of the shared shape is
+ * optional, so intersecting all five never made a missing one a compile error --
+ * it only advertised `stagedAgents` / `stagedMcpServers` that `installPlugin`
+ * never writes, which a consumer would read as `undefined` and take for "no
+ * agents staged". Those two facts already ride the REQUIRED `declaresAgents` /
+ * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
+ * and the reconcile projection), so dropping the optional twins removes a
+ * duplicate vocabulary rather than a signal. `unsupported` stays and is
+ * populated: an install admitted through the partial gate drops component kinds,
+ * and an outcome that omitted them would contradict the `(partially-installed)`
+ * row `list` renders one command later -- the same contradiction the shared
+ * shape exists to prevent on the enable side.
  */
 export type InstallPluginOutcome =
   | ({
@@ -237,7 +249,7 @@ export type InstallPluginOutcome =
       readonly declaresMcp: boolean;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
-    } & LedgerDegradationSignals)
+    } & Pick<LedgerDegradationSignals, "unsupported" | "orphanRewake" | "degradedKinds">)
   | {
       /**
        * Collapsed failure shape. All failure variants (`already-installed`,
@@ -1862,6 +1874,15 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     declaresAgents: installCtx.stagedAgentNames.length > 0,
     declaresMcp: installCtx.stagedMcpServerNames.length > 0,
     ...(postCommitWarnings.length > 0 && { postCommitWarnings }),
+    // WR-03: the LIVE dropped-component kinds, read off the ledger's own
+    // resolution exactly as the standalone row above reads them. An install
+    // admitted through the partial gate materializes a degraded plugin, so an
+    // outcome that stayed silent about it would hand an orchestrated caller the
+    // facts for a bare `(installed)` row over a record whose `list` row reads
+    // `(partially-installed)`. Omitted on a clean install (NREG-01).
+    ...(installCtx.resolved.state === "partially-available" && {
+      unsupported: [...installCtx.resolved.unsupported],
+    }),
     // SURF-05 / D-63-08 / IN-07: the same orphan-rewake fact the standalone row
     // above reports, carried on the outcome so the orchestrated reconcile
     // projection can name it too. Omitted when false (NREG-01).
