@@ -2165,9 +2165,17 @@ export function partiallyInstalledRow(
  *
  * `versionToken` is the already-rendered version slot (the caller passes
  * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
- * reason set (the `installed` arm threads `p.reasons`, the reasons-less variants
- * pass `undefined`); `dependencies` drives the `{requires pi-subagents}` /
+ * reason set; `dependencies` drives the `{requires pi-subagents}` /
  * `{requires pi-mcp}` markers via `composeReasons`.
+ *
+ * WR-13: which callers thread `reasons`, over the seven command arms folded
+ * here -- the five `(installed)` arms (install, enable, list, import, reconcile)
+ * and the `(reinstalled)` arm (WR-09) pass `p.reasons`; the `(updated)` arm is
+ * the ONE caller that still passes `undefined`, because `PluginUpdatedMessage`
+ * carries no `reasons` field. That gap is a known one: `update` stages through
+ * the same bridges and can degrade a component exactly as install / enable /
+ * reinstall do, but neither its outcome nor its message can name the kind, so a
+ * degraded update renders a clean `(updated)` row.
  */
 export function installedLikeRow(
   icon: string,
