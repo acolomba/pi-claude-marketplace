@@ -262,7 +262,7 @@ Plans:
 3. Architecture/contract checks prove no manifest snapshot, orphan field, schema migration, status, reason, glyph, or network path was added. Any new source-scanning gate reads files directly rather than shelling out to `grep`, which silently skips `orchestrators/plugin/info.ts` because that file contains a NUL byte. (COMPAT-01)
 4. `docs/output-catalog.md` and the PRD document fully installed, partially-installed, disabled, unknown-name, manifest-read, update, and uninstall behavior, including the repaired disabled-partial case, and the known documentation defects named in DOC-08 are corrected. (DOC-08)
 
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 
 Plans:
 **Wave 1**
@@ -272,7 +272,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 98-03-PLAN.md — remediation affordance on a stale-gate enable failure, and disabled records reachable by plain update (WR-02, WR-04)
+- [x] 98-03-PLAN.md — remediation affordance on a stale-gate enable failure, and disabled records reachable by plain update (WR-02, WR-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -290,7 +290,7 @@ Plans:
 | 95. Manifest-independent installed inventory | v1.18 | 2/2 | Complete    | 2026-08-08 |
 | 96. Installation-record-backed plugin info | v1.18 | 4/4 | Complete    | 2026-08-09 |
 | 97. Disabled-state classification repair | v1.18 | 5/5 | Complete    | 2026-08-09 |
-| 98. Lifecycle regression and contract documentation | v1.18 | 2/6 | In Progress|  |
+| 98. Lifecycle regression and contract documentation | v1.18 | 3/6 | In Progress|  |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |

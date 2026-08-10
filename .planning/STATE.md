@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: lifecycle-regression-and-contract-documentation
 status: executing
-stopped_at: Completed 98-02-PLAN.md
-last_updated: "2026-08-10T03:12:00.000Z"
+stopped_at: Completed 98-03-PLAN.md
+last_updated: "2026-08-10T03:40:59.265Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 98 plan 02 complete — LIFE-04 pinned with six per-kind uninstall cases on a manifest-absent record; the seed factory now covers all five resource kinds (hooks was missing) and the mcp case proves ownership-scoped removal
+last_activity_desc: Phase 98 plan 03 complete — WR-02 and WR-04 closed: a stale-gate enable failure names its dropped kinds and points at update --partial, and a disabled record reaches the update refresh short-circuit with no flag typed
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 13
-  percent: 76
+  completed_plans: 14
+  percent: 75
 ---
 
 # Project State
@@ -35,8 +35,8 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 ## Current Position
 
 Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
-Plan: 3 of 6
-Status: Executing Phase 98 — plans 01-02 complete (IN-07 and WR-06 carriers landed; LIFE-04 pinned)
+Plan: 4 of 6
+Status: Executing Phase 98 — plans 01-03 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04 pinned)
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -186,6 +186,8 @@ two integration checks.
 - [Phase 98]: LIFE-04 coverage asserts one resource kind per case (D-98-12) so a single bridge-arm regression turns exactly one case red; the shared (uninstalled) row constant makes "the kind mix does not move the row" structural rather than six coincidences
 - [Phase 98]: An ownership-scoped removal is proven by seeding a differently-owned neighbour and asserting it survives — asserting only the owned key's absence would pass under a document-clobbering rewrite
 - [Phase 98]: The manifest-absent property of every uninstall fixture is now asserted explicitly before each call rather than left incidental, so a future fixture that starts writing a marketplace.json fails loudly instead of silently weakening the coverage
+- [Phase 98]: WR-04 lands via direction 2: preflightUpdate derives the candidate gate's partial argument from the disabled-record predicate, leaving classifyInstalledRecord and every completion consumer untouched
+- [Phase 98]: The stale-gate enable narrowing keys on PluginShapeError shape kind not-installable (the install-op gate), not no-longer-installable as planned
 
 ### Open decisions
 
@@ -272,9 +274,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 97 P05 | 25min | 2 tasks | 2 files |
 | Phase 98 P01 | 50 | 3 tasks | 10 files |
 | Phase 98 P02 | 20min | 3 tasks | 1 file |
+| Phase 98 P03 | 55min | 2 tasks | 7 files |
 
 ## Session
 
-**Last session:** 2026-08-10T03:12:00.000Z
-**Stopped at:** Completed 98-02-PLAN.md
+**Last session:** 2026-08-10T03:40:51.359Z
+**Stopped at:** Completed 98-03-PLAN.md
 **Resume file:** None
