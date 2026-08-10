@@ -96,6 +96,17 @@ import { REPO_ROOT, stripComments } from "../helpers/source-scan.ts";
 const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
 const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
 
+/**
+ * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
+ * counts them across the module, `GLYPH_DECLARATION` tests a single spelling.
+ * Built from ONE source string so the counting clause and the clause that pins
+ * what the pattern must see can never drift apart, and split by flag because a
+ * `/g/` regex carries `lastIndex` across `.test()` calls.
+ */
+const GLYPH_DECLARATION_SOURCE = String.raw`\bexport const ICON_[A-Z_]+\b`;
+const GLYPH_DECLARATIONS = new RegExp(GLYPH_DECLARATION_SOURCE, "g");
+const GLYPH_DECLARATION = new RegExp(GLYPH_DECLARATION_SOURCE);
+
 async function readStrippedSource(rel: string): Promise<string> {
   return stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
 }
@@ -252,14 +263,40 @@ test("COMPAT-01: the notify module declares no eighth glyph export", async () =>
   // The one clause here that scans source: an eighth glyph export cannot be
   // caught by comparing runtime constants, because the glyphs are seven
   // separate exports with no collection to compare against.
-  const declarations = (await readStrippedSource(NOTIFY_REL)).match(
-    /^export const ICON_[A-Z_]+ = /gm,
-  );
+  //
+  // WR-07: the pattern anchors on the DECLARATION, not on the spelling that
+  // follows the name. The former `/^export const ICON_[A-Z_]+ = /gm` required
+  // ` = ` immediately after the name and a line start, so an eighth glyph
+  // written `export const ICON_EIGHTH: string = "..."` -- or pushed off the line
+  // start by comment stripping -- slipped past the one clause this file calls
+  // load-bearing.
+  const declarations = (await readStrippedSource(NOTIFY_REL)).match(GLYPH_DECLARATIONS);
 
   assert.equal(
     declarations?.length,
     7,
     "COMPAT-01: the glyph vocabulary is closed at seven. A new glyph is a rendered-vocabulary expansion and needs its catalog row and renderer arm in the same change.",
+  );
+});
+
+test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph export can take", () => {
+  // WR-07: the clause above asserts an ABSENCE, so a pattern that matched
+  // nothing would pass it just as quietly as a correct one. Pin what the pattern
+  // is required to see, including the two spellings that used to slip past.
+  const spellings = [
+    'export const ICON_EIGHTH = "◎";',
+    'export const ICON_EIGHTH: string = "◎";',
+    '/** doc */ export const ICON_EIGHTH = "◎";',
+  ];
+  for (const spelling of spellings) {
+    assert.match(spelling, GLYPH_DECLARATION, `the pattern must match: ${spelling}`);
+  }
+
+  // And what it must NOT see: a reference is not a declaration.
+  assert.equal(
+    GLYPH_DECLARATION.test("return `${ICON_EIGHTH} ${name}`;"),
+    false,
+    "a glyph USE must not count as a declaration",
   );
 });
 
