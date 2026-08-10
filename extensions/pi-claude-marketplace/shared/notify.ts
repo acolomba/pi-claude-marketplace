@@ -926,6 +926,13 @@ export interface PluginFailedMessage extends MessageBase {
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
+  // WR-02 / D-98-03: set on the enable-failure surface when the record-derived
+  // installable gate went stale -- the record was installable when the user
+  // disabled it and the manifest entry has since gained an unsupported kind, so
+  // `update --partial` re-pins it. The renderer appends the 4-space-indented
+  // update-worded `--partial` hint trailer below the row. Absent on every other
+  // failure producer, which render byte-frozen.
+  readonly partialHint?: boolean;
   readonly cause?: Error;
   readonly rollbackPartial?: readonly {
     // Free-form phase label sourced from transaction/phase-ledger.ts's
@@ -3733,7 +3740,11 @@ function composePluginLinesWith(
   // SEV-04 / XSURF-03: the partially-upgradable manual update-decline row carries a
   // 4-space-indented update-worded `--partial` hint trailer. The list inventory
   // `partially-upgradable` row omits `partialHint` and stays byte-frozen.
-  if (p.status === "partially-upgradable" && p.partialHint === true) {
+  // WR-02 / D-98-03: the `failed` status joins the disjunction for the
+  // stale-gate enable failure, whose remedy is `update --partial` too -- the
+  // frozen literal is reused rather than a second trailer minted. Every other
+  // producer of a failed row omits `partialHint`, so the gate is inert for them.
+  if ((p.status === "partially-upgradable" || p.status === "failed") && p.partialHint === true) {
     lines.push(`    ${PARTIAL_UPDATE_HINT_TRAILER}`);
   }
 

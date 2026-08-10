@@ -58,7 +58,12 @@ import { writeBatchedConfigEntries } from "../../persistence/config-write-back.t
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  MarketplaceNotFoundError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
@@ -231,6 +236,11 @@ async function runEnableBranch(
   // `unavailable` candidate either way. What the precedent also requires is
   // that the degrade be SIGNALLED -- hence the `(partially-installed)` row
   // with the dropped kinds on both the standalone and the orchestrated arm.
+  //
+  // WR-02 / D-98-03: reading the PERSISTED record makes this gate stale
+  // whenever the manifest entry gained an unsupported kind after the disable,
+  // so the strict arm rejects a plugin `update --partial` could still re-pin --
+  // `staleGateDropped` recognises that rejection and the row names the remedy.
   const partial = !installed.compatibility.installable;
   // I4: thread an InstallFailureCapture so a rollback-partial enable failure
   // surfaces the per-phase rollback children in the (failed) row, matching
@@ -1116,13 +1126,18 @@ function composeOutcomeRow(args: {
       // operator sees which phases needed recovery, matching the standalone
       // install/uninstall path (`composeInstallFailureMessage`).
       const partials = outcome.rollbackPartials ?? [];
+      // WR-02 / D-98-03: a rollback-partial failure keeps the `rollback partial`
+      // reason -- the ledger got far enough to commit and unwind, which is a
+      // different fact than the pre-ledger stale-gate rejection.
+      const staleGate = partials.length > 0 ? undefined : staleGateDropped(outcome.cause);
       const baseReasons =
         partials.length > 0 ? (["rollback partial"] as const) : narrowEnableFailure(outcome.cause);
       const row: PluginFailedMessage = {
         status: "failed",
         name: plugin,
-        reasons: baseReasons,
+        reasons: staleGate ?? baseReasons,
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
+        ...(staleGate !== undefined && { partialHint: true }),
         cause: outcome.cause,
         // D-03/D-06: a failed enable -> error, no reload.
         severity: "error",
@@ -1174,6 +1189,34 @@ function composeOutcomeRow(args: {
             needsReload: true,
           };
   }
+}
+
+/**
+ * WR-02 / D-98-03: recognise the STALE-GATE enable failure and name the kinds
+ * it dropped. The enable branch derives its ledger gate from the persisted
+ * record, so a record that was installable at disable time runs the strict
+ * `requireInstallable` gate (op `install` -> shape kind `not-installable`);
+ * `partialable` is true only when the live resolution came back
+ * `partially-available`, which is exactly the record-versus-manifest
+ * disagreement. The kinds are narrowed through the same
+ * `narrowUnsupportedKinds` seam the `list (partially-upgradable)` row uses, so
+ * the brace is byte-identical across the surfaces, and the caller stamps
+ * `partialHint` to point at `update --partial` -- the command that re-pins the
+ * record against the current manifest entry.
+ *
+ * Returns `undefined` for every other cause, which keeps the trailer inert.
+ * Mirrors `composeUpdateDeclineRow`'s cause narrowing in `update.ts`.
+ */
+function staleGateDropped(cause: Error): readonly ContentReason[] | undefined {
+  if (
+    cause instanceof PluginShapeError &&
+    cause.shape.kind === "not-installable" &&
+    cause.shape.partialable
+  ) {
+    return narrowUnsupportedKinds(cause.shape.unsupportedKinds ?? []);
+  }
+
+  return undefined;
 }
 
 /**

@@ -3770,6 +3770,36 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-02 / D-98-03: the stale-gate enable failure. `partialHint` on a
+    // `failed` row is set ONLY by the enable-failure narrowing, and it is what
+    // widens the XSURF-03 trailer gate to this row; the `{lsp}` brace comes
+    // through the same `narrowUnsupportedKinds` seam the list
+    // `(partially-upgradable)` row uses.
+    "enable-failed-stale-gate": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "foo-plugin",
+                version: "1.2.3",
+                reasons: narrowUnsupportedKinds(["lspServers"]),
+                partialHint: true,
+                cause: new Error('Plugin "foo-plugin" is not installable: contains lspServers'),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "enable-marketplace-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

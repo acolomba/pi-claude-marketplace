@@ -16,6 +16,7 @@ import { test } from "node:test";
 
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -187,6 +188,15 @@ async function seedRealDisabledMarketplace(
      */
     unsupportedKind?: "lspServers";
     /**
+     * WR-02 / D-98-03: keep the persisted availability discriminant at the
+     * FULLY-installable form while the on-disk plugin carries
+     * `unsupportedKind`'s marker. That is the stale gate: the record was
+     * installable when the user disabled it, the manifest entry has since
+     * gained an unsupported kind, and the enable branch derives its ledger
+     * gate from the record rather than from the current resolution.
+     */
+    staleInstallableGate?: boolean;
+    /**
      * WARN-01 / D-86-03: write the plugin's only skill with unparseable
      * frontmatter (`name: [unterminated` -- a closed `---` block whose inner
      * YAML throws in `parseFrontmatter`), so the enable branch's ledger
@@ -267,7 +277,7 @@ async function seedRealDisabledMarketplace(
   // explicit enabled: false. `installable` mirrors the seeded availability
   // axis, which is orthogonal to the disabled marker (ENBL-05).
   const compatibility =
-    opts.unsupportedKind === undefined
+    opts.unsupportedKind === undefined || opts.staleInstallableGate === true
       ? { installable: true, notes: [], supported: [], unsupported: [] }
       : {
           installable: false,
@@ -954,6 +964,124 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
     const staged = await readdir(skillsTargetDir).catch((): string[] => []);
     assert.deepEqual(staged, [], "no skill artifact may be staged by a failed enable");
   });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WR-02 / D-98-03: the stale installable gate on the enable branch
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-02: an enable whose persisted installable gate is stale names the dropped kinds and points at update --partial", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      staleInstallableGate: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    // The row names the dropped kind through the same `narrowUnsupportedKinds`
+    // seam the list `(partially-upgradable)` row uses, and carries the frozen
+    // update-worded remediation trailer -- `update --partial` is the remedy
+    // that re-pins the record against the current manifest entry.
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user]",
+        "  ⊘ foo-plugin v1.2.3 (failed) {lsp}",
+        "    Re-run with --partial to update with the supported components.",
+        '    cause: Plugin "foo-plugin" is not installable: contains lspServers',
+      ].join("\n"),
+    );
+  });
+});
+
+test("WR-02: an enable that fails for an unrelated reason keeps its bare failed row -- no remediation trailer", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    assert.match(notifications[0]!.message, /\(failed\) \{source missing\}/);
+    assert.ok(
+      !notifications[0]!.message.includes("Re-run with --partial"),
+      `a missing source is not remediable by --partial: ${notifications[0]!.message}`,
+    );
+  });
+});
+
+test("WR-02: a failed plugin row from another surface renders byte-identically -- the widened trailer gate is inert without the hint", () => {
+  const emitted: NotifyRecord[] = [];
+  const ctx = {
+    cwd: "/tmp",
+    ui: {
+      notify: (m: string, s?: string): void => {
+        emitted.push(s === undefined ? { message: m } : { message: m, severity: s });
+      },
+    },
+  } as unknown as ExtensionContext;
+
+  // The catalog `failure-runtime-with-cause` row: a failed row that stamps no
+  // `partialHint`. Widening the trailer gate to admit the `failed` status must
+  // leave it byte-for-byte where it was.
+  notify(ctx, makePi(), {
+    marketplaces: [
+      {
+        name: "claude-plugins-official",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            name: "foo-plugin",
+            reasons: [],
+            cause: new Error("EACCES: permission denied, mkdir '/home/user/.pi/agent/skills'"),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(emitted.length, 1);
+  assert.equal(
+    emitted[0]!.message,
+    [
+      "A plugin operation has failed.",
+      "",
+      "● claude-plugins-official [user]",
+      "  ⊘ foo-plugin (failed)",
+      "    cause: EACCES: permission denied, mkdir '/home/user/.pi/agent/skills'",
+    ].join("\n"),
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -2215,6 +2215,21 @@ A plugin operation has failed.
 
 Triggered when the cached marketplace clone has been deleted between the recorded state and the enable invocation. The orchestrator aborts pre-ledger -- no artifacts are partially materialized, no state mutation occurs, and the config file is unchanged. Severity `error` (the cascade carries a failed row); the summary line names the failed plugin operation per GRAM-02.
 
+### Stale installable gate -- the manifest entry degraded while the plugin was disabled (WR-02 / D-98-03)
+
+<!-- catalog-state: enable-failed-stale-gate -->
+
+```text
+A plugin operation has failed.
+
+● claude-plugins-official [user]
+  ⊘ foo-plugin v1.2.3 (failed) {lsp}
+    Re-run with --partial to update with the supported components.
+    cause: Plugin "foo-plugin" is not installable: contains lspServers
+```
+
+The enable branch derives its ledger gate from the PERSISTED record (ENBL-07 / D-69-01), so a record that was fully installable when the user disabled it runs the strict `requireInstallable` gate. The gate goes stale when the marketplace publishes an unsupported kind into that plugin's manifest entry while the record sits disabled: the live resolution comes back `partially-available`, the strict gate rejects it, and the enable fails. The row names the dropped kinds through the SAME `narrowUnsupportedKinds` seam the `list (partially-upgradable)` inventory row uses, so the `{lsp}` brace is byte-identical across the two surfaces, and it carries the frozen update-worded `--partial` hint trailer: `update --partial` re-pins the record against the current manifest entry, after which `enable` takes the partial gate and re-materializes the supported components. The trailer fires ONLY on this narrowing -- every other producer of a `(failed)` row omits `partialHint` and stays byte-frozen. The cause-chain trailer keeps its position below the hint. Fail-clean: the record stays disabled, every `resources.*` array stays empty, and no artifact is staged. Severity `error`; no reload-hint.
+
 ### Not installed -- marketplace present, plugin row absent
 
 <!-- catalog-state: enable-not-installed -->
