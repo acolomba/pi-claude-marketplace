@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { stripComments } from "../helpers/source-scan.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -21,6 +24,7 @@ interface RestrictedPathsRule {
 interface FlatConfigBlock {
   files?: readonly string[];
   rules?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
 }
 
 /**
@@ -107,6 +111,131 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
     `${EXTENSION_ROOT}/persistence`,
   ],
 };
+
+/** Every flat-config block, for the assertions that read more than one field. */
+async function loadBlocks(): Promise<FlatConfigBlock[]> {
+  const mod = (await import(`${REPO_ROOT}/eslint.config.js`)) as { default: FlatConfigBlock[] };
+  return mod.default;
+}
+
+/**
+ * D-11: `import-x/no-cycle` must be configured AND must be able to traverse a
+ * `.ts` dependency graph.
+ *
+ * The second half is the whole point. `no-cycle` walks the graph through
+ * `import-x`'s module resolution, and that walk only follows files whose
+ * extension appears in `settings["import-x/extensions"]` -- which defaults to
+ * the JavaScript extensions. On this `.ts`-only tree the rule with default
+ * settings parses the entry file, finds nothing traversable, and reports
+ * success on a graph it never walked. A deliberate two-file cycle under
+ * `orchestrators/` goes completely undetected that way. So a config carrying
+ * the rule but not the setting is indistinguishable from no gate at all, and
+ * this assertion is what makes the difference visible.
+ */
+test("D-11: import-x/no-cycle is configured and can traverse .ts dependencies", async () => {
+  const blocks = await loadBlocks();
+  const cycleBlock = blocks.find((b) => b.rules?.["import-x/no-cycle"] !== undefined);
+  assert.ok(
+    cycleBlock !== undefined,
+    "no flat-config block configures import-x/no-cycle -- the D-11 cycle boundary is ungated",
+  );
+
+  const entry: unknown = cycleBlock.rules?.["import-x/no-cycle"];
+  // `Array.isArray` on an `unknown` narrows to `any[]`, so re-assert the
+  // element type rather than let an implicit `any` through the strict gate.
+  const severity: unknown = Array.isArray(entry) ? (entry as unknown[])[0] : entry;
+  assert.equal(severity, "error", "import-x/no-cycle must be an error, not a warning");
+
+  const extensions = cycleBlock.settings?.["import-x/extensions"];
+  assert.ok(
+    Array.isArray(extensions) && extensions.includes(".ts"),
+    'the import-x/no-cycle block must set settings["import-x/extensions"] to include ".ts". Without it the rule resolves imports but never parses the resolved .ts files, so it walks a one-node graph and greens on any cycle.',
+  );
+
+  assert.ok(
+    cycleBlock.files?.some((f) => f.includes("orchestrators")),
+    "the import-x/no-cycle block must cover orchestrators/ -- that is the layer the marketplace/ <-> plugin/ cycle risk lives in",
+  );
+});
+
+/**
+ * D-11: the ledger modules of `orchestrators/plugin/` and
+ * `orchestrators/marketplace/` must not statically import each other.
+ *
+ * `import-x/no-cycle` cannot cover this. It reports a cycle only once the graph
+ * is ALREADY circular, so the first of the two edges lands green and the rule
+ * fires on whoever adds the second. The edge that matters here is preventive:
+ * a marketplace ledger reaching a plugin ledger drags that ledger's whole graph
+ * in, and `orchestrators/types.ts` plus the leaf row composers exist precisely
+ * so it does not have to.
+ *
+ * Type-only imports are forbidden too. A shared TYPE is what
+ * `orchestrators/types.ts` is for; reaching into a ledger module for one
+ * re-creates the coupling the split removed, and the next author who needs a
+ * value has an import line already sitting there to widen.
+ *
+ * `bootstrap.ts` is deliberately absent from the plugin side: it is a composer,
+ * not a ledger, and composing `addMarketplace` + `setMarketplaceAutoupdate` is
+ * its entire job.
+ */
+const PLUGIN_LEDGERS = ["install", "update", "uninstall", "reinstall", "enable-disable"] as const;
+const MARKETPLACE_LEDGERS = ["add", "remove", "update", "autoupdate"] as const;
+
+// Non-global on purpose: a /g regex carries `lastIndex` across `.test()` calls
+// and would skip every second file in the walk below.
+const PLUGIN_LEDGER_IMPORT = new RegExp(
+  `from\\s+"\\.\\./plugin/(?:${PLUGIN_LEDGERS.join("|")})\\.ts"`,
+);
+const MARKETPLACE_LEDGER_IMPORT = new RegExp(
+  `from\\s+"\\.\\./marketplace/(?:${MARKETPLACE_LEDGERS.join("|")})\\.ts"`,
+);
+
+const ORCHESTRATORS_REL = "extensions/pi-claude-marketplace/orchestrators";
+
+/** Repository-relative `.ts` files directly inside one orchestrator subfolder. */
+async function orchestratorFiles(subdir: string): Promise<string[]> {
+  const rel = `${ORCHESTRATORS_REL}/${subdir}`;
+  const entries = await readdir(path.join(REPO_ROOT, rel), { withFileTypes: true });
+  return entries.filter((e) => e.isFile() && e.name.endsWith(".ts")).map((e) => `${rel}/${e.name}`);
+}
+
+test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", async () => {
+  const files = await orchestratorFiles("marketplace");
+  assert.ok(files.length > 0, `walked ${ORCHESTRATORS_REL}/marketplace and found no .ts files`);
+
+  const offenders: string[] = [];
+  for (const rel of files) {
+    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
+    if (PLUGIN_LEDGER_IMPORT.test(stripped)) {
+      offenders.push(rel);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `D-11 violation -- these marketplace files import a plugin ledger module:\n  ${offenders.join("\n  ")}\nImport the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.`,
+  );
+});
+
+test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module", async () => {
+  const offenders: string[] = [];
+  for (const name of PLUGIN_LEDGERS) {
+    const rel = `${ORCHESTRATORS_REL}/plugin/${name}.ts`;
+    // A renamed or deleted ledger must fail loudly rather than silently
+    // uncovering this direction of the gate.
+    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
+    if (MARKETPLACE_LEDGER_IMPORT.test(stripped)) {
+      offenders.push(rel);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `D-11 violation -- these plugin ledgers import a marketplace ledger module:\n  ${offenders.join("\n  ")}\nonly orchestrators/marketplace/shared.ts is reachable from a plugin ledger.`,
+  );
+});
 
 test("import-x/no-restricted-paths defines exactly 8 zones (one per folder) -- D-11", async () => {
   const zones = await loadZones();

@@ -273,6 +273,38 @@ export default tseslint.config(
     },
   },
   {
+    // BLOCK C-2 (D-11): Cycle enforcement inside orchestrators/.
+    // `no-restricted-paths` above gates the LAYER direction; it says nothing
+    // about a cycle that stays inside one layer, which is exactly where the
+    // marketplace/ <-> plugin/ risk lives.
+    //
+    // Scope is `orchestrators/` and not the whole extension because
+    // `bridges/hooks/` carries pre-existing cycles (the event-router <->
+    // dispatch <-> async-rewake/registry knot). Widening this glob without
+    // untangling that knot first turns the gate red on day one, so the gate
+    // covers the boundary D-11 is about and the hooks knot stays a known,
+    // documented exception -- see the Circular imports bullet in
+    // `.planning/codebase/ARCHITECTURE.md`.
+    //
+    // The `settings` are load-bearing, not decoration: `no-cycle` walks the
+    // dependency graph through `import-x`'s own module resolution, and that
+    // walk only follows files whose extension is listed in
+    // `import-x/extensions` (default `.js`/`.mjs`/`.cjs`). On a `.ts`-only
+    // tree the rule therefore parses the entry file, resolves its imports,
+    // finds no traversable dependency, and reports nothing -- a green gate
+    // that gates nothing. Verified: a deliberate two-file `.ts` cycle goes
+    // undetected without these settings and is reported with them.
+    // `tests/architecture/import-boundaries.test.ts` pins both halves.
+    files: ["extensions/pi-claude-marketplace/orchestrators/**/*.ts"],
+    settings: {
+      "import-x/extensions": [".ts", ".js"],
+      "import-x/parsers": { "@typescript-eslint/parser": [".ts"] },
+    },
+    rules: {
+      "import-x/no-cycle": ["error", { ignoreExternal: true }],
+    },
+  },
+  {
     // BLOCK E (Phase 7 D-04): Pi peer-import chokepoint. Direct imports of
     // `@earendil-works/pi-coding-agent` are allowed only in
     // `extensions/pi-claude-marketplace/platform/pi-api.ts`. All other
