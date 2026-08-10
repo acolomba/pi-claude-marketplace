@@ -489,48 +489,35 @@ The sections above state the evidence. This section states the judgement that fo
 
 ### Their strengths
 
-- **Security engineering depth.** DNS pinning, exact-string origin allowlists, a hardened TAR reader, and four-layer redaction. This is the most careful network and archive work in the comparison, and it is not close.
-- **Trust as a first-class subject.** Content-bound grants, plus a continuity rule that lets exact-content trust survive an update. The design is coherent rather than bolted on.
-- **The interactive manager.** The single most visible capability that either project has.
-- **An automation grammar.** Machine-readable output, stable exit codes, pagination, operation tokens, and a versioned grammar that a test verifies against their own specification.
-- **Multi-host reach.** Codex support roughly doubles the addressable marketplace population.
-- **Distribution.** Bundling into a one-install harness reaches users who never compare plugin hosts.
-- **Candor.** Their changelog documents their own failures in unusual detail, and their backlog criticizes their own strictness. That is a healthy engineering culture, and this document relies on it as evidence.
+Their security engineering is the best work in this comparison, and it is not close. DNS pinning, exact-string origin allowlists, a hardened TAR reader, four layers of redaction. Trust gets the same care. Content-bound grants ship with a continuity rule that lets exact-content trust survive an update, so the design holds together rather than looking bolted on afterwards.
+
+The interactive manager is the single most visible capability either project has. Behind it sits an automation grammar we cannot match: machine-readable output, stable exit codes, pagination, operation tokens, and a versioned grammar that one of their own tests checks against their specification. Codex support roughly doubles the marketplaces they can reach.
+
+Two of their advantages are not code at all. Bundling into a one-install harness reaches users who never compare plugin hosts. And their changelog records their own failures in unusual detail while their backlog criticizes their own strictness. That is a healthy engineering culture, and it is the reason several claims in this document can cite them against themselves.
 
 ### Their weaknesses
 
-- **Two of five component kinds are missing by design.** No slash commands, and no Claude agents. For a user migrating from Claude Code, that is a large silent hole.
-- **All-or-nothing installs.** One unsupported component kind blocks the whole plugin.
-- **Plugin user configuration stops at the first secret.** Their secret store returns unavailable on every platform, and the tree holds no Keychain, libsecret, or Windows Credential Manager code.
-- **Trust cannot be revoked through the product.** The primitive is exported and unused.
-- **A reliability pattern, repeated.** Four consecutive releases walked back over-aggressive fail-closed platform guards. Their own author calls the third one "the third round of the same anti-pattern in this adapter."
-- **Node `>=24`.** A direct consequence of `node:sqlite`, and it excludes a large installed base.
-- **Documentation drifts from code in four places** at this commit, including a terminal manager described with five sections that the code no longer has.
-- **No community signal.** Zero stars, forks, issues, and outside contributors.
+Two of the five component kinds are missing by design. No slash commands, no Claude agents. For someone migrating from Claude Code that is a large hole, and it stays quiet until the plugin they wanted stops doing what it used to do. Installs are all or nothing, so a single unsupported component kind blocks the whole plugin.
+
+Plugin user configuration stops at the first secret. Their secret store returns unavailable on every platform, and the tree holds no Keychain, libsecret, or Windows Credential Manager code. Trust cannot be revoked through the product either. The primitive is exported, and nothing calls it.
+
+The problem most likely to bite a user is the reliability one. Four consecutive releases walked back over-aggressive fail-closed platform guards, and their own author calls the third of them "the third round of the same anti-pattern in this adapter." The Node `>=24` floor follows from `node:sqlite` and shuts out a large installed base. Their documentation disagrees with their code in four places, including a terminal manager described with five sections that the code no longer has. And nobody has yet starred, forked, or filed an issue against the repository.
 
 ### Our strengths
 
-- **Component coverage.** Five kinds against three, including the two they refuse.
-- **Partial installs and soft-dependency degradation.** An unsupported kind never blocks the rest, and an absent companion extension degrades presentationally instead of failing.
-- **Migration off Claude Code.** We adopt marketplace declarations and the installed plugin set. That is the difference between one command and rebuilding a plugin list by hand.
-- **Offline guarantees that a gate enforces.** A test greps the orchestrators for git surfaces and fails the build, so the guarantee cannot rot quietly.
-- **Hook depth where it counts.** Ten events, `StopFailure` mapped over a closed error-type set, and a live async-rewake lane that they retain without activating.
-- **A low Node floor and no build step.** `>=20.19.0`, and Node strips our TypeScript natively.
-- **Three runtime dependencies** against seven, two of which are forks they must maintain.
-- **A real community, at small scale.** Seventeen stars, eight forks, and two merged external pull requests.
+We translate five component kinds to their three, including the two they refuse. An unsupported kind never blocks the rest, and an absent companion extension degrades presentationally instead of failing outright. We adopt marketplace declarations and the installed plugin set, which for someone leaving Claude Code is the difference between one command and rebuilding a plugin list by hand.
+
+Some of our guarantees are enforced rather than promised. A test greps the orchestrators for git surfaces and fails the build, so the offline guarantee cannot rot quietly. Our hooks go deeper where it counts: ten events, `StopFailure` mapped over a closed error-type set, and a live async-rewake lane that they retain without activating.
+
+We are also cheaper to run. The Node floor is `>=20.19.0`, there is no build step because Node strips our TypeScript natively, and we carry three runtime dependencies against their seven, two of which are forks they have to maintain themselves. Seventeen stars, eight forks, and two merged external pull requests make a small community, but a real one.
 
 ### Our weaknesses
 
-- **No trust model.** Plugin code is trusted on install. No signatures, no checksums against a trusted digest, and no allowlist.
-- **No egress policy.** No DNS pinning and no origin allowlist. This gap has no seam on our side to reuse.
-- **No interactive manager.** We import pi-tui for one type at three sites.
-- **No automation surface.** No machine-readable output, no exit codes, no pagination, and no dry run beyond `pending`.
-- **No plugin user configuration.** A plugin that declares it downgrades to `partially-available`.
-- **No npm plugin sources.** Our one unsupported plugin-source kind.
-- **Uninstall deletes plugin data unconditionally.** The contents of `${CLAUDE_PLUGIN_DATA}` vanish with no prompt.
-- **No update discovery.** No timer, no notices, and no session-start update run.
-- **Claude only.** No Codex support.
-- **The reconcile cascade is invisible after `/reload`**, because the host rebuilds the chat from the transcript and drops extension notifications.
+We have no trust model. Plugin code is trusted on install, with no signatures, no checksums against a trusted digest, and no allowlist. We have no egress policy either, and no DNS pinning or origin allowlist, and that is the one gap on this list with no seam on our side to reuse.
+
+The interface and automation gaps are broad. No interactive manager, because we import pi-tui for a single type at three sites. No machine-readable output, no exit codes, no pagination, and no dry run beyond `pending`. No plugin user configuration, so a plugin that declares it downgrades to `partially-available`. No npm plugin sources. No update discovery of any kind: no timer, no notices, no session-start run. No Codex support.
+
+Two smaller items do real damage in use. Uninstall deletes the plugin data directory unconditionally, so the contents of `${CLAUDE_PLUGIN_DATA}` disappear with no prompt. And the reconcile cascade is invisible after `/reload`, because the host rebuilds the chat from the transcript and drops extension notifications on the way.
 
 The section "Where we are behind on our own terms" above carries the full self-reported list, including accepted residual risks.
 
