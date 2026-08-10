@@ -994,8 +994,10 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
     assert.equal(notifications[0]!.severity, "error");
     // The row names the dropped kind through the same `narrowUnsupportedKinds`
     // seam the list `(partially-upgradable)` row uses, and carries the frozen
-    // update-worded remediation trailer -- `update --partial` is the remedy
-    // that re-pins the record against the current manifest entry.
+    // stale-gate remediation trailer -- `update --partial` is the remedy that
+    // re-pins the record against the current manifest entry. CR-01: the trailer
+    // NAMES `update`; the command that just failed is `enable`, which rejects
+    // `--partial`, so a "re-run" wording would send the user into a usage error.
     assert.equal(
       notifications[0]!.message,
       [
@@ -1003,7 +1005,7 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
         "",
         "● mp [user]",
         "  ⊘ foo-plugin v1.2.3 (failed) {lsp}",
-        "    Re-run with --partial to update with the supported components.",
+        "    Run update --partial on this plugin, then enable it again.",
         '    cause: Plugin "foo-plugin" is not installable: contains lspServers',
       ].join("\n"),
     );

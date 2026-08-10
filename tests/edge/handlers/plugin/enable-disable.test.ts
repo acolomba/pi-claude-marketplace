@@ -95,6 +95,20 @@ test("USAGE: unknown flag emits USAGE error (enable)", async () => {
   });
 });
 
+test("CR-01: enable rejects --partial, so no enable-surface trailer may tell the user to re-run with it", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx(cwd);
+    const handler = makeEnableDisableHandler(makePi(), true);
+    await handler("foo@bar --partial", ctx);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "error");
+    // This is the fact the stale-gate remediation trailer has to respect: the
+    // remedy is `update --partial`, and the trailer must NAME `update` rather
+    // than say "re-run", which resolves to the command that just failed.
+    assert.match(notifications[0]!.message, /Unknown flag: "--partial"\./);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // Flag parsing + forward
 // ──────────────────────────────────────────────────────────────────────────

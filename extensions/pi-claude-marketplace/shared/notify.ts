@@ -2479,6 +2479,19 @@ const PARTIAL_UPDATE_HINT_TRAILER =
   "Re-run with --partial to update with the supported components.";
 
 /**
+ * CR-01 / D-98-03: the stale-gate enable-failure remediation trailer. DISTINCT
+ * from `PARTIAL_UPDATE_HINT_TRAILER` because the command that just failed is
+ * `enable`, which accepts no `--partial` flag (`edge/handlers/plugin/
+ * enable-disable.ts` parses a positional ref plus `--scope` / `--local` only) --
+ * a "re-run" instruction there names the wrong command and earns the user an
+ * `Unknown flag` usage error. This literal names `update` explicitly and states
+ * the follow-up `enable`, which is the remedy the catalog documents. Interpolates
+ * no plugin / marketplace identifier (T-73-01) and is locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md.
+ */
+const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
+
+/**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
  *   - `info`    = the resource reached the desired state (success / steady
  *                 inventory / benign idempotent no-op);
@@ -3753,12 +3766,18 @@ function composePluginLinesWith(
   // SEV-04 / XSURF-03: the partially-upgradable manual update-decline row carries a
   // 4-space-indented update-worded `--partial` hint trailer. The list inventory
   // `partially-upgradable` row omits `partialHint` and stays byte-frozen.
-  // WR-02 / D-98-03: the `failed` status joins the disjunction for the
-  // stale-gate enable failure, whose remedy is `update --partial` too -- the
-  // frozen literal is reused rather than a second trailer minted. Every other
-  // producer of a failed row omits `partialHint`, so the gate is inert for them.
-  if ((p.status === "partially-upgradable" || p.status === "failed") && p.partialHint === true) {
+  if (p.status === "partially-upgradable" && p.partialHint === true) {
     lines.push(`    ${PARTIAL_UPDATE_HINT_TRAILER}`);
+  }
+
+  // CR-01 / D-98-03: the stale-gate enable failure takes its OWN trailer. Its
+  // remedy is `update --partial` too, but the failed command is `enable`, so the
+  // "re-run" wording of `PARTIAL_UPDATE_HINT_TRAILER` would name a command that
+  // rejects the flag it advertises. Only the enable-failure narrowing stamps
+  // `partialHint` on a `failed` row -- every other producer of one omits it, so
+  // this gate stays inert for them.
+  if (p.status === "failed" && p.partialHint === true) {
+    lines.push(`    ${STALE_GATE_UPDATE_HINT_TRAILER}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {

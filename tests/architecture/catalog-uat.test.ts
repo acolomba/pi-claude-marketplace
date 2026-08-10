@@ -3798,11 +3798,13 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // WR-02 / D-98-03: the stale-gate enable failure. `partialHint` on a
-    // `failed` row is set ONLY by the enable-failure narrowing, and it is what
-    // widens the XSURF-03 trailer gate to this row; the `{lsp}` brace comes
-    // through the same `narrowUnsupportedKinds` seam the list
-    // `(partially-upgradable)` row uses.
+    // WR-02 / CR-01 / D-98-03: the stale-gate enable failure. `partialHint` on a
+    // `failed` row is set ONLY by the enable-failure narrowing, and it selects
+    // the enable-worded `STALE_GATE_UPDATE_HINT_TRAILER` -- NOT the XSURF-03
+    // update-decline trailer, whose "re-run" wording would name `enable`, the
+    // one command that rejects `--partial`. The `{lsp}` brace comes through the
+    // same `narrowUnsupportedKinds` seam the list `(partially-upgradable)` row
+    // uses.
     "enable-failed-stale-gate": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
