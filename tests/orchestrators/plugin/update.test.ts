@@ -1233,9 +1233,9 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
   });
 });
 
-// ─── PUP-7 / WR-04: success populates stagedAgents + stagedMcpServers ─────────
+// ─── PUP-7 / WR-04: success populates stagedAgentNames + stagedMcpServerNames ─────────
 
-test("WR-04: successful update populates stagedAgents + stagedMcpServers on outcome", async () => {
+test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames on outcome", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr04-"));
     try {
@@ -1256,10 +1256,13 @@ test("WR-04: successful update populates stagedAgents + stagedMcpServers on outc
         assert.equal(outcome.partition, "updated");
         assert.equal(outcome.fromVersion, "1.0.0");
         assert.equal(outcome.toVersion, "1.0.1");
-        assert.ok(outcome.stagedAgents !== undefined);
-        assert.ok(outcome.stagedAgents.length > 0, "stagedAgents must be populated");
-        assert.ok(outcome.stagedMcpServers !== undefined);
-        assert.ok(outcome.stagedMcpServers.length > 0, "stagedMcpServers must be populated");
+        assert.ok(outcome.stagedAgentNames !== undefined);
+        assert.ok(outcome.stagedAgentNames.length > 0, "stagedAgentNames must be populated");
+        assert.ok(outcome.stagedMcpServerNames !== undefined);
+        assert.ok(
+          outcome.stagedMcpServerNames.length > 0,
+          "stagedMcpServerNames must be populated",
+        );
       } finally {
         process.chdir(prevCwd);
       }

@@ -27,7 +27,7 @@
 //
 //  Phase 3b (compose recovery hint or success): if any failures, wrap in
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
-//  Else: success outcome carries WR-04 stagedAgents/stagedMcpServers.
+//  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
@@ -1895,8 +1895,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // staged this update). The renderer probes companion-loaded state via
   // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp}`
   // iff (declares AND unloaded).
-  const stagedAgents = handles.agents.result.recorded.map((r) => r.generatedName);
-  const stagedMcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
+  const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
+  const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
   await dropPluginCompletionCache(args);
   // S5: an invalid config file silently skipped the write-back while the
   // success notify proceeded. Direct-path callers now surface the abort as a
@@ -1937,10 +1937,10 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
     name: plugin,
     fromVersion,
     toVersion,
-    stagedAgents,
-    stagedMcpServers,
-    declaresAgents: stagedAgents.length > 0,
-    declaresMcp: stagedMcpServers.length > 0,
+    stagedAgentNames,
+    stagedMcpServerNames,
+    declaresAgents: stagedAgentNames.length > 0,
+    declaresMcp: stagedMcpServerNames.length > 0,
     // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
     // `partially-available` degraded it -- carry the dropped kinds so the cascade
     // renders `(partially-installed)` instead of `(updated)`. Empty for a clean

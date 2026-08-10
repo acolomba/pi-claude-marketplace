@@ -24,12 +24,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly version: string;
   readonly resourcesChanged: boolean;
   /**
-   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. Named apart
-   * from `LedgerDegradationSignals.stagedAgents` / `.stagedMcpServers`
-   * (`plugin/shared.ts`), which are presence FLAGS carrying a count verdict
-   * only. A name list and a boolean answer different questions -- `which
-   * resources were written` versus `did the row declare the companion` -- so
-   * the two must not be confusable at a producer or a consumer site.
+   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
+   * suffix keeps them spelled apart from the same-subject presence FLAGS on
+   * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
+   * verdict only. A name list and a boolean answer different questions --
+   * `which resources were written` versus `does the row declare the
+   * companion` -- so the two must not be confusable at a producer or a
+   * consumer site.
    */
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
@@ -146,7 +147,7 @@ interface PluginUpdateBase {
 /**
  * `(updated)` partition. `fromVersion` and `toVersion`
  * are REQUIRED here -- the orchestrator transitioned the install record
- * from one to the other. `stagedAgents` / `stagedMcpServers` are the
+ * from one to the other. `stagedAgentNames` / `stagedMcpServerNames` are the
  * names of resources that were actually written during the update
  * (WR-04 / RH-5 input).
  */
@@ -154,8 +155,15 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase {
   readonly partition: "updated";
   readonly fromVersion: string;
   readonly toVersion: string;
-  readonly stagedAgents: readonly string[];
-  readonly stagedMcpServers: readonly string[];
+  /**
+   * D-99-02c: generated NAMES, spelled apart from the same-subject presence
+   * flags on `LedgerDegradationSignals` (`plugin/shared.ts`). While both
+   * shapes spelled these members the same way, a `readonly string[]` member
+   * collided with an optional `boolean` one, so this outcome could not
+   * extend the signal shape at all.
+   */
+  readonly stagedAgentNames: readonly string[];
+  readonly stagedMcpServerNames: readonly string[];
   /**
    * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the partial-degrade signal for a
    * `--partial` update whose candidate re-resolved `partially-available`. Present
