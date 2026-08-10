@@ -318,8 +318,27 @@ Plans:
 4. The autoupdate cascade skip row has a catalog state with a FIXTURES entry; the description-bearing variant count is corrected; the residual `RLD-04`/`D-08` anchors are re-anchored or dropped at the six named sites (skipping the four files where `D-08` legitimately means something else).
 5. A disabled record whose `resolvedSource` moved while the version pin did not is refreshed rather than left stale; the rare-failure-arm coverage sweep lands the tests named in the 2026-06-12 todo (bounded to its named arms in update/reinstall/install).
 
-**Plans:** 0 plans
+**Plans:** 7 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 99 to break down)
+- [ ] 99-01-PLAN.md — Rename the colliding staged-name string arrays on BOTH outcome interfaces (D-99-02c; the enabler that unblocks 99-04)
+- [ ] 99-02-PLAN.md — Widen the ENBL-05 drift gate to the destructured, bracket-access and Boolean twin spellings (D-99-02b)
+- [ ] 99-03-PLAN.md — Close the three 98-06 documentation deferrals: cascade skip-row catalog state, nine-variant count, seven dangling anchor sites (D-99-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 99-04-PLAN.md — Thread the malformed-component degradation signal through `update` on both render surfaces, with catalog state, fixture and style-guide amendment (WR-12 / D-99-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 99-05-PLAN.md — Export the manifest-membership discriminant from `domain/` and rewire list, info and update onto it, behind a drift gate (D-99-02a)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 99-06-PLAN.md — Refresh a disabled record whose source or compatibility moved under an unchanged version, with the deep-equal guard made load-bearing (D-99-05a)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 99-07-PLAN.md — Measure the residual rare-failure arms, then cover them in update/reinstall/install within the locked bound (D-99-05b)

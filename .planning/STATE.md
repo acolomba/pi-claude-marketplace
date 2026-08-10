@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 status: completed
 stopped_at: Phase 98 complete — all v1.18 phases done, milestone ready to close
-last_updated: "2026-08-10T08:39:40.657Z"
+last_updated: "2026-08-10T11:21:14.805Z"
 last_activity: 2026-08-10
 last_activity_desc: "Phase 98 plan 06 complete — DOC-08 closed: the catalog's variant enumerations, token table and glyph roster re-derived from the runtime constants, the PRD's manifest-failure row rewritten to the BOUND-01 output, the list decision flowchart redrawn around the ManifestLookup discriminant, and six source-comment sites re-anchored with no executable line changed. Full check green (CHECK_EXIT=0)"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 17
+  total_plans: 24
   completed_plans: 17
-  percent: 100
+  percent: 71
 current_phase_name: lifecycle-regression-and-contract-documentation
 ---
 
