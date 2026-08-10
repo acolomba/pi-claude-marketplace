@@ -56,10 +56,11 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -74,6 +75,7 @@ import {
 import { runInstallLedger } from "./install.ts";
 import {
   applyPartialCascadeFold,
+  enableRowDependencies,
   resolveCrossScopePluginTarget,
   selectConfigWriteTarget,
   synthesizeAdoptedMarketplaceSource,
@@ -84,7 +86,7 @@ import type { LedgerDegradationSignals } from "./shared.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -286,6 +288,11 @@ async function runEnableBranch(
       }),
       ...(resolved.orphanRewake === true && { orphanRewake: true }),
       ...(degradedKinds.length > 0 && { degradedKinds }),
+      // SEV-01 / D-98-02: the LENGTH of the staged-name arrays only. The names
+      // themselves must never reach a rendered row -- the row needs the
+      // declaration verdict, nothing more.
+      ...(ledgerCtx.stagedAgentNames.length > 0 && { stagedAgents: true }),
+      ...(ledgerCtx.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
     };
   } catch (err) {
     return {
@@ -912,7 +919,16 @@ function dispatchOutcome(args: {
   readonly outcome: SetEnabledOutcome | undefined;
 }): void {
   const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
-  const row = composeOutcomeRow({ plugin, enable, configBasename, outcome });
+  // SEV-01: the single sanctioned companion probe, taken once here -- the same
+  // one `notify()` uses to render the `{requires pi-...}` markers -- and passed
+  // down to the pure row composer, which holds no Pi reference of its own.
+  const row = composeOutcomeRow({
+    plugin,
+    enable,
+    configBasename,
+    outcome,
+    probe: softDepStatus(pi),
+  });
   // RLD-05 / D-07: the disable verb no longer threads a distinguishing cascade
   // kind. The fresh `(disabled)` row stamps `needsReload: true` directly (its
   // artifacts were unstaged -- SNM-33), so the `/reload to pick up changes`
@@ -968,10 +984,16 @@ function dispatchOutcome(args: {
  * different fact: it is a degrade the ledger just produced, not a pre-existing
  * shortfall, so it takes the same `warning` raise `install.ts::successSeverity`
  * applies (WARN-01 / D-86-03) on whichever verb materialized it.
+ *
+ * SEV-01 / D-98-02: a MISSING companion is the second, independent raise. The
+ * two compose -- the stronger wins -- so neither rule can silently replace the
+ * other: a malformed degrade is `warning` whatever the probe reports, and an
+ * unloaded declared companion is `warning` whatever degraded.
  */
 function freshEnableRow(
   plugin: string,
   outcome: EnableDegradationSignals & { version?: string },
+  probe: SoftDepStatus,
 ): EnableMsg {
   const unsupported = outcome.unsupported ?? [];
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
@@ -979,15 +1001,25 @@ function freshEnableRow(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
-  const severity = malformed.length > 0 ? "warning" : "info";
+  // SEV-01: the enable row derives the SAME dependency list `install.ts` derives
+  // for the same ledger run, so the `{requires pi-...}` markers fire on a
+  // re-enable exactly as on an install.
+  const dependencies = enableRowDependencies(outcome);
+  const severity =
+    malformed.length > 0
+      ? "warning"
+      : companionSeverity(
+          {
+            declaresAgents: outcome.stagedAgents === true,
+            declaresMcp: outcome.stagedMcpServers === true,
+          },
+          probe,
+        );
   if (unsupported.length > 0) {
     return {
       status: "partially-installed",
       name: plugin,
-      // SEV-01: `dependencies` stays empty here -- the enable row does not yet
-      // thread the ledger's staged agent / mcp names, so the soft-dep markers
-      // never fire on either enable arm.
-      dependencies: [],
+      dependencies,
       ...(outcome.version !== undefined && { version: outcome.version }),
       reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
       severity,
@@ -998,7 +1030,7 @@ function freshEnableRow(
   return {
     status: "installed",
     name: plugin,
-    dependencies: [],
+    dependencies,
     ...(outcome.version !== undefined && { version: outcome.version }),
     ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads Pi
@@ -1014,8 +1046,10 @@ function composeOutcomeRow(args: {
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome | undefined;
+  /** SEV-01: the caller's `softDepStatus(pi)` snapshot -- this composer is pure. */
+  readonly probe: SoftDepStatus;
 }): EnableMsg | DisableMsg {
-  const { plugin, enable, configBasename, outcome } = args;
+  const { plugin, enable, configBasename, outcome, probe } = args;
   if (outcome === undefined) {
     return {
       status: "failed",
@@ -1120,7 +1154,7 @@ function composeOutcomeRow(args: {
       // per-row `needsReload: true` stamp (RLD-02 OR-reduce), not a cascade
       // kind.
       return enable
-        ? freshEnableRow(plugin, outcome)
+        ? freshEnableRow(plugin, outcome, probe)
         : {
             // D-06/RLD-02: a realized fresh disable unstages Pi-visible
             // artifacts, so it stamps needsReload directly -- this is what lets

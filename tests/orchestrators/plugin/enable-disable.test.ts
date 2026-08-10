@@ -44,6 +44,18 @@ function makePi(): ExtensionAPI {
   } as unknown as ExtensionAPI;
 }
 
+/**
+ * WR-06 / SEV-01: a Pi whose tool list carries the `subagent` tool, which is
+ * the single sanctioned `pi-subagents`-loaded probe (`softDepStatus`). The
+ * default `makePi()` above reports BOTH companions unloaded, which is what
+ * makes a row with a staged agent take the soft-dep marker.
+ */
+function makePiWithSubagents(): ExtensionAPI {
+  return {
+    getAllTools: (): unknown[] => [{ name: "subagent" }],
+  } as unknown as ExtensionAPI;
+}
+
 async function withHermeticHome<T>(
   fn: (env: { cwd: string; home: string }) => Promise<T>,
 ): Promise<T> {
@@ -190,6 +202,11 @@ async function seedRealDisabledMarketplace(
      * an earlier manifest).
      */
     omitFromManifest?: boolean;
+    /**
+     * WR-06 / SEV-01: give the plugin an agent so the re-enable's ledger stages
+     * one, which is what makes the row declare the `pi-subagents` companion.
+     */
+    withAgent?: boolean;
   },
 ): Promise<{ statePath: string; configPath: string }> {
   const scopeRoot = path.join(home, ".pi", "agent");
@@ -217,6 +234,15 @@ async function seedRealDisabledMarketplace(
     // The resolver's `lspServers` convention probe: a `.lsp.json` at the
     // plugin root makes the entry resolve `partially-available`.
     await writeFile(path.join(pluginRoot, ".lsp.json"), JSON.stringify({ servers: {} }));
+  }
+
+  if (opts.withAgent === true) {
+    const agentsDir = path.join(pluginRoot, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(
+      path.join(agentsDir, "helper.md"),
+      "---\nname: helper\ntools: Read,Grep\n---\n\nBody.\n",
+    );
   }
 
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
@@ -684,6 +710,164 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
         "",
         "● mp [user]",
         "  ● foo-plugin v1.2.3 (installed) {malformed skill}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WR-06: the enable row derives its dependency list from the ledger's staged
+// counts, so the soft-dep markers and the SEV-01 raise apply on a re-enable
+// exactly as they do on an install of the same plugin.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires pi-subagents} at warning severity when the companion is unloaded", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // The ledger staged an agent, so the row DECLARES the `pi-subagents`
+    // companion. With the companion unloaded the re-enable is silently
+    // degraded -- the same fact, the same marker and the same info -> warning
+    // raise the install row takes for the identical ledger run.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "warning");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● claude-plugins-official [user]",
+        "  ● foo-plugin v1.2.3 (installed) {requires pi-subagents}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+  });
+});
+
+test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no marker and stays info", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePiWithSubagents(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // A declared companion that IS loaded degrades nothing: the marker is a
+    // probe result, not a property of the plugin, so the row falls back to the
+    // clean `enable-fresh` byte form.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● claude-plugins-official [user]",
+        "  ● foo-plugin v1.2.3 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+  });
+});
+
+test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill composes both raises -- one warning row carrying both tokens", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // The two raises are independent rules over the same row: a malformed
+    // component is `warning` whatever the companion probe says, and a missing
+    // companion is `warning` whatever degraded. Taking the stronger of the two
+    // is what keeps either rule from silently replacing the other.
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      withAgent: true,
+      malformedSkill: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, "warning");
+    // MSG-GR-4: the typed reasons and the soft-dep markers share ONE brace,
+    // typed reasons first.
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● claude-plugins-official [user]",
+        "  ● foo-plugin v1.2.3 (installed) {malformed skill, requires pi-subagents}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+  });
+});
+
+test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers renders the catalog enable-fresh row unchanged", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // The regression guard for the derivation: a skill-only plugin declares no
+    // companion, so an unloaded probe must produce no marker and no raise.
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.ok(!notifications[0]!.message.includes("requires"));
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● claude-plugins-official [user]",
+        "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
       ].join("\n"),

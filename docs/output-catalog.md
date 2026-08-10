@@ -2163,6 +2163,21 @@ The enable branch runs the SAME install ledger over the SAME bridges as `install
 
 The re-materialized `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on a handler WITHOUT `asyncRewake: true`. One token per plugin regardless of N orphan handlers, exactly as on the install row. Severity `info` -- the config bug names itself in the brace; the enable itself was carried out in full. When more than one signal is present they share ONE brace in the install row's emit order: `{orphan rewake, malformed skill, lsp}`.
 
+### Enable of a plugin whose companion extension is unloaded (SEV-01 / WR-06)
+
+<!-- catalog-state: enable-soft-dep -->
+
+```text
+A plugin operation needs attention.
+
+● claude-plugins-official [user]
+  ● foo-plugin v1.2.3 (installed) {requires pi-subagents}
+
+/reload to pick up changes
+```
+
+The re-enable's ledger staged at least one agent, so the row DECLARES the `pi-subagents` companion; `dependencies` is derived from the ledger's staged counts (agents -> `pi-subagents`, MCP servers -> `pi-mcp`), never from a hard-coded empty list. The soft-dep marker rides the same brace as any typed reasons, typed reasons first (MSG-GR-4): a re-enable that also degraded a skill renders `{malformed skill, requires pi-subagents}`. Severity `warning` per SEV-01 -- a declared companion that is not loaded silently degrades an otherwise clean re-enable, the same raise the install row takes for the same ledger run. The two raises COMPOSE: a malformed degrade is `warning` whatever the probe reports, and an unloaded companion is `warning` whatever degraded. A loaded companion -- or a plugin that stages neither agents nor MCP servers -- renders the `enable-fresh` row above unchanged.
+
 ### Idempotent enable
 
 <!-- catalog-state: enable-idempotent -->

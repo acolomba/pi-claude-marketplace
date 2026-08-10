@@ -3673,6 +3673,34 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // SEV-01 / WR-06: the enable row derives `dependencies` from the ledger's
+    // staged counts, so a re-enable that staged an agent declares the
+    // `pi-subagents` companion. With that companion unloaded the row takes the
+    // marker AND the info -> warning raise, exactly as the install row does for
+    // the same ledger run.
+    "enable-soft-dep": {
+      pi: piWithNothingLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "foo-plugin",
+                version: "1.2.3",
+                dependencies: ["agents"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "enable-idempotent": {
       pi: piWithBothLoaded(),
       // Idempotent no-op -- benign reason routes to info per UXG-02 / D-28-06.

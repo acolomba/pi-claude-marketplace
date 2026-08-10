@@ -28,6 +28,7 @@ import type { MaterializablePlugin } from "../../domain/resolver.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -74,6 +75,41 @@ export interface LedgerDegradationSignals {
    * whichever verb materialized it.
    */
   readonly degradedKinds?: readonly DegradeKind[];
+  /**
+   * SEV-01 / D-98-02: the ledger staged at least one agent, so the row DECLARES
+   * the `pi-subagents` companion. Drives the `{requires pi-subagents}` marker
+   * and, when that companion is unloaded, the info -> warning raise. Carries a
+   * COUNT verdict only -- the staged agent names never reach a rendered row.
+   */
+  readonly stagedAgents?: boolean;
+  /**
+   * SEV-01 / D-98-02: the ledger staged at least one MCP server, so the row
+   * DECLARES the `pi-mcp-adapter` companion. The MCP counterpart of
+   * `stagedAgents`, driving the `{requires pi-mcp}` marker and the same raise.
+   */
+  readonly stagedMcpServers?: boolean;
+}
+
+/**
+ * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
+ * from the ledger's staged-count signals -- the same derivation `install.ts`
+ * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` for the same
+ * ledger run. Shared by the standalone enable row and the reconcile enable
+ * projection so the two row composers cannot drift.
+ */
+export function enableRowDependencies(
+  signals: Pick<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">,
+): readonly Dependency[] {
+  const dependencies: Dependency[] = [];
+  if (signals.stagedAgents === true) {
+    dependencies.push("agents");
+  }
+
+  if (signals.stagedMcpServers === true) {
+    dependencies.push("mcp");
+  }
+
+  return dependencies;
 }
 
 /**
