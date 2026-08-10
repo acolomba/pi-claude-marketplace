@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
-current_phase: 98
-status: completed
-stopped_at: Phase 98 complete — all v1.18 phases done, milestone ready to close
-last_updated: "2026-08-10T11:21:14.805Z"
+current_phase: 99
+status: in_progress
+stopped_at: Completed 99-01-PLAN.md
+last_updated: "2026-08-10T11:37:37.871Z"
 last_activity: 2026-08-10
-last_activity_desc: "Phase 98 plan 06 complete — DOC-08 closed: the catalog's variant enumerations, token table and glyph roster re-derived from the runtime constants, the PRD's manifest-failure row rewritten to the BOUND-01 output, the list decision flowchart redrawn around the ManifestLookup discriminant, and six source-comment sites re-anchored with no executable line changed. Full check green (CHECK_EXIT=0)"
+last_activity_desc: "Phase 99 plan 01 complete — D-99-02c closed: the colliding `readonly string[]` staged-name pairs renamed to `stagedAgentNames` / `stagedMcpServerNames` on BOTH `ReinstallReinstalledOutcome` and `PluginUpdateUpdatedOutcome`, freeing the bare spellings for the `LedgerDegradationSignals` booleans and lifting the TS2430 block on plan 99-04. Typecheck, lint, format and the four affected suites green; COMPAT-01 gate unchanged"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 17
-  percent: 71
-current_phase_name: lifecycle-regression-and-contract-documentation
+  completed_plans: 18
+  percent: 75
+current_phase_name: post-audit-tech-debt-closure
 ---
 
 # Project State
@@ -27,14 +27,33 @@ See: .planning/PROJECT.md (updated 2026-08-10 after Phase 98)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Milestone v1.18 close — audit, complete, cleanup, then
-version bump + PR. All four phases (95-98) complete and verified.
+**Current focus:** Phase 99 — close every debt item the v1.18 milestone audit
+enumerated, then milestone close: version bump + PR. Phases 95-98 complete and
+verified.
 
 ## Current Position
 
-Phase: 98
-Plan: Not started
-Status: All phases complete — milestone v1.18 ready to close
+Phase: 99 — post-audit tech-debt closure
+Plan: 1 of 7 complete (wave 1 in progress)
+Status: In progress
+Plan 99-01 closed D-99-02c, the first of the fragility trio. The two
+`readonly string[]` staged-name pairs are renamed `stagedAgentNames` /
+`stagedMcpServerNames` on BOTH outcome interfaces — `ReinstallReinstalledOutcome`
+(the site D-99-02c names) and `PluginUpdateUpdatedOutcome` (the second site
+research found). Renaming only reinstall would have left plan 99-04 blocked:
+a `readonly string[]` member colliding with an optional `boolean` one makes
+`PluginUpdateUpdatedOutcome extends LedgerDegradationSignals` a TS2430 error,
+so the `Omit`/`Pick` workaround would have become permanent. Both producers
+moved with their keys and every right-hand side is byte-identical, so no
+rendered byte and no persisted key moved (NREG-01); the COMPAT-01 gate passes
+unchanged. `install.ts:258`'s `Omit` was left in place — it records a
+deliberate exclusion, not a collision workaround. One deviation: a
+prettier re-wrap forced by the longer names. Carrier for 99-04: the inherited
+booleans will need populating at `update.ts:1940` alongside the existing
+`declaresAgents` / `declaresMcp` derivations.
+
+### Phase 98 closure (previous)
+
 Phase 98 closed 2026-08-10 with all gates green. Six plans landed the
 four Phase-97 carriers (IN-07, WR-06, WR-02, WR-04), LIFE-04/05/06
 characterization coverage, the COMPAT-01 no-expansion contract gate, and the
@@ -313,9 +332,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P04 | 30min | 2 tasks | 4 files |
 | Phase 98 P05 | 16min | 3 tasks | 2 files |
 | Phase 98 P06 | 27min | 3 tasks | 8 files |
+| Phase 99 P01 | 12min | 2 tasks | 6 files |
 
 ## Session
 
-**Last session:** 2026-08-10T08:45:00.000Z
-**Stopped at:** Phase 98 complete — all v1.18 phases done, milestone lifecycle next
+**Last session:** 2026-08-10T11:37:37.555Z
+**Stopped at:** Completed 99-01-PLAN.md
 **Resume file:** None
