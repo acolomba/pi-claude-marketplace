@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: Lifecycle regression and contract documentation
 status: planning
-stopped_at: Phase 97 complete (verified, secured, nyquist-compliant) — ready to plan Phase 98
-last_updated: "2026-08-10T00:47:20.194Z"
+stopped_at: Phase 98 context gathered
+last_updated: "2026-08-10T01:08:02.728Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
 progress:
@@ -268,6 +268,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-10T00:50:00.000Z
-**Stopped at:** Phase 97 complete, ready to plan Phase 98
-**Resume file:** None
+**Last session:** 2026-08-10T01:08:02.688Z
+**Stopped at:** Phase 98 context gathered
+**Resume file:** .planning/phases/98-lifecycle-regression-and-contract-documentation/98-CONTEXT.md
