@@ -337,7 +337,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 99-06-PLAN.md — Refresh a disabled record whose source or compatibility moved under an unchanged version, with the deep-equal guard made load-bearing (D-99-05a)
+- [x] 99-06-PLAN.md — Refresh a disabled record whose source or compatibility moved under an unchanged version, with the deep-equal guard made load-bearing (D-99-05a)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 

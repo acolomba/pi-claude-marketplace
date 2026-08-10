@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-05-PLAN.md
-last_updated: "2026-08-10T16:52:00.000Z"
+stopped_at: Completed 99-06-PLAN.md
+last_updated: "2026-08-10T17:35:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 22
-  percent: 92
-last_activity_desc: "Phase 99 plan 05 complete — D-99-02a closed, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+  completed_plans: 23
+  percent: 96
+last_activity_desc: "Phase 99 plan 06 complete — D-99-05a closed: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -34,8 +34,44 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 5 of 7 complete (waves 1-3 done; next is 99-06, wave 4)
+Plan: 6 of 7 complete (waves 1-4 done; next is 99-07, wave 5 — the last plan)
 Status: Executing
+Plan 99-06 closed D-99-05a. The equal-version short-circuit is now scoped to
+enabled records (`toVersion === fromVersion && !isRecordedButDisabled(record)`),
+so a disabled record falls through to a new `runDisabledRecordRefresh` helper
+that refreshes the pin, sweeps the un-referenced clone only if the refresh
+actually wrote, and re-derives the row from that same version equality. A
+disabled record whose path-source marketplace was re-added from a different
+directory, or whose manifest entry gained or lost an unsupported kind without a
+version bump, no longer points a later enable at a path that may not exist.
+
+**The plan's premise was falsified and the deviation is the right one.** It
+directed the executor to recover a deep-equal guard "drafted and reverted
+during an earlier fix pass". That draft is not in the history:
+`git log -S refreshDisabledRecord` over the source file returns only `5f1d0c57`
+(introduced the function) and `d1287a30` (the WR-01 narrowing), and neither
+carries a guard — 99-RESEARCH.md had already marked the recovery `[ASSUMED]`.
+Verified independently at close-out. The plan's own sanctioned alternative was
+taken instead of hand-rolling a recursive compare: a positional normalized
+projection compared with `===` over exactly the seven fields the refresh
+writes, excluding `updatedAt` (wall-clock derived) and comparing `resolvedSha`
+as the value the record would end up with.
+
+The guard is proven load-bearing by observed red, not asserted: replacing it
+with a no-op turns the new nothing-moved case red on a bumped `updatedAt` and
+the pre-existing ENBL-09 idempotency case red on mtime, while the moved-source,
+drift and promote cases stay green — exactly the guard's controls fail.
+`update.ts` was confirmed byte-identical to its pre-experiment copy before the
+test commit. `refreshDisabledRecord` also moved from `withStateGuard` to
+`withLockedStateTransaction`, because the former saves unconditionally and
+would have rewritten state.json regardless of the guard. The `(skipped)
+{up-to-date}` row deliberately keeps its bytes with a comment citing D-99-05a:
+the row reports artifact state, which genuinely is unchanged. The enabled path
+is untouched by construction — the change scopes an existing condition rather
+than moving the branch — with the unedited PUP-3 case as the control. The
+suppression count in `update.ts` is 4, unchanged (verified against the prior
+commit). Gate green: 3402 unit + 18 integration, 0 fail.
+
 Plan 99-05 closed D-99-02a, which the milestone audit's integration checker
 called the largest remaining warning. The membership rule — exact string
 identity on the manifest's plugin names, no case folding, no Unicode
