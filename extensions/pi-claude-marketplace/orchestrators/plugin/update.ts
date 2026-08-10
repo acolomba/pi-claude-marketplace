@@ -1572,6 +1572,23 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // unchanged.
   if (isRecordedButDisabled(preflight.record)) {
     await refreshDisabledRecord(args, preflight);
+    // PURL-06 / D-78-01: the refresh re-pointed resolvedSource + resolvedSha at
+    // the clone `preflightUpdate` just materialized, so the OLD clone key is now
+    // unreferenced. This arm RETURNS before the finalize path's GC-after-swap,
+    // so without this sweep every repeated update of a disabled git-source
+    // plugin leaves one more orphan until some unrelated command happens to
+    // sweep -- the accumulation the derive-not-persist GC exists to prevent.
+    // Same shape as the finalize call: outside the state guard (the refresh's
+    // withStateGuard has committed and released), gated on a git-source swap,
+    // and swallowed per D-19-01.
+    if (preflight.resolvedSha !== undefined) {
+      try {
+        await garbageCollectPluginClones(args.locations);
+      } catch {
+        // D-19-01: a GC failure never fails the update; the next pass retries.
+      }
+    }
+
     return {
       partition: "unchanged",
       name: plugin,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -4222,6 +4222,18 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       // The refresh never re-materializes: the record stays disabled and empty.
       assert.equal(record.enabled, false, "the record stays disabled");
       assertResourcesEmpty(record, "stay empty (no re-materialization)");
+      // PURL-06 / D-78-01: the refresh re-pointed resolvedSource + resolvedSha
+      // at the clone the preflight materialized, so the OLD key is
+      // unreferenced. This arm returns before the finalize path's
+      // GC-after-swap, so the sweep has to run on the arm itself -- otherwise
+      // every repeated update of a disabled git-source plugin accumulates one
+      // more orphan until an unrelated command happens to sweep.
+      const cloneEntries = (await readdir(locations.pluginClonesDir)).sort();
+      assert.deepEqual(
+        cloneEntries,
+        [pluginCloneKey(cloneUrl, SHA_NEW)],
+        "plugin-clones/ holds only the live key after the disabled-record refresh",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
