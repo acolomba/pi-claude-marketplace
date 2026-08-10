@@ -5,15 +5,15 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 98
 current_phase_name: lifecycle-regression-and-contract-documentation
 status: executing
-stopped_at: Completed 98-03-PLAN.md
-last_updated: "2026-08-10T03:40:59.265Z"
+stopped_at: Completed 98-04-PLAN.md
+last_updated: "2026-08-10T04:07:03.114Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 98 plan 03 complete — WR-02 and WR-04 closed: a stale-gate enable failure names its dropped kinds and points at update --partial, and a disabled record reaches the update refresh short-circuit with no flag typed
+last_activity_desc: "Phase 98 plan 03 complete — WR-02 and WR-04 closed: a stale-gate enable failure names its dropped kinds and points at update --partial, and a disabled record reaches the update refresh short-circuit with no flag typed"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 75
 ---
 
@@ -35,8 +35,8 @@ PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 ## Current Position
 
 Phase: 98 (lifecycle-regression-and-contract-documentation) — EXECUTING
-Plan: 4 of 6
-Status: Executing Phase 98 — plans 01-03 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04 pinned)
+Plan: 5 of 6
+Status: Executing Phase 98 — plans 01-04 complete (IN-07, WR-06, WR-02 and WR-04 carriers landed; LIFE-04 pinned; COMPAT-01 gated by one enumeration-equality contract test)
 Phase 97 closed 2026-08-09 with all gates green. The five plans landed
 ENBL-05..09: one `enabled`-keyed disabled-state predicate in
 `persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
@@ -188,6 +188,9 @@ two integration checks.
 - [Phase 98]: The manifest-absent property of every uninstall fixture is now asserted explicitly before each call rather than left incidental, so a future fixture that starts writing a marketplace.json fails loudly instead of silently weakening the coverage
 - [Phase 98]: WR-04 lands via direction 2: preflightUpdate derives the candidate gate's partial argument from the disabled-record predicate, leaving classifyInstalledRecord and every completion consumer untouched
 - [Phase 98]: The stale-gate enable narrowing keys on PluginShapeError shape kind not-installable (the install-op gate), not no-longer-installable as planned
+- [Phase 98]: Enumeration equality over count pins for closed-set gates: notify-closed-set-locks owns lengths, compat-01-no-expansion owns membership
+- [Phase 98]: Architecture gates delegate a clause through a shared non-test helper (tests/helpers/source-scan.ts), never by importing another *.test.ts module
+- [Phase 98]: PLUGIN_INSTALL_RECORD_SCHEMA is exported as a test-only widening so the COMPAT-01 gate reads the record key set off the schema rather than a hand-maintained list
 
 ### Open decisions
 
@@ -275,9 +278,10 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P01 | 50 | 3 tasks | 10 files |
 | Phase 98 P02 | 20min | 3 tasks | 1 file |
 | Phase 98 P03 | 55min | 2 tasks | 7 files |
+| Phase 98 P04 | 30min | 2 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-08-10T03:40:51.359Z
-**Stopped at:** Completed 98-03-PLAN.md
+**Last session:** 2026-08-10T04:06:52.448Z
+**Stopped at:** Completed 98-04-PLAN.md
 **Resume file:** None

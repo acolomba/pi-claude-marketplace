@@ -65,7 +65,7 @@ migration, no schema-version bump, and no persisted change.
 
 <!-- DOC numbering continues from v1.17 (DOC-06/07). -->
 
-- [ ] **COMPAT-01**: The feature introduces no manifest snapshot, orphan field, state-schema migration, status token, reason token, glyph, or new network path; it derives the read-surface condition from the valid manifest and existing installation record. The network clause is already enforced for both `info` surfaces by the existing architecture gate. Any new source-scanning gate must read files directly rather than shelling out to `grep`: `orchestrators/plugin/info.ts` contains a literal NUL byte, so `grep` classifies it as binary and silently skips the one file this milestone changes most.
+- [x] **COMPAT-01**: The feature introduces no manifest snapshot, orphan field, state-schema migration, status token, reason token, glyph, or new network path; it derives the read-surface condition from the valid manifest and existing installation record. The network clause is already enforced for both `info` surfaces by the existing architecture gate. Any new source-scanning gate must read files directly rather than shelling out to `grep`: `orchestrators/plugin/info.ts` contains a literal NUL byte, so `grep` classifies it as binary and silently skips the one file this milestone changes most.
 - [ ] **DOC-08**: `docs/output-catalog.md` and `docs/prd/pi-claude-marketplace-prd.md` document the manifest-independent list/info behavior, partial-install preservation, failure boundary, and unchanged lifecycle behavior. This also settles four known documentation defects: the PRD's PL-6 row and its section 5.3.1 flowchart still describe the retired v1 manifest-failure renderer; the output catalog's brace-bearing-variant count is stale; `(partially-installed)` is missing from the catalog's status-token reference table despite being a closed-set member; and the `notify-reasons.ts` header comments still describe a 37-entry reason set that now holds 38. The disabled-state repair is documented too: `(disabled)` now covers the partial case, and the reconcile comment asserting that only the disable orchestrator writes `enabled: false` is corrected.
 
 ## Future Requirements
@@ -111,7 +111,7 @@ Which phases cover which requirements.
 | LIFE-04 | Phase 98 | Pending |
 | LIFE-05 | Phase 98 | Pending |
 | LIFE-06 | Phase 98 | Pending |
-| COMPAT-01 | Phase 98 | Pending |
+| COMPAT-01 | Phase 98 | Complete |
 | DOC-08 | Phase 98 | Pending |
 
 **Coverage:**
