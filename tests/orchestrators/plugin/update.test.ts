@@ -3108,6 +3108,106 @@ test("WR-04: a targeted update with NO partial flag reaches the disabled-record 
   });
 });
 
+test("WR-01: a CLEAN disabled record whose candidate would newly degrade keeps the decline row and its record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-clean-disabled-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      // The candidate resolves `partially-available`, so admitting it would
+      // flip the record's availability discriminant to false.
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      // Disabled but CLEAN: the user consented to disabling this plugin, never
+      // to degrading it. `makeDisabledPluginRecord` keeps the default
+      // `installable: true` compatibility block.
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // The XSURF-03 decline row with its remediation trailer -- the consent
+      // ask. NOT the `(skipped) {up-to-date}` refresh row, which would rewrite
+      // the record with no flag typed and no row naming the new degradation.
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "A plugin operation needs attention.\n\n● mp [project]\n  ● hello v1.0.0 (partially-upgradable) {unsupported component}\n    Re-run with --partial to update with the supported components.",
+      );
+      assert.equal(notifications[0]?.severity, "warning");
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.0.0", "the pin does NOT move on a declined update");
+      assert.equal(
+        rec.compatibility.installable,
+        true,
+        "availability does NOT flip without an explicit --partial",
+      );
+      assert.deepEqual([...rec.compatibility.unsupported], [], "no dropped kinds are recorded");
+      assert.equal(rec.enabled, false, "the record stays disabled");
+      assertResourcesEmpty(rec, "stay empty (nothing was staged)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-01: an explicit --partial on the same clean disabled record consents to the degrade and re-pins it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-consented-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(rec.version, "1.1.0", "the flagged path still re-pins the record");
+      assert.equal(rec.compatibility.installable, false, "the consented degrade is recorded");
+      assert.ok(rec.compatibility.unsupported.length > 0, "the dropped kinds are recorded");
+      assert.equal(rec.enabled, false, "the record stays disabled");
+      assertResourcesEmpty(rec, "stay empty (a disabled record stages nothing)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("ENBL-09: the disabled-record refresh derives compatibility.installable from the resolution -- degraded stays degraded", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-enbl09-degraded-"));

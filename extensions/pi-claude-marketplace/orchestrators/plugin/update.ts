@@ -969,6 +969,29 @@ async function resolveUpdateCandidate(
   }
 }
 
+/**
+ * WR-04 / WR-01 / D-98-04: the record shape whose re-pin may run WITHOUT the
+ * caller's `--partial` flag -- a disabled record that is ALREADY degraded.
+ *
+ * Composed from the single ENBL-05 disabled predicate; the availability axis is
+ * read HERE, beside it, and never folded into it. The two facts stay orthogonal
+ * as far as "is this record disabled" is concerned. What this predicate answers
+ * is narrower: has the user ALREADY consented to this record's degradation?
+ *
+ * WR-01: a record that is disabled but still CLEAN has consented to nothing. If
+ * its manifest entry has newly gained an unsupported kind, admitting it here
+ * would let `refreshDisabledRecord` write `installable: false` plus the dropped
+ * kinds with no flag typed and no row naming the degradation -- and the bulk
+ * and autoupdate paths funnel through this same preflight, so the flip could
+ * happen with no user command at all. A clean disabled record therefore keeps
+ * the XSURF-03 decline row, and its degrade still needs an explicit `--partial`.
+ */
+function widensPartialGate(
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+): boolean {
+  return isRecordedButDisabled(record) && !record.compatibility.installable;
+}
+
 async function preflightUpdate(
   args: ThreePhaseArgs,
 ): Promise<PluginPreflight | PluginUpdateOutcome> {
@@ -1091,7 +1114,7 @@ async function preflightUpdate(
   const candidate = await resolveUpdateCandidate(entry, mp.marketplaceRoot, clone.probe, {
     plugin,
     fromVersion: record.version,
-    partial: args.partial === true || isRecordedButDisabled(record),
+    partial: args.partial === true || widensPartialGate(record),
   });
   if ("partition" in candidate) {
     return candidate;
