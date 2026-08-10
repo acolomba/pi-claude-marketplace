@@ -1213,7 +1213,16 @@ function staleGateDropped(cause: Error): readonly ContentReason[] | undefined {
     cause.shape.kind === "not-installable" &&
     cause.shape.partialable
   ) {
-    return narrowUnsupportedKinds(cause.shape.unsupportedKinds ?? []);
+    const narrowed = narrowUnsupportedKinds(cause.shape.unsupportedKinds ?? []);
+    // WR-05: an EMPTY narrowing names no fact, so it is not a match. The caller
+    // writes `staleGate ?? baseReasons`, and `??` treats `[]` as present -- an
+    // empty return would therefore discard the base narrowing AND still stamp
+    // `partialHint`, producing a brace-less `(failed)` row carrying a
+    // remediation trailer. Unreachable today (the resolver builds the
+    // `partially-available` arm only for a non-empty kind list, and every kind
+    // maps to a reason), which is exactly why the contract is enforced here
+    // rather than assumed: `undefined` means leave the row as it was.
+    return narrowed.length > 0 ? narrowed : undefined;
   }
 
   return undefined;
@@ -1269,3 +1278,8 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
     err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
   );
 }
+
+// Test seam (mirrors the `__test_` exports on `install.ts`): the stale-gate
+// narrowing's empty-list contract is unreachable through the public verb, so it
+// is asserted directly rather than assumed.
+export { staleGateDropped as __test_staleGateDropped };

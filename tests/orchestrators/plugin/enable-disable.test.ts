@@ -14,8 +14,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  __test_staleGateDropped,
+  setPluginEnabled,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import {
+  MarketplaceNotFoundError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -1957,4 +1963,44 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
       assert.equal(outcome.version, "1.2.3");
     }
   });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WR-05: the stale-gate narrowing's "no match" contract
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () => {
+  // The caller writes `staleGate ?? baseReasons` and stamps `partialHint` on a
+  // non-undefined result. `??` treats `[]` as present, so returning an empty
+  // list would discard the base narrowing AND still attach a remediation
+  // trailer -- a brace-less (failed) row telling the user to re-pin a plugin
+  // whose dropped kinds were never named. `undefined` means leave the row as it
+  // was, and an empty narrowing names no fact.
+  const emptyKinds = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "foo-plugin",
+    reasons: ["contains lspServers"],
+    partialable: true,
+    unsupportedKinds: [],
+  });
+  assert.equal(__test_staleGateDropped(emptyKinds), undefined);
+
+  // The matching shape still returns its narrowed reasons.
+  const withKinds = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "foo-plugin",
+    reasons: ["contains lspServers"],
+    partialable: true,
+    unsupportedKinds: ["lspServers"],
+  });
+  assert.deepEqual([...(__test_staleGateDropped(withKinds) ?? [])], ["lsp"]);
+
+  // A non-partialable structural failure is not a stale gate at all.
+  const structural = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "foo-plugin",
+    reasons: ["source dir does not exist"],
+    partialable: false,
+  });
+  assert.equal(__test_staleGateDropped(structural), undefined);
 });
