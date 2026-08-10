@@ -3422,10 +3422,12 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
       const firstNotifications = await runOnce();
       const firstRecord = await settledFields();
       // WR-05 / RECON-05: a second identical call must not write state.json at
-      // all. What keeps the refresh from rewriting the record is the
-      // `toVersion === fromVersion` short-circuit in `preflightUpdate`, which
-      // returns the `unchanged` outcome BEFORE the disabled-record branch is
-      // reached -- so the refresh runs only when the pin genuinely moved.
+      // all. The second call DOES reach the refresh -- D-99-05a lets a disabled
+      // record past the `toVersion === fromVersion` short-circuit, because its
+      // source and compatibility block move independently of the pin. What
+      // keeps the record from being rewritten is the refresh's own deep-equal
+      // guard: it compares the projection it would write against the persisted
+      // one and skips the save when they match.
       // Comparing settled fields alone cannot see a rewrite that lands the same
       // values; the mtime and the wall-clock `updatedAt` can, so read both
       // BEFORE the second call.
@@ -3440,9 +3442,9 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
       assert.equal(secondNotifications.length, 1);
       // WR-02: the two calls did DIFFERENT things, so their rows differ. The
       // first moved the pin and says so with the skip reason that names why
-      // nothing was materialized; the second is a genuine no-op reached through
-      // the `toVersion === fromVersion` short-circuit, and `{up-to-date}` is a
-      // true statement only there.
+      // nothing was materialized; the second wrote nothing at all, and
+      // `{up-to-date}` is a true statement only there. Both rows are derived
+      // from the same version equality, one arm of the refresh each.
       assert.equal(
         firstNotifications[0]?.message,
         "● mp [project]\n  ⊘ hello (skipped) {already disabled}",
@@ -3464,6 +3466,69 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
         firstUpdatedAt,
         "a no-op refresh must not bump updatedAt while rendering (skipped) {up-to-date}",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── D-99-05a: a disabled record refreshes under an UNCHANGED version ────────
+//
+// `refreshDisabledRecord` owns three independently-moving facts: the version
+// pin, `resolvedSource`, and the `compatibility` block. Only the first is what
+// `toVersion === fromVersion` compares, so a disabled record now falls THROUGH
+// that short-circuit and the refresh decides for itself whether anything moved.
+//
+// The enabled-plugin control for this reordering is the existing PUP-3 case
+// above: an enabled record at an equal version still reaches the `unchanged`
+// partition with state.json not rewritten. It is asserted there and unedited.
+
+test("D-99-05a: a disabled record whose source moved under an unchanged version is refreshed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-d9905a-moved-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+      });
+
+      // The pin the record carries points somewhere the manifest no longer
+      // resolves -- the shape a path-source marketplace re-added from another
+      // directory leaves behind. The VERSION is identical to the manifest's, so
+      // nothing about the version says the record is stale.
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.1.0");
+      await saveState(locations.extensionRoot, state);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // D-99-05a row contract: the artifact state genuinely IS unchanged -- the
+      // refresh materializes nothing -- so the byte-pinned up-to-date skip row
+      // stays right even though the pin moved. No new catalog state.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
+
+      const after = await loadState(locations.extensionRoot);
+      const rec = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(rec !== undefined);
+      assert.equal(
+        rec.resolvedSource,
+        path.join(seeded.marketplaceRoot, "plugins", "hello"),
+        "a later enable re-materializes from the CURRENT pluginRoot",
+      );
+      assert.equal(rec.version, "1.1.0", "the version pin was already current");
+      assert.equal(rec.enabled, false, "a refresh never enables");
+      assertResourcesEmpty(rec, "stay empty (nothing is materialized)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

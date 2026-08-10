@@ -123,7 +123,7 @@ import {
 } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 
@@ -1150,7 +1150,20 @@ async function preflightUpdate(
   // Path / github-name plugins keep the 3-tier `resolvePluginVersion` ladder.
   const resolvedSha = clone.resolvedSha();
   const toVersion = await deriveUpdateToVersion(entry, installable, resolvedSha);
-  if (toVersion === fromVersion) {
+  // D-99-05a: version equality is the whole answer for an ENABLED record --
+  // nothing else it holds can move without the version moving, because every
+  // other field is rewritten by the materialization the version gates.
+  //
+  // A DISABLED record holds more than the version. `refreshDisabledRecord` also
+  // owns `resolvedSource` and the `compatibility` block, and both move
+  // independently of the pin: a path-source marketplace re-added from another
+  // directory, or a manifest entry that gains or loses an unsupported kind with
+  // no version bump. Returning here would leave a later `enable` pointed at a
+  // path that may no longer exist, or gated on a stale availability
+  // discriminant. So a disabled record falls THROUGH to
+  // `runDisabledRecordRefresh`, which re-derives this same version equality for
+  // its row and lets the refresh's own guard decide whether to write.
+  if (toVersion === fromVersion && !isRecordedButDisabled(record)) {
     // `(unchanged)` rows do not render the soft-dep marker either.
     return {
       partition: "unchanged",
@@ -1393,30 +1406,101 @@ async function markUpdateInProgress(
  * is a truthful "we touched this record" stamp.
  */
 /**
- * D-UPD: refresh a disabled-but-recorded plugin's version pin + resolvedSource
- * inside a withStateGuard so a future `enable` re-materializes from the
- * current manifest. Resources.* stay empty (the plugin is still disabled).
- * The standalone-direct write-back (maybeWritePluginConfigBack) is
- * SKIPPED -- the config entry already exists by construction (the disabled
- * record only persists when the user explicitly disabled it), and writing
- * the byte-stable `{}` patch would touch state.json mtime via the SOLE
- * sanctioned save seam without changing user-visible bytes.
+ * D-99-05a: the slice of a disabled record that {@link refreshDisabledRecord}
+ * owns, normalized to one string so two snapshots compare with `===` rather
+ * than through a hand-rolled recursive walk. Positional, so no key ordering can
+ * make equal records compare unequal.
+ *
+ * `updatedAt` is deliberately absent: the refresh derives it from the wall
+ * clock, so a projection carrying it would differ from itself on every call and
+ * the guard could never hold.
+ */
+function disabledPinProjection(
+  version: string,
+  resolvedSource: string,
+  resolvedSha: string | undefined,
+  compatibility: {
+    readonly installable: boolean;
+    readonly notes: readonly string[];
+    readonly supported: readonly string[];
+    readonly unsupported: readonly string[];
+  },
+): string {
+  return JSON.stringify([
+    version,
+    resolvedSource,
+    resolvedSha ?? null,
+    compatibility.installable,
+    [...compatibility.notes],
+    [...compatibility.supported],
+    [...compatibility.unsupported],
+  ]);
+}
+
+/**
+ * D-UPD: refresh a disabled-but-recorded plugin's version pin, resolvedSource
+ * and compatibility block under the scope lock so a future `enable`
+ * re-materializes from the current manifest. Resources.* stay empty (the plugin
+ * is still disabled). The standalone-direct write-back
+ * (maybeWritePluginConfigBack) is SKIPPED -- the config entry already exists by
+ * construction (the disabled record only persists when the user explicitly
+ * disabled it), and writing the byte-stable `{}` patch would touch state.json
+ * mtime via the SOLE sanctioned save seam without changing user-visible bytes.
+ *
+ * D-99-05a: reached on an unchanged version too, so the guard below is what
+ * keeps a repeated update from rewriting an already-current record. RECON-05:
+ * nothing moved means no save at all -- not a save that happens to land the
+ * same values, which still bumps `updatedAt` and state.json's mtime. That is
+ * why the transaction saves explicitly instead of using `withStateGuard`, which
+ * persists unconditionally.
+ *
+ * Returns whether anything was written.
  */
 async function refreshDisabledRecord(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
-): Promise<void> {
+): Promise<boolean> {
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion, resolvedSha } = preflight;
-  await withStateGuard(locations, (s) => {
-    const sMp = s.marketplaces[marketplace];
+  return withLockedStateTransaction(locations, async (tx) => {
+    const sMp = tx.state.marketplaces[marketplace];
     if (sMp === undefined) {
-      return;
+      return false;
     }
 
     const sRecord = sMp.plugins[plugin];
     if (sRecord === undefined) {
-      return;
+      return false;
+    }
+
+    // ENBL-09: derive the availability discriminant from the resolution rather
+    // than hard-coding it, so it always agrees with the unsupported list copied
+    // beside it. `installable: true` next to a non-empty `unsupported` array is
+    // a record whose two fields contradict each other, and every downstream
+    // classifier reads a different token off the same record.
+    const nextCompatibility = {
+      installable: installable.state === "installable",
+      notes: [...installable.notes],
+      supported: [...installable.supported],
+      unsupported: [...installable.unsupported],
+    };
+    // The sha the record would END UP with: a path / github-name source carries
+    // no pin and leaves the recorded one alone, so comparing against a bare
+    // `undefined` would read every such refresh as a move.
+    const next = disabledPinProjection(
+      toVersion,
+      installable.pluginRoot,
+      resolvedSha ?? sRecord.resolvedSha,
+      nextCompatibility,
+    );
+    const current = disabledPinProjection(
+      sRecord.version,
+      sRecord.resolvedSource,
+      sRecord.resolvedSha,
+      sRecord.compatibility,
+    );
+    if (next === current) {
+      return false;
     }
 
     sRecord.version = toVersion;
@@ -1432,19 +1516,83 @@ async function refreshDisabledRecord(
       sRecord.resolvedSha = resolvedSha;
     }
 
-    // ENBL-09: derive the availability discriminant from the resolution rather
-    // than hard-coding it, so it always agrees with the unsupported list copied
-    // beside it. `installable: true` next to a non-empty `unsupported` array is
-    // a record whose two fields contradict each other, and every downstream
-    // classifier reads a different token off the same record.
-    sRecord.compatibility = {
-      installable: installable.state === "installable",
-      notes: [...installable.notes],
-      supported: [...installable.supported],
-      unsupported: [...installable.unsupported],
-    };
+    sRecord.compatibility = nextCompatibility;
     sRecord.updatedAt = new Date().toISOString();
+    await tx.save();
+    return true;
   });
+}
+
+/**
+ * The disabled-record arm of the three-phase body: refresh the pin, sweep the
+ * clone the refresh un-referenced, and pick the row.
+ *
+ * Extracted so the reordering that made this arm reachable on an unchanged
+ * version does not add a branch to `runThreePhaseUpdate`'s already-suppressed
+ * complexity budget.
+ */
+async function runDisabledRecordRefresh(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+): Promise<PluginUpdateOutcome> {
+  const { plugin } = args;
+  const { fromVersion, toVersion } = preflight;
+  const wrote = await refreshDisabledRecord(args, preflight);
+
+  // PURL-06 / D-78-01: a refresh that moved the pin re-pointed resolvedSource +
+  // resolvedSha at the clone `preflightUpdate` just materialized, so the OLD
+  // clone key is now unreferenced. This arm RETURNS before the finalize path's
+  // GC-after-swap, so without this sweep every repeated update of a disabled
+  // git-source plugin leaves one more orphan until some unrelated command
+  // happens to sweep -- the accumulation the derive-not-persist GC exists to
+  // prevent. Same shape as the finalize call: outside the state guard (the
+  // refresh's transaction has committed and released), gated on a git-source
+  // swap, and swallowed per D-19-01. A refresh that wrote nothing un-referenced
+  // nothing, so it sweeps nothing either.
+  if (wrote && preflight.resolvedSha !== undefined) {
+    try {
+      await garbageCollectPluginClones(args.locations);
+    } catch {
+      // D-19-01: a GC failure never fails the update; the next pass retries.
+    }
+  }
+
+  if (toVersion === fromVersion) {
+    // D-99-05a row contract: the `unchanged` row stays, byte for byte, even
+    // when the refresh above moved the source or the compatibility block. The
+    // row reports the ARTIFACT state, and that state genuinely is unchanged --
+    // a disabled record materializes nothing either way. Moving a byte-pinned
+    // row here would buy the reader no new fact and cost a catalog amendment,
+    // so the up-to-date claim is kept deliberately, not by omission.
+    return {
+      partition: "unchanged",
+      name: plugin,
+      fromVersion,
+      toVersion,
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
+
+  // WR-02: NOT the `unchanged` partition. `unchanged` renders `{up-to-date}`,
+  // a claim about the VERSION, and the refresh just moved that version along
+  // with the source, the sha and the compatibility block. `up-to-date` is
+  // therefore the one fact this row cannot claim. Report the skip that actually
+  // happened and name why nothing was materialized: the record is disabled.
+  // Both tokens are inherited closed-set members; `already disabled` is
+  // idempotent, so the row keeps its info severity and emits no summary line.
+  // `fromVersion` is deliberately omitted: the record no longer holds it (the
+  // refresh just moved the pin), so rendering it in the row's version slot
+  // would trade one stale claim for another. The row makes no version claim,
+  // which is the same slot shape the `unchanged` projection renders above.
+  return {
+    partition: "skipped",
+    name: plugin,
+    notes: [],
+    reasons: ["already disabled"] as const,
+    declaresAgents: false,
+    declaresMcp: false,
+  };
 }
 
 async function finalizeUpdateRecord(
@@ -1621,47 +1769,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // ENBL-09: refresh the record's version, resolvedSource and compatibility so
   // a future enable reads the current pin, but keep `resources.*` empty.
   if (isRecordedButDisabled(preflight.record)) {
-    await refreshDisabledRecord(args, preflight);
-    // PURL-06 / D-78-01: the refresh re-pointed resolvedSource + resolvedSha at
-    // the clone `preflightUpdate` just materialized, so the OLD clone key is now
-    // unreferenced. This arm RETURNS before the finalize path's GC-after-swap,
-    // so without this sweep every repeated update of a disabled git-source
-    // plugin leaves one more orphan until some unrelated command happens to
-    // sweep -- the accumulation the derive-not-persist GC exists to prevent.
-    // Same shape as the finalize call: outside the state guard (the refresh's
-    // withStateGuard has committed and released), gated on a git-source swap,
-    // and swallowed per D-19-01.
-    if (preflight.resolvedSha !== undefined) {
-      try {
-        await garbageCollectPluginClones(args.locations);
-      } catch {
-        // D-19-01: a GC failure never fails the update; the next pass retries.
-      }
-    }
-
-    // WR-02: NOT the `unchanged` partition. `unchanged` means "the resolved
-    // version matched the record exactly; nothing was written", and it renders
-    // `{up-to-date}` -- a claim about the VERSION. This arm is reachable only
-    // when the version MOVED (`preflightUpdate` returns `unchanged` on
-    // `toVersion === fromVersion` before the disabled branch is reached), and
-    // the refresh above just rewrote that version along with the source, the sha
-    // and the compatibility block. `up-to-date` is therefore the one fact the
-    // row cannot claim. Report the skip that actually happened and name why
-    // nothing was materialized: the record is disabled. Both tokens are
-    // inherited closed-set members; `already disabled` is idempotent, so the row
-    // keeps its info severity and emits no summary line.
-    // `fromVersion` is deliberately omitted: the record no longer holds it (the
-    // refresh just moved the pin), so rendering it in the row's version slot
-    // would trade one stale claim for another. The row makes no version claim,
-    // which is the same slot shape the `unchanged` projection rendered here.
-    return {
-      partition: "skipped",
-      name: plugin,
-      notes: [],
-      reasons: ["already disabled"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
+    return runDisabledRecordRefresh(args, preflight);
   }
 
   // ─── : prepare into tmp ────────────────────────────────────────────
