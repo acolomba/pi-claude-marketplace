@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
-current_phase_name: post-audit-tech-debt-closure
-status: executing
-stopped_at: Phase 99 review loop converged (2 iterations); verifier gate next
-last_updated: "2026-08-10T21:40:00.000Z"
+status: completed
+stopped_at: Phase 99 complete and verified; milestone lifecycle next
+last_updated: "2026-08-10T23:36:25.992Z"
 last_activity: 2026-08-10
+last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 24
   completed_plans: 24
   percent: 100
-last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+current_phase_name: post-audit-tech-debt-closure
 ---
 
 # Project State
@@ -33,10 +33,34 @@ verified.
 
 ## Current Position
 
-Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 7 of 7 complete. Review loop CONVERGED after 2 iterations.
-Status: Verifier, validate-phase and secure-phase still to run before the phase
-closes. `npm run check` green at HEAD: 3417 unit + 18 integration, 0 fail.
+Phase: 99 (post-audit-tech-debt-closure) — COMPLETE
+Plan: 7 of 7 complete
+Status: All v1.18 phases complete (95-99). Milestone lifecycle remains: audit,
+complete-milestone, cleanup, then version bump + CHANGELOG + PR.
+
+Phase 99 closed 2026-08-10 with every gate green. All seven debt items the
+v1.18 audit enumerated are closed and verified against the code rather than
+against the summaries: verification `passed` 5/5 criteria, nyquist-compliant;
+security `SECURED` with `threats_open: 0` (29 declared threats plus the 9
+review-discovered defects, each traced through its call chain). `npm run check`
+green at HEAD: 3417 unit (1 pre-existing platform-conditional skip) + 18
+integration, 0 fail; typecheck, lint and format all exit 0.
+
+The review loop converged in two iterations and was worth its cost: it caught
+one genuine user-visible defect (CR-01 — `update --partial` rendered a row
+naming only the dropped kinds, no `{malformed skill}` and no severity raise, on
+a path the autoupdate cascade reaches with NO user flag) and three documents
+asserting things the code had falsified. The third of those is the one to
+remember: `ARCHITECTURE.md` claimed an `import-x` no-cycle rule enforced the
+D-11 boundary and no such rule existed — and adding it naively would have
+produced a GREEN GATE GATING NOTHING, because the rule walks a one-node graph
+unless `settings["import-x/extensions"]` includes `.ts`.
+
+Bookkeeping done at close: the three carrier todos this phase closed are
+retired to `todos/completed/`; the coverage-exclusion question 99-07 raised
+stays pending because nothing has decided it; `ROADMAP.md`'s false
+anchor-definition premise is corrected in place with a note recording what it
+caused.
 
 ### Review iteration 2 (the fix pass reviewed)
 
@@ -393,7 +417,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-10 — Phase 99 plan 99-02 complete
+Last activity: 2026-08-10 — Phase 99 complete
 
 ## Roadmap Summary
 

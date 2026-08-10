@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-98 (planned, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, and a disabled partially-installed plugin is once again recognized as disabled
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-99 (all phases complete and verified, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, and a disabled partially-installed plugin is once again recognized as disabled
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
@@ -312,9 +312,11 @@ Plans:
 | 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete | 2026-07-26 |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |
 
-### Phase 99: Post-audit tech-debt closure
+### Phase 99: Post-audit tech-debt closure — COMPLETE 2026-08-10
 
 **Goal:** Every debt item the v1.18 milestone audit enumerated is closed before the milestone ships: the three integration fragility warnings, the update-verb degradation-signal gap, the documentation deferrals, and the two legacy carriers.
+
+**Outcome:** All seven items closed and verified against the code. Verification `passed` 5/5, nyquist-compliant; security `SECURED`, `threats_open: 0`. The two-iteration review loop additionally closed a user-visible defect (a degraded `update --partial` rendered a clean-looking row on a path the autoupdate cascade reaches with no user flag) and corrected three documents that asserted things the code had falsified — including an `ARCHITECTURE.md` claim that a no-cycle rule enforced the D-11 boundary when none existed.
 
 **Requirements:** none — post-audit debt closure; items tracked in `.planning/v1.18-MILESTONE-AUDIT.md` (tech_debt frontmatter) and the three pending todos (operator decision 2026-08-10: address all four groups before completing v1.18)
 
@@ -328,7 +330,7 @@ Plans:
 4. The autoupdate cascade skip row has a catalog state with a FIXTURES entry; the description-bearing variant count is corrected; the residual `RLD-04`/`D-08` anchors are re-anchored or dropped at the six named sites (skipping the four files where `D-08` legitimately means something else).
 5. A disabled record whose `resolvedSource` moved while the version pin did not is refreshed rather than left stale; the rare-failure-arm coverage sweep lands the tests named in the 2026-06-12 todo (bounded to its named arms in update/reinstall/install).
 
-**Plans:** 2/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 **Wave 1**
