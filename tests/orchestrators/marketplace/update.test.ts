@@ -9,6 +9,7 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
 import {
   __test_outcomeToCascadePluginMessage,
   __test_snapshotAfterRefresh,
@@ -1073,6 +1074,111 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
       assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
 
       assert.deepEqual(await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello"), before);
+    } finally {
+      await rm(marketplaceRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── WR-10: a disabled-record re-pin leaves the autoupdate no-op gate ─────────
+//
+// The gate collapses an autoupdate-ON cascade to the bare
+// `(skipped) {up-to-date}` marketplace row when BOTH the validated
+// marketplace.json content is unchanged AND every cascaded plugin outcome is
+// `unchanged`. `unchanged` means the resolved version matched the record
+// exactly and NOTHING was written.
+//
+// A disabled record whose pin moved is not that: the update rewrites the
+// record's version, source, sha and compatibility block and then declines to
+// re-materialize artifacts, reporting `skipped` + `already disabled` (WR-02).
+// So the cascade is not a no-op, the gate does not fire, and the marketplace
+// renders `(updated)` with the per-plugin row underneath -- which is the fact.
+// Collapsing this to `{up-to-date}` would restate at the marketplace level the
+// exact falsehood WR-02 removed from the plugin row.
+//
+// The scenario is reachable only because the hash-version ladder is
+// CONTENT-derived: the plugin's files move while marketplace.json stays
+// byte-identical, so `snapshot.changed` is false and the plugin pin still moves.
+//
+// Deliberately USER scope, for the reason the sibling case above states at
+// length: `updateSinglePlugin` reads the process working directory itself.
+test("WR-10: an autoupdate cascade over a disabled record whose pin moved renders rows, not the no-op collapse", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    const locations = locationsFor("user", cwd);
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "mp-disabled-repin-"));
+    try {
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      // NEITHER plugin.json NOR the manifest entry declares a version, so the
+      // PI-7 content hash is the resolved version (tier 3) and editing a file
+      // under the plugin root moves the pin.
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello" }),
+      );
+      await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, "skills", "tool", "SKILL.md"),
+        "---\nname: tool\ndescription: A tool.\n---\n\n# Tool\n\nBefore.\n",
+      );
+      await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "disabled-mp",
+          plugins: [{ name: "hello", source: "./plugins/hello" }],
+        }),
+      );
+
+      // The record is pinned at the plugin's CURRENT content hash and disabled.
+      const pinnedVersion = await computeHashVersion(pluginRoot);
+      await seedPathMarketplace({
+        cwd,
+        name: "disabled-mp",
+        marketplaceRoot,
+        scope: "user",
+        autoupdate: true,
+        plugins: {
+          hello: { ...makePluginRecord(), version: pinnedVersion, enabled: false },
+        },
+      });
+
+      // Move the plugin CONTENT. marketplace.json is not touched, so the
+      // marketplace-level change detector reports no change.
+      await writeFile(
+        path.join(pluginRoot, "skills", "tool", "SKILL.md"),
+        "---\nname: tool\ndescription: A tool.\n---\n\n# Tool\n\nAfter.\n",
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      const { gitOps } = makeMockGitOps();
+      await updateMarketplace({
+        ctx,
+        pi,
+        name: "disabled-mp",
+        scope: "user",
+        cwd,
+        gitOps,
+        pluginUpdate: updateSinglePlugin,
+      });
+
+      const first = notifications[0];
+      assert.ok(first !== undefined);
+      // The byte form, pinned whole: the no-op collapse would have rendered one
+      // line (`● disabled-mp [user] (skipped) {up-to-date}`) and no rows.
+      assert.equal(
+        first.message,
+        ["● disabled-mp [user] (updated)", "  ⊘ hello (skipped) {already disabled}"].join("\n"),
+      );
+      // Benign idempotent skip -> info, so no severity arg and no summary line.
+      assert.equal(first.severity, undefined);
+
+      // And the re-pin the row declines to call `up-to-date` really happened.
+      const after = await readPluginRecord(locations.extensionRoot, "disabled-mp", "hello");
+      assert.ok(after !== undefined);
+      assert.notEqual(after.version, pinnedVersion);
+      assert.equal(after.enabled, false);
     } finally {
       await rm(marketplaceRoot, { recursive: true, force: true });
     }

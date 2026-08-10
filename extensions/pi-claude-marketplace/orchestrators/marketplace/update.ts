@@ -1018,6 +1018,14 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // `failed` outcome keeps the existing `(updated)`-with-rows emission so the
   // per-plugin failed routing is preserved (a thrown refresh failure is already
   // handled upstream in `refreshOneMarketplace`'s catch and never reaches here).
+  // WR-10: the `skipped` exclusion covers the disabled-record re-pin (WR-02),
+  // which is reachable here precisely because the hash-version ladder is
+  // CONTENT-derived: the plugin's files can move while marketplace.json stays
+  // byte-identical, so (A) holds while the plugin pin does not. That refresh
+  // REWRITES the record (version, source, sha, compatibility) and only declines
+  // to re-materialize artifacts, so collapsing it to `{up-to-date}` would
+  // restate at the marketplace level the same false version claim the plugin row
+  // stopped making. Catalog state `update-autoupdate-disabled-repin`.
   // When both hold, emit the SAME `(skipped) {up-to-date}` payload as the OFF
   // no-op (plugins:[] -> shouldEmitReloadHint stays false, warning severity).
   const cascadeIsNoOp = outcomes.every((o) => o.partition === "unchanged");

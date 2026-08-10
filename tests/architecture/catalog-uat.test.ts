@@ -3320,6 +3320,33 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-10: the near miss of the no-op above. A disabled record whose
+    // content-derived pin moved is a `skipped` outcome, not `unchanged`, so it
+    // leaves the no-op gate and the cascade rows render. Benign idempotent
+    // reason -> INFO (no `expectedSeverity`).
+    "update-autoupdate-disabled-repin": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "disabled-mp",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                scope: "user",
+                reasons: ["already disabled"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {
