@@ -5305,6 +5305,93 @@ test("WR-12: an update whose new source skill will not parse names the kind on t
   });
 });
 
+test("WR-12: an update whose new source command will not parse names the command kind on the row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-command-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasCommand: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", "commands", "deploy.md"),
+        UNPARSEABLE_FRONTMATTER,
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated) {malformed command}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-12: an update that degrades BOTH kinds emits both reasons in the canonical order", async () => {
+  // Order is the property the catalog byte fixture depends on, and it is why the
+  // collection routes through `malformedReasonsForKinds` rather than a
+  // verb-local kinds-to-reasons map: the helper owns the canonical emit order,
+  // so a local map would produce the right tokens in the wrong order.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-both-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasCommand: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), UNPARSEABLE_FRONTMATTER);
+      await writeFile(path.join(pluginRoot, "commands", "deploy.md"), UNPARSEABLE_FRONTMATTER);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated) {malformed skill, malformed command}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("NREG-01: a clean update row is byte-identical to before -- no brace, no raise", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-clean-"));

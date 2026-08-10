@@ -2340,3 +2340,63 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     assert.equal(typeof state.fetchCalls[0]?.auth?.onAuthRequired, "function");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// WARN-01 / WR-12 / D-99-03: the autoupdate cascade's `(updated)` row
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WR-12: the autoupdate cascade row is byte-identical to the standalone update row for the same degraded outcome", async () => {
+  // The update verb has TWO surfaces that render an `(updated)` row -- this
+  // autoupdate cascade and the manual update cascade -- and they read the same
+  // outcome. One naming the degrade while the other renders a bare success row
+  // is exactly the drift the single composer exists to prevent, so the surfaces
+  // are pinned against each other rather than each against its own literal.
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({
+      cwd,
+      name: "mp",
+      ref: "main",
+      autoupdate: true,
+      plugins: { hello: makePluginRecord() },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = makeMockGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000031" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        degradedKinds: ["skill"],
+      });
+
+    await updateMarketplace({
+      ctx,
+      pi,
+      name: "mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    // Byte-identical to the row `tests/orchestrators/plugin/update.test.ts`
+    // pins for the standalone verb, down to the two-space cascade indent.
+    assert.ok(
+      first.message.includes("  ● hello v1.0.0 → v1.0.1 (updated) {malformed skill}"),
+      `expected the standalone row bytes, got: ${first.message}`,
+    );
+    // WARN-01: the malformed raise is a SEPARATE axis from the WR-01
+    // companion-absence suppression this surface applies, so it fires here even
+    // though an absent companion deliberately does not.
+    assert.equal(first.severity, "warning");
+  });
+});
