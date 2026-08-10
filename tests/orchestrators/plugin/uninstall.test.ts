@@ -145,7 +145,13 @@ async function seedFullPlugin(
   marketplace: string,
   plugin: string,
   cwd: string,
-): Promise<{ skillDir: string; commandFile: string; agentFile: string; mcpJson: string }> {
+): Promise<{
+  skillDir: string;
+  commandFile: string;
+  agentFile: string;
+  hooksFile: string;
+  mcpJson: string;
+}> {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   // skill: <skillsTargetDir>/<name>/SKILL.md
@@ -182,6 +188,12 @@ async function seedFullPlugin(
   };
   await atomicWriteJson(locations.agentsIndexPath, agentsIndex);
 
+  // hooks: <hooksDir>/<plugin>/hooks.json -- the path shape hookConfigPathFor
+  // composes, which is what removeHookConfig removes on the cascade's 5th arm.
+  const hooksFile = path.join(locations.hooksDir, plugin, "hooks.json");
+  await mkdir(path.dirname(hooksFile), { recursive: true });
+  await writeFile(hooksFile, JSON.stringify({ hooks: {} }));
+
   // mcp: <scopeRoot>/mcp.json with one owned server
   const mcpServerName = "uni-server";
   const mcpJson = locations.mcpJsonPath;
@@ -208,6 +220,9 @@ async function seedFullPlugin(
         scope: locations.scope,
         source: pathSource("./src"),
         addedFromCwd: cwd,
+        // LIFE-04: nothing writes a marketplace.json under this cwd, so the
+        // recorded manifest path never exists. Uninstall reads no manifest and
+        // no resolver -- the installation record alone drives the cascade.
         manifestPath: path.join(cwd, "marketplace.json"),
         marketplaceRoot: cwd,
         plugins: {
@@ -216,13 +231,14 @@ async function seedFullPlugin(
             prompts: ["uni-cmd"],
             agents: [agentName],
             mcpServers: [mcpServerName],
+            hooks: [plugin],
           }),
         },
       },
     },
   });
 
-  return { skillDir, commandFile, agentFile, mcpJson };
+  return { skillDir, commandFile, agentFile, hooksFile, mcpJson };
 }
 
 // PU-1 + PU-8 (success path, hint emitted) ---------------------------
