@@ -2,71 +2,64 @@
 gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
-current_phase: 97
-current_phase_name: disabled-state-classification-repair
-status: executing
-stopped_at: Completed 97-05-PLAN.md — all 5 plans complete, phase at gates
-last_updated: "2026-08-09T20:12:00.000Z"
+current_phase: 98
+current_phase_name: Lifecycle regression and contract documentation
+status: planning
+stopped_at: Phase 97 complete (verified, secured, nyquist-compliant) — ready to plan Phase 98
+last_updated: "2026-08-10T00:47:20.194Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 97 plan 05 closed out; ENBL-09 verified post-hoc against concurrently-landed commits — the disabled-record refresh derives its availability discriminant, the update --partial short-circuit stages nothing on disk, and two identical calls are a fixed point; one guard-tripping comment fixed and the full suite green
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
   completed_plans: 11
-  percent: 50
+  percent: 75
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-09 after Phase 96)
+See: .planning/PROJECT.md (updated 2026-08-09 after Phase 97)
 
 **Core value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>`
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Phase 97 — disabled-state-classification-repair
-A disabled partially-installed plugin is recognized as disabled by every
-surface, restoring the orthogonality of declared, enabled and available.
-No state migration and no schema-version change.
+**Current focus:** Phase 98 — lifecycle-regression-and-contract-documentation
+The new read behavior and the disabled-state repair ship without mutation,
+persistence, network, or public-contract regressions; the output catalog,
+PRD, and design doc are reconciled (LIFE-04..06, COMPAT-01, DOC-08).
 
 ## Current Position
 
-Phase: 97 (disabled-state-classification-repair) — EXECUTED, AT GATES
-Plan: 5 of 5
-Status: Plans 01-05 complete. The ENBL-05 root repair landed first: one
-disabled-state predicate in `persistence/state-io.ts` keyed only on
-`enabled`, six modules on it, and the CR-01 repro (a manifest-absent
-disabled partial reaching the state-only info arm) green. Plan 02 then
-froze the rendering that repair exposed — ENBL-06 is closed on both
-surfaces, with a byte-exact `list` contrast row and an `info --fetch`
-cause pin, and the stale two-axis-marker prose swept from the render
-surfaces and the output catalog. Plan 03 closed ENBL-07: `runEnableBranch`
-derives the install ledger's admission gate from the record's own
-availability discriminant, so a disabled partial re-materializes through
-the partially-available arm instead of dying on `requireInstallable`, with
-the manifest-absent enable and the repeat disable pinned byte-exactly.
-Plan 04 closed ENBL-08 by making load-time reconcile a fixed point for a
-disabled partial: the BFILL-01 backfill scan now filters on `enabled` as
-well as availability, so no unattended pass re-materializes — and through
-reinstall's record write re-enables — a plugin the user disabled, and two
-identical planner passes are pinned to the empty plan with a
-declared-enabled counter-case. Plan 05 closed ENBL-09, the second-order
-edit the collapse exposed: `refreshDisabledRecord` now derives the
-persisted availability discriminant from the resolution instead of
-hard-coding `installable: true`, so the short-circuit a disabled partial
-reaches can no longer write full availability beside a non-empty
-unsupported array — proven by a degraded/promotion counter-case pair and
-by mutation. The short-circuit itself is pinned by an on-disk no-stage
-assertion, and two identical `update --partial` calls are a fixed point.
-Its production work landed as concurrent commits outside the paused
-session's dispatch and was verified criterion-by-criterion at close-out,
-which caught one comment tripping the D-75-01 vocabulary guard (fixed in
-`be4da56d`).
-Last activity: 2026-08-09 — Phase 97 plan 05 closed out (full suite green,
-exit 0); phase awaits its verification gates
+Phase: 98 — Lifecycle regression and contract documentation
+Plan: Not started
+Status: Ready to plan
+Phase 97 closed 2026-08-09 with all gates green. The five plans landed
+ENBL-05..09: one `enabled`-keyed disabled-state predicate in
+`persistence/state-io.ts` (CR-01 repro green), byte-exact disabled-partial
+rendering on list/info with the two-axis-marker prose swept, a
+partial-capable enable gate derived from the record's own availability
+discriminant, a backfill scan that is a fixed point for disabled partials,
+and a `refreshDisabledRecord` that derives its persisted availability
+discriminant (mutation-proven) behind an on-disk no-stage short-circuit
+pin. Plan 05's work landed as concurrent commits outside the paused
+session's dispatch and was verified criterion-by-criterion at close-out.
+The three-iteration review fix loop finished all_fixed: it repaired the
+enable outcome row for partials (status derived like install's, severity
+info per the operator's SEV-03 parity ruling, degradation signals threaded
+through one shared `EnableDegradationSignals` shape), refreshed
+`resolvedSha` beside the version pin, collapsed two more predicate twins
+under a whole-tree drift gate, reached clone GC from the disabled update
+arm, and disambiguated colliding finding-ID comment anchors. Verification
+passed 6/6 roadmap criteria and 29/29 must-haves; nyquist-compliant;
+threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
+warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
+stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
+gap is a backlog todo.
+Last activity: 2026-08-09 — Phase 97 complete, transitioned to Phase 98
 
 ## Roadmap Summary
 
@@ -94,11 +87,16 @@ exit 0); phase awaits its verification gates
   own-manifest authority pinned and the catalog's open note closed. CR-01
   (disabled-partial predicate) carried to Phase 97.
 
-- **Phase 97 — Disabled-state classification repair** (ENBL-05..09): collapse the
-  four copies of the disabled-state predicate into one keyed only on `enabled`,
-  then restore list/info rendering, enable/disable idempotency, reconcile steady
-  state, and the update short-circuit for disabled partially-installed records.
-  Repairs ENBL-04 from v1.12. No state migration.
+- **Phase 97 — Disabled-state classification repair** (ENBL-05..09): COMPLETE
+  2026-08-09. Collapsed every disabled-state predicate onto one `enabled`-keyed
+  definition (whole-tree drift gate), restored list/info disabled-partial
+  rendering byte-exactly, made enable partial-capable with a derived ledger
+  gate, guarded the load-time backfill into a fixed point, and derived the
+  update refresh's availability discriminant. Repairs ENBL-04 from v1.12; no
+  state migration. The review fix loop additionally repaired the enable
+  outcome row (derived status, SEV-03 info severity, threaded degradation
+  signals), refreshed `resolvedSha`, and reached clone GC from the disabled
+  update arm.
 
 - **Phase 98 — Lifecycle regression and contract documentation** (LIFE-04..06,
   COMPAT-01, DOC-08): no lifecycle production changes expected — pin
@@ -180,6 +178,9 @@ two integration checks.
 - [Phase 97]: ENBL-09: the derive landed in refreshDisabledRecord, not runThreePhaseUpdate, so the edit adds no pressure to an already complexity-suppressed function; suppression count in update.ts unchanged at 6
 - [Phase 97]: A persisted discriminant is proven derived only by a counter-case pair — the degraded assertion alone is satisfied by hard-coding the opposite constant; the promotion case on the same fixture excludes both
 - [Phase 97]: The update short-circuit's no-stage claim is asserted on disk (the generated skill absent from the skills target dir), not by the record's empty resource arrays, because re-staging is the defect and unrecorded files would still satisfy a state-only check
+- [Phase 97 fix loop]: Operator ruling — the degraded ENABLE row stamps info for row-level consistency with install --partial and the backfilled partial arm (SEV-03 parity); the shortfall predates the enable. A malformed-frontmatter degrade still raises warning (WARN-01 parity with install)
+- [Phase 97 fix loop]: Enable's degradation signals are one exported EnableDegradationSignals shape intersected into both outcome arms, so a fourth signal cannot be dropped on one consumer
+- [Phase 97 fix loop]: The disabled-state drift gate walks the whole extension tree instead of a definition-site allowlist, making the state-io "SOLE predicate" claim structurally true
 
 ### Open decisions
 
@@ -238,17 +239,15 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Operator Next Steps
 
-- Run Phase 97's verification gates. All five plans are executed and the full
-  suite is green; ENBL-05..09 are each closed and summarized. The CR-01 carrier
-  todo (`.planning/todos/pending/2026-08-09-disabled-partial-reaches-state-only-info-arm.md`)
-  was absorbed by ENBL-05's single-predicate collapse and ENBL-06's widened
-  guard test — close it out as part of the phase verification.
+- Discuss, plan, and execute Phase 98. It carries the notify.ts/tools.ts
+  stale-comment reconciliation todo (DOC-08), the D-96-01 divergence
+  documentation, and the Phase 97 review-loop carriers in
+  `.planning/todos/pending/` (WR-02/WR-04/WR-06 enable-surface warnings and
+  the IN-07 install-arm orphan-rewake asymmetry, all `resolves_phase: 98`).
 
-- Then plan and execute Phase 98, which carries the notify.ts/tools.ts
-  stale-comment reconciliation todo (DOC-08) plus the D-96-01 divergence
-  documentation.
-
-- Verify each phase against its mapped requirements before transition.
+- After Phase 98: milestone lifecycle — audit, complete v1.18, cleanup. Run
+  runtime UAT before archiving; skip the git tag at milestone close (tags
+  track npm releases).
 
 ## Performance Metrics
 
@@ -269,6 +268,6 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-09T20:12:00.000Z
-**Stopped at:** Completed 97-05-PLAN.md — Phase 97 fully executed (5/5), awaiting verification gates
+**Last session:** 2026-08-10T00:50:00.000Z
+**Stopped at:** Phase 97 complete, ready to plan Phase 98
 **Resume file:** None
