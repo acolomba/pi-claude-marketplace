@@ -1,21 +1,26 @@
 ---
 phase: 97-disabled-state-classification-repair
-reviewed: 2026-08-09T00:00:00Z
+reviewed: 2026-08-10T00:30:00Z
 depth: standard
-files_reviewed: 20
+iteration: 3
+files_reviewed: 25
 files_reviewed_list:
   - docs/output-catalog.md
+  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin-path.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts
   - extensions/pi-claude-marketplace/persistence/state-io.ts
   - extensions/pi-claude-marketplace/shared/notify.ts
+  - tests/architecture/catalog-uat.test.ts
   - tests/orchestrators/edge-deps.test.ts
   - tests/orchestrators/plugin/enable-disable.test.ts
   - tests/orchestrators/plugin/info-manifest-absent.test.ts
@@ -23,48 +28,78 @@ files_reviewed_list:
   - tests/orchestrators/plugin/plugin-state-classifier.test.ts
   - tests/orchestrators/plugin/update.test.ts
   - tests/orchestrators/reconcile/backfill.test.ts
+  - tests/orchestrators/reconcile/notify.test.ts
   - tests/orchestrators/reconcile/plan.test.ts
 findings:
-  critical: 2
-  warning: 6
-  info: 3
-  total: 11
+  critical: 0
+  warning: 1
+  info: 7
+  total: 8
 status: issues_found
 ---
 
-# Phase 97: Code Review Report
+# Phase 97: Code Review Report (iteration 3, final)
 
-**Reviewed:** 2026-08-09T00:00:00Z
+**Reviewed:** 2026-08-10T00:30:00Z
 **Depth:** standard
-**Files Reviewed:** 20
+**Files Reviewed:** 25
 **Status:** issues_found
 
 ## Summary
 
-Phase 97 collapses four copies of the disabled-state predicate onto one
-(`isRecordedButDisabled`, keyed on `enabled` alone), repairs disabled-partial
-rendering on `list` / `info`, makes the enable branch partial-capable, guards the
-load-time backfill scan against disabled records, and derives the availability
-discriminant in `update`'s `refreshDisabledRecord`.
+All three iteration-2 warnings are genuinely fixed, verified against the source
+rather than the fix report. WR-07's shape choice is the strongest part of the
+set: the three signals became one exported `EnableDegradationSignals` interface
+that is intersected into the local `fresh` sentinel, intersected into the
+exported `enabled` outcome arm, and `extends`-inherited by
+`PluginEnabledOutcome` — so the two row composers read one type instead of two
+hand-synchronized field lists, which is the drift that produced the finding.
+Both composers reproduce `install.ts`'s emit order exactly (`orphan rewake` →
+per-kind `malformed *` → `narrowUnsupportedKinds(unsupported)`), and the
+`malformed.length > 0 ? "warning" : "info"` raise is behaviorally identical to
+`install.ts:1808`'s `frontmatterDegradations.length > 0` gate (`degradedKinds`
+is a de-duplicated projection of exactly that array, and every `DegradeKind`
+member has a token in `MALFORMED_REASON_BY_KIND`, so the two predicates cannot
+diverge). The SEV-03 operator ruling survives untouched: a dropped-kind-only
+re-enable still stamps `info` on both arms — I confirmed that by reading the
+`unsupported.length > 0` arm with `malformed` empty. `orphanRewake` correctly
+does NOT move the severity channel, matching install.
 
-The predicate collapse itself is correct and well-gated: the truth-table test and
-the enable-bucket counter-case in `tests/orchestrators/reconcile/plan.test.ts`
-cover the four cells and the over-reach case, and `list` / `info` / the completion
-bucketizer all consume the one definition.
+WR-08 is correct on the merits and shape-identical to the finalize-path sweep it
+mirrors: same `preflight.resolvedSha !== undefined` gate, same D-19-01 swallow,
+and genuinely outside the guard — `refreshDisabledRecord`'s `withStateGuard` has
+returned before the call, so no nested acquisition is possible. The GC is
+derive-not-persist and iterates ALL records including disabled ones, so a
+sibling disabled record still protects its own clone; the new sweep cannot
+delete a live tree.
 
-Two defects remain in the newly-opened paths. ENBL-07 widened the enable ledger's
-admission gate but did not widen the row it renders, so a degraded
-re-materialization is reported to the user as a clean `(installed)` — the exact
-class of divergence ENBL-06 was fixing on `list` / `info`, now reintroduced on the
-enable verb, and pinned by the phase's own test. ENBL-09 corrected two of the
-three fields `refreshDisabledRecord` writes but left `resolvedSha` stale beside a
-sha-derived version bump, so a later `reinstall` pins the re-clone to the previous
-commit while the record advertises the new one.
+WR-09 is fully applied in `enable-disable.ts`: a fresh grep for `WR-0N` / `CR-0N`
+in that file returns nothing, and every replacement anchor (`FORCE-05`,
+`D-69-01`, `SEV-01`, `D-10`, `ATTR-08`, `RECON-03`, `CMP-3`, `UAT-05`,
+`RECON-04`) resolves to a real ID elsewhere in `extensions/` or `docs/` — none
+was invented.
 
-The remaining findings are drift risks the phase created or left open: a fifth
-inline copy of the predicate introduced by ENBL-08 in `reconcile/apply.ts` that
-the new drift gate structurally cannot see, and a set of enable-path affordance
-gaps (no `--partial` hint, no completion entry, no soft-dep markers).
+Verification I ran myself, not taken from the fix report: `tsc --noEmit` clean;
+`eslint` over the nine changed source/test files clean; `node --test` over
+`catalog-uat` + `reconcile/notify` + `enable-disable` + `update` = 151 pass / 0
+fail; `pre-commit run --files docs/output-catalog.md` — mdformat and
+markdownlint-cli2 both pass (the trufflehog failure is the documented worktree
+git-mode structural failure, and the repo's prettier hook is scoped to
+`\.(js|json|ts)$`, so the markdown file is out of that hook's scope).
+
+One new WARNING: commit `8367bb10` rewrote `enabledRowFromOutcome`'s doc block
+to describe the new `warning` raise but left the dispatch-site comment fourteen
+lines below asserting the opposite. It is a carrier, not a re-fix.
+
+## Prior-Finding Verification
+
+| ID | Prior severity | Cited commit | Verdict | Evidence |
+|----|----------------|--------------|---------|----------|
+| WR-07 | WARNING | `8367bb10` | **RESOLVED** | `enable-disable.ts:100-136` defines `EnableDegradationSignals`; `:206-209` and `:155-160` intersect it into both outcome arms; `apply-outcomes.ts:172` inherits it via `extends`. Producer at `:305-316` reads all three off `ledgerCtx`. Consumer 1 `freshEnableRow:1000-1035`; consumer 2 `enabledRowFromOutcome:531-563`. Order matches `install.ts:1767-1779` + `:1825`. Severity matches `install.ts:1808-1810`; the clean partial shortfall still stamps `info` (SEV-03 untouched). Catalog states `enable-degraded` / `enable-orphan-rewake` at `docs/output-catalog.md:2138-2165` with fixtures at `catalog-uat.test.ts:3621-3675`. End-to-end byte + severity pin at `enable-disable.test.ts:649-692`; three projection pins at `notify.test.ts:495-568` including the all-three ordering assertion. No missed call site: `status: "enabled"` is consumed only at `apply.ts:694`, and `kind: "plugin-enabled"` only at `notify.ts:642`. |
+| WR-08 | WARNING | `97b600b7` | **RESOLVED** | `update.ts:1584-1590` runs the sweep on the disabled arm, after `await refreshDisabledRecord` has released its guard, gated on `preflight.resolvedSha !== undefined`, swallowed per D-19-01 — byte-for-byte the shape of the finalize call at `:1840-1846`. `clone-gc.ts:38-51` iterates every record in `state.marketplaces`, disabled included, so a sibling disabled record keeps protecting its clone. Pin at `update.test.ts:4230-4237` asserts `readdir(pluginClonesDir)` equals exactly `[pluginCloneKey(cloneUrl, SHA_NEW)]`. `clone-gc.ts` remains fs-only, so no git token entered the module. |
+| WR-09 | WARNING | `72316b7e` | **RESOLVED (as scoped)** | `grep -n "WR-0[0-9]\|CR-0[0-9]" enable-disable.ts` → no matches. `apply.ts:988`, `:1040`, `:1085`, `:1108` now read `RECON-04`. All replacement anchors verified present elsewhere in the tree. The residual legacy anchors in `apply.ts` / `update.ts` / `plan.ts` are the repo-wide sweep the finding did not ask for; correctly noted, not carried. |
+| WR-02 / WR-04 / WR-06 / WR-05-residual | WARNING | `d601e0fb`, `276122a` | **DEFERRED — carriers confirmed** | Not re-raised per declared policy. |
+| IN-01..IN-06 | INFO | — | **STILL OPEN** | Re-listed below unchanged. |
 
 ## Structural Findings (fallow)
 
@@ -74,349 +109,170 @@ None supplied for this review.
 
 ## Critical Issues
 
-### CR-01: A partial re-enable renders `(installed)` — the enable row was never widened alongside the gate
-
-**Classification:** BLOCKER
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:200`, `:207-233`, `:981-1001`, `:817-829`
-
-**Issue:**
-ENBL-07 widened the enable branch's ledger admission gate:
-
-```ts
-// enable-disable.ts:200
-const partial = !installed.compatibility.installable;
-```
-
-so a disabled soft-degraded record now resolves through `requirePartialInstallable`
-and re-materializes with one or more component kinds dropped. Nothing downstream
-was widened to match:
-
-- `runEnableBranch` (`:207-233`) discards `result.installCtx` entirely and returns
-  `{ kind: "fresh", version: recordedVersion }`. The resolution's `state`
-  (`installable` vs `partially-available`) is available on the returned
-  `InstallLedgerResult` (`install.ts:499-501`) and is thrown away.
-- `composeOutcomeRow`'s `fresh` arm (`:991-1001`) hard-codes
-  `status: "installed"` + `severity: "info"` for every enable.
-- The orchestrated arm (`:817-829`) hard-codes `status: "enabled"`, so the
-  reconcile row (`reconcile/apply.ts:679-687`, `buildSuccess` →
-  `plugin-enabled`) is equally clean.
-
-`installPlugin` does the opposite for the same ledger outcome
-(`install.ts:1818-1828`): `installCtx.resolved.state === "partially-available"`
-selects `status: "partially-installed"` with
-`narrowUnsupportedKinds(...)` reasons, per FSTAT-07 / D-66-04. The record the
-enable writes carries `installable: false` + a non-empty `unsupported` list
-(`install.ts:1151-1154`), so the very next `list` renders
-`(partially-installed) {lsp}` for the plugin the enable just called `(installed)`.
-`docs/output-catalog.md` (the `/claude:plugin enable` section, around line 2110)
-documents only the `(installed)` fresh-enable state — no partial state exists for
-this verb.
-
-The severity stamp is wrong for the same reason: the notification tri-state treats
-`info` as "desired state reached" and `warning` as "carried out but short", and a
-dropped-component enable is the second case (`install.ts` routes it through
-`companionSeverity` / the WARN-01 raise; enable does not).
-
-`tests/orchestrators/plugin/enable-disable.test.ts:587-591` pins the wrong byte
-form (`/foo-plugin v1\.2\.3 \(installed\)/`) against a fixture that deliberately
-resolves `partially-available` (a `.lsp.json` at the plugin root, seeded at
-`:202-206`), so the defect is currently test-locked and will not self-correct.
-
-**Fix:** thread the resolved state out of the ledger and branch the fresh-enable
-row the same way `install.ts` does.
-
-```ts
-// runEnableBranch
-const result = await runInstallLedger(state, locations, { ... , partial }, capture);
-if (result.kind === "marketplace-absent") { /* unchanged */ }
-
-return {
-  kind: "fresh",
-  version: recordedVersion,
-  degradedKinds:
-    result.installCtx.resolved.state === "partially-available"
-      ? [...result.installCtx.resolved.unsupported]
-      : [],
-};
-
-// composeOutcomeRow, enable arm
-return degradedKinds.length > 0
-  ? {
-      status: "partially-installed",
-      name: plugin,
-      dependencies: [],
-      ...(outcome.version !== undefined && { version: outcome.version }),
-      reasons: narrowUnsupportedKinds(degradedKinds),
-      severity: "warning",
-      needsReload: true,
-    }
-  : { status: "installed", /* unchanged */ };
-```
-
-Update `tests/orchestrators/plugin/enable-disable.test.ts:587-591` to assert the
-degraded byte form, and add the matching `catalog-state` block to
-`docs/output-catalog.md`'s enable section.
-
-### CR-02: `refreshDisabledRecord` bumps a sha-derived `version` without refreshing `resolvedSha`
-
-**Classification:** BLOCKER
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1353-1385`
-
-**Issue:**
-For a git source, the update's `toVersion` is derived from the newly resolved
-commit: `deriveUpdateToVersion` returns `shaVersion(resolvedSha)` when the source
-is git-backed (`update.ts:867-873`), and `preflight.resolvedSha` carries that full
-sha (`update.ts:1099-1120`, `PluginPreflight.resolvedSha` at `:732-740`).
-
-`refreshDisabledRecord` destructures only `{ installable, toVersion }`
-(`:1358`) and writes `version`, `resolvedSource` and `compatibility` — never
-`resolvedSha`. Its sibling `finalizeUpdateRecord` does write it (`:1471-1473`).
-So after `update` on a **disabled git-source** plugin the record holds:
-
-- `version` = `sha-<12 hex of the NEW commit>`
-- `resolvedSource` = the NEW clone root
-- `resolvedSha` = the **OLD** commit
-
-That is precisely the "two fields that contradict each other" shape ENBL-09's own
-comment (`:1372-1376`) declares unacceptable, left in the same object literal.
-
-The contradiction is not cosmetic. `reinstall` pins its re-clone to the recorded
-sha (`reinstall.ts:1193` → `resolveInstallable({ recordedSha: oldSnapshot.resolvedSha })`,
-consumed at `:1428-1432`) and keeps `version: oldRecord.version`
-(`reinstall.ts:1655-1666`). A `reinstall` after this refresh therefore materializes
-the **previous** commit's tree while the record continues to advertise the new
-sha-version — a silent revert of the user's update with no row saying so.
-`reinstall.ts:1661-1665` documents this exact invariant ("dropping it corrupts GC
-key derivation and a later reinstall's pin"); `refreshDisabledRecord` breaks it.
-
-**Fix:**
-
-```ts
-const { installable, toVersion, resolvedSha } = preflight;
-...
-    sRecord.version = toVersion;
-    sRecord.resolvedSource = installable.pluginRoot;
-    // PURL-09 / D-77-02: the pin and the sha-derived version must move together.
-    if (resolvedSha !== undefined) {
-      sRecord.resolvedSha = resolvedSha;
-    }
-```
-
-Add a git-source case to the ENBL-09 suite in
-`tests/orchestrators/plugin/update.test.ts` asserting
-`shaVersion(rec.resolvedSha) === rec.version` after the refresh.
+None. No BLOCKER found; the two iteration-1 BLOCKERs remain resolved.
 
 ## Warnings
 
-### WR-01: ENBL-08 introduced a fifth inline copy of the predicate the drift gate cannot see
+### WR-10: the `plugin-enabled` dispatch comment asserts the severity rule WR-07 just replaced
 
 **Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:1044`, `extensions/pi-claude-marketplace/persistence/state-io.ts:129-154`, `tests/orchestrators/reconcile/plan.test.ts:717-723`
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:652-657`
 
 **Issue:**
-`state-io.ts:129-134` declares `isRecordedButDisabled` "the SOLE disabled-state
-predicate … a module that re-derives the rule locally is a drift twin the gate in
-`tests/orchestrators/reconcile/plan.test.ts` rejects." The ENBL-08 commit in this
-same phase then wrote the rule inline:
+`8367bb10` rewrote the doc block above `enabledRowFromOutcome` (`:512-530`) to
+describe the new split — `info` for a dropped-kind-only re-enable, `warning` for
+a malformed component — but left the comment at the `case "plugin-enabled":`
+dispatch site untouched:
 
 ```ts
-// reconcile/apply.ts:1044
-if (!record.enabled) {
-  return false;
-}
+// ENBL-07 / FSTAT-07 / D-66-04: a re-enable that went through the partial
+// gate dropped component kinds, so it takes the `(partially-installed)`
+// projection instead -- the SAME split the standalone enable verb and the
+// `plugin-backfilled` arm make, and the row the very next `list` renders
+// for that record. SEV-03: both arms stay `info` -- the degradation
+// predates the enable, so the requested transition was fully carried out.
+block.plugins.push(enabledRowFromOutcome(outcome));
 ```
 
-The gate enumerates exactly four paths (`plan.test.ts:718-723`:
-`reconcile/plan.ts`, `plugin/update.ts`, `plugin/enable-disable.ts`,
-`plugin/plugin-state-classifier.ts`) and its own comment claims it "can see a
-FIFTH copy appearing elsewhere" — it cannot; it is an allowlist, not a repo scan.
-`orchestrators/plugin-path.ts:39` carries the same inline form (pre-existing).
-The doc claim in `state-io.ts` is therefore false as of this phase.
+The last sentence is now false for the function it introduces: fourteen lines
+earlier, `enabledRowFromOutcome:539` computes
+`const severity = malformed.length > 0 ? "warning" : "info"`, and
+`notify.test.ts:495-516` pins that a `degradedKinds: ["skill"]` enable projects
+at `warning`. A reader who trusts the dispatch comment over the code reads the
+`warning` stamp as a regression against SEV-03 and "restores" it — which is
+exactly the operator ruling this comment is trying to protect, inverted. It is
+the same defect class WR-09 was raised for (an anchor/claim that no longer means
+what the code does), in a comment the same commit walked past.
 
-**Fix:** import the predicate in `apply.ts` and either broaden the gate or soften
-the claim.
+`enable-disable.ts` has no twin problem: its `dispatchOutcome` site carries no
+severity claim, and `freshEnableRow`'s doc block was updated in full.
+
+**Fix:** restate the last clause to name the split the function actually
+implements, and keep the SEV-03 anchor on the half it still governs.
 
 ```ts
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
-...
-if (isRecordedButDisabled(record)) {
-  return false;
-}
+// ENBL-07 / FSTAT-07 / D-66-04: a re-enable that went through the partial
+// gate dropped component kinds, so it takes the `(partially-installed)`
+// projection instead -- the SAME split the standalone enable verb and the
+// `plugin-backfilled` arm make, and the row the very next `list` renders
+// for that record. SEV-03: a dropped-kind-only re-enable stays `info` --
+// that shortfall predates the enable, so the requested transition was fully
+// carried out. WARN-01: a component this ledger just degraded takes the
+// `warning` raise instead; see `enabledRowFromOutcome`.
 ```
-
-Then replace `FORMER_DEFINITION_SITES` with a walk of
-`extensions/pi-claude-marketplace/**/*.ts` asserting that any file matching
-`/!\s*\w+\.enabled\b/` (comments stripped) also imports the single predicate, so
-a sixth copy fails the gate wherever it lands.
-
-### WR-02: enable derives its partial gate from a persisted flag and gives no `--partial` affordance when that flag is stale
-
-**Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:200`, `:1024-1037`
-
-**Issue:**
-`partial` is derived from `installed.compatibility.installable`, a value persisted
-at install/update time. A record that was fully installable when disabled but
-whose manifest entry has since gained an unsupported kind derives `partial = false`,
-so `runInstallLedger` runs `requireInstallable`, which throws `PluginShapeError`.
-`narrowEnableFailure` (`:1024-1037`) only recognises `ENOENT`, so the row renders
-with an **empty reasons array** — a bare `⊘ <plugin> (failed)` plus a cause
-trailer. `install` and `update` both surface the resolver's `partialable`
-discriminant and append the `--partial` hint (`install.ts:1925-1932`,
-`update.ts:1974-1981`); enable has no `--partial` flag and emits no hint, so the
-user is told the enable failed and given nothing to act on. The only recovery
-(`update --partial`, which rewrites `compatibility.installable` via
-`refreshDisabledRecord`) is undiscoverable.
-
-**Fix:** narrow the `PluginShapeError` in `narrowEnableFailure` the way
-`composeUpdateDeclineRow` does, and render a hint pointing at
-`update --partial` (or accept `--partial` on `enable` and widen the gate on
-request rather than on the persisted flag).
-
-### WR-03: the reconcile-driven enable opts into a degrading install with no user flag and no signal
-
-**Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:200`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:797-801`
-
-**Issue:**
-`--partial` is documented as an explicit opt-in gate (D-65-03 / FORCE-05: "`--partial`
-widens the gate … the default gate still blocks it"). After ENBL-07, the
-load-time reconcile path reaches `setPluginEnabled({ notifications: { mode:
-"orchestrated" } })` for every config-declared-enabled disabled record
-(`apply.ts:797-801`), and `runEnableBranch` sets `partial: true` from the record
-with no user involvement. Combined with CR-01 the reconcile row is
-`plugin-enabled` with no degrade marker, so a `/reload` can drop component kinds
-from a plugin with neither a command typed nor a row naming the drop. The
-autoupdate cascade has a documented precedent for the automatic partial stance
-(`update.ts:560-569`, D-69-01) — but that path renders `(partially-installed)`
-with the dropped kinds. This path renders nothing.
-
-**Fix:** fixing CR-01 covers the signalling half. Additionally record the
-automatic-opt-in decision beside the derivation at `:193-200` with the D-69-01
-precedent cited, so the departure from the FORCE-05 explicit-opt-in rule is
-deliberate rather than incidental.
-
-### WR-04: `update --partial` completion excludes the records for which it is the only remediation
-
-**Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts:120-138`, `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1562`
-
-**Issue:**
-The classifier collapses every disabled record to `installed`, which by design
-keeps it out of the `update --partial` candidate set
-(`plugin-state-classifier.ts:29-33`, pinned by
-`tests/orchestrators/edge-deps.test.ts:794`). But `update`'s disabled-record
-short-circuit is only reachable **with** `--partial` when the candidate resolves
-`partially-available` — the phase's own test header states this
-(`tests/orchestrators/plugin/update.test.ts:2913-2919`) and pins it at `:3024`.
-So refreshing a disabled partial's pin requires typing a command the completion
-provider will never offer, and per WR-02 that same command is the prerequisite for
-a successful `enable`.
-
-**Fix:** either surface disabled records in the `--partial` completion bucket
-(a distinct `disabled` classification consumed only by the completion path), or
-make the disabled short-circuit reachable without `--partial` (it stages nothing,
-so the strict-gate rationale does not apply to it) and document the choice at
-`update.ts:1551-1562`.
-
-### WR-05: `refreshDisabledRecord` rewrites the record unconditionally while rendering `(skipped) {up-to-date}`
-
-**Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1370-1383`
-
-**Issue:**
-The function always writes `version`, `resolvedSource`, the whole `compatibility`
-block and `updatedAt`, then the caller returns the `unchanged` outcome that renders
-`⊘ <plugin> (skipped) {up-to-date}` (`update.ts:1562-1570`, byte-pinned at
-`tests/orchestrators/plugin/update.test.ts:3054-3058`). Every repeated
-`update --partial` on an already-current disabled record therefore rewrites
-state.json — bumping mtime and `updatedAt` while telling the user nothing changed.
-ENBL-09 widened the blast radius by adding the whole `compatibility` block to the
-unconditional write. The idempotency test at `:3085-3149` acknowledges the drift
-by explicitly excluding `updatedAt` from its comparison. The function's own doc
-(`:1345-1351`) argues the config write-back is skipped precisely to avoid touching
-mtime "without changing user-visible bytes" — the state write does not follow the
-same rule.
-
-**Fix:** compute the prospective values first and return without calling
-`withStateGuard` when `version`, `resolvedSource` and every `compatibility` field
-already match, mirroring the deep-equal short-circuit `maybeWritePluginConfigBack`
-uses (`update.ts:1477-1486`).
-
-### WR-06: the fresh-enable row hard-codes `dependencies: []`, suppressing the soft-dep markers and the SEV-01 severity raise
-
-**Classification:** WARNING
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995`
-
-**Issue:**
-`composeOutcomeRow`'s enable arm emits `dependencies: []` unconditionally, so a
-re-enable that stages agents or MCP servers never renders
-`{requires pi-subagents}` / `{requires pi-mcp}` and never takes the SEV-01
-info→warning raise `install.ts:1809-1817` applies for an unloaded companion. The
-enable ledger stages exactly the same artifacts as the install ledger, so the
-signal is equally relevant. The condition predates the phase, but ENBL-07 makes
-enable the sanctioned re-materialization surface for degraded records, which are
-the ones most likely to need the marker.
-
-**Fix:** thread the staged-name counts out of `runInstallLedger`'s `installCtx`
-(the same `stagedAgentNames` / `stagedMcpServerNames` `install.ts:1811-1815`
-reads) and build `dependencies` + `severity` through `companionSeverity` rather
-than pinning them.
 
 ## Info
+
+### IN-07: the reconcile install arm still drops `orphanRewake`, so the cascade now names it for enable but not for install
+
+**Classification:** INFO
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1856-1865`; `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:494-505`
+
+**Issue:** `installPlugin`'s orchestrated return carries `degradedKinds` but not
+`orphanRewake` (and not `unsupported`), so `installedRowFromOutcome` can only
+ever emit `(installed)` with malformed tokens. After WR-07 the enable arm of the
+same cascade carries all three. A load-time reconcile that installs a plugin
+with an orphan `rewakeMessage` handler renders a bare `(installed)` row, while a
+re-enable of that identical plugin in the same cascade renders
+`(installed) {orphan rewake}` — the inverse of the asymmetry WR-07 closed, now
+sitting in one file.
+
+The gap predates this phase on the install arm (WR-07 did not create it and
+correctly did not widen its scope to fix it), and the enable arm's behavior is
+the more truthful of the two, so nothing here needs reverting. But no carrier
+currently names it: WR-06's todo is scoped to `dependencies` / soft-dep markers
+only.
+
+**Fix:** add `...(installCtx.resolved.orphanRewake === true && { orphanRewake: true })`
+to the orchestrated `InstallPluginOutcome` and compose it in
+`installedRowFromOutcome` through the same `EnableDegradationSignals`-shaped
+seam, or record the divergence on the Phase 98 carrier so it is not rediscovered
+as a third-generation finding.
 
 ### IN-01: retired `force-*` vocabulary survives in the touched test titles and comments
 
 **Classification:** INFO
-**File:** `tests/orchestrators/plugin/plugin-state-classifier.test.ts:168`, `:171`, `:178`, `:182`; `tests/orchestrators/edge-deps.test.ts:474`, `:481`, `:490`, `:509`
+**File:** `tests/orchestrators/edge-deps.test.ts:357-359`, `:370`, `:474`, `:481`, `:491`, `:509-510`, `:517-518`, `:526-527`, `:556-561`, `:766`, `:772`
 
-**Issue:** the classification names moved to `partially-installed*` /
-`partially-upgradable`, but the titles and comments in these two files still say
+**Issue:** Carried unchanged (declared out of fix scope). The classifications are
+`partially-installed*` / `partially-upgradable`, but the comments still say
 `force-installed-upgradable`, `force-upgradable`, `force-installed` and
-`update --force`. The title at
-`plugin-state-classifier.test.ts:168` names `force-installed-upgradable` while the
-body asserts `"partially-installed-upgradable"`, so a reader has to run the test
-to learn what it checks. `tests/architecture/partial-vocabulary-guard.test.ts`
-does not reserve these spellings, so nothing catches the drift.
+`update --force`. `tests/architecture/partial-vocabulary-guard.test.ts` does not
+reserve these spellings.
 
-**Fix:** rename to the current tokens in the same pass, and consider adding
-`update --force` / `force-upgradable` / `force-installed` to the vocabulary guard's
-reserved set.
+**Fix:** rename to the current tokens; consider reserving the three `force-*`
+spellings in the vocabulary guard.
 
 ### IN-02: the planner's disable-branch comment still describes the retired empty-resources marker
 
 **Classification:** INFO
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:305-313`
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts:306`
 
-**Issue:** the phase corrected the file header (`:18-23`) and the enable-branch
-comment (`:329-331`), but the disable branch still reads "the terminal state of a
-successful disable is exactly `recorded with empty resources + config enabled:
-false`". Emptied arrays are now explicitly documented as a *consequence* of
-disabling, not the marker (`state-io.ts:146-149`), so this is the one surviving
-statement of the retired rule in a file the phase edited.
+**Issue:** Carried unchanged. The file header and the enable-branch comment were
+corrected; `:306` still reads "exactly `recorded with empty resources + config
+enabled: false`", the one surviving statement of the retired rule in a file this
+phase edited.
 
 **Fix:** restate as "recorded with `enabled: false` + config `enabled: false`".
 
 ### IN-03: the completion fixture seeds disabled records in a shape `DisabledPluginRecord` forbids
 
 **Classification:** INFO
-**File:** `tests/orchestrators/edge-deps.test.ts:437-447`
+**File:** `tests/orchestrators/edge-deps.test.ts:437-444`
 
-**Issue:** `layoutFixtureMarketplace` writes `skills: [`${p.name}-skill`]` for
-every installed record and then sets `enabled: p.disabled !== true`, producing a
-disabled record with a populated `resources.skills`. That combination is the exact
-fourth quadrant `DisabledPluginRecord`'s empty-tuple typing was introduced to make
-unrepresentable (`state-io.ts:85-109`); the typebox schema is permissive, so
-`saveState` accepts it. The fixture still proves what it intends (the predicate
-reads only `enabled`), but it is not a shape production can produce, which weakens
-it as a regression pin for the bucketizer.
+**Issue:** Carried unchanged. `skills: [`${p.name}-skill`]` is written for every
+record and `enabled: p.disabled !== true` set afterwards, producing a disabled
+record with populated `resources.skills` — the quadrant
+`DisabledPluginRecord`'s empty-tuple typing exists to make unrepresentable.
 
 **Fix:** zero the `resources` arrays when `p.disabled === true`, matching
-`toDisabledRecord`; the predicate assertions are unaffected and the fixture becomes
-reachable state.
+`toDisabledRecord`.
+
+### IN-04: the drift gate over-matches on any `.enabled` field and under-strips trailing comments
+
+**Classification:** INFO
+**File:** `tests/orchestrators/reconcile/plan.test.ts:749-758`, `:778-782`
+
+**Issue:** Carried unchanged. `INLINE_REDERIVATIONS` matches `[\w.]+\.enabled` on
+any object, and `stripComments` strips only line comments that START a line, so
+a future unrelated `enabled` field or a trailing explanatory comment fails the
+gate with the wrong instruction.
+
+**Fix:** anchor the regexes to the record shape rather than the field name, and
+strip `//` to end-of-line anywhere outside a string.
+
+### IN-05: `PluginToggleAxes.buildSuccess` still cannot express the enable-only constraint
+
+**Classification:** INFO
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:637-651`, `:821-840`
+
+**Issue:** Narrowed by WR-07, not closed. The loose `unsupported?` field became a
+single `degradation?: EnableDegradationSignals` carrier, and the disable axis now
+destructures it off explicitly (`{ degradation: _degradation, ...info }`) instead
+of relying on the caller never passing it — a real improvement. Object spread
+still bypasses the excess-property check, so the type cannot forbid a disable
+outcome carrying degradation signals; the invariant remains enforced by control
+flow at `:694`.
+
+**Fix:** give the two axes distinct `buildSuccess` signatures, or make
+`PluginToggleAxes` generic over the outcome it builds.
+
+### IN-06: the catalog asserts a state "breaks IL-2" where the code documents a sanctioned exception
+
+**Classification:** INFO
+**File:** `docs/output-catalog.md:1531`
+
+**Issue:** Carried unchanged. The catalog says the disabled inventory row "breaks
+IL-2"; `info.ts::emitFetchSkip` and `reconcile/README.md` frame the same second
+notification as the sanctioned RECON-04 single-emit carve-out.
+
+**Fix:** restate as "emits a second notification under the same sanctioned
+exception the disabled inventory row uses (RECON-04 / IL-2 single-emit
+carve-out)".
 
 ---
 
-_Reviewed: 2026-08-09T00:00:00Z_
+_Reviewed: 2026-08-10T00:30:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 3 (final — loop cap reached)_
