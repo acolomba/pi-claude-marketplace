@@ -1,10 +1,6 @@
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
 
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07 architectural surface guard.
@@ -85,41 +81,15 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "refreshGitHubClone reference", pattern: /\brefreshGitHubClone\b/ },
 ];
 
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
-    .replace(/^\s*\/\/.*$/gm, ""); // line comments
-}
-
 test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps surface", async () => {
-  const offenders: string[] = [];
-
-  for (const rel of FORBIDDEN_TARGETS) {
-    let src: string;
-    try {
-      src = await readFile(path.join(REPO_ROOT, rel), "utf8");
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        // Pre-implementation skip path: the file does not exist yet. The gate
-        // activates once the orchestrator target lands (see header).
-        continue;
-      }
-
-      throw err;
-    }
-
-    const stripped = stripComments(src);
-    for (const { name, pattern } of FORBIDDEN_PATTERNS) {
-      if (pattern.test(stripped)) {
-        offenders.push(`${rel} matches forbidden ${name}: ${String(pattern)}`);
-      }
-    }
-  }
-
-  assert.deepEqual(
-    offenders,
-    [],
-    `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in plugin orchestrator(s):\n  ${offenders.join("\n  ")}\n  (install.ts, list.ts, and reinstall.ts are network-free by contract; only update.ts is permitted to import gitOps via Pattern S-9.)`,
+  // The read / stripComments / offender-accumulate mechanic lives in
+  // tests/helpers/source-scan.ts so this gate and the COMPAT-01 no-expansion
+  // gate share one implementation (D-98-09). The target list, the pattern list,
+  // and this failure message stay owned here.
+  await assertNoForbiddenSurface(
+    FORBIDDEN_TARGETS,
+    FORBIDDEN_PATTERNS,
+    (offenders) =>
+      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in plugin orchestrator(s):\n  ${offenders.join("\n  ")}\n  (install.ts, list.ts, and reinstall.ts are network-free by contract; only update.ts is permitted to import gitOps via Pattern S-9.)`,
   );
 });
