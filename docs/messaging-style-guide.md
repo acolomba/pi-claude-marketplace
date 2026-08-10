@@ -35,7 +35,7 @@ The discriminated `PluginNotificationMessage` union pins each variant's `status`
 ```ts
 type PluginNotificationMessage =
   | PluginInstalledMessage // status: "installed";    dependencies (required)
-  | PluginUpdatedMessage // status: "updated";      dependencies (required); from/to (required)
+  | PluginUpdatedMessage // status: "updated";      dependencies (required); from/to (required); reasons? (WR-12)
   | PluginReinstalledMessage // status: "reinstalled";  dependencies (required); reasons? (WR-09)
   | PluginUninstalledMessage // status: "uninstalled"
   | PluginAvailableMessage // status: "available";    NO scope (SNM-11)
@@ -63,7 +63,7 @@ The closed sets are encoded as runtime tuples and their literal-union types are 
 
 The discriminated union and the per-variant field carve-outs are the binding compile-time contract. Adding or removing a variant, or shifting a field's required/optional discipline, is enforced by `assertNever(plugin)` in the renderer's switch (SNM-17), by the per-command `satisfies CommandContext` checks in the `*.messaging.ts` modules, and by the `_UncoveredReason` / `_ExtraReason` closed-set membership proof in `extensions/pi-claude-marketplace/shared/notify-reasons.ts`; the closed-set tuple lengths are tripwired by `tests/architecture/notify-closed-set-locks.test.ts`. A drift from one of the tuples or the per-variant discipline becomes a compile error or a failing length lock:
 
-- `reasons: readonly Reason[]` REQUIRED only on `partially-available | unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). It is OPTIONAL on exactly two transition variants -- `installed` (SURF-05 / D-63-08) and `reinstalled` (WARN-01 / WR-09) -- which carry a brace only when their ledger produced a fact worth naming, and render byte-identically to a reasons-less row when it did not. Every remaining variant omits the field entirely, so `(uninstalled) {up-to-date}` is a compile error.
+- `reasons: readonly Reason[]` REQUIRED only on `partially-available | unavailable | upgradable | skipped | failed | manual recovery` (D-15-01). It is OPTIONAL on exactly three transition variants -- `installed` (SURF-05 / D-63-08), `updated` (WARN-01 / WR-12) and `reinstalled` (WARN-01 / WR-09) -- which carry a brace only when their ledger produced a fact worth naming, and render byte-identically to a reasons-less row when it did not. Every remaining variant omits the field entirely, so `(uninstalled) {up-to-date}` is a compile error.
 - `dependencies: readonly Dependency[]` REQUIRED only on `installed | updated | reinstalled | present` (D-15-02 + SNM-06 + G-21-01). The other 12 variants omit the field; only those 4 switch arms reach the per-dependency probe path.
 - `version?: string` on every variant EXCEPT `updated`, which carries REQUIRED `from: string; to: string` instead (D-15-04), and the 4 `will *` pending variants, which omit version entirely (DIFF-02: the recorded version is not load-bearing pre-transition). The hash-version contract (PI-7 `hash-<12hex>`) remains a plain string -- no branded type.
 - `scope?: Scope` on every variant EXCEPT `available | partially-available | unavailable` (SNM-11 -- MSG-PL-6 carve-out preserved structurally; the list surface does not emit `[<scope>]` brackets for those rows).

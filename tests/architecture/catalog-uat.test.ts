@@ -1863,6 +1863,37 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WARN-01 / WR-12 / D-99-03: a component the update's own ledger degraded
+    // names its kind on the `(updated)` row and takes the info -> warning raise,
+    // matching the install / enable / reinstall arms. Distinct from the
+    // dropped-kind axis below, which renders `(partially-installed)`.
+    "update-degraded-component": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                from: "1.0.0",
+                to: "1.0.1",
+                dependencies: [],
+                reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // SEV-04 / D-69-02 / XSURF-03: a TARGETED `update <plugin>@<marketplace>`
     // that declines a partially-upgradable candidate (no `--partial`) is actionable
     // -> warning. The decline flips to the `partially-upgradable` token (consistent

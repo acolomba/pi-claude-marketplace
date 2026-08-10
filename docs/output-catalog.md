@@ -954,6 +954,25 @@ Plugin update: 1 updated
 
 D-78-06 / PURL-06: a git-source update swaps the recorded commit, so both `from` and `to` are git-source `sha-<12hex>` versions (`sha-a1b2c3d4e5f6` -> `sha-222233334445`). Each renders through the SAME `composeVersionArrow` -> `renderVersion` -> `formatShaVersionForDisplay` path the hash-version arrow uses, so it shortens to its git-style 7-hex form with a `v#` prefix (`v#a1b2c3d`, `v#2222333`) -- no new render grammar. Persistence keeps the full `sha-<12hex>` on both sides (D-77-01). Severity: info. Reload-hint fires because `git-plugin` was updated.
 
+### Update with a degraded component (WARN-01 / D-86-03 / WR-12)
+
+<!-- catalog-state: update-degraded-component -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 → v1.0.1 (updated) {malformed skill}
+
+/reload to pick up changes
+```
+
+An update drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(updated)` -- the transition happened, and the component is updated-but-short -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable, reinstall and backfill rows use. A plugin that degrades both kinds renders one brace in that seam's canonical order: `{malformed skill, malformed command}`.
+
+This is the MALFORMED-component axis, not the dropped-kind axis. A kind the resolver cannot support at all is DROPPED, and a `--partial` update reports that with the `(partially-installed)` row and its dropped-component brace. A malformed component is written, not dropped, so it stays on the `(updated)` row. The two axes are independent: an update can drop one kind and degrade another, and each names itself on the row its own axis owns.
+
+Severity `warning` with the summary line, the same raise the install, enable and reinstall surfaces take for the same class of degrade: this one the update's own ledger just produced. The raise applies on BOTH surfaces that render this row -- the manual update cascade and the marketplace autoupdate cascade -- because a degraded component is short of ideal whichever surface reports it. It is orthogonal to each surface's own success-severity policy, so the autoupdate cascade's deliberate silence about an absent companion (WR-01) is unaffected. The trailing tally is unchanged: the count is taken by PARTITION, so a degraded update is still one update. A clean update renders the brace-less rows above unchanged.
+
 ### Partially-upgradable decline, targeted update (SEV-04 / D-69-02)
 
 <!-- catalog-state: decline-partially-upgradable-targeted -->
