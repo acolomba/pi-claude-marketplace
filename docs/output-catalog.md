@@ -10,9 +10,9 @@ Per-command rendered output for each user-visible state. Catalog v2.0 supersedes
 - `○` -- empty circle. On plugin rows: plugin is not installed and there is no error -- `(available)` (declared but never installed), `(uninstalled)` (explicitly removed), or the pending-tense `(will uninstall)`. Never used on marketplace headers.
 - `⊘` -- prohibited symbol. On plugin rows: error / blocked state -- `(unavailable)`, `(skipped)`, `(failed)`, `(manual recovery)`. On marketplace headers: `(failed)` only.
 - `⊖` -- circled minus. On plugin rows: a partially-available plugin whose components would be dropped under `--partial` -- `(partially-available)` only, on the list / info inventory surfaces AND the install-failure surface (XSURF-01). Stays in the circled-operator family with `⊘` but reads "diminished / components dropped" rather than "blocked". Not used on marketplace headers.
-- `◉` -- bullseye. On plugin rows: a recorded-installed plugin that currently re-resolves `partially-available` -- `(partially-installed)` only, on the list / info inventory surfaces AND the install / update / enable success surfaces (FSTAT-02). Distinct from the clean `(installed)` row's `●` so a degraded install is visually separable. Not used on marketplace headers.
+- `◉` -- fisheye (a filled circle inside a ring). On plugin rows: a recorded-installed plugin that currently re-resolves `partially-available` -- `(partially-installed)` only, on the list / info inventory surfaces AND the install / update / enable success surfaces (FSTAT-02). Distinct from the clean `(installed)` row's `●` so a degraded install is visually separable. Not used on marketplace headers.
 - `◌` -- dotted circle. On plugin rows: a not-installed git-source plugin whose clone/mirror is not yet materialized locally -- `(remote)` only (RSTA-01 / D-80-01). Not used on marketplace headers.
-- `◍` -- fisheye. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row (D-80-01: reassigned from `◌`). Not used on marketplace headers.
+- `◍` -- circle with vertical fill. On plugin rows: deliberate, user-requested disabled state -- `(disabled)` realized inventory row and `(will disable)` pending-tense row (D-80-01: reassigned from `◌`). Not used on marketplace headers.
 
 ### Always-marketplace-header form
 

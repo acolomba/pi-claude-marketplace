@@ -259,6 +259,33 @@ test("COMPAT-01: every glyph constant holds its inherited code point", () => {
   );
 });
 
+test("COMPAT-01: the catalog names each glyph the way the code-point pins above name it", async () => {
+  // WR-08: the catalog called `◉` "bullseye" (BULLSEYE is U+25CE, a character
+  // the codebase does not use) and gave `◉`'s real name, fisheye, to `◍` two
+  // rows below -- while the pins above named both correctly. A reader
+  // reconciling the two documents had no way to tell which was wrong. The
+  // catalog keeps its descriptive register; what is pinned is the pairing.
+  const catalog = await readFile(path.join(REPO_ROOT, "docs/output-catalog.md"), "utf8");
+  const expected: ReadonlyArray<readonly [string, string]> = [
+    [ICON_INSTALLED, "filled circle"],
+    [ICON_AVAILABLE, "empty circle"],
+    [ICON_UNINSTALLABLE, "prohibited symbol"],
+    [ICON_PARTIALLY_AVAILABLE, "circled minus"],
+    [ICON_PARTIALLY_INSTALLED, "fisheye"],
+    [ICON_REMOTE, "dotted circle"],
+    [ICON_DISABLED, "circle with vertical fill"],
+  ];
+  const mismatches = expected
+    .filter(([glyph, name]) => !catalog.includes(`- \`${glyph}\` -- ${name}`))
+    .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
+
+  assert.deepEqual(
+    mismatches,
+    [],
+    "COMPAT-01: the catalog's glyph names must agree with the code-point pins. Renaming one is a documentation change that belongs in the same commit as the pin it describes.",
+  );
+});
+
 test("COMPAT-01: the notify module declares no eighth glyph export", async () => {
   // The one clause here that scans source: an eighth glyph export cannot be
   // caught by comparing runtime constants, because the glyphs are seven
