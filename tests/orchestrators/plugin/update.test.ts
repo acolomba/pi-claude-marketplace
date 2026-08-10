@@ -5241,3 +5241,102 @@ test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// WARN-01 / WR-12 / D-99-03: the `(updated)` row names a degraded component
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Frontmatter the YAML parser rejects. The bridge writes the component in
+ * synthesized, non-model-invocable form rather than failing the ledger, which is
+ * exactly why the row reporting the transition has to name it: `list` renders
+ * the record's degraded state one command later, and a bare `(updated)` row
+ * would contradict it.
+ */
+const UNPARSEABLE_FRONTMATTER = "---\nname: [unterminated\n---\n\n# Bad\nBody.\n";
+
+test("WR-12: an update whose new source skill will not parse names the kind on the `(updated)` row and takes the warning raise", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-skill-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", "skills", "tool", "SKILL.md"),
+        UNPARSEABLE_FRONTMATTER,
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // Asserted through the PUBLIC verb, not through the renderer function:
+      // `update` renders its rows through the verb-local `UPDATE_RENDER` map,
+      // so a fix applied only to the central `renderPluginRow` arm would raise
+      // the severity while still dropping the brace.
+      assert.equal(notifications.length, 1);
+      const body = notifications[0]?.message ?? "";
+      assert.equal(
+        body,
+        "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated) {malformed skill}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      // WARN-01: the raise reaches the Pi API severity argument, not only the
+      // summary line.
+      assert.equal(notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NREG-01: a clean update row is byte-identical to before -- no brace, no raise", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-wr12-clean-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]?.message ?? "",
+        "● mp [project]\n" +
+          "  ● hello v1.0.0 → v1.0.1 (updated)\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+      assert.equal(notifications[0]?.severity, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
