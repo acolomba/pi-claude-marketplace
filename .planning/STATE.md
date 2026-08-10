@@ -5,16 +5,16 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
 current_phase_name: post-audit-tech-debt-closure
 status: executing
-stopped_at: Completed 99-06-PLAN.md
-last_updated: "2026-08-10T17:35:00.000Z"
+stopped_at: Completed 99-07-PLAN.md — all 7 plans done, phase gates next
+last_updated: "2026-08-10T18:20:00.000Z"
 last_activity: 2026-08-10
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 23
-  percent: 96
-last_activity_desc: "Phase 99 plan 06 complete — D-99-05a closed: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+  completed_plans: 24
+  percent: 100
+last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -34,8 +34,43 @@ verified.
 ## Current Position
 
 Phase: 99 (post-audit-tech-debt-closure) — EXECUTING
-Plan: 6 of 7 complete (waves 1-4 done; next is 99-07, wave 5 — the last plan)
-Status: Executing
+Plan: 7 of 7 complete — all plan work done, phase gates remain
+Status: Plans complete; code review, verifier, validate-phase and secure-phase
+still to run before the phase closes.
+
+Plan 99-07 closed D-99-05b and vindicated its own measure-then-scope ordering.
+The carrier's 2026-06-12 per-file table was wrong in BOTH directions: measured
+at HEAD, percentages had RISEN while absolute uncovered counts had also risen —
+the files outgrew their tests. `update.ts` measured 91.89% / 247 uncovered
+(table said 87.9% / 213), `reinstall.ts` 93.92% / 125 (93.1% / 83),
+`install.ts` 96.35% / 88 (93.4% / 77). Decisively, `orchestrators/edge-deps.ts`
+measured 100.00% / 0 against a recorded 49.7% / 94 — so the coverage-exclusion
+question that module raised is dissolved by measurement rather than decided.
+After the sweep: update 93.89% / 186, reinstall 95.77% / 87, install 96.43%/86.
+
+Seven arms covered: update's bare-form enumerate failure (the largest
+contiguous region at ~34 lines), the hooks slot of the phase-3a fail-continue
+contract, and both intent-mark concurrency guards via a racing writer injected
+through the existing clone-cache seam; reinstall's unparseable config
+write-back and a typed shape reason (`{source mismatch}`) beating the substring
+fallback; install's hooks-bridge undo. Two mutation checks prove the cases
+discriminate rather than merely execute — neutering the ST-9 version comparison
+turned EXACTLY ONE of four update cases red, and neutering `removeHookConfig`
+turned the install case red; both files restored diff-clean.
+
+Deliberately left, each with a stated reason: the bulk-reinstall per-target
+catch and both per-entry schema re-checks are defensive code no product state
+can produce (`reinstallPlugin` converts its own failures to outcomes and never
+throws; `MARKETPLACE_SCHEMA` validates every entry at load). The mcp
+fail-continue slot needs a permission trick that must skip as root, and a
+skipped near-duplicate would add a broken window without adding safety. The
+notes-substring narrowers (~54 lines, the largest remaining block) are
+unreachable back-compat. `import/execute.ts` (59) and `marketplace/update.ts`
+(50) are recorded, not tested — outside the locked bound. No
+`sonar.coverage.exclusions` entry was added; that call is re-filed as
+`2026-08-10-coverage-exclusion-versus-tests-for-the-out-of-bound-orchestr.md`.
+Gate green: 3409 unit + 18 integration, 0 fail.
+
 Plan 99-06 closed D-99-05a. The equal-version short-circuit is now scoped to
 enabled records (`toVersion === fromVersion && !isRecordedButDisabled(record)`),
 so a disabled record falls through to a new `runDisabledRecordRefresh` helper

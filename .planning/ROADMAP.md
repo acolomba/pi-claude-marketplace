@@ -341,4 +341,4 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 99-07-PLAN.md — Measure the residual rare-failure arms, then cover them in update/reinstall/install within the locked bound (D-99-05b)
+- [x] 99-07-PLAN.md — Measure the residual rare-failure arms, then cover them in update/reinstall/install within the locked bound (D-99-05b)
