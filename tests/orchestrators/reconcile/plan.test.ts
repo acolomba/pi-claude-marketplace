@@ -741,15 +741,49 @@ const PREDICATE_DEFINITION_SITE = "extensions/pi-claude-marketplace/persistence/
 const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;
 
 /**
- * The single-axis rederivation, in the three spellings that mean "this record
- * is disabled". Deliberately does NOT match `entry.enabled !== false`: that is
- * the CONFIG-declaration axis (`persistence/config-io.ts`), a different fact
- * about a different object, whose default is enabled-when-absent.
+ * D-99-02b: a destructure that BINDS the `enabled` key off a record. Matching
+ * the binding rather than a bare `!enabled` is what holds the pattern to the
+ * plugin-record axis -- a bare identifier cannot be told apart from any
+ * unrelated local. `[^{}]*` never crosses a nested brace, and the `=` must
+ * follow the closing brace, so an object LITERAL carrying an `enabled` property
+ * (its `=` precedes the brace) cannot reach the match.
+ */
+const DESTRUCTURED_ENABLED_BINDING = /\{[^{}]*\benabled\b[^{}]*\}\s*=(?![=>])/;
+
+/**
+ * D-99-02b: bracket access to the `enabled` key. No legitimate use of it exists
+ * anywhere in this tree, so the ACCESS shape is flagged unconditionally instead
+ * of enumerating every negation and comparison that could wrap it.
+ */
+const BRACKET_ENABLED_ACCESS = /\[\s*["']enabled["']\s*\]/;
+
+/**
+ * D-99-02b: a `Boolean(...)` coercion wrapping an `.enabled` read -- again the
+ * access shape, not the comparison. Requiring the read INSIDE the call leaves
+ * the `Type.Boolean()` schema declarations alone, and the leading `\.` keeps
+ * the pattern off the config-declaration axis.
+ */
+const BOOLEAN_ENABLED_COERCION = /Boolean\s*\([^)]*\.enabled\b[^)]*\)/;
+
+/**
+ * The single-axis rederivation, in the six spellings that mean "this record
+ * is disabled": the three operator-adjacent forms, plus the destructured,
+ * bracket-access and `Boolean()` twins that a `(`, a `[` or a bare bound
+ * identifier would otherwise hide from them (D-99-02b). Deliberately does NOT
+ * match `entry.enabled !== false`: that is the CONFIG-declaration axis
+ * (`persistence/config-io.ts`), a different fact about a different object,
+ * whose default is enabled-when-absent -- which is why each widened pattern
+ * keeps its leading `.`, `[` or `Boolean(` anchor rather than matching a bare
+ * `enabled`. Every member is non-global: a `/g/` regex carries `lastIndex`
+ * across `.test()` calls and would silently skip alternating files in the walk.
  */
 const INLINE_REDERIVATIONS: ReadonlyArray<RegExp> = [
   /!\s*[\w.]+\.enabled\b/,
   /\.enabled\s*===\s*false/,
   /\.enabled\s*!==\s*true/,
+  DESTRUCTURED_ENABLED_BINDING,
+  BRACKET_ENABLED_ACCESS,
+  BOOLEAN_ENABLED_COERCION,
 ];
 
 /**
@@ -758,10 +792,26 @@ const INLINE_REDERIVATIONS: ReadonlyArray<RegExp> = [
  * bound identifier each break the match. Held as DATA rather than described in
  * prose, so the proof below cannot be satisfied (or defeated) by comment text.
  */
-const ESCAPING_TWIN_SPELLINGS: ReadonlyArray<{ readonly label: string; readonly line: string }> = [
-  { label: "destructured binding", line: "const { enabled } = record;" },
-  { label: "bracket access", line: 'if (!record["enabled"]) {' },
-  { label: "Boolean() coercion", line: "if (Boolean(record.enabled) === false) {" },
+const ESCAPING_TWIN_SPELLINGS: ReadonlyArray<{
+  readonly label: string;
+  readonly pattern: RegExp;
+  readonly line: string;
+}> = [
+  {
+    label: "destructured binding",
+    pattern: DESTRUCTURED_ENABLED_BINDING,
+    line: "const { enabled } = record;",
+  },
+  {
+    label: "bracket access",
+    pattern: BRACKET_ENABLED_ACCESS,
+    line: 'if (!record["enabled"]) {',
+  },
+  {
+    label: "Boolean() coercion",
+    pattern: BOOLEAN_ENABLED_COERCION,
+    line: "if (Boolean(record.enabled) === false) {",
+  },
 ];
 
 /**
@@ -946,9 +996,16 @@ test("ENBL-05: the drift gate flags the destructured, bracket-access and Boolean
   // for that future twin, so the gate's reach is pinned rather than assumed.
   for (const twin of ESCAPING_TWIN_SPELLINGS) {
     assert.ok(
-      INLINE_REDERIVATIONS.some((re) => re.test(twin.line)),
-      `ENBL-05: no rederivation pattern flags the ${twin.label} twin -- ${twin.line}`,
+      twin.pattern.test(twin.line),
+      `ENBL-05: ${String(twin.pattern)} does not flag the ${twin.label} twin -- ${twin.line}`,
     );
+
+    for (const control of NON_REDERIVATIONS) {
+      assert.ok(
+        !twin.pattern.test(control.line),
+        `ENBL-05: ${String(twin.pattern)} over-reaches onto the ${control.label} -- ${control.line}`,
+      );
+    }
   }
 
   for (const control of NON_REDERIVATIONS) {
