@@ -1483,9 +1483,11 @@ function nextDisabledPin(
  * disabled one with it. A plugin with nothing to write must not pay for the
  * lock.
  *
- * The snapshot is read outside the lock, so this answer is advisory: the
- * in-transaction guard re-derives it against the LIVE record and remains the
- * TOCTOU-safe authority for whether the write happens.
+ * The snapshot is read outside the lock, so this answer is advisory about the
+ * RECORD: the in-transaction guard re-derives the same comparison against the
+ * live record and is the authority for whether the write happens. Neither guard
+ * is fresher than `preflightUpdate` about the RESOLUTION -- both derive the
+ * `next` side from the same out-of-lock resolve.
  */
 function disabledRefreshWouldWrite(preflight: PluginPreflight): boolean {
   const { record } = preflight;
@@ -1535,9 +1537,14 @@ async function refreshDisabledRecord(
       return false;
     }
 
-    // Re-derived against the LIVE record: `disabledRefreshWouldWrite` asked the
-    // same question of the pre-lock snapshot to decide whether to open this
-    // transaction at all, but only this comparison is TOCTOU-safe.
+    // Re-derived against the LIVE record, which `disabledRefreshWouldWrite`
+    // could only see as a pre-lock snapshot. Only the CURRENT half of the
+    // comparison is live, though: the NEXT half comes from `preflight`, whose
+    // `installable` / `toVersion` were resolved outside this lock. So this guard
+    // is authoritative about the RECORD and no fresher than the preflight about
+    // the RESOLUTION -- it cannot tell that the marketplace manifest moved after
+    // `preflightUpdate` read it, and a caller must not skip its own re-resolve
+    // on the strength of holding this lock.
     const next = nextDisabledPin(preflight, sRecord.resolvedSha);
     const nextCompatibility = next.compatibility;
     const current = disabledPinProjection(
