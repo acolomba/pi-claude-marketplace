@@ -462,6 +462,126 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
   });
 });
 
+// ─── LIFE-05 / D-98-13: the manifest-absent skip on all three enumeration paths ─
+//
+// `UpdatePluginsTarget` has three shapes -- targeted (`plugin` + `marketplace`),
+// marketplace-bulk (`marketplace`), and global-bulk (`all`) -- and all three
+// converge on the SAME `preflightUpdate` arm that returns `partition: "skipped"`
+// with `reasons: ["not in manifest"]` when the refreshed manifest no longer
+// lists the installed entry. PUP-5 above pins the targeted shape; the two cases
+// below pin the remaining two, byte for byte, so a future change to
+// `enumerateTargets` cannot silently drop the skip on a bulk path.
+//
+// Both bulk shapes render the SAME row bytes as the targeted shape: the
+// `[project]` bracket rides the marketplace header, and the plugin-row bracket
+// is suppressed by orphan-fold (plugin.scope === mp.scope). The bulk bodies
+// carry ONE extra line the targeted body does not: the OUT-03 / D-04 tally,
+// which renders on `cardinality: "plural"` operations only. The tally is an
+// orthogonal contract -- the skip row itself is unchanged across all three
+// paths, which is what these cases pin.
+
+/**
+ * The byte form the targeted case (PUP-5) pins, reused verbatim by both bulk
+ * cases. Copied rather than referenced so PUP-5 stays an independent pin: two
+ * assertions of the same literal catch a drift that one shared constant would
+ * hide on both sides at once.
+ */
+const MANIFEST_ABSENT_UPDATE_BODY =
+  "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {not in manifest}";
+
+/** The bulk-form body: the targeted row bytes plus the plural-cardinality tally. */
+const MANIFEST_ABSENT_BULK_BODY = `${MANIFEST_ABSENT_UPDATE_BODY}\n\nPlugin update: 1 warning`;
+
+test("LIFE-05: marketplace-bulk target renders `(skipped) {not in manifest}`, and a repeated update is byte-identical", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-life05-mp-"));
+    try {
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      // The marketplace drops the entry after install.
+      await rewriteManifest(seeded.manifestPath, "mp", {});
+
+      const firstRun = makeCtx();
+      await updatePlugins({
+        ctx: firstRun.ctx,
+        pi: firstRun.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(firstRun.notifications.length, 1);
+      assert.equal(firstRun.notifications[0]?.message, MANIFEST_ABSENT_BULK_BODY);
+      assert.equal(firstRun.notifications[0]?.severity, "warning");
+
+      // NFR-3: the skip arm is idempotent. Re-running the same update over the
+      // same state must render the same bytes -- a drifting second run would
+      // mean the first run mutated something the row reads.
+      const secondRun = makeCtx();
+      await updatePlugins({
+        ctx: secondRun.ctx,
+        pi: secondRun.pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(secondRun.notifications.length, 1);
+      assert.equal(secondRun.notifications[0]?.message, firstRun.notifications[0]?.message);
+      assert.equal(secondRun.notifications[0]?.severity, "warning");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writes NO state", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-life05-all-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      await rewriteManifest(seeded.manifestPath, "mp", {});
+
+      const readRecord = async (): Promise<PluginRecord | undefined> => {
+        const state = await loadState(locations.extensionRoot);
+        return state.marketplaces["mp"]?.plugins["hello"];
+      };
+
+      const before = await readRecord();
+      assert.ok(before !== undefined);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.message, MANIFEST_ABSENT_BULK_BODY);
+      assert.equal(notifications[0]?.severity, "warning");
+
+      // NFR-1 / NFR-3: the skip returns BEFORE any state mutation, so an
+      // interrupted run cannot leave a half-written record behind. Deep
+      // equality over the whole record covers the version pin, the resolved
+      // source, the compatibility block, and the resource lists at once.
+      assert.deepEqual(await readRecord(), before);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── PUP-6: happy 3-phase path -- updated outcome + state record swap + reload hint ─
 
 test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new version + reload hint emitted", async () => {
