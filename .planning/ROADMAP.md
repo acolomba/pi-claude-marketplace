@@ -301,3 +301,25 @@ Plans:
 | 89. Documentation reconcile | v1.16 | 3/3 | Complete | 2026-07-31 |
 | 86. Skill and command frontmatter compliance | v1.15 | 5/5 | Complete | 2026-07-26 |
 | 85. `mcpServers` string file-path references | v1.14 | 2/2 | Complete | 2026-07-23 |
+
+### Phase 99: Post-audit tech-debt closure
+
+**Goal:** Every debt item the v1.18 milestone audit enumerated is closed before the milestone ships: the three integration fragility warnings, the update-verb degradation-signal gap, the documentation deferrals, and the two legacy carriers.
+
+**Requirements:** none — post-audit debt closure; items tracked in `.planning/v1.18-MILESTONE-AUDIT.md` (tech_debt frontmatter) and the three pending todos (operator decision 2026-08-10: address all four groups before completing v1.18)
+
+**Depends on:** Phase 98
+
+**Success Criteria:**
+
+1. `ManifestLookup` is exported and consumed as a value by every surface that judges manifest absence (list, info, update) — no surface re-derives the successful-read rule independently.
+2. The ENBL-05 drift gate catches the destructured, bracket-access, and Boolean-comparison twin spellings; reinstall's colliding `stagedAgents`/`stagedMcpServers` string-array fields are renamed apart from the shared signal booleans.
+3. `update` threads degradation signals: a malformed skill pulled by an update renders its reasons brace with the WARN-01 raise, on both the standalone and cascade surfaces, with catalog + style-guide amendments (closes WR-12).
+4. The autoupdate cascade skip row has a catalog state with a FIXTURES entry; the description-bearing variant count is corrected; the residual `RLD-04`/`D-08` anchors are re-anchored or dropped at the six named sites (skipping the four files where `D-08` legitimately means something else).
+5. A disabled record whose `resolvedSource` moved while the version pin did not is refreshed rather than left stale; the rare-failure-arm coverage sweep lands the tests named in the 2026-06-12 todo (bounded to its named arms in update/reinstall/install).
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 99 to break down)
