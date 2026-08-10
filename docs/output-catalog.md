@@ -2060,6 +2060,19 @@ Autoupdate-ON cascade refresh whose validated `marketplace.json` content was byt
 
 The near miss of the no-op above, and the reason the gate keys on `unchanged` alone. The hash-version ladder is CONTENT-derived, so a plugin's files can move while `marketplace.json` stays byte-identical: `snapshot.changed` is `false`, but the plugin's pin moved. Over a DISABLED record the update rewrites the record's version, `resolvedSource`, `resolvedSha` and `compatibility` block and then declines to re-materialize artifacts -- an `ENBL-09` refresh, reported as `skipped` with the idempotent `already disabled` reason. That outcome is not `unchanged`, so it leaves the no-op gate and the marketplace renders `(updated)` with the row underneath. Collapsing it to `(skipped) {up-to-date}` would restate at the marketplace level the same false version claim the plugin row itself stopped making. Severity `info` -- `already disabled` is in the benign idempotent set, so the row and the notification both compute info (the second arg is omitted) and no summary line is emitted. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
 
+### Autoupdate-on cascade -- a plugin the refreshed manifest no longer declares (LIFE-06)
+
+<!-- catalog-state: update-autoupdate-cascade-not-in-manifest -->
+
+```text
+A plugin operation needs attention.
+
+● auto-skip [user] (updated)
+  ⊘ hello (skipped) {not in manifest}
+```
+
+LIFE-06 / D-98-13: the refreshed `marketplace.json` no longer lists an installed record's entry, so the shared update preflight stamps `partition: "skipped"` with `reasons: ["not in manifest"]` and `cascadeAutoupdates` passes that outcome through untouched (only a THROW is caught and converted). The cascade row carries NO version token, and the omission is deliberate: `outcomeToCascadePluginMessage`'s `skipped` arm forwards name, scope and reasons only, while the single-plugin `update` surface renders the SAME skip as `⊘ hello v1.0.0 (skipped) {not in manifest}`. Both forms are byte-pinned -- the cascade one in `tests/orchestrators/marketplace/update.test.ts`, the version-carrying one in `tests/orchestrators/plugin/update.test.ts` -- so adding a version here would move a locked contract rather than correct a rendering bug. `not in manifest` is failure-class and not idempotent, so `skipSeverity` stamps the row `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The marketplace header keeps `(updated)`: a `skipped` outcome is not `unchanged`, so it leaves the all-unchanged no-op gate (UXG-05) exactly as the disabled re-pin above does. The record is left untouched -- a skipped plugin is a fixed point for the cascade, so a repeated `marketplace update` renders byte-identically. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
+
 ### Autoupdate-off manifest refresh -- changed
 
 <!-- catalog-state: manifest-refresh-changed -->

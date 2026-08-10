@@ -3376,6 +3376,36 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // LIFE-06 / D-98-13: the cascade skip row for an installed record whose
+    // manifest entry is gone. `outcomeToCascadePluginMessage`'s `skipped` arm
+    // forwards name, scope and reasons ONLY -- no version -- so this row is
+    // version-less while the single-plugin `update` surface renders `v1.0.0` on
+    // the same skip. That asymmetry is the byte contract, not a bug.
+    // `not in manifest` is non-idempotent, so `skipSeverity` stamps `warning`.
+    "update-autoupdate-cascade-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "auto-skip",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "skipped",
+                name: "hello",
+                scope: "user",
+                reasons: ["not in manifest"],
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {
