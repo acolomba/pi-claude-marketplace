@@ -117,11 +117,12 @@ interface SeedPathMarketplaceOpts {
   readonly mpName: string;
   readonly manifest: { name: string; plugins: readonly Record<string, unknown>[] };
   /**
-   * Installed plugin records. `disabled: true` seeds the ENBL-02
-   * empty-resources marker (recorded-but-disabled); the default seeds a
-   * populated `resources.skills` -- a production installed record always has
-   * >= 1 populated array (the empty-resources + installable:true
-   * intersection IS the disabled marker, D-54-01 / ENBL-04).
+   * Installed plugin records. `disabled: true` controls the `enabled` boolean
+   * and nothing else -- ENBL-05 collapsed the disabled state onto that single
+   * axis, and ENBL-18 keeps the inventory intact across a disable, so a
+   * disabled record carries the same populated `resources` an enabled one does.
+   * Every record defaults to a populated `resources.skills`; a production
+   * installed record always has >= 1 populated array.
    */
   readonly installed?: Record<
     string,
@@ -218,16 +219,13 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
         supported: [],
         unsupported: [...unsupported],
       },
-      resources:
-        info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
-          : {
-              skills: [...(override?.skills ?? [`${name}-skill`])],
-              prompts: [...(override?.prompts ?? [])],
-              agents: [...(override?.agents ?? [])],
-              mcpServers: [...(override?.mcpServers ?? [])],
-              hooks: [...(override?.hooks ?? [])],
-            },
+      resources: {
+        skills: [...(override?.skills ?? [`${name}-skill`])],
+        prompts: [...(override?.prompts ?? [])],
+        agents: [...(override?.agents ?? [])],
+        mcpServers: [...(override?.mcpServers ?? [])],
+        hooks: [...(override?.hooks ?? [])],
+      },
       enabled: info.disabled !== true,
       installedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -1063,13 +1061,16 @@ test("INFO-09 boundary: a DECLARED plugin keeps the manifest-backed row with no 
 });
 
 // ---------------------------------------------------------------------------
-// D-54-01 / ENBL-04: the disabled carve-out is partitioned out of the info
-// surface BEFORE `buildBlock` runs, so a manifest-absent DISABLED record still
-// renders the list-arm `(disabled)` inventory cascade rather than the new
-// state-only installed block.
+// D-100-08 / ENBL-17: a manifest-absent DISABLED record goes through the SAME
+// `buildBlock` every other installed record does, so it reports the component
+// inventory the disable retained (ENBL-18) instead of a bare row. The
+// `(disabled)` token survives the reroute because the disabled status is
+// injected ahead of the persisted-status derivation, which knows only
+// `installed` / `partially-installed`; and `{not in manifest}` stays on the
+// inventory row per D-100-07 -- it names what blocks the user's next action.
 // ---------------------------------------------------------------------------
 
-test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` inventory cascade", async () => {
+test("D-100-08 / ENBL-17: a manifest-absent DISABLED record renders `(disabled) {not in manifest}` with its retained inventory", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -1085,24 +1086,25 @@ test("D-54-01: a manifest-absent DISABLED record still renders the `(disabled)` 
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
     );
   });
 });
 
-// The disabled-PARTIAL half of the same carve-out. Before the ENBL-05
-// collapse the disabled-state predicate also read `compatibility.installable`,
-// so this record (`enabled: false` AND `installable: false`) was not
-// recognized as disabled by `partitionDisabledScopes` and fell through to the
-// state-only installed block, rendering `(partially-installed)` with a
-// `{not in manifest, ...}` brace over an empty component map -- the CR-01
-// defect. The row is BARE, byte-identical to the canonical disabled row above:
-// `PluginDisabledMessage` carries no `reasons` field by construction, which is
-// what makes INV-04's "never `{not in manifest}` on a disabled row" structural.
-test("ENBL-05 / ENBL-06 / CR-01: a manifest-absent DISABLED PARTIAL record renders the `(disabled)` inventory cascade, not the state-only installed block", async () => {
+// The disabled-PARTIAL half. The persisted unsupported kind rides the same
+// reason brace it does on an enabled state-only record, AFTER the absence
+// token -- `narrowUnsupportedKinds` stays the sole producer of the kind tokens
+// and the disabled status does not suppress them. What the injection changes is
+// the STATUS: without it this record derives `(partially-installed)`, which
+// would tell the user a deregistered plugin is running.
+test("D-100-08 / ENBL-17: a manifest-absent DISABLED PARTIAL keeps `(disabled)`, not the derived `(partially-installed)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -1112,8 +1114,8 @@ test("ENBL-05 / ENBL-06 / CR-01: a manifest-absent DISABLED PARTIAL record rende
       mpName: "mp",
       manifest: { name: "mp", plugins: [] },
       // The factory derives the reachable persisted shape from these two
-      // fields alone: `enabled: false`, `installable: false` (unsupported is
-      // non-empty), and every `resources.*` array emptied.
+      // fields alone: `enabled: false` and `installable: false` (unsupported is
+      // non-empty). The inventory survives the disable (ENBL-18).
       installed: { alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] } },
     });
 
@@ -1121,22 +1123,26 @@ test("ENBL-05 / ENBL-06 / CR-01: a manifest-absent DISABLED PARTIAL record rende
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
+    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest, lsp}",
+        "    skills: alpha-skill",
+      ].join("\n"),
     );
   });
 });
 
-// D-96-04 on the all-disabled early return: that branch short-circuits every
-// probe, so `--fetch` fetched nothing there too. Without the note the run
-// renders bytes identical to a bare run -- the exact failure mode D-96-04 was
-// written to close, on a sibling branch of the same function. The reason token
-// differs from the state-only note because the cause differs: a disabled record
-// has no materialized artifacts to refresh (ENBL-02), rather than no manifest
-// entry to fetch from.
-test("D-96-04: `info --fetch` on an all-disabled marketplace emits the skip note", async () => {
+// D-96-04 / ENBL-17: the skip note survives the reroute. This scope carries
+// BOTH skip causes -- disabled AND manifest-absent -- and emits exactly ONE
+// skip row, because the cause is a single producer-reported field on the block
+// rather than two per-cause lists that could concatenate. The reason names the
+// proximate cause: a disabled record has no materialized artifacts to refresh
+// (ENBL-02) whatever the manifest says, while the inventory row above it keeps
+// `{not in manifest}` because that is what constrains the user next.
+test("D-96-04 / ENBL-17: `info --fetch` on a disabled AND manifest-absent scope emits ONE skip row, reporting the disabled cause", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -1163,7 +1169,11 @@ test("D-96-04: `info --fetch` on an all-disabled marketplace emits the skip note
     assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "    skills: alpha-skill",
+      ].join("\n"),
     );
     assert.equal(notifications[1]!.severity, "warning");
     assert.equal(
@@ -1175,14 +1185,22 @@ test("D-96-04: `info --fetch` on an all-disabled marketplace emits the skip note
         "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
       ].join("\n"),
     );
+    // ONE row, not one per cause: a `(skipped)` row for the manifest-absence
+    // cause beside the disabled one would be the concatenation regression the
+    // single `skipReason` field exists to make unrepresentable.
+    assert.equal(
+      notifications[1]!.message.split("(skipped)").length - 1,
+      1,
+      notifications[1]!.message,
+    );
   });
 });
 
-// ENBL-06: the same `--fetch` accounting for the PARTIAL disabled shape. Before
-// the disabled-state axes were separated, this record missed the disabled
-// partition and landed in the state-only arm, so its skip row named the
-// manifest-absence cause. The cause is the disabled record, not the missing
-// manifest entry, and the reason token has to say so.
+// ENBL-06 / ENBL-17: the same `--fetch` accounting for the PARTIAL disabled
+// shape. Before the disabled-state axes were separated, this record missed the
+// disabled classification and its skip row named the manifest-absence cause.
+// The cause is the disabled record, not the missing manifest entry, and the
+// reason token has to say so.
 test("ENBL-06 / D-96-04: `info --fetch` on a DISABLED PARTIAL skips for the disabled cause, not the manifest-absence cause", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
@@ -1210,7 +1228,11 @@ test("ENBL-06 / D-96-04: `info --fetch` on a DISABLED PARTIAL skips for the disa
     assert.equal(notifications[0]!.severity, undefined, "the inventory block keeps info severity");
     assert.equal(
       notifications[0]!.message,
-      ["● mp [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest, lsp}",
+        "    skills: alpha-skill",
+      ].join("\n"),
     );
     assert.equal(notifications[1]!.severity, "warning");
     assert.equal(
@@ -1223,7 +1245,8 @@ test("ENBL-06 / D-96-04: `info --fetch` on a DISABLED PARTIAL skips for the disa
       ].join("\n"),
     );
     // The specific regression: the state-only arm's reason token on a record
-    // that never belongs there.
+    // that never belongs there. The SKIP note names the disabled cause; the
+    // inventory row above is where manifest absence is reported.
     assert.equal(
       notifications[1]!.message.includes("not in manifest"),
       false,
@@ -1283,31 +1306,33 @@ test("D-96-04: a mixed disabled + state-only `--fetch` run orders both skip rows
     // survive a duplicated skip notification, a lost info block, and any
     // reordering -- including the WR-10 inventory/note inversion this order
     // encodes.
-    assert.equal(notifications.length, 3, JSON.stringify(notifications));
+    //
+    // D-100-08 / ENBL-17: TWO notifications, not three. The disabled scope is no
+    // longer a foreign message kind, so both scopes ride ONE info cascade
+    // instead of forcing a second notify for the mixed result.
+    assert.equal(notifications.length, 2, JSON.stringify(notifications));
 
-    // 0: the user-scope state-only info block, unchanged by the flag.
+    // 0: both scopes' info blocks in one cascade, project-first (MSG-GR-3). The
+    // disabled scope reports its retained inventory beside the enabled one.
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
       notifications[0]!.message,
       [
+        "● mp [project] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "    skills: alpha-skill",
+        "",
         "● mp [user] <no autoupdate>",
         "  ● alpha v2.0.0 (installed) {not in manifest}",
         "    skills: alpha-skill",
       ].join("\n"),
     );
 
-    // 1: the project-scope disabled inventory. WR-10: the inventory precedes
-    // the note that annotates it, matching the all-disabled early return.
-    assert.equal(notifications[1]!.severity, undefined);
+    // 1: ONE skip notification carrying both rows, project-first, each naming
+    // its own cause. WR-10: the note follows the inventory it annotates.
+    assert.equal(notifications[1]!.severity, "warning");
     assert.equal(
       notifications[1]!.message,
-      ["● mp [project]", "  ◍ alpha v1.0.0 (disabled)"].join("\n"),
-    );
-
-    // 2: ONE skip notification carrying both rows, project-first.
-    assert.equal(notifications[2]!.severity, "warning");
-    assert.equal(
-      notifications[2]!.message,
       [
         "Some plugin operations need attention.",
         "",
@@ -1660,10 +1685,10 @@ test("D-96-04: `info --fetch` on a manifest-DECLARED plugin emits NO skip note",
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     // The note is keyed on the ARM that fired, not on the flag alone. A
-    // declared plugin runs the manifest-backed arm, which reports
-    // `stateOnly: false` on its `InfoBlock` -- the discriminant `emitFetchSkip`
-    // reads. Nothing about the rendered row is consulted, so the keying cannot
-    // drift with the reason tokens the row happens to carry.
+    // declared, enabled plugin runs the manifest-backed arm, which reports NO
+    // `skipReason` on its `InfoBlock` -- the field `emitFetchSkip` reads.
+    // Nothing about the rendered row is consulted, so the keying cannot drift
+    // with the reason tokens the row happens to carry.
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: userRoot,
