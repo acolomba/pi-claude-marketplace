@@ -1517,8 +1517,22 @@ function disabledRefreshWouldWrite(preflight: PluginPreflight): boolean {
 /**
  * D-UPD: refresh a disabled-but-recorded plugin's version pin, resolvedSource
  * and compatibility block under the scope lock so a future `enable`
- * re-materializes from the current manifest. Resources.* stay empty (the plugin
- * is still disabled). The standalone-direct write-back
+ * re-materializes from the current manifest.
+ *
+ * ENBL-18 SKEW, deliberate: `resources.*` and `hookEntries` are NOT touched, so
+ * after `disable` -> `update` the record pins version B while its inventory
+ * still describes what version A materialized. The two fields answer different
+ * questions -- the pin says what the next `enable` will install, the inventory
+ * says what the last install actually put on disk -- and only `enable` can make
+ * them agree, because only `enable` re-materializes. Clearing the inventory
+ * instead would trade a stale answer for no answer at all, which is the
+ * self-describing record ENBL-18 exists to keep; refusing to move the pin would
+ * leave a future `enable` installing a version the marketplace no longer
+ * declares. `info` and `list` therefore render the retained inventory under the
+ * NEW version until the plugin is enabled again -- recorded in the
+ * `state-only-disabled-with-components` catalog state.
+ *
+ * The standalone-direct write-back
  * (maybeWritePluginConfigBack) is SKIPPED -- the config entry already exists by
  * construction (the disabled record only persists when the user explicitly
  * disabled it), and writing the byte-stable `{}` patch would touch state.json
