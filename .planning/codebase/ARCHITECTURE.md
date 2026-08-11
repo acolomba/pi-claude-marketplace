@@ -153,7 +153,7 @@
 ### Load-Time Reconcile Flow (`resources_discover`)
 
 1. Pi fires `resources_discover` on every session start/reload; `index.ts` handler first calls `hydrateProjectScopeForCwd` (`bridges/hooks/index.ts`) to populate the per-project hook-routing cache
-2. `applyReconcile` (`orchestrators/reconcile/apply.ts`) diffs the desired state (from `state.json`) against on-disk artifacts (`orchestrators/reconcile/plan.ts`) and re-materializes anything missing — this is the self-healing mechanism that lets `/reload` alone recover from a partial or externally-deleted install (NFR-2)
+2. `applyReconcile` (`orchestrators/reconcile/apply.ts`) reconciles **desired** state against **recorded** state: `orchestrators/reconcile/plan.ts` diffs the declared config (merged `claude-plugins.json`) against the installation records in `state.json`, partitioning both sides into seven action buckets, and the apply path installs, uninstalls, enables, and disables to close the gap — materializing and unstaging artifacts as those transitions require. This is what lets `/reload` alone converge on a hand-edited config (NFR-2). It is a config-to-record reconciliation, NOT a deep diff of records against on-disk artifacts: an artifact deleted underneath an intact record is not detected
 3. `recomputePluginPath` (`orchestrators/plugin-path.ts`) rebuilds the `PATH`-equivalent routing table for both scopes
 4. `aggregateDiscoveredResources` (`orchestrators/discover.ts`) walks both scope `locationsFor(...)` bundles and returns `{ skillPaths, promptPaths }` to Pi
 

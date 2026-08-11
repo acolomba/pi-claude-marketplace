@@ -41,9 +41,11 @@ Plugin keys are flat-keyed `"${plugin}@${marketplace}"` and parsed by `lastIndex
 
 ## Sentinel contracts
 
-The planner and the apply path coordinate via two structural sentinels (no new schema fields):
+The planner and the apply path coordinate via one structural sentinel, plus one explicit schema field that REPLACED an earlier structural marker:
 
-- **Empty-resources marker for "currently disabled" (ENBL-02 / A1).** A recorded plugin whose `resources.{skills,prompts,agents,mcpServers}` arrays are ALL empty AND whose `compatibility.installable === true` is treated as currently disabled. The disable orchestrator empties the resource arrays while preserving the version pin AND the `installable: true` flag, so the empty-resources + installable-true intersection is the unambiguous "currently disabled" marker. `installable === true` is load-bearing: a soft-degraded (`installable: false`) plugin -- e.g. one whose companion extension is missing -- legally records all four resource arrays empty too, so without the guard the `state-populated-mixed.json` fixture's soft-degraded entry would be misclassified as `pluginsToEnable`.
+- **Explicit `enabled` field for "currently disabled" (ENBL-02 / ENBL-05).** A recorded plugin is currently disabled iff its `enabled` boolean is `false`. `state-io.ts::isRecordedButDisabled` is the single definition and reads that field and NOTHING else; a drift gate asserts no second definition exists, in any spelling.
+
+  This replaced a two-axis structural marker that intersected all-empty `resources.*` with `compatibility.installable === true`. Neither conjunct survives, and the reasons are worth keeping: emptiness is a CONSEQUENCE of disabling rather than the marker, and `installable` tracks availability, which is ORTHOGONAL to user intent. The `installable === true` half was not merely redundant but actively wrong -- a partial install always persists `installable: false`, so the guard excluded exactly the disabled-partial record and no other shape, making every disabled-detection path silently take the wrong branch (ENBL-04 violation, repaired by ENBL-05..09).
 
 - **Tri-state `samePlannedSource` sentinel.** `domain/source.ts` exports `samePlannedSource(record, declared): "same" | "different" | "unknown-stored"`. Earlier shapes returned `boolean | "unknown-stored"`, which a careless `if (...)` treated as a source match for the `"unknown-stored"` arm. The tri-state cut closes that footgun: every consumer (`plan.ts::diffMarketplaces`, `plan.ts::findRecordedBySource`) must switch on the explicit literal.
 
