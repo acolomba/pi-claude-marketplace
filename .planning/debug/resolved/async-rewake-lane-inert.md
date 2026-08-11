@@ -1,13 +1,25 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "UAT G-91-2: asyncRewake:true PreToolUse handler never spawns its async child in a live Pi session (HENV-02)"
 created: 2026-08-04T00:00:00Z
-updated: 2026-08-04T00:00:00Z
+updated: 2026-08-11T00:00:00Z
 ---
 
 ## Current Focus
 
-ROOT CAUSE CONFIRMED — investigation complete (diagnose-only mode; no fix applied).
+CLOSED 2026-08-11 as NO PRODUCT DEFECT.
+
+The investigation confirmed the lane is correct and the symptom came from a
+stale staged artifact in the UAT fixture, not from code. No product change was
+required, so there is nothing left to fix or schedule. The reusable finding —
+`/reload` reads the staged copy, so a source edit needs a reinstall before it
+can be observed — is recorded in the knowledge base.
+
+One residue, deliberately not carried as an open item: the live re-run against a
+re-staged fixture was never performed. The seam test proved the corrected config
+through the unmodified production path (2/2, both spawns with full env parity),
+which is what establishes there is no defect; the live re-run would only
+re-confirm a fixture correction.
 
 reasoning_checkpoint:
   hypothesis: "The async child never spawned because the routing bucket never contained an asyncRewake PreToolUse handler: the event router hydrates from the STAGED scope-dir copy of hooks.json, which still held the first (Stop-based) fixture attempt; the UAT edited the marketplace source and ran /reload, which re-reads the staged copy, not the source"
@@ -109,6 +121,6 @@ root_cause: |
   nothing failed — routing executed the staged config faithfully.
   The seam test proves the corrected config spawns both children with correct
   HENV-02 env through the unmodified production path.
-fix: "None applied (diagnose-only mode). Direction: re-stage the fixture (reinstall or update env-observe@henv-uat-mkt) so the staged copy carries the sync+async PreToolUse pair, then re-run UAT Test 2 live; no product code change required for G-91-2."
-verification: "Seam-level: throwaway test 2/2 pass (experiment A reproduces the failure from the stale artifact; experiment B shows both spawns + full HENV key parity from the corrected artifact). Live re-verification pending re-staged fixture."
+fix: "None needed — no product code change was required for G-91-2. The corrective action is to the FIXTURE: re-stage it (reinstall or update env-observe@henv-uat-mkt) so the staged copy carries the sync+async PreToolUse pair before re-running UAT Test 2 live."
+verification: "Seam-level, and sufficient to establish no-defect: throwaway test 2/2 pass — experiment A reproduces the failure from the stale artifact, experiment B shows both spawns plus full HENV key parity from the corrected artifact, both through the unmodified production path. The live re-run against a re-staged fixture was NOT performed and is not carried as an open item; it would re-confirm a fixture correction, not the product behavior experiment B already proved."
 files_changed: []

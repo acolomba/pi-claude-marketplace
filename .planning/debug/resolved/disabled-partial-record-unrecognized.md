@@ -1,21 +1,20 @@
 ---
-status: diagnosed
+status: resolved
 trigger: "v1.18 roadmap validation: INV-04 review surfaced that `isRecordedButDisabled` conjoins `compatibility.installable` with `!enabled`, while a partial install always persists `installable: false`"
 created: 2026-08-07T00:00:00Z
-updated: 2026-08-07T00:00:00Z
+updated: 2026-08-11T00:00:00Z
 ---
 
 ## Current Focus
 
-ROOT CAUSE CONFIRMED — investigation complete. No fix applied in this session.
+RESOLVED 2026-08-11. The fix landed as ENBL-05 through ENBL-09, and the live
+reproduction this session listed as its blind spot has now been run.
 
-SCHEDULED: milestone v1.18 Phase 97 (disabled-state classification repair), by
-operator decision 2026-08-07, reversing the same-day decision to track it
-separately. The repair is specified as ENBL-05 through ENBL-09, which continue
-the v1.12 enable/disable family because this defect is a live violation of
-ENBL-04 — "declared / enabled / available are orthogonal facts" — that the
-partial-install feature introduced. Status stays `diagnosed` until the fix lands;
-move this file to `resolved/` and add a knowledge-base entry at that point.
+The repair continued the v1.12 enable/disable family because the defect is a
+live violation of ENBL-04 — "declared / enabled / available are orthogonal
+facts" — that the partial-install feature introduced. The four predicate copies
+collapsed into one definition keyed only on `enabled`, and the five affected
+surfaces were restored. See the Resolution section for what shipped.
 
 reasoning_checkpoint:
   hypothesis: "Disabling a partially-installed plugin produces an on-disk record (enabled: false + compatibility.installable: false) that no surface recognizes as disabled, because every disabled-detection predicate also requires installable === true"
@@ -107,8 +106,30 @@ ordinary partial install, enable reports "already enabled" and never
 re-materializes it, disable is never idempotent, reconcile re-plans a disable
 forever, and update re-stages artifacts for a plugin the user disabled.
 
-fix: "None applied (diagnose-only; out of scope for v1.18). Direction: drop the `compatibility.installable &&` conjunct from plugin-state-classifier.ts:130, enable-disable.ts:183, reconcile/plan.ts:275, and update.ts:1353, so the predicate reads `!record.enabled` alone. The guard is no longer load-bearing: `enabled: false` is written only by the disable orchestrator, and the schema migration backfills `enabled: true` for legacy records. Then update the truth-table cell at tests/orchestrators/reconcile/plan.test.ts:724, update the textual drift-guard that requires both axes in the predicate body, correct the false premise in the reconcile/plan.ts comment, and add coverage for the disabled-plus-partial shape across list, enable, disable, reconcile, and update. Consider extracting the predicate to one home so a fifth copy cannot drift."
+fix: "Applied as ENBL-05 through ENBL-09. The four copies were not merely stripped of the conjunct but collapsed into ONE definition — `isRecordedButDisabled`, exported from persistence/state-io.ts and keyed only on `enabled` — with the three predicate twins and one inline conjunction deleted; six modules now read the single definition. The guard was confirmed not load-bearing: `enabled: false` is written only by the disable orchestrator, and the schema migration backfills `enabled: true` for legacy records. The truth-table cell at tests/orchestrators/reconcile/plan.test.ts that had pinned the wrong behavior as intended was corrected rather than left green, and the textual drift-guard was INVERTED from 'the twin has the right body' to 'no twin survives', later widened to catch the destructured, bracket-access and Boolean()-coercion spellings. The false premise in the reconcile/plan.ts comment was corrected. All five surfaces were restored: list and info rendering, enable and disable idempotency, reconcile steady state, and the update short-circuit."
 
-verification: "Source-level only. Line references re-verified 2026-08-07. Live reproduction and the fix itself are both pending."
+verification: |
+  Three independent levels, all green.
+  Source: line references re-verified 2026-08-07; the single definition and its
+  six consumers re-verified at the v1.18 integration audit 2026-08-11.
+  Test: coverage added for the disabled-plus-partial shape across list, enable,
+  disable, reconcile and update, including the CR-01 repro (a manifest-absent
+  disabled partial renders the disabled cascade) and an enabled soft-degraded
+  counter-case that proves the assertions discriminate.
+  Live: the blind spot this session recorded — "No live-Pi reproduction was run;
+  a live run would confirm the enable no-op and the reconcile re-plan loop end to
+  end" — is CLOSED. tests/live-uat/manifest-absence-canary.mjs Flow B installs a
+  genuine partial through the extension's own ledger (compatibility.installable
+  false, asserted on the real record), disables it, and observes both list and
+  info render `(disabled)`, with a second disable returning
+  `(skipped) {already disabled}`. Run 2026-08-11 against pi 0.84.0: B0-B3 all
+  pass.
 
-files_changed: []
+files_changed:
+  - extensions/pi-claude-marketplace/persistence/state-io.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin-state-classifier.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+  - tests/orchestrators/reconcile/plan.test.ts
