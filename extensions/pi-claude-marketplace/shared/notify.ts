@@ -1351,6 +1351,12 @@ interface PluginInfoRowBase {
   // the info surface. `partially-upgradable` is deliberately omitted -- it is a
   // list-inventory-only concept (an installed plugin's info is partially-installed
   // or installed, never partially-upgradable).
+  //
+  // D-100-08 / ENBL-17: `disabled` joins the set so a disabled record can report its
+  // description and component inventory through the same row every other installed
+  // record uses, instead of a bare foreign-shaped one. This is a per-surface subset
+  // widening, not a new token -- `disabled` is already a member of the closed
+  // `PLUGIN_STATUSES` tuple, so the enumeration gates and the length lock are unaffected.
   readonly status: Extract<
     PluginStatus,
     | "installed"
@@ -1361,6 +1367,7 @@ interface PluginInfoRowBase {
     | "partially-available"
     | "failed"
     | "partially-installed"
+    | "disabled"
   >;
   readonly name: string;
   readonly version?: string;
@@ -3266,6 +3273,10 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
       // FSTAT-02 / FSTAT-07 / D-66-03: info row for an installed plugin
       // re-resolving `partially-available` -- the dedicated `◉` glyph.
       return ICON_PARTIALLY_INSTALLED;
+    case "disabled":
+      // D-100-08 / ENBL-17: info row for a disabled record -- the existing
+      // `◍` glyph, so the slot stays byte-identical to the disabled list row.
+      return ICON_DISABLED;
     case "available":
       return ICON_AVAILABLE;
     case "remote":
