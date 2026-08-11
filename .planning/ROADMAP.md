@@ -302,7 +302,7 @@ Plans:
 | 97. Disabled-state classification repair | v1.18 | 5/5 | Complete    | 2026-08-09 |
 | 98. Lifecycle regression and contract documentation | v1.18 | 6/6 | Complete    | 2026-08-10 |
 | 99. Post-audit tech-debt closure | v1.18 | 7/7 | Complete    | 2026-08-10 |
-| 100. Disabled-plugin information retention | v1.18 | 4/5 | In Progress | — |
+| 100. Disabled-plugin information retention | v1.18 | 5/5 | In Progress | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
@@ -432,7 +432,7 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
 > state, so retention makes an enable self-conflict. Two of the three readers
 > named at discuss need no code change; a fourth, found at research, does.
 
-**Plans:** 4/5 plans executed in 4 waves
+**Plans:** 5/5 plans executed in 4 waves
 
 Plans:
 **Wave 1**
@@ -450,4 +450,4 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 100-05-PLAN.md — disabled-info catalog state, byte fixture and coverage (ENBL-16, ENBL-17)
+- [x] 100-05-PLAN.md — disabled-info catalog state, byte fixture and coverage (ENBL-16, ENBL-17)
