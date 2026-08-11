@@ -345,6 +345,7 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
     [
       "compatibility",
       "enabled",
+      "hookEntries",
       "installedAt",
       "resolvedSha",
       "resolvedSource",
@@ -352,7 +353,7 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
       "updatedAt",
       "version",
     ],
-    "COMPAT-01: no field may be added to or removed from the persisted install record.",
+    "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it only as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent); removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
   );
 });
 

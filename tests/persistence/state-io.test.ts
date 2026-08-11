@@ -492,6 +492,29 @@ test("D-77-02 / ENBL-18: toDisabledRecord preserves resolvedSha through the disa
   assert.equal(disabled.enabled, false);
 });
 
+// ENBL-10 / ENBL-18: the sibling built to the template above. `hookEntries` is
+// the description of a disabled plugin's hooks that `info` reads once the
+// artifacts are gone, so the disable transform losing it would defeat the
+// retention this key exists for.
+test("D-100-01 / ENBL-10: toDisabledRecord preserves hookEntries through the disable transform", () => {
+  const record: PluginInstallRecord = {
+    version: "sha-a1b2c3d4e5f6",
+    resolvedSource: "https://github.com/o/r",
+    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["h"] },
+    enabled: true,
+    installedAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+  };
+  const disabled = toDisabledRecord(record, "2025-02-02T00:00:00.000Z");
+  assert.deepEqual(disabled.hookEntries, [
+    { event: "PreToolUse", matcher: "Bash" },
+    { event: "SessionStart" },
+  ]);
+  assert.equal(disabled.enabled, false);
+});
+
 test("HOOK-02 / D-57-01: v1.12-shaped state.json round-trips through loadState; every plugin record gains resources.hooks default", async (t) => {
   const { root, cleanup } = await tmpExtensionRoot();
   // Suppress IL-3 sanctioned warn: ST-4 fire-and-forget persist may race

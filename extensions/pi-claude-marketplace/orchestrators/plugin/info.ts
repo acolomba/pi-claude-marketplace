@@ -30,16 +30,12 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import {
-  BUCKET_A_EVENTS,
-  TOOL_EVENTS,
-  type ToolEvent,
-} from "../../domain/components/hook-events.ts";
+import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   parseHooksConfig,
+  projectHookSummaryEntries,
   type DroppedHook,
   type HookConfigParseResult,
-  type HooksConfig,
 } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
@@ -86,7 +82,7 @@ import { makePresenceProbe } from "./git-source-probe.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ClaudeHookEvent, HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {
   ContentReason,
   NotificationMessage,
@@ -95,11 +91,6 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-
-// SURF-01: TOOL_EVENTS is a string[] tuple; rewrap as a Set
-// for O(1) membership tests in the HookSummaryEntry projector. Module-
-// scope so the Set is allocated once across all info.ts call sites.
-const TOOL_EVENT_SET: ReadonlySet<string> = new Set<string>(TOOL_EVENTS);
 
 // INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
 // membership tests in `readLenientHookSummary`'s per-event supported flag.
@@ -357,50 +348,6 @@ function normalizeDependencies(raw: unknown): readonly string[] | undefined {
   }
 
   return [...strings].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-}
-
-/**
- * SURF-01 / D-63-04 / D-63-06: project a parsed `HooksConfig` to the
- * `HookSummaryEntry[]` shape the renderer consumes. One entry per
- * (event, group) tuple in declaration order from the parsed file --
- * `Object.entries` and `Array` iteration both preserve insertion order
- * for plain objects (the JSON.parse output `parseHooksConfig` returns),
- * so the rendered order matches the on-disk authoring order.
- *
- * Tool events (`PreToolUse` / `PostToolUse` / `PostToolUseFailure`)
- * carry the group's `matcher` (defaulting to the empty string when the
- * group's `matcher` is absent -- match-all per MATCH-01); non-tool
- * events do not carry one. Granularity is per-GROUP, not per-handler:
- * the renderer surfaces `event(matcher)` once per group regardless of
- * how many handlers the group declares.
- *
- * Pure and total: never throws. The supportability gate in
- * `checkMatcherSupportability` has already accepted every event key as
- * a `BucketAEvent`, so the tool-event discriminator is a closed-set
- * membership check against `TOOL_EVENTS`.
- */
-function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEntry[] {
-  const entries: HookSummaryEntry[] = [];
-  for (const [eventName, groups] of Object.entries(parsed)) {
-    for (const group of groups) {
-      if (TOOL_EVENT_SET.has(eventName)) {
-        entries.push({
-          event: eventName as ToolEvent,
-          matcher: group.matcher ?? "",
-        });
-      } else {
-        // Cast: the assertion is upheld by the supportability gate's
-        // bucket-A admission check (every event key surviving
-        // `parseHooksConfig.ok = true` is a `ClaudeHookEvent`, and the
-        // tool-event guard above excludes the `ToolEvent` subset).
-        entries.push({
-          event: eventName as Exclude<ClaudeHookEvent, ToolEvent>,
-        });
-      }
-    }
-  }
-
-  return entries;
 }
 
 /**

@@ -36,6 +36,31 @@ import { errorMessage } from "../shared/errors.ts";
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
 /**
+ * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
+ * plus the optional matcher, and NOTHING else.
+ *
+ * The two properties are the whole payload boundary. Handler material --
+ * command strings, arguments, timeouts, environment -- is never written here,
+ * so `state.json` does not become a durable copy of a plugin's shell commands
+ * and `info` has nothing of the sort to render. The value is a RENDERING
+ * source only, never a routing source: registered handlers come from the
+ * hydrate walk over the on-disk materialized configuration and from nowhere
+ * else, so a fabricated entry can mislead `info` but cannot run.
+ *
+ * `event` is a plain string rather than a closed union on purpose: a future
+ * Claude event token must not invalidate a whole state file. The narrowing to
+ * the renderer's closed `HookSummaryEntry` union happens once, at the read
+ * boundary (`domain/components/hooks.ts::hookSummaryEntriesFromPersisted`).
+ */
+const PERSISTED_HOOK_ENTRY_SCHEMA = Type.Object({
+  event: Type.String(),
+  matcher: Type.Optional(Type.String()),
+});
+
+/** The persisted hook-entry shape derived from its schema. */
+export type PersistedHookEntry = Type.Static<typeof PERSISTED_HOOK_ENTRY_SCHEMA>;
+
+/**
  * ST-3: per-plugin install record (D-09 nesting under marketplaces.<mp>.plugins).
  *
  * HOOK-02 / D-57-01: `resources.hooks` is REQUIRED (string[]). It holds
@@ -66,6 +91,25 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // path/github-name installs omit it. Reinstall uses THIS full sha as its
   // re-clone checkout pin; clone GC presence-checks it to derive live keys.
   resolvedSha: Type.Optional(Type.String()),
+  // D-100-01 / ENBL-10: the supported hook entries the install materialized.
+  // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
+  // precedent), so a legacy record without it loads unchanged and absence
+  // needs no migrate fill.
+  //
+  // ABSENCE MEANS "this record predates the key": the reader falls through to
+  // the materialized-file read. That is a DIFFERENT fact from a present empty
+  // array, which means "this plugin declares no supported hooks" -- a
+  // completed answer carrying zero entries. Records self-heal on the next
+  // install, update, reinstall or enable; there is no backfill (D-100-09).
+  //
+  // Two payload boundaries, both enforced by PERSISTED_HOOK_ENTRY_SCHEMA
+  // above: the entries are the SUPPORTED subset only (D-100-02), and no
+  // handler payload is recorded, so the value is a rendering source and never
+  // a routing source.
+  //
+  // Named for the entries themselves because `resources.hooks` already holds
+  // a different fact -- the hooks CONTAINER slug.
+  hookEntries: Type.Optional(Type.Array(PERSISTED_HOOK_ENTRY_SCHEMA)),
   compatibility: Type.Object({
     installable: Type.Boolean(),
     notes: Type.Array(Type.String()),

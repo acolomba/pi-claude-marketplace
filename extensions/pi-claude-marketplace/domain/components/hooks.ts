@@ -58,6 +58,8 @@ import {
 } from "./hook-events.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "./hook-tool-names.ts";
 
+import type { ClaudeHookEvent, HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+
 // MATCH-03: the `if`-field permission-rule primitives live in
 // `bridges/hooks/if-field/` -- domain MUST NOT import upward
 // (D-11 import direction). `parseHooksConfig` consumes
@@ -960,4 +962,81 @@ export function partitionHooks(config: HooksConfig): HooksPartition {
   }
 
   return { supported, dropped };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Hook-summary projection (SURF-01 / D-63-06, D-100-02): the single home for
+// turning a hooks description -- parsed config or persisted record entries --
+// into the `HookSummaryEntry` union the info surface renders.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * SURF-01 / D-63-04 / D-63-06: project a parsed `HooksConfig` to the
+ * `HookSummaryEntry[]` shape the renderer consumes. One entry per
+ * (event, group) tuple in declaration order from the parsed file --
+ * `Object.entries` and `Array` iteration both preserve insertion order
+ * for plain objects (the JSON.parse output `parseHooksConfig` returns),
+ * so the rendered order matches the on-disk authoring order.
+ *
+ * Tool events (`PreToolUse` / `PostToolUse` / `PostToolUseFailure`)
+ * carry the group's `matcher` (defaulting to the empty string when the
+ * group's `matcher` is absent -- match-all per MATCH-01); non-tool
+ * events do not carry one. Granularity is per-GROUP, not per-handler:
+ * the renderer surfaces `event(matcher)` once per group regardless of
+ * how many handlers the group declares.
+ *
+ * Pure and total: never throws. The supportability gate in
+ * `checkMatcherSupportability` has already accepted every event key as
+ * a `BucketAEvent`, so the tool-event discriminator is a closed-set
+ * membership check against `TOOL_EVENTS`.
+ */
+export function projectHookSummaryEntries(parsed: HooksConfig): readonly HookSummaryEntry[] {
+  const entries: HookSummaryEntry[] = [];
+  for (const [eventName, groups] of Object.entries(parsed)) {
+    for (const group of groups) {
+      if (TOOL_EVENT_MEMBERS.has(eventName)) {
+        entries.push({
+          event: eventName as ToolEvent,
+          matcher: group.matcher ?? "",
+        });
+      } else {
+        // Cast: the assertion is upheld by the supportability gate's
+        // bucket-A admission check (every event key surviving
+        // `parseHooksConfig.ok = true` is a `ClaudeHookEvent`, and the
+        // tool-event guard above excludes the `ToolEvent` subset).
+        entries.push({
+          event: eventName as Exclude<ClaudeHookEvent, ToolEvent>,
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * D-100-01 / D-100-02 / ENBL-12: narrow persisted record entries to the
+ * `HookSummaryEntry` union, applying the same tool-event membership test
+ * `projectHookSummaryEntries` uses to pick the arm.
+ *
+ * The narrowing lives here, at the single read boundary, because the two
+ * shapes disagree on purpose: the persisted schema keeps `event` an open
+ * string so a future Claude event token cannot invalidate a whole state
+ * file, while `HookSummaryEntry` is a closed union the renderer switches on.
+ * Doing this once means no consumer re-derives the arm choice.
+ *
+ * A tool event takes the matcher-carrying arm with `matcher` defaulting to
+ * the empty string (match-all per MATCH-01, matching the projector); every
+ * other event takes the bare arm. Pure and total: never throws.
+ */
+export function hookSummaryEntriesFromPersisted(
+  persisted: readonly { readonly event: string; readonly matcher?: string }[],
+): readonly HookSummaryEntry[] {
+  return persisted.map((entry) => {
+    if (TOOL_EVENT_MEMBERS.has(entry.event)) {
+      return { event: entry.event as ToolEvent, matcher: entry.matcher ?? "" };
+    }
+
+    return { event: entry.event as Exclude<ClaudeHookEvent, ToolEvent> };
+  });
 }
