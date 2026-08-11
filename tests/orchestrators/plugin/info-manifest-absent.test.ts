@@ -13,8 +13,10 @@
 //     kinds renders `(partially-installed)` with the absence token FIRST
 //   - INFO-11 the four name-list component kinds render from `resources.*`,
 //     sorted, with the Pi-generated installed names verbatim (D-96-01)
-//   - D-54-01 / ENBL-04 the disabled carve-out still runs BEFORE the
-//     state-only arm
+//   - ENBL-16 / ENBL-17 a recorded-but-disabled record travels the SAME arm,
+//     reporting its retained inventory and its recorded hook entries under a
+//     `(disabled)` token, with `{not in manifest}` as the only reason it may
+//     carry
 //   - INFO-12 / NFR-5 the state-only arm reaches no network surface, asserted
 //     as call counts on the injected clone-cache and credential seams
 //
@@ -1140,6 +1142,110 @@ test("D-100-08 / ENBL-16 / ENBL-17: a manifest-absent DISABLED PARTIAL keeps `(d
   });
 });
 
+// ENBL-17 / D-100-03: the population the retained inventory exists for. A
+// disabled plugin's materialized hook configuration is DELETED by the disable
+// (ENBL-02), so the record is the only thing left that can answer "which hooks
+// did this plugin register". The fixture writes no materialized configuration
+// at all: the `hooks:` block below can only have come from `hookEntries`, and a
+// reader that fell back to the file would render no block instead.
+//
+// Every other kind is populated too, which is what makes the two negatives
+// below say something: a record with agents and mcpServers is exactly the shape
+// a soft-dependency marker would attach to (ENBL-15 / D-100-06).
+test("ENBL-16 / ENBL-17: a disabled, manifest-absent record lists its recorded hooks and its whole retained inventory", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          disabled: true,
+          resources: {
+            skills: ["alpha-skill"],
+            agents: ["pi-claude-marketplace-alpha-bot"],
+            mcpServers: ["alpha-mcp"],
+            hooks: ["alpha"],
+          },
+          hookEntries: [{ event: "SessionStart" }, { event: "PostToolUse", matcher: "Read" }],
+        },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "    agents: pi-claude-marketplace-alpha-bot",
+        "    hooks:",
+        "      SessionStart",
+        "      PostToolUse(Read)",
+        "    mcp: alpha-mcp",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+
+    // Row-scoped negatives. An equality failure reports a diff; these name the
+    // regression. The row is line 1 -- the component lines below it legitimately
+    // contain neither token, so scoping to the row is what makes them tight.
+    const row = notifications[0]!.message.split("\n")[1]!;
+    assert.equal(row.includes("lsp"), false, row);
+    assert.equal(row.includes("requires"), false, row);
+  });
+});
+
+// The still-declared control for the disabled arm, the twin of the INFO-09
+// boundary above. The manifest DECLARES this disabled plugin, so the row
+// resolves from the manifest and carries no absence brace. This is what proves
+// `{not in manifest}` is derived from the manifest lookup rather than from
+// disabled-ness -- without it, a stamp hard-coded on the disabled arm would
+// pass every other test in this file.
+test("ENBL-16 / ENBL-17: a DECLARED disabled record renders `(disabled)` with no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+      installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills/alpha-src-skill"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled)",
+        "    skills: alpha-src-skill",
+      ].join("\n"),
+    );
+    const row = notifications[0]!.message.split("\n")[1]!;
+    assert.ok(row.includes("(disabled)"), row);
+    assert.equal(row.includes("not in manifest"), false, row);
+  });
+});
+
 // D-96-04 / ENBL-17: the skip note survives the reroute. This scope carries
 // BOTH skip causes -- disabled AND manifest-absent -- and emits exactly ONE
 // skip row, because the cause is a single producer-reported field on the block
@@ -1525,6 +1631,81 @@ test("INFO-12 / NFR-5: a git-source-shaped manifest-absent record under `--fetch
       "INFO-12: a remote-shaped record must not erase a credential",
     );
     assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
+  });
+});
+
+// ENBL-17 / NFR-5: the same zero-call boundary for the REROUTED disabled arm.
+// The enabled cases above cannot cover it: a disabled record used to return
+// before any fetch-capable builder ran, and it now travels the same path an
+// enabled one does. So "no network here" stopped being a property of the
+// control flow and became a claim needing an assertion that can fail. The
+// record is remote-SHAPED and the run carries `--fetch`, which is the input
+// that would drive a probe on the manifest-backed arm.
+test("ENBL-17 / NFR-5: a DISABLED manifest-absent record under `--fetch` makes ZERO seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          disabled: true,
+          resolvedSource: "https://example.com/repo",
+          resources: { skills: ["alpha-skill"], hooks: ["alpha"] },
+          hookEntries: [{ event: "SessionStart" }],
+        },
+      },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(gitState.cloneCalls.length, 0, "ENBL-17: the disabled arm must not clone");
+    assert.equal(gitState.fetchCalls.length, 0, "ENBL-17: the disabled arm must not fetch");
+    assert.equal(
+      credState.fillCalls.length,
+      0,
+      "ENBL-17: the disabled arm must not read a credential",
+    );
+    assert.equal(
+      credState.approveCalls.length,
+      0,
+      "ENBL-17: the disabled arm must not store a credential",
+    );
+    assert.equal(
+      credState.rejectCalls.length,
+      0,
+      "ENBL-17: the disabled arm must not erase a credential",
+    );
+
+    // Zero calls AND the full inventory: a guard that reached zero by returning
+    // an empty block would satisfy the counters alone.
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "    hooks:",
+        "      SessionStart",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
   });
 });
 
