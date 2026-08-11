@@ -4,17 +4,17 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 100
 current_phase_name: disabled-plugin-information-retention
-status: in_progress
-stopped_at: Phase 100 context gathered
-last_updated: "2026-08-11T13:45:08.919Z"
+status: executing
+stopped_at: Completed 100-01-PLAN.md
+last_updated: "2026-08-11T15:14:24.710Z"
 last_activity: 2026-08-11
-last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 25
   percent: 83
+last_activity_desc: "Phase 100 plan 01 complete — the retention spine. Disable stopped zeroing the record's five resources arrays; the installation record is now a description of what was installed rather than a mirror of what is on disk, which is what lets a later plan report a disabled plugin's contents after its manifest entry disappears. Artifact removal is unchanged — the cascade still unstages all five kinds, hooks.json included (ENBL-13). The type invariant was RE-POINTED, not dropped: toDisabledRecord<R> returns resources: R, so changing the inventory is a compile error at the producer, the same enforcement strength the retired empty-tuple brand carried aimed at the guarantee this phase actually makes. Both guards retention would otherwise have broken landed in the same commit: hydrateScopeFromState gained an explicit isRecordedButDisabled guard (the protection was previously incidental file-absence), and install.ts's cross-plugin conflict guard now excludes the plugin's own record as update and reinstall already did. Two deviations closed gaps between what the plan's must_haves claimed and what its tests proved: ENBL-19 was shipping UNPROVEN end-to-end — removing the install.ts exclusion left all 39 existing enable-disable tests green, because every hand-seeded disabled record in the suite carries empty arrays — so an enable/disable/enable round-trip test was added and mutation-checked; and ENBL-13's disk-side half asserted against nothing, since the fixture never materialized a hooks.json for removeHookConfig to remove. removePluginRecord now exists once in the tree. Previous: Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 ---
 
 # Project State
@@ -27,19 +27,20 @@ See: .planning/PROJECT.md (updated 2026-08-10 after Phase 98)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Phase 99 — close every debt item the v1.18 milestone audit
-enumerated, then milestone close: version bump + PR. Phases 95-98 complete and
-verified.
+**Current focus:** Phase 100 — disabled-plugin information retention, then
+milestone close: version bump + PR. Phases 95-99 complete and verified.
 
 ## Current Position
 
-Phase: 100 (disabled-plugin-information-retention) — PLANNED, ready to execute
-Plan: 5 plans in 4 waves, none started
-Status: Phase 100 added 2026-08-11 by operator decision, extending v1.18 rather
-than opening v1.19. A disabled plugin must keep describing itself: its resources
-deregister from Pi, but the record's inventory of them stays, so `info` does not
-lose information and still reports the plugin as disabled. All three decisions
-the roadmap left open are closed — hooks-while-disabled detail moves onto the
+Phase: 100 (disabled-plugin-information-retention) — EXECUTING
+Plan: 2 of 5 (100-01 complete, Wave 1 done)
+Status: Phase 100 was added 2026-08-11 by operator decision, extending v1.18
+rather than opening v1.19. A disabled plugin must keep describing itself: its
+resources deregister from Pi, but the record's inventory of them stays, so
+`info` does not lose information and still reports the plugin as disabled. Plan
+100-01 landed that spine — retention, the hydrate guard, and the enable-path
+self-conflict exclusion, one tracer slice, `npm run check` green. All three
+decisions the roadmap left open are closed — hooks-while-disabled detail moves onto the
 record (D-100-01..03), backfill is declined (D-100-09), and a disabled row may
 carry `{not in manifest}` and nothing else (D-100-07). Requirement IDs
 ENBL-10..ENBL-19 were assigned at planning.
@@ -466,7 +467,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-10 — Phase 99 complete
+Last activity: 2026-08-11
 
 ## Roadmap Summary
 
@@ -609,6 +610,9 @@ two integration checks.
 - [Phase 98]: DOC-08 counts are re-derived from the message interfaces: 9 reason-bearing and 4 dep-bearing variants of the 19 plugin statuses, each stated with its runtime constant and the gate that pins it
 - [Phase 98]: The list decision flowchart is redrawn around the ManifestLookup discriminant, with a note that the unverified arm is reachable only on the cross-scope fold
 - [Phase 98]: The PRD's non-member (present) token was replaced by (remote) rather than deleted, and PL-6 names where the never-silently-disappear guarantee now lives (INV-01) so the rewrite reads as a relocation, not a shrink
+- [Phase 100]: D-100-10 landed as a generic passthrough: toDisabledRecord<R> returns resources: R, so the retired empty-tuple brand is replaced by a producer-side compile error on any inventory change.
+- [Phase 100]: ENBL-19 needed an enable/disable/enable round-trip test, not a fixture edit — every hand-seeded disabled record in the suite carries empty arrays, so removing the install.ts exclusion left all 39 existing tests green.
+- [Phase 100]: The resolvedSha preservation test was anchored as the optional-key template rather than duplicated; a byte-shaped copy would be a sonarjs/no-identical-functions candidate and prove nothing new.
 
 ### Open decisions
 
@@ -701,12 +705,13 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 98 P06 | 27min | 3 tasks | 8 files |
 | Phase 99 P01 | 12min | 2 tasks | 6 files |
 | Phase 99 P02 | 12min | 2 tasks | 1 file |
+| Phase 100 P01 | 47min | 3 tasks | 12 files |
 
 ## Session
 
-**Last session:** 2026-08-11T12:37:42.844Z
-**Stopped at:** Phase 100 context gathered
-**Resume file:** .planning/phases/100-disabled-plugin-information-retention/100-CONTEXT.md
+**Last session:** 2026-08-11T15:14:14.070Z
+**Stopped at:** Completed 100-01-PLAN.md
+**Resume file:** None
 (retained until Phase 99 closes — it carries the 99-04 blocking constraint
 against reintroducing the Pick/Omit workaround 99-01 lifted)
 
