@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 100
 current_phase_name: disabled-plugin-information-retention
 status: in_progress
-stopped_at: "Phase 100 added and scoped; needs discuss. PR #120 held open to carry it."
-last_updated: "2026-08-11T11:18:36.179Z"
+stopped_at: Phase 100 context gathered
+last_updated: "2026-08-11T12:37:42.933Z"
 last_activity: 2026-08-11
 last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 progress:
@@ -47,6 +47,7 @@ including what was already verified safe, is in the ROADMAP Phase 100 section.
 
 - The v1.18 milestone audit (`passed`, 2026-08-11T00:20Z) is now STALE. It
   audited phases 95-99. Re-run `/gsd-audit-milestone` before close.
+
 - PR #120 is held open to carry Phase 100 rather than merging first (operator
   decision 2026-08-11). Its green CI at `5d712b73` therefore covers less than
   the branch will at merge time.
@@ -687,9 +688,9 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-10T11:37:37.555Z
-**Stopped at:** Completed 99-02-PLAN.md
-**Resume file:** .planning/phases/99-post-audit-tech-debt-closure/.continue-here.md
+**Last session:** 2026-08-11T12:37:42.844Z
+**Stopped at:** Phase 100 context gathered
+**Resume file:** .planning/phases/100-disabled-plugin-information-retention/100-CONTEXT.md
 (retained until Phase 99 closes — it carries the 99-04 blocking constraint
 against reintroducing the Pick/Omit workaround 99-01 lifted)
 
