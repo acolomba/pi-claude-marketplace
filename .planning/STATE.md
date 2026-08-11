@@ -5,8 +5,8 @@ milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 100
 current_phase_name: disabled-plugin-information-retention
 status: executing
-stopped_at: Completed 100-02-PLAN.md
-last_updated: "2026-08-11T16:17:14.700Z"
+stopped_at: Completed 100-03-PLAN.md
+last_updated: "2026-08-11T17:24:01.840Z"
 last_activity: 2026-08-11
 progress:
   total_phases: 6
@@ -33,7 +33,7 @@ milestone close: version bump + PR. Phases 95-99 complete and verified.
 ## Current Position
 
 Phase: 100 (disabled-plugin-information-retention) — EXECUTING
-Plan: 3 of 5 (100-01, 100-02 complete; Waves 1-2 done)
+Plan: 4 of 5 (100-01, 100-02, 100-03 complete; Waves 1-2 done)
 Status: Phase 100 was added 2026-08-11 by operator decision, extending v1.18
 rather than opening v1.19. A disabled plugin must keep describing itself: its
 resources deregister from Pi, but the record's inventory of them stays, so
@@ -616,6 +616,8 @@ two integration checks.
 - [Phase 100]: D-100-01 implemented as a top-level optional hookEntries key with a two-property element schema (event + optional matcher); no handler payload can be persisted.
 - [Phase 100]: Update's no-hooks branch deletes hookEntries rather than writing an empty array, so present-empty keeps one meaning across all three write sites.
 - [Phase 100]: clonePluginRecord exported as __test_clonePluginRecord: the snapshot's hookEntries is read by nothing, so a dropped key would be invisible end-to-end.
+- [Phase 100]: The list surface renders disabled rows through its OWN render map (list.messaging.ts), not the central renderPluginRow arm; both had to thread reasons or the feature silently no-ops
+- [Phase 100]: The fresh-disable transition row is left unstamped on purpose, and its own render map hard-codes undefined reasons, so the non-edit is structural rather than conventional
 
 ### Open decisions
 
@@ -710,11 +712,12 @@ None of the carryover items originate from v1.17 env-parity.
 | Phase 99 P02 | 12min | 2 tasks | 1 file |
 | Phase 100 P01 | 47min | 3 tasks | 12 files |
 | Phase 100 P02 | 45min | 3 tasks | 12 files |
+| Phase 100 P03 | 70min | 3 tasks | 8 files |
 
 ## Session
 
-**Last session:** 2026-08-11T16:17:04.871Z
-**Stopped at:** Completed 100-02-PLAN.md
+**Last session:** 2026-08-11T17:24:01.788Z
+**Stopped at:** Completed 100-03-PLAN.md
 **Resume file:** None
 (retained until Phase 99 closes — it carries the 99-04 blocking constraint
 against reintroducing the Pick/Omit workaround 99-01 lifted)
