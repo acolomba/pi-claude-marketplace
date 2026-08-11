@@ -469,7 +469,13 @@ test("D-77-02 saveState + loadState round-trips resolvedSha intact", async () =>
   }
 });
 
-test("D-77-02 toDisabledRecord preserves resolvedSha through the disable transform", () => {
+// ENBL-18: the optional-key preservation template. `toDisabledRecord` copies
+// the whole record and overrides only `enabled` + `updatedAt`, so every
+// optional top-level key survives the disable by construction. A record's
+// populated `resources` block rides through the same way -- proven separately
+// in the ENBL-18 section below. Any future optional key added to the record
+// gets its own sibling of this test, built to this shape.
+test("D-77-02 / ENBL-18: toDisabledRecord preserves resolvedSha through the disable transform", () => {
   const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
   const record: PluginInstallRecord = {
     version: "sha-a1b2c3d4e5f6",
@@ -638,11 +644,12 @@ test("ENBL-02: STATE_SCHEMA.schemaVersion accepts 1 and 2 (saveState accepts bot
 });
 
 // ===================================================================
-// ENBL-02 two-signal invariant: EnabledPluginRecord / DisabledPluginRecord
-// branded types + the toDisabledRecord factory.
+// ENBL-02 / ENBL-18: EnabledPluginRecord / DisabledPluginRecord types + the
+// toDisabledRecord factory. The disable transform changes `enabled` and
+// `updatedAt` and NOTHING else (D-100-10).
 // ===================================================================
 
-test("ENBL-02: toDisabledRecord empties all resources, sets enabled:false, preserves identity + restamps updatedAt", () => {
+test("ENBL-18 / D-100-10: toDisabledRecord preserves every resources array, sets enabled:false, preserves identity + restamps updatedAt", () => {
   const record: PluginInstallRecord = {
     version: "9.9.9",
     resolvedSource: "/abs/mp/foo",
@@ -668,7 +675,9 @@ test("ENBL-02: toDisabledRecord empties all resources, sets enabled:false, prese
   assert.equal(disabled.installedAt, "2026-01-01T00:00:00.000Z");
   // updatedAt restamped.
   assert.equal(disabled.updatedAt, "2026-02-02T00:00:00.000Z");
-  // The disabled + empty shape is a legal stored record.
+  // ENBL-18: a disabled record carrying a POPULATED inventory is a legal
+  // stored shape. Disabled-plus-empty stays legal too -- it merely stops
+  // being the only form a disabled record can take.
   assert.equal(
     STATE_VALIDATOR.Check({
       schemaVersion: 2,
@@ -688,10 +697,53 @@ test("ENBL-02: toDisabledRecord empties all resources, sets enabled:false, prese
   );
 });
 
-test("ENBL-02: DisabledPluginRecord forbids non-empty resources at compile time", () => {
+test("ENBL-18 / D-100-10: toDisabledRecord's resources shape flows through the generic, and narrowing it is a compile error", () => {
   // Compile-time guard: gated by `npm run typecheck` (tests/**/*.ts is in the
-  // tsconfig include). If the branded type regresses to permissive arrays,
-  // the @ts-expect-error below stops erroring and typecheck fails.
+  // tsconfig include). The proof is PRODUCER-side now: `R` is what makes
+  // "disable changed the inventory" impossible to express in the transform's
+  // return type. If the generic regresses to a fixed resources shape, the
+  // expect-error directive below stops erroring and typecheck fails.
+  interface HooksOnlyResources {
+    skills: [];
+    prompts: [];
+    agents: [];
+    mcpServers: [];
+    hooks: [string];
+  }
+  const hooksOnly: PluginInstallRecord & { resources: HooksOnlyResources } = {
+    version: "1.0.0",
+    resolvedSource: "/abs",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["h"] },
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // `R` flows through: the result's `resources` is the INPUT's shape.
+  const disabled: DisabledPluginRecord<HooksOnlyResources> = toDisabledRecord(
+    hooksOnly,
+    "2026-02-02T00:00:00.000Z",
+  );
+  assert.deepEqual(disabled.resources.hooks, ["h"]);
+  assert.equal(disabled.enabled, false);
+
+  // ... and it is NOT some other shape. A transform that emptied the hooks
+  // inventory would have to return this type; the generic refuses it.
+  interface EmptiedResources {
+    skills: [];
+    prompts: [];
+    agents: [];
+    mcpServers: [];
+    hooks: [];
+  }
+  // @ts-expect-error toDisabledRecord must not narrow the inventory it was handed
+  const emptied: DisabledPluginRecord<EmptiedResources> = toDisabledRecord<HooksOnlyResources>(
+    hooksOnly,
+    "2026-02-02T00:00:00.000Z",
+  );
+  void emptied;
+
   type DisabledSkills = DisabledPluginRecord["resources"]["skills"];
 
   // The empty form type-checks, and an enabled record may carry populated
