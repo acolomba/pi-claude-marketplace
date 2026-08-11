@@ -257,6 +257,57 @@ test("ENBL-19: enabling a disabled plugin against only its own retained record d
   assert.ok(state.marketplaces["official"]?.plugins["self"] !== undefined);
 });
 
+// ENBL-18: a DISABLED record keeps its inventory, so it keeps its names. An
+// unrelated install that generates one of them is refused, exactly as it would
+// be against an enabled owner -- the reservation is what lets the owner's own
+// `enable` re-take its names later, and what stops an `uninstall` of the owner
+// from unstaging a second plugin's artifact of the same name. The refusal is
+// otherwise unexplainable from disk, because a disabled plugin materialized
+// nothing, so the line names the owner as disabled and points at the remedy.
+test("ENBL-18: a DISABLED owner still reserves its generated names, and the conflict names it as disabled", () => {
+  const state = makeState({
+    official: {
+      plugins: {
+        // Disabled, nothing on disk, inventory retained.
+        alpha: makePluginRecord({
+          enabled: false,
+          resources: {
+            skills: ["a-foo"],
+            prompts: ["alpha:cmd"],
+            agents: [],
+            mcpServers: [],
+          },
+        }),
+        // An enabled owner, so one assertion covers both wordings and pins
+        // that only the disabled owner's line differs.
+        gamma: makePluginRecord({
+          resources: { skills: ["g-foo"], prompts: [], agents: [], mcpServers: [] },
+        }),
+      },
+    },
+  });
+  // The names an UNRELATED plugin `beta` would generate.
+  const names: CrossPluginGeneratedNames = {
+    skills: ["a-foo", "g-foo"],
+    commands: ["alpha:cmd"],
+    agents: [],
+  };
+
+  let captured: unknown;
+  try {
+    assertNoCrossPluginConflicts("user", names, removePluginRecord(state, "official", "beta"));
+  } catch (e) {
+    captured = e;
+  }
+
+  assert.ok(captured instanceof CrossPluginConflictError, "expected CrossPluginConflictError");
+  assert.deepEqual(captured.conflicts, [
+    `skill "a-foo" already owned by disabled plugin "alpha"`,
+    `skill "g-foo" already owned by plugin "gamma"`,
+    `command "alpha:cmd" already owned by disabled plugin "alpha"`,
+  ]);
+});
+
 test("PI-6 / D-05 case D: MCP server collision NOT detected (PRD §6.5 exclusion)", () => {
   // An existing plugin owns an MCP server named "shared-mcp". The
   // helper's input shape (CrossPluginGeneratedNames) has NO mcpServers

@@ -20,7 +20,7 @@ import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -620,27 +620,56 @@ function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+/**
+ * One entry of an owner map. `disabled` carries the owning record's
+ * `isRecordedButDisabled` verdict into the message so a refused install can name
+ * WHY the slot looks empty on disk -- see `collectOwners`.
+ */
+interface NameOwner {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly disabled: boolean;
+}
+
+/**
+ * ENBL-18 / ENBL-19: every record in the scope reserves its generated names,
+ * disabled ones included. A disabled record retains its inventory, so its names
+ * stay reserved even though it materialized nothing on disk. That is the
+ * deliberate reading: the reservation is what lets a later `enable` re-take its
+ * own names, and it is what keeps an `uninstall` of the disabled plugin from
+ * unstaging an artifact a second plugin would otherwise have installed under the
+ * same name in the meantime.
+ *
+ * The cost is a refusal the disk cannot explain -- the conflicting name occupies
+ * no file. `disabled` is threaded so the message can, and `uninstall <owner>`
+ * remains the remedy.
+ */
 function collectOwners(state: ExtensionState): {
-  skillOwners: Map<string, { plugin: string; marketplace: string }>;
-  commandOwners: Map<string, { plugin: string; marketplace: string }>;
-  agentOwners: Map<string, { plugin: string; marketplace: string }>;
+  skillOwners: Map<string, NameOwner>;
+  commandOwners: Map<string, NameOwner>;
+  agentOwners: Map<string, NameOwner>;
 } {
-  const skillOwners = new Map<string, { plugin: string; marketplace: string }>();
-  const commandOwners = new Map<string, { plugin: string; marketplace: string }>();
-  const agentOwners = new Map<string, { plugin: string; marketplace: string }>();
+  const skillOwners = new Map<string, NameOwner>();
+  const commandOwners = new Map<string, NameOwner>();
+  const agentOwners = new Map<string, NameOwner>();
 
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
     for (const [pluginName, plugin] of Object.entries(mp.plugins)) {
+      const owner: NameOwner = {
+        plugin: pluginName,
+        marketplace: mpName,
+        disabled: isRecordedButDisabled(plugin),
+      };
       for (const n of plugin.resources.skills) {
-        skillOwners.set(n, { plugin: pluginName, marketplace: mpName });
+        skillOwners.set(n, owner);
       }
 
       for (const n of plugin.resources.prompts) {
-        commandOwners.set(n, { plugin: pluginName, marketplace: mpName });
+        commandOwners.set(n, owner);
       }
 
       for (const n of plugin.resources.agents) {
-        agentOwners.set(n, { plugin: pluginName, marketplace: mpName });
+        agentOwners.set(n, owner);
       }
     }
   }
@@ -651,13 +680,17 @@ function collectOwners(state: ExtensionState): {
 function collectConflicts(
   kind: string,
   names: readonly string[],
-  owners: ReadonlyMap<string, { plugin: string; marketplace: string }>,
+  owners: ReadonlyMap<string, NameOwner>,
 ): string[] {
   const conflicts: string[] = [];
   for (const n of [...names].sort(compareNames)) {
     const owner = owners.get(n);
     if (owner !== undefined) {
-      conflicts.push(`${kind} "${n}" already owned by plugin "${owner.plugin}"`);
+      // The `disabled` qualifier is the only variable part: a disabled owner
+      // holds the name while occupying no disk slot, so the bare wording sent
+      // the user looking for a file that is not there.
+      const ownerKind = owner.disabled ? "disabled plugin" : "plugin";
+      conflicts.push(`${kind} "${n}" already owned by ${ownerKind} "${owner.plugin}"`);
     }
   }
 
@@ -688,6 +721,12 @@ function collectConflicts(
  * MCP server names are EXCLUDED by construction: `CrossPluginGeneratedNames`
  * has no `mcpServers` field. PRD §6.5 places MCP cross-slot collision at
  * the bridge layer (MC-4), not in this orchestrator-tier guard.
+ *
+ * ENBL-18: DISABLED records own their names too -- see `collectOwners` for why
+ * the reservation is kept rather than filtered. The caller's own record is
+ * excluded via `removePluginRecord` (ENBL-19), so this only ever refuses an
+ * install against a DIFFERENT plugin's reservation, and the conflict line names
+ * the owner as disabled when it is.
  *
  * @throws CrossPluginConflictError when ANY name collides; the message
  *   lists every conflict in the order above. Pre-disk-write per RN-3.

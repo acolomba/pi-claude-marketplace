@@ -596,6 +596,14 @@ A marketplace operation has failed.
 ⊘ ghost-mp [project] (failed) {not added}
 ```
 
+### Failure -- a name a DISABLED plugin still owns (ENBL-18)
+
+The pre-flight cross-plugin guard refuses an install when a generated skill, command, or agent name belongs to a different plugin in the same scope. A DISABLED plugin is such an owner. Disable keeps the installation record and its component inventory (ENBL-18), thus the names stay reserved even though the disable deleted every artifact from disk.
+
+The reservation is deliberate. It is what lets `/claude:plugin enable` re-take the plugin's own names later, and what stops an `uninstall` of the disabled plugin from removing an artifact that a second plugin installed under the same name in the meantime.
+
+The refusal is otherwise unexplainable from disk, because the name occupies no file. Thus the conflict line names the owner as disabled: `skill "a-foo" already owned by disabled plugin "alpha"`. An enabled owner keeps the shorter form: `skill "g-foo" already owned by plugin "gamma"`. The remedy is `/claude:plugin uninstall <owner>@<marketplace>`, which removes the record and releases the names. The row form is unchanged -- this text rides the `cause:` trailer of the `failure-runtime-with-cause` state above. Severity `error`; no reload-hint (nothing landed).
+
 ______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
