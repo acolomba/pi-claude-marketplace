@@ -74,8 +74,8 @@ declares it -- while still reporting the plugin as disabled.
 - [x] **ENBL-13**: Disable continues to unstage all five artifact kinds, hook configuration included; only the record's description is retained.
 - [x] **ENBL-14**: Hook hydration skips a record the disabled-state predicate reports disabled, so a disabled plugin's hooks do not re-register on reload.
 - [x] **ENBL-15**: A disabled row on `list` renders byte-identically to today: no soft-dependency marker, whatever the record's retained inventory holds.
-- [ ] **ENBL-16**: A disabled row may carry `{not in manifest}` and no other reason, on both `list` and `info`. **Supersedes INV-04.** The reason is load-bearing: `plugin enable` re-runs the install ledger, which resolves from the marketplace manifest, so a disabled manifest-absent record cannot be re-enabled and the bare row gave no warning before the attempt. The `list` half has landed; the `info` half rides with the ENBL-17 reroute.
-- [ ] **ENBL-17**: `info` on a disabled record routes through the shared block builder, reporting description and components; the `{already disabled}` fetch-skip note survives.
+- [x] **ENBL-16**: A disabled row may carry `{not in manifest}` and no other reason, on both `list` and `info`. **Supersedes INV-04.** The reason is load-bearing: `plugin enable` re-runs the install ledger, which resolves from the marketplace manifest, so a disabled manifest-absent record cannot be re-enabled and the bare row gave no warning before the attempt. Both halves have landed: the `list` half stamps the reason in `list.ts`, and the `info` half arrives through the ENBL-17 reroute, whose state-only arm already produced the absence reason -- the row now keeps it instead of being diverted before it is built. On `info` the reason may be joined by the persisted unsupported-kind tokens the same state-only arm produces for an enabled record; the "no other reason" clause binds the `list` inventory row.
+- [x] **ENBL-17**: `info` on a disabled record routes through the shared block builder, reporting description and components; the `{already disabled}` fetch-skip note survives.
 - [x] **ENBL-18**: Disable preserves the record's inventory exactly; the producer type makes any change to it a compile error.
 - [x] **ENBL-19**: Enabling a disabled plugin does not self-conflict against its own retained resource names.
 
@@ -137,8 +137,8 @@ Which phases cover which requirements.
 | ENBL-13 | Phase 100 | Complete |
 | ENBL-14 | Phase 100 | Complete |
 | ENBL-15 | Phase 100 | Complete |
-| ENBL-16 | Phase 100 | In progress (list half complete) |
-| ENBL-17 | Phase 100 | Pending |
+| ENBL-16 | Phase 100 | Complete |
+| ENBL-17 | Phase 100 | Complete |
 | ENBL-18 | Phase 100 | Complete |
 | ENBL-19 | Phase 100 | Complete |
 | LIFE-04 | Phase 98 | Complete |
@@ -176,9 +176,12 @@ plugin's own record unless the install ledger's cross-plugin guard excludes it.
 ---
 
 _Requirements defined: 2026-08-07_
-_Last updated: 2026-08-11 during Phase 100: added ENBL-10 through ENBL-19
-(disabled-plugin information retention) and marked INV-04 superseded by ENBL-16
+_Last updated: 2026-08-11 during Phase 100: marked ENBL-16 and ENBL-17 complete
+once the `info` reroute landed the `info` half of the absence reason
 (32/32 requirements mapped)_
+
+_Previously: 2026-08-11 during Phase 100: added ENBL-10 through ENBL-19
+(disabled-plugin information retention) and marked INV-04 superseded by ENBL-16_
 
 _Previously: 2026-08-08 by quick task 260808-dhm: added INV-05 (LLM tool-surface
 reason widening) per the Phase 95 discuss decision D-95-06, and replaced the
