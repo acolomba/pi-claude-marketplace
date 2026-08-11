@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-99 (all phases complete and verified, target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, and a disabled partially-installed plugin is once again recognized as disabled
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-100 (95-99 complete and verified; Phase 100 added 2026-08-11, not started; target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, a disabled partially-installed plugin is once again recognized as disabled, and a disabled plugin keeps describing itself
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
@@ -301,6 +301,8 @@ Plans:
 | 96. Installation-record-backed plugin info | v1.18 | 4/4 | Complete    | 2026-08-09 |
 | 97. Disabled-state classification repair | v1.18 | 5/5 | Complete    | 2026-08-09 |
 | 98. Lifecycle regression and contract documentation | v1.18 | 6/6 | Complete    | 2026-08-10 |
+| 99. Post-audit tech-debt closure | v1.18 | 7/7 | Complete    | 2026-08-10 |
+| 100. Disabled-plugin information retention | v1.18 | 0/0 | Not started | — |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
@@ -354,3 +356,66 @@ Plans:
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 99-07-PLAN.md — Measure the residual rare-failure arms, then cover them in update/reinstall/install within the locked bound (D-99-05b)
+
+### Phase 100: Disabled-plugin information retention
+
+**Goal:** Disabling a plugin deregisters its resources from Pi without discarding
+the record's description of them, so `info` on a disabled plugin reports what the
+plugin contains even when the marketplace manifest no longer declares it.
+
+**Operator decision (2026-08-11):** a disabled plugin's artifacts must be removed
+or deregistered from Pi, but its own descriptor stays. `info` must not lose
+information, and it must still say the plugin is disabled.
+
+**Requirements**: TBD — the enable/disable family continues (ENBL-10+); assigned
+at discuss.
+
+**Depends on:** Phase 99
+
+**Problem.** `toDisabledRecord` zeroes all five `resources.*` arrays, and the
+`DisabledPluginRecord` branded type pins them to the empty tuple so a populated
+disabled record is a compile error. The inventory is therefore destroyed at
+disable time. Combined with a manifest that later drops the entry, nothing
+anywhere can say what the plugin installed -- the one case v1.18 otherwise
+repaired for enabled records. Observed 2026-08-11: a disabled, manifest-absent
+plugin renders a bare `(disabled)` row from both `list` and `info`, with
+`resources` empty in `state.json`.
+
+**Scoping already established** (verified against the code, not assumed):
+
+- Nothing reads resources-emptiness as a signal any more; ENBL-05 removed the
+  last reader, so relaxing the shape breaks no predicate.
+- Unstage is ENOENT-tolerant per name, so uninstalling a disabled record whose
+  artifacts are already gone stays a no-op rather than an error.
+- `enable` re-runs `runInstallLedger`, whose state phase OVERWRITES `resources`
+  wholesale and sets `enabled: true`, so a populated disabled record cannot
+  stale-merge on re-enable.
+- COMPAT-01 pins the install record's KEY SET, not its values, so the change
+  trips no architecture gate.
+- 14 test files assert the disabled+empty shape and 3 reference the branded
+  type; each assertion needs judging as pinning the retired MARKER (now wrong)
+  or the still-correct BEHAVIOR.
+
+**Open decisions for discuss:**
+
+1. **Hooks while disabled.** `readStateOnlyHookEntries` reads the materialized
+   `hooks/<slug>/hooks.json`, which disable correctly unstages, so the hooks line
+   would report a read failure -- trading one wrong answer for another. Needs a
+   distinct not-materialized-while-disabled arm, or the detail must live in the
+   record. Same truthful-split problem D-96-03 solved for manifest absence.
+2. **Records disabled before this change.** Their inventory is already gone and
+   is unrecoverable from the record. It can be re-derived from the manifest only
+   while the plugin is still declared -- which excludes the very case this phase
+   exists to fix. Decide backfill-on-cycle, backfill-on-reconcile, or none.
+3. **Reasons on a disabled row.** The catalog suppresses them because "a disabled
+   plugin is in the user-requested state, not a failure state", a rationale that
+   predates v1.18 establishing that reasons are not failures (`{not in manifest}`
+   rides a successful `(installed)` row). Today a disabled plugin whose
+   marketplace dropped it gets no signal. Settle it here rather than touching the
+   disabled arm twice.
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 100 to break down)
