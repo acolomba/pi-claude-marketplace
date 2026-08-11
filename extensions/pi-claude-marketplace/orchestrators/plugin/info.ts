@@ -858,6 +858,14 @@ async function buildBlock(
 
   // (c) Installed bucket.
   if (installed !== undefined) {
+    // D-100-08 / ENBL-17: a disabled record has no materialized artifacts to
+    // refresh (ENBL-02), so the fetch is DECLINED here rather than run and then
+    // described as skipped. `skipReason` below and this gate are ONE decision:
+    // without the gate a disabled git-source record the manifest still declares
+    // would clone and fetch for real, then carry an `already disabled` note
+    // whose whole purpose is to say the fetch did nothing. The arm (b) sibling
+    // needs no gate -- `buildStateOnlyInstalledRow` cannot express a fetch.
+    const blockFetchCtx = isRecordedButDisabled(installed) ? undefined : fetchCtx;
     const row = await buildInstalledRow({
       pluginName,
       version: installedVersion ?? manifestVersion,
@@ -868,7 +876,7 @@ async function buildBlock(
       installedRecord: installed,
       parsedSource,
       locations,
-      ...(fetchCtx !== undefined && { fetchCtx }),
+      ...(blockFetchCtx !== undefined && { fetchCtx: blockFetchCtx }),
     });
     return wrapBlock(
       marketplace,

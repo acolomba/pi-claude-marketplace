@@ -1709,6 +1709,101 @@ test("ENBL-17 / NFR-5: a DISABLED manifest-absent record under `--fetch` makes Z
   });
 });
 
+// ENBL-17 / NFR-5: the zero-call boundary for the disabled record the manifest
+// STILL DECLARES. Every other disabled `--fetch` case in this file seeds an
+// EMPTY `plugins` array, which routes the block to the state-only arm -- an arm
+// whose signature cannot express a fetch. A declared record travels the
+// manifest-backed arm instead, where the fetch context IS threaded, so the
+// decline is a branch rather than a signature and needs an assertion that can
+// fail. The record is git-sourced with no clone on disk, which is the input the
+// enabled twin of this fixture fetches for real.
+//
+// The claim under test is the one the `already disabled` skip note makes: the
+// note says the fetch did nothing, so nothing may be fetched. A run that clones
+// and then reports a skipped fetch contradicts the note, `InfoBlock.skipReason`
+// and the `disabled-fetch-skipped` catalog state at once.
+test("ENBL-17 / NFR-5: `info --fetch` on a DISABLED record the manifest still DECLARES makes ZERO seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "https://example.com/alpha.git", version: "1.0.0" }],
+      },
+      installed: { alpha: { version: "1.0.0", disabled: true } },
+    });
+
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    assert.equal(
+      gitState.cloneCalls.length,
+      0,
+      "ENBL-17: a disabled declared record must not clone",
+    );
+    assert.equal(
+      gitState.fetchCalls.length,
+      0,
+      "ENBL-17: a disabled declared record must not fetch",
+    );
+    assert.equal(
+      credState.fillCalls.length,
+      0,
+      "ENBL-17: a disabled declared record must not read a credential",
+    );
+    assert.equal(
+      credState.approveCalls.length,
+      0,
+      "ENBL-17: a disabled declared record must not store a credential",
+    );
+    assert.equal(
+      credState.rejectCalls.length,
+      0,
+      "ENBL-17: a disabled declared record must not erase a credential",
+    );
+
+    // The rendered pair, so a guard that reached zero by dropping the block
+    // would not pass. The row carries no absence brace (the manifest declares
+    // it) and no components (the clone is cold and nothing fetched it warm).
+    assert.equal(notifications.length, 2);
+    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled)",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+    assert.equal(notifications[1]!.severity, "warning");
+    assert.equal(
+      notifications[1]!.message,
+      [
+        "A plugin operation needs attention.",
+        "",
+        "● mp [user]",
+        "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
+      ].join("\n"),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // D-96-04: a `--fetch` the state-only arm cannot carry out is REPORTED, never
 // swallowed. Rendering identical bytes with and without the flag would teach
