@@ -82,7 +82,7 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
-import { parseHooksConfig } from "../../domain/components/hooks.ts";
+import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -153,6 +153,7 @@ import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1671,6 +1672,7 @@ async function finalizeUpdateRecord(
   preflight: PluginPreflight,
   handles: PrepHandles,
   phase3aFailures: readonly Phase3Failure[],
+  hookEntries: readonly HookSummaryEntry[] | undefined,
 ): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
   const { installable, toVersion, resolvedSha } = preflight;
@@ -1732,6 +1734,16 @@ async function finalizeUpdateRecord(
     // the swap" and the existing slug stays.
     if (!failedPhases.has("hooks")) {
       sRecord.resources.hooks = installable.hooksConfigPath === undefined ? [] : [plugin];
+      // D-100-01 / ENBL-10: the record's hook description moves with the
+      // inventory slug, under the same guard and in the same direction. When
+      // version B declares no hooks the description is dropped, so the record
+      // never names hooks the current version no longer declares; when the
+      // hooks commit failed neither fact moves and both keep version A's value.
+      if (hookEntries === undefined) {
+        delete sRecord.hookEntries;
+      } else {
+        sRecord.hookEntries = [...hookEntries];
+      }
     }
 
     // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
@@ -1943,6 +1955,11 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // until the user runs reinstall (RECOVERY_PLUGIN_REINSTALL_PREFIX
   // hint). Same recovery contract as reinstall.ts::commitHooks (see
   // WR-05).
+  // D-100-01 / ENBL-10: the supported hook entries version B materialized,
+  // captured at parse time and written by finalize under the same
+  // hooks-success guard as the inventory slug. Stays undefined when version B
+  // declares no hooks, which is the signal to clear the record's description.
+  let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
     if (preflight.installable.hooksConfigPath === undefined) {
       // Version B has no hooks: remove any stale file from version A.
@@ -1964,6 +1981,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
         pluginRoot: preflight.installable.pluginRoot,
         hooksValue: parsed.value,
       });
+      // D-100-02 / ENBL-11: `parsed.value` is the supported subset already.
+      hookEntries = projectHookSummaryEntries(parsed.value);
     }
   } catch (err) {
     phase3aFailures.push({ phase: "hooks", msg: errorMessage(err), cause: err });
@@ -1997,7 +2016,13 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // `phase: "finalize"` Phase3Failure member is deferred.
   let invalidConfigWriteBack = false;
   try {
-    const finalizeResult = await finalizeUpdateRecord(args, preflight, handles, phase3aFailures);
+    const finalizeResult = await finalizeUpdateRecord(
+      args,
+      preflight,
+      handles,
+      phase3aFailures,
+      hookEntries,
+    );
     invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
     phase3aFailures.push({

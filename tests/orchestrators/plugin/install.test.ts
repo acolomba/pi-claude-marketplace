@@ -3401,6 +3401,15 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
         `expected non-empty hooks resource; got ${JSON.stringify(afterState.marketplaces["mp"]?.plugins["p1"]?.resources)}; notification: ${summary}`,
       );
 
+      // D-100-01 / ENBL-11: the same install also describes the hooks it
+      // materialized. `resources.hooks` names the container slug; this names
+      // the entries, which is what `info` reports once the artifacts are gone.
+      // A tool event carries its matcher (empty string = match-all); no
+      // handler payload is recorded.
+      assert.deepEqual(afterState.marketplaces["mp"]?.plugins["p1"]?.hookEntries, [
+        { event: "PreToolUse", matcher: "" },
+      ]);
+
       // Post-condition: the routing-table now reflects the installed plugin's
       // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
       // inside the per-plugin lock right after `addPluginConfigToCache`.

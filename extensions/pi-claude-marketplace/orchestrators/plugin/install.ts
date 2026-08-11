@@ -96,7 +96,7 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
-import { parseHooksConfig } from "../../domain/components/hooks.ts";
+import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -165,6 +165,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
@@ -395,6 +396,10 @@ interface InstallCtx {
   // the atomic write). Track whether the file was written so the phase undo
   // path knows whether to call removeHookConfig.
   hooksFileWritten: boolean;
+  // D-100-01 / ENBL-10: the supported hook entries the hooks phase
+  // materialized, carried to the state phase for the record's `hookEntries`.
+  // Stays undefined when the resolver advertises no hooks config.
+  hookEntries?: readonly HookSummaryEntry[];
   // Names captured for PluginInstallRecord.resources and reload-hint composition.
   stagedSkillNames: readonly string[];
   stagedCommandNames: readonly string[];
@@ -1089,6 +1094,10 @@ export async function runInstallLedger(
         hooksValue: parsed.value,
       });
       c.hooksFileWritten = true;
+      // D-100-01 / D-100-02 / ENBL-11: describe the hooks this install
+      // materialized. `parsed.value` is already the supported subset, so the
+      // projection is byte-parity with the hooks line `info` renders.
+      c.hookEntries = projectHookSummaryEntries(parsed.value);
     },
     undo: async (c) => {
       if (!c.hooksFileWritten) {
@@ -1173,6 +1182,10 @@ export async function runInstallLedger(
         // full sha; clone GC presence-checks it to derive live clone keys).
         // Path / github-name installs omit it.
         ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
+        // D-100-01 / ENBL-10: describe the hooks the install materialized, so
+        // a later `info` need not read the config back off disk. Omitted when
+        // the plugin declares no hooks config -- there is nothing to describe.
+        ...(c.hookEntries !== undefined && { hookEntries: [...c.hookEntries] }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the
           // resolve, not a hardcoded `true`. A `--partial` install of an

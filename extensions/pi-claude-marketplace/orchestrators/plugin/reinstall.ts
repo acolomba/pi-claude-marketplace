@@ -62,7 +62,7 @@ import {
   rollbackSkillsReplacement,
 } from "../../bridges/skills/index.ts";
 import { pluginMirrorKey } from "../../domain/clone-key.ts";
-import { parseHooksConfig } from "../../domain/components/hooks.ts";
+import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR, type PluginEntry } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -118,6 +118,7 @@ import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/sour
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type {
@@ -1236,7 +1237,7 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsSourceDir: generated.agentsSourceDir,
   });
-  const replacements = await replaceAll(handles, {
+  const { replacements, hookEntries } = await replaceAll(handles, {
     locations,
     cwd,
     plugin,
@@ -1245,7 +1246,15 @@ async function runLockedReinstall(
 
   let invalidConfigWriteBack: boolean;
   try {
-    updateStateRecord(tx.state, marketplace, plugin, oldSnapshot, installable, handles);
+    updateStateRecord(
+      tx.state,
+      marketplace,
+      plugin,
+      oldSnapshot,
+      installable,
+      handles,
+      hookEntries,
+    );
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
     // mtime invariant. Reinstall is invoked by the user (both standalone and
@@ -1569,11 +1578,20 @@ async function prepareAllHandles(input: {
   return handles as PreparedHandles;
 }
 
+/**
+ * D-100-01 / ENBL-10: returns the rollback ledger AND the hook entries
+ * `commitHooks` wrote, because the record composition needs a description of
+ * the hooks it materialized and the hooks slot is the only step that has one.
+ */
 async function replaceAll(
   handles: PreparedHandles,
   hooks: HooksReplaceArgs,
-): Promise<readonly ReplacementEntry[]> {
+): Promise<{
+  readonly replacements: readonly ReplacementEntry[];
+  readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+}> {
   const replacements: ReplacementEntry[] = [];
+  let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
     const skills = await replacePreparedSkills(handles.skills);
     replacements.push({ phase: "skills", handle: skills });
@@ -1609,7 +1627,7 @@ async function replaceAll(
     // which re-resolves version B (no hooks) and persists the truthful
     // state. The same recovery contract applies to update.ts (see
     // WR-01 documentation there).
-    await commitHooks(hooks);
+    hookEntries = await commitHooks(hooks);
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (err) {
@@ -1617,7 +1635,7 @@ async function replaceAll(
     throw errorWithManualRecovery(err, leaks);
   }
 
-  return Object.freeze(replacements);
+  return { replacements: Object.freeze(replacements), hookEntries };
 }
 
 interface HooksReplaceArgs {
@@ -1633,12 +1651,19 @@ interface HooksReplaceArgs {
  * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
  * When the resolved plugin has no hooks, remove any stale subtree (defensive
  * cleanup of an artifact a prior install left behind).
+ *
+ * D-100-01 / D-100-02 / ENBL-11: returns the supported hook entries it wrote,
+ * for the record's `hookEntries`. Returns undefined on the no-hooks branch --
+ * that branch removes the stale subtree rather than writing one, so there is
+ * nothing to describe.
  */
-async function commitHooks(args: HooksReplaceArgs): Promise<void> {
+async function commitHooks(
+  args: HooksReplaceArgs,
+): Promise<readonly HookSummaryEntry[] | undefined> {
   const { locations, cwd, plugin, installable } = args;
   if (installable.hooksConfigPath === undefined) {
     await removeHookConfig({ locations, pluginName: plugin });
-    return;
+    return undefined;
   }
 
   const raw = await readFile(
@@ -1657,6 +1682,9 @@ async function commitHooks(args: HooksReplaceArgs): Promise<void> {
     pluginRoot: installable.pluginRoot,
     hooksValue: parsed.value,
   });
+
+  // `parsed.value` is the supported subset already.
+  return projectHookSummaryEntries(parsed.value);
 }
 
 function updateStateRecord(
@@ -1666,6 +1694,7 @@ function updateStateRecord(
   oldRecord: PluginRecord,
   installable: MaterializablePlugin,
   handles: PreparedHandles,
+  hookEntries: readonly HookSummaryEntry[] | undefined,
 ): void {
   const mp = state.marketplaces[marketplace];
   if (mp?.plugins[plugin] === undefined) {
@@ -1697,6 +1726,10 @@ function updateStateRecord(
       unsupported: [...installable.unsupported],
     },
     resources: resourcesFromHandles(handles, plugin, installable),
+    // D-100-01 / ENBL-10: describe the hooks this re-materialize wrote. Top
+    // level, so it does not belong in `resourcesFromHandles`. Omitted when the
+    // resolved plugin declares no hooks -- that branch removed the subtree.
+    ...(hookEntries !== undefined && { hookEntries: [...hookEntries] }),
     enabled: true,
     installedAt: oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
@@ -2014,6 +2047,13 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
     // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
     // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
     ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
+    // D-100-01 / ENBL-10: preserve the recorded hook description across the
+    // snapshot. This function enumerates fields rather than spreading, so an
+    // omission here silently drops the key from the old-record snapshot. Deep
+    // copy, matching the resources arrays below.
+    ...(record.hookEntries !== undefined && {
+      hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
+    }),
     compatibility: {
       installable: record.compatibility.installable,
       notes: [...record.compatibility.notes],
@@ -2033,3 +2073,12 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
     updatedAt: record.updatedAt,
   };
 }
+
+/**
+ * Test binding seam: exported under the `__test_*` prefix, following the
+ * sibling seams in this file. The snapshot enumerates fields rather than
+ * spreading, so a record key it forgets is dropped with NO compile error and
+ * NO observable failure until some future reader wants it. That silence is
+ * what the seam exists to break.
+ */
+export { clonePluginRecord as __test_clonePluginRecord };
