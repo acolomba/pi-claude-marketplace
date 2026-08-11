@@ -388,13 +388,17 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
 
 - Nothing reads resources-emptiness as a signal any more; ENBL-05 removed the
   last reader, so relaxing the shape breaks no predicate.
+
 - Unstage is ENOENT-tolerant per name, so uninstalling a disabled record whose
   artifacts are already gone stays a no-op rather than an error.
+
 - `enable` re-runs `runInstallLedger`, whose state phase OVERWRITES `resources`
   wholesale and sets `enabled: true`, so a populated disabled record cannot
   stale-merge on re-enable.
+
 - COMPAT-01 pins the install record's KEY SET, not its values, so the change
   trips no architecture gate.
+
 - 14 test files assert the disabled+empty shape and 3 reference the branded
   type; each assertion needs judging as pinning the retired MARKER (now wrong)
   or the still-correct BEHAVIOR.
@@ -406,10 +410,12 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
    would report a read failure -- trading one wrong answer for another. Needs a
    distinct not-materialized-while-disabled arm, or the detail must live in the
    record. Same truthful-split problem D-96-03 solved for manifest absence.
+
 2. **Records disabled before this change.** Their inventory is already gone and
    is unrecoverable from the record. It can be re-derived from the manifest only
    while the plugin is still declared -- which excludes the very case this phase
    exists to fix. Decide backfill-on-cycle, backfill-on-reconcile, or none.
+
 3. **Reasons on a disabled row.** The catalog suppresses them because "a disabled
    plugin is in the user-requested state, not a failure state", a rationale that
    predates v1.18 establishing that reasons are not failures (`{not in manifest}`
@@ -429,9 +435,19 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
 **Plans:** 5 plans in 4 waves
 
 Plans:
+**Wave 1**
 
 - [ ] 100-01-PLAN.md — retention spine: disable keeps the inventory, hooks stay deregistered, enable still works (ENBL-13, ENBL-14, ENBL-18, ENBL-19)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 100-02-PLAN.md — the `hookEntries` record key, its three write sites and its read ladder (ENBL-10, ENBL-11, ENBL-12)
 - [ ] 100-03-PLAN.md — the disabled list row carries `{not in manifest}`; INV-04 superseded (ENBL-15, ENBL-16)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 100-04-PLAN.md — the disabled `info` arm routes through the shared block builder (ENBL-17)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 100-05-PLAN.md — disabled-info catalog state, byte fixture and coverage (ENBL-16, ENBL-17)
