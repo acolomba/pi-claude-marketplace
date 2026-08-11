@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test, beforeEach } from "node:test";
 
 import {
@@ -28,8 +31,11 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionContext,
   ToolResultEvent,
@@ -776,4 +782,97 @@ test("WR-01: hydrateProjectScopeForCwd clears all project-scope entries regardle
   assert.equal(cache.size, 1);
   const survivor = [...cache.values()][0];
   assert.equal(survivor?.scope, "user");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register on the
+// next hydrate. The protection used to be incidental -- disable deleted
+// hooks.json, so the read failed and only logged. ENBL-18 keeps
+// `resources.hooks` populated on a disabled record, so these two tests write a
+// REAL hooks.json under the scope's hooks dir: file-presence cannot mask the
+// guard, and the enabled control proves the fixture is not simply broken.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Run `fn` against a hermetic project-scope cwd, then remove it. */
+async function withProjectCwd(fn: (cwd: string) => Promise<void>): Promise<void> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "hooks-hydrate-enbl14-"));
+  try {
+    await fn(cwd);
+  } finally {
+    // Retry rmdir: a recursive rm can race a lingering async write and hit
+    // ENOTEMPTY; retry until it settles.
+    await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
+/**
+ * Seed a project-scope `state.json` naming one hooks-bearing plugin, plus the
+ * materialized `<hooksDir>/<slug>/hooks.json` the record points at. `enabled`
+ * is the ONLY axis that differs between the two cases below.
+ */
+async function seedProjectHooksPlugin(cwd: string, enabled: boolean): Promise<void> {
+  const loc = locationsFor("project", cwd);
+  const pluginRoot = path.join(cwd, "mp", "plugins", "hooky");
+
+  await mkdir(path.join(loc.hooksDir, "hooky"), { recursive: true });
+  await writeFile(
+    path.join(loc.hooksDir, "hooky", "hooks.json"),
+    JSON.stringify(makeConfig([{ event: "PreToolUse", handlers: 1 }])),
+    "utf8",
+  );
+
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: { kind: "path", raw: "./mp", logical: path.join(cwd, "mp") },
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "mp", ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: path.join(cwd, "mp"),
+        plugins: {
+          hooky: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["hooky"] },
+            enabled,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+  await mkdir(loc.extensionRoot, { recursive: true });
+  await saveState(loc.extensionRoot, state);
+}
+
+test("ENBL-14 / D-100-05: a disabled record's hooks are NOT hydrated, even though its hooks.json is on disk", async () => {
+  await withProjectCwd(async (cwd) => {
+    await seedProjectHooksPlugin(cwd, false);
+
+    await hydrateProjectScopeForCwd(cwd);
+
+    assert.equal(
+      _parsedConfigCacheForTest().size,
+      0,
+      "ENBL-14: hydrate must skip a record isRecordedButDisabled reports disabled",
+    );
+  });
+});
+
+test("ENBL-14 control: the SAME fixture with enabled: true hydrates exactly one cache entry", async () => {
+  await withProjectCwd(async (cwd) => {
+    await seedProjectHooksPlugin(cwd, true);
+
+    await hydrateProjectScopeForCwd(cwd);
+
+    const cache = _parsedConfigCacheForTest();
+    assert.equal(cache.size, 1, "the fixture DOES hydrate when the record is enabled");
+    const entry = [...cache.values()][0];
+    assert.equal(entry?.scope, "project");
+    assert.equal(entry?.pluginId, "hooky");
+  });
 });

@@ -640,6 +640,74 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// ENBL-19: enable does not self-conflict against the retained inventory
+// ──────────────────────────────────────────────────────────────────────────
+
+// The hazard only appears on the SECOND enable of a round trip, because that
+// is the first disabled record whose inventory a real disable produced. A
+// hand-seeded disabled record with empty arrays (the shape the fixtures above
+// use) cannot reach it. `runEnableBranch` re-runs `runInstallLedger`, whose
+// pre-flight cross-plugin guard reads the same-scope state; without the
+// ENBL-19 exclusion the plugin's own retained skill name is "already owned"
+// and every such enable fails with CrossPluginConflictError.
+test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inventory does not self-conflict", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "claude-plugins-official",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+    });
+    const args = {
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      scope: "user" as const,
+    };
+
+    // 1. First enable: materializes the skill and records its generated name.
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // 2. Disable: ENBL-18 keeps the inventory on the record.
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    const readSkills = async (): Promise<string[]> => {
+      const state = JSON.parse(await readFile(statePath, "utf8")) as {
+        marketplaces: Record<
+          string,
+          { plugins: Record<string, { enabled: boolean; resources: { skills: string[] } }> }
+        >;
+      };
+      const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+      assert.equal(rec.enabled, false, "the round trip's middle step must leave a DISABLED record");
+      return rec.resources.skills;
+    };
+
+    const retained = await readSkills();
+    assert.ok(
+      retained.length > 0,
+      "ENBL-18 precondition: the disabled record still names the skill it installed",
+    );
+
+    // 3. Second enable: the guard must exclude the plugin's own record.
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● claude-plugins-official [user]",
+        "  ● foo-plugin v1.2.3 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+      "ENBL-19: the second enable renders the ordinary success row, not (failed)",
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // ENBL-07: enable on a DISABLED PARTIAL record
 // ──────────────────────────────────────────────────────────────────────────
 

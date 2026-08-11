@@ -7,6 +7,7 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   assertNoCrossPluginConflicts,
+  removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstallMarketplaceSource,
   resolveInstalledMarketplaceTarget,
@@ -177,6 +178,83 @@ test("PI-6 / D-05 case C: skill + command + agent collisions -> deterministic or
     `agent "pi-claude-marketplace-x-agent" already owned by plugin "owner"`,
     `agent "pi-claude-marketplace-y-agent" already owned by plugin "owner"`,
   ]);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// ENBL-19: the guard is called with the plugin's OWN record excluded, because
+// a disabled record now RETAINS its inventory (ENBL-18) and re-materializing
+// it must not count as a cross-plugin conflict. These two cases pin that the
+// exclusion changes WHICH records populate the owner map and nothing else --
+// a genuine collision against a second plugin is still rejected.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("ENBL-19: a genuine cross-plugin collision is still rejected after the plugin's own record is excluded", () => {
+  const state = makeState({
+    official: {
+      plugins: {
+        // The plugin being enabled: disabled, inventory retained.
+        self: makePluginRecord({
+          enabled: false,
+          resources: { skills: ["self-skill"], prompts: [], agents: [], mcpServers: [] },
+        }),
+        // A second plugin that genuinely owns one of the candidate names.
+        other: makePluginRecord({
+          resources: { skills: ["other-skill"], prompts: [], agents: [], mcpServers: [] },
+        }),
+      },
+    },
+  });
+  const names: CrossPluginGeneratedNames = {
+    skills: ["self-skill", "other-skill"],
+    commands: [],
+    agents: [],
+  };
+  const stateForGuard = removePluginRecord(state, "official", "self");
+
+  let captured: unknown;
+  try {
+    assertNoCrossPluginConflicts("user", names, stateForGuard);
+  } catch (e) {
+    captured = e;
+  }
+
+  assert.ok(captured instanceof CrossPluginConflictError, "expected CrossPluginConflictError");
+  assert.deepEqual(
+    captured.conflicts,
+    [`skill "other-skill" already owned by plugin "other"`],
+    "only the OTHER plugin's name conflicts; the excluded record's own name does not",
+  );
+});
+
+test("ENBL-19: enabling a disabled plugin against only its own retained record does not throw", () => {
+  const state = makeState({
+    official: {
+      plugins: {
+        self: makePluginRecord({
+          enabled: false,
+          resources: {
+            skills: ["self-skill"],
+            prompts: ["self:cmd"],
+            agents: ["pi-claude-marketplace-self-agent"],
+            mcpServers: [],
+          },
+        }),
+      },
+    },
+  });
+  const names: CrossPluginGeneratedNames = {
+    skills: ["self-skill"],
+    commands: ["self:cmd"],
+    agents: ["pi-claude-marketplace-self-agent"],
+  };
+  const stateForGuard = removePluginRecord(state, "official", "self");
+
+  assert.doesNotThrow(() => {
+    assertNoCrossPluginConflicts("user", names, stateForGuard);
+  });
+  // The exclusion is non-mutating: the caller's live snapshot still holds the
+  // record, which the ledger goes on to overwrite in place.
+  assert.ok(state.marketplaces["official"]?.plugins["self"] !== undefined);
 });
 
 test("PI-6 / D-05 case D: MCP server collision NOT detected (PRD §6.5 exclusion)", () => {

@@ -988,6 +988,27 @@ test("ENBL-05: the transient all-empty-resources shape with enabled: true is NOT
   assert.equal(isRecordedButDisabled(emptied), false);
 });
 
+test("ENBL-05 / ENBL-18: a disabled record with a POPULATED inventory is still reported disabled", () => {
+  // The `recordWith` fixture above encodes the retired "disabled implies
+  // empty" rule as test data. That shape stays legal, but it is no longer the
+  // only one a disabled record can take: disable now preserves every
+  // `resources.*` array (D-100-10), so the predicate's array-independence has
+  // to be proven against the shape this creates and not only against the one
+  // it retires. The predicate reads the boolean; the arrays are irrelevant in
+  // both directions.
+  const retained: DisabledMarkerRecord = {
+    ...recordWith(true, false),
+    resources: {
+      skills: ["s1"],
+      prompts: ["c1"],
+      agents: ["a1"],
+      mcpServers: ["m1"],
+      hooks: ["h1"],
+    },
+  };
+  assert.equal(isRecordedButDisabled(retained), true);
+});
+
 test("ENBL-05: no disabled-state twin survives ANYWHERE in the extension tree -- the whole source walk, not an allowlist (drift gate)", async () => {
   // The gate this replaces enumerated the four sites that once held a copy, so
   // it was structurally blind to a NEW one: a fifth twin (`!record.enabled`)
