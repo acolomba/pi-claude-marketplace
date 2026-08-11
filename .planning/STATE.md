@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 99
-status: completed
-stopped_at: Phase 99 complete and verified; milestone lifecycle next
-last_updated: "2026-08-10T23:36:25.992Z"
-last_activity: 2026-08-10
+status: shipped
+stopped_at: v1.18 shipped as PR #120; milestone close deferred until after merge
+last_updated: "2026-08-11T00:45:00.000Z"
+last_activity: 2026-08-11
 last_activity_desc: "Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Seven rare-failure and rollback arms covered across update, reinstall and install, two of them mutation-proven to discriminate; three more proved to be defensive code no product state can reach and are recorded as deliberately left. Out-of-bound modules recorded, not tested; the exclusion decision re-filed as a fresh todo. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
 progress:
   total_phases: 5
@@ -35,8 +35,25 @@ verified.
 
 Phase: 99 (post-audit-tech-debt-closure) — COMPLETE
 Plan: 7 of 7 complete
-Status: All v1.18 phases complete (95-99). Milestone lifecycle remains: audit,
-complete-milestone, cleanup, then version bump + CHANGELOG + PR.
+Status: v1.18 SHIPPED as PR #120
+(https://github.com/acolomba/pi-claude-marketplace/pull/120), `MERGEABLE`
+against main. The milestone is deliberately NOT closed: `complete-milestone`,
+the version bump to 0.14.0, CHANGELOG, and cleanup all remain, by operator
+decision 2026-08-11 to ship first and close after merge.
+
+Shipped on top of the phase work: a re-run milestone audit that supersedes the
+stale 2026-08-10 09:30Z `tech_debt` verdict with `passed` (22/22 requirements,
+5/5 integration seams, 3/3 E2E flows, zero blockers), and a live runtime UAT
+harness at `tests/live-uat/manifest-absence-canary.mjs` that drives the real
+extension against a disposable sandbox. Its Flow A and Flow B pass end to end;
+Flow C (live-`pi` host smoke) routes to `human_needed` because the sandbox has
+no configured provider.
+
+Two debug sessions closed to `resolved/` with knowledge-base entries:
+`disabled-partial-record-unrecognized` (fixed by ENBL-05..09, and the live
+reproduction it recorded as its own blind spot now runs in the canary) and
+`async-rewake-lane-inert` (no product defect; the symptom was a stale staged
+artifact).
 
 Phase 99 closed 2026-08-10 with every gate green. All seven debt items the
 v1.18 audit enumerated are closed and verified against the code rather than
