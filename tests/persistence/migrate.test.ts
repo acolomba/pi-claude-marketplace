@@ -91,6 +91,24 @@ test("ST-5 migrate normalizes resources.agents and resources.mcpServers to []", 
   assert.deepEqual(p2.resources["mcpServers"], []);
 });
 
+// D-100-01 / ENBL-10: `hookEntries` is additive and OPTIONAL, so the migration
+// must leave it alone -- a legacy record comes out of the migrator with the key
+// still absent, and absence is what routes the read to the materialized file.
+// Filling it (with `[]`, say) would turn every pre-existing record into a
+// confident claim of "no hooks" that the record cannot support.
+test("D-100-01 / ENBL-10: migration adds no hookEntries fill to a legacy record", async () => {
+  const fixture = JSON.parse(
+    await readFile(path.join(FIXTURES, "v1-missing-resources.json"), "utf8"),
+  ) as unknown;
+  const { marketplaces } = migrateLegacyMarketplaceRecords(fixture, "/ext-root", GATE_CLOSED);
+  const gamma = marketplaces["gamma"] as {
+    plugins: Record<string, Record<string, unknown>>;
+  };
+  const p2 = gamma.plugins["p2"];
+  assert.ok(p2);
+  assert.equal(Object.hasOwn(p2, "hookEntries"), false);
+});
+
 test("migrate on null returns empty marketplaces (no mutation flag)", () => {
   const result = migrateLegacyMarketplaceRecords(null, "/ext-root", GATE_CLOSED);
   assert.deepEqual(result.marketplaces, {});

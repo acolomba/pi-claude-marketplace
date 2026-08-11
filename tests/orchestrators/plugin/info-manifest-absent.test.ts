@@ -155,6 +155,13 @@ interface SeedPathMarketplaceOpts {
         mcpServers?: readonly string[];
         hooks?: readonly string[];
       };
+      /**
+       * ENBL-10 / ENBL-12: seed the record's optional `hookEntries` key. Three
+       * distinguishable fixtures: omitted (a legacy record predating the key,
+       * which sends the read to the materialized file), an empty array (a
+       * completed answer of zero entries), and a populated array.
+       */
+      hookEntries?: readonly { event: string; matcher?: string }[];
     }
   >;
   /** Plugin source dirs to create under <mpRoot> so resolveStrict probes succeed. */
@@ -202,6 +209,9 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     plugins[name] = {
       version: info.version,
       resolvedSource: info.resolvedSource ?? "./placeholder",
+      ...(info.hookEntries !== undefined && {
+        hookEntries: info.hookEntries.map((e) => ({ ...e })),
+      }),
       compatibility: {
         installable: unsupported.length === 0,
         notes: [],
@@ -524,6 +534,149 @@ test("INFO-11: hook entries follow the materialized file's declaration order, ne
         "    hooks:",
         "      PreToolUse(Bash)",
         "      Stop",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-100-03 / ENBL-12 read ladder: the record wins when it carries `hookEntries`,
+// the materialized file answers when it does not, and a present-but-empty key
+// is a completed answer of zero entries rather than a fall-through.
+//
+// Every case below seeds a materialized configuration whose entries DIFFER
+// from the record's, so "the record won" and "the file won" produce different
+// bytes. A test that seeded the same entries on both sides would pass whichever
+// source the code actually read.
+// ---------------------------------------------------------------------------
+
+test("D-100-03 / ENBL-12: a record carrying hookEntries renders them, not the materialized file's", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: {
+          version: "1.0.0",
+          resources: { hooks: ["alpha"] },
+          hookEntries: [{ event: "SessionStart" }, { event: "PostToolUse", matcher: "Read" }],
+        },
+      },
+    });
+    // Deliberately DIFFERENT from the record: these two lines are what the
+    // rendered block must NOT contain.
+    await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({
+        Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo b" }] }],
+      }),
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    hooks:",
+        "      SessionStart",
+        "      PostToolUse(Read)",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("D-100-03 / ENBL-12: a legacy record with no hookEntries key still reports its hooks from the materialized file", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      // No `hookEntries`: the shape every record written before the key
+      // existed has. The fallback is what keeps these records reporting
+      // truthfully until the next install, update, reinstall or enable.
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({
+        Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo b" }] }],
+      }),
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "    hooks:",
+        "      Stop",
+        "      PreToolUse(Bash)",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("D-100-03 / ENBL-12: a present-but-empty hookEntries renders no `hooks:` line and no reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { hooks: ["alpha"] }, hookEntries: [] },
+      },
+    });
+    // A readable file with real entries: if the empty key fell through to the
+    // file, these two lines would appear.
+    await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({
+        Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo b" }] }],
+      }),
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
         "    skills: alpha-skill",
       ].join("\n"),
     );

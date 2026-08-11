@@ -32,6 +32,7 @@ import path from "node:path";
 
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
+  hookSummaryEntriesFromPersisted,
   parseHooksConfig,
   projectHookSummaryEntries,
   type DroppedHook,
@@ -992,7 +993,20 @@ async function composeStateOnlyComponents(
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
-  const hooksRead = await readStateOnlyHookEntries(record.resources.hooks, locations, cwd);
+  // D-100-03 / ENBL-12 read ladder: the record wins when it carries the key,
+  // the materialized file answers when it does not, and records self-heal on
+  // the next install, update, reinstall or enable (there is no backfill,
+  // D-100-09). A present-but-EMPTY key is a completed read of zero entries --
+  // it must reach the `listed` arm, not collapse to `none`.
+  //
+  // The record path composes no path and opens no file, so a present key
+  // strictly REDUCES the traversal surface of this row builder rather than
+  // adding to it; the `assertPathInside` chokepoint on the fallback path is
+  // unchanged and still runs before every read.
+  const hooksRead: StateOnlyHookRead =
+    record.hookEntries === undefined
+      ? await readStateOnlyHookEntries(record.resources.hooks, locations, cwd)
+      : { kind: "listed", entries: hookSummaryEntriesFromPersisted(record.hookEntries) };
 
   return {
     components: {
