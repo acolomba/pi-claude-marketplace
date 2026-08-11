@@ -367,8 +367,11 @@ plugin contains even when the marketplace manifest no longer declares it.
 or deregistered from Pi, but its own descriptor stays. `info` must not lose
 information, and it must still say the plugin is disabled.
 
-**Requirements**: TBD — the enable/disable family continues (ENBL-10+); assigned
-at discuss.
+**Requirements**: ENBL-10, ENBL-11, ENBL-12, ENBL-13, ENBL-14, ENBL-15, ENBL-16,
+ENBL-17, ENBL-18, ENBL-19 — assigned at planning from the research pass's proposed
+set. ENBL-19 covers a hazard no discuss decision anticipated: retaining the record's
+resource names makes `plugin enable` self-conflict against its own record unless the
+install ledger's cross-plugin guard excludes it. ENBL-16 supersedes INV-04.
 
 **Depends on:** Phase 99
 
@@ -414,8 +417,21 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
    marketplace dropped it gets no signal. Settle it here rather than touching the
    disabled arm twice.
 
-**Plans:** 0 plans
+> **Scoping correction (2026-08-11, recorded at discuss and confirmed at
+> planning).** The claim above that nothing reads resources-emptiness as a signal
+> is FALSE. Four readers were found. One is a correctness hazard —
+> `hydrateScopeFromState` uses emptiness as the disabled filter for hook routing
+> and carries no enabled guard — and one is phase-breaking: the install ledger's
+> cross-plugin conflict guard walks every record's resource names against the RAW
+> state, so retention makes an enable self-conflict. Two of the three readers
+> named at discuss need no code change; a fourth, found at research, does.
+
+**Plans:** 5 plans in 4 waves
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 100 to break down)
+- [ ] 100-01-PLAN.md — retention spine: disable keeps the inventory, hooks stay deregistered, enable still works (ENBL-13, ENBL-14, ENBL-18, ENBL-19)
+- [ ] 100-02-PLAN.md — the `hookEntries` record key, its three write sites and its read ladder (ENBL-10, ENBL-11, ENBL-12)
+- [ ] 100-03-PLAN.md — the disabled list row carries `{not in manifest}`; INV-04 superseded (ENBL-15, ENBL-16)
+- [ ] 100-04-PLAN.md — the disabled `info` arm routes through the shared block builder (ENBL-17)
+- [ ] 100-05-PLAN.md — disabled-info catalog state, byte fixture and coverage (ENBL-16, ENBL-17)
