@@ -386,8 +386,6 @@ async function installedRowMessage(
   // BOUND-03 / D-95-05: only a READ manifest that omits the record backs the
   // claim -- `unverified` says nothing about a manifest the system never saw.
   const notInManifest = lookup.kind === "absent";
-  const declaresAgents = record.resources.agents.length > 0;
-  const declaresMcp = record.resources.mcpServers.length > 0;
   const upgradable =
     manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
 
@@ -422,6 +420,14 @@ async function installedRowMessage(
       needsReload: false,
     };
   }
+
+  // ENBL-15 / D-100-06: derived BELOW the disabled early return, so a disabled
+  // record's retained inventory (ENBL-18 keeps `agents` / `mcpServers`
+  // populated) is not even in scope where its row is built. The disabled row
+  // must carry no soft-dependency marker: those markers state a runtime concern
+  // that is suspended while the plugin is disabled.
+  const declaresAgents = record.resources.agents.length > 0;
+  const declaresMcp = record.resources.mcpServers.length > 0;
 
   // D-67-02 / LIST-02: the finer installed-inventory state is derived by the
   // SHARED `classifyInstalledRecord` (the same classifier the completion
