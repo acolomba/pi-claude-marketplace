@@ -10,8 +10,8 @@
 //   - INV-01 an enabled, fully supported manifest-absent record
 //   - INV-02 a degraded (partially-installed) manifest-absent record
 //   - INV-03 `--installed` membership across both manifest-absent forms
-//   - INV-04 the CANONICAL disabled shape (ENBL-04: empty resources +
-//     `compatibility.installable: true`) never carries a reason brace
+//   - ENBL-16 a disabled record carries `{not in manifest}` and no other
+//     reason, superseding INV-04's "never carries a reason brace" clause
 //   - BOUND-03 the cross-scope orphan fold must distinguish a manifest that
 //     FAILED to load from one that loaded without the entry (D-95-05)
 //
@@ -431,10 +431,17 @@ test("INV-02: a manifest-absent degraded record with a non-carve-out kind render
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// INV-04: the canonical disabled row never carries a reason brace
+// ENBL-16: the disabled row names manifest absence, and nothing else
 // ──────────────────────────────────────────────────────────────────────────
 
-test("INV-04: a manifest-absent CANONICAL disabled record renders `(disabled)` with no reason brace", async () => {
+// ENBL-16 / D-100-07 supersedes INV-04's no-reason clause. Manifest absence is
+// a DURABLE fact that constrains what the user can do next: `plugin enable`
+// re-runs the install ledger, which resolves from the marketplace manifest, so
+// a disabled record the manifest no longer declares cannot be re-enabled. The
+// bare row gave no warning before the attempt. Every OTHER reason stays
+// suppressed on this row -- they describe runtime behavior that is currently
+// suspended.
+test("ENBL-16: a manifest-absent disabled record renders `(disabled) {not in manifest}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -442,9 +449,6 @@ test("INV-04: a manifest-absent CANONICAL disabled record renders `(disabled)` w
       cwd,
       mpName: "mp1",
       manifest: { name: "mp1", plugins: [] },
-      // ENBL-04 canonical marker: empty resources + installable:true. The
-      // PARTIAL disabled shape (`enabled: false` with populated resources) is
-      // deliberately NOT pinned here -- ENBL-06 changes it.
       installed: { dis: { version: "1.2.3", disabled: true } },
     });
 
@@ -453,9 +457,35 @@ test("INV-04: a manifest-absent CANONICAL disabled record renders `(disabled)` w
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      // `PluginDisabledMessage` has no `reasons` field and the disabled render
-      // arm hardcodes `composeReasons(undefined, ...)`, so the bare form is
-      // structurally guaranteed rather than conditionally produced.
+      ["● mp1 [user]", "  ◍ dis v1.2.3 (disabled) {not in manifest}"].join("\n"),
+    );
+  });
+});
+
+// The gate half of the pair: an absence claim is made only against a manifest
+// that loaded AND omitted the entry (BOUND-03 / D-95-05). A manifest that still
+// declares the plugin backs no claim, so the row stays byte-identical to the
+// legacy bare form.
+test("ENBL-16: a disabled record its manifest STILL declares renders `(disabled)` with no reason brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "dis", source: "./dis", version: "1.2.3" }],
+      },
+      installed: { dis: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["dis"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
       ["● mp1 [user]", "  ◍ dis v1.2.3 (disabled)"].join("\n"),
     );
   });

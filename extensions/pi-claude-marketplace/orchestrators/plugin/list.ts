@@ -331,6 +331,25 @@ function partiallyInstalledReasons(
 }
 
 /**
+ * ENBL-16 / D-100-07: the disabled inventory row names manifest absence and
+ * NOTHING else. Absence is a durable fact that constrains the user's next
+ * action -- `plugin enable` re-runs the install ledger, which resolves from the
+ * marketplace manifest, so a manifest-absent disabled record cannot be
+ * re-enabled and the bare row gave no warning before the attempt. The record's
+ * unsupported kinds stay suppressed: they describe runtime behavior that is
+ * currently suspended.
+ *
+ * The caller passes `notInManifest`, which is already gated on a SUCCESSFULLY
+ * read manifest (BOUND-03 / D-95-05) -- a manifest the system never parsed
+ * backs no absence claim. Returning the field as an object rather than an array
+ * keeps a still-declared record's row free of the key entirely, which is what
+ * makes it render byte-for-byte as before.
+ */
+function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessage, "reasons"> {
+  return notInManifest ? { reasons: ["not in manifest"] } : {};
+}
+
+/**
  * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
@@ -416,6 +435,8 @@ async function installedRowMessage(
       version: record.version,
       ...scopeField,
       ...descriptionField,
+      // ENBL-16 / D-100-07: `{not in manifest}` and no other reason.
+      ...disabledReasonsField(notInManifest),
       severity: "info",
       needsReload: false,
     };

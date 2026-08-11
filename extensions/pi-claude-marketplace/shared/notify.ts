@@ -757,17 +757,33 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  * RLD-05 / D-07: the reload-hint is driven by the caller-stamped `needsReload`
  * -- the fresh-disable transition stamps `true`, the list / info inventory row
  * stamps `false` -- so the row's reload behavior no longer depends on a cascade
- * kind. Structurally
- * distinct from `(unavailable)`: the variant carries no `reasons` (a disabled
- * plugin is in the user-requested state, not a failure state), and the byte
- * form differs (`(disabled)` vs `(unavailable)`).
+ * kind. Structurally distinct from `(unavailable)`: the byte form differs
+ * (`(disabled)` vs `(unavailable)`).
  *
- * NO `dependencies` / `reasons` / `cause` / `rollbackPartial` by construction
- * -- the inventory row is bare. ENBL-06 / INV-04: the absent `reasons` field
- * is what makes "a disabled row never carries `{not in manifest}`" structural
- * rather than test-enforced. A row type with no reasons field cannot emit a
- * manifest-absence reason, whatever the record's availability or manifest
- * status. The renderer arm uses `ICON_DISABLED`
+ * NO `dependencies` / `cause` / `rollbackPartial` by construction.
+ *
+ * ENBL-16 / D-100-07: `reasons` is OPTIONAL here, exactly as on
+ * `PluginInstalledMessage`, `PluginUpdatedMessage` and
+ * `PluginReinstalledMessage`, and it admits exactly one member --
+ * `not in manifest`. The governing rule: render durable facts that constrain
+ * what the user can do next; suppress facts about runtime behavior that is
+ * currently suspended. Manifest absence is the first kind: `plugin enable`
+ * re-runs the install ledger, which resolves from the marketplace manifest, so
+ * a disabled record the manifest no longer declares cannot be re-enabled, and
+ * the bare row gave no warning before the attempt. Which reasons a surface
+ * stamps is an ORCHESTRATOR decision (D-95-01) -- the render path holds no
+ * allowlist. Absent `reasons` renders the legacy brace-less row byte-for-byte:
+ * `composeReasons` returns `""` for an undefined list and `joinTokens`
+ * collapses the empty slot.
+ *
+ * ENBL-15 / D-100-06 stays structural in its place: the render arm passes both
+ * soft-dependency arguments hard-coded `false`, so a disabled row cannot emit
+ * `{requires pi-subagents}` / `{requires pi-mcp}` whatever the record's
+ * retained inventory holds (ENBL-18 keeps `resources.agents` /
+ * `resources.mcpServers` populated across a disable). Those markers state a
+ * runtime concern that is suspended while the plugin is disabled.
+ *
+ * The renderer arm uses `ICON_DISABLED`
  * (`◍`) -- the same glyph the `will disable` row uses. PL-4: optional
  * `description` rendered as a second 4-space-indented line, truncated at
  * column 66 (same as the other list-surface inventory variants).
@@ -778,6 +794,7 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2409,16 +2426,17 @@ function renderPluginRow(
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
       // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
       // (`◍`) glyph, the same glyph the `(will disable)` pending-tense row
-      // carries. NO reasons -- the variant carries none; composeReasons
-      // receives undefined + both soft-dep flags false (the inventory row
-      // never emits soft-dep markers).
+      // carries. ENBL-16: the caller's `reasons` are threaded, and the caller
+      // stamps at most `not in manifest`; both soft-dep flags stay hard-coded
+      // false, which is what keeps the disabled row free of a soft-dep marker
+      // whatever inventory the record retained (ENBL-15).
       return joinTokens([
         ICON_DISABLED,
         p.name,
         renderScopeBracket(p.scope, mpScope),
         renderVersion(p.version),
         "(disabled)",
-        composeReasons(undefined, false, false, probe),
+        composeReasons(p.reasons, false, false, probe),
       ]);
     default: {
       assertNever(p);

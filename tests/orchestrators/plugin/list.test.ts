@@ -1080,13 +1080,16 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
 // ENBL-06: disabled-ness (`enabled`) and availability
 // (`compatibility.installable`) are orthogonal axes, so a record whose
 // install-time resolution dropped a component kind is still DISABLED once the
-// user disables it. Its row renders at byte parity with the canonical disabled
-// row -- bare. `PluginDisabledMessage` carries no `reasons` field by
-// construction, which makes INV-04's "never `{not in manifest}` on a disabled
-// row" structural rather than test-enforced. The enabled partial seeded beside
-// it keeps its unsupported-kind brace, so the two shapes stay distinguishable
+// user disables it.
+//
+// ENBL-16: both records here are absent from the loaded manifest and both
+// dropped the same kind, so the braces separate the two reason SOURCES. The
+// disabled row names manifest absence alone -- its unsupported-kind tokens stay
+// suppressed, because a dropped component describes runtime behavior that is
+// suspended while the plugin is disabled. The enabled partial beside it keeps
+// `{not in manifest, lsp}`, which is what makes the two shapes distinguishable
 // inside one marketplace block.
-test("ENBL-06 / INV-04: a disabled PARTIAL renders bare `(disabled)` beside an enabled partial's `(partially-installed) {lsp}` in the same block", async () => {
+test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) {not in manifest}` beside an enabled partial's `(partially-installed) {not in manifest, lsp}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -1094,13 +1097,9 @@ test("ENBL-06 / INV-04: a disabled PARTIAL renders bare `(disabled)` beside an e
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
-      manifest: {
-        name: "mp1",
-        plugins: [
-          { name: "alpha", source: "./alpha", version: "1.0.0" },
-          { name: "beta", source: "./beta", version: "1.0.0" },
-        ],
-      },
+      // The manifest LOADED and declares neither record, which is the only
+      // state that backs an absence claim (BOUND-03 / D-95-05).
+      manifest: { name: "mp1", plugins: [] },
       // Both records carry the same dropped kind; only `disabled` differs.
       installed: {
         alpha: { version: "1.0.0", disabled: true, unsupported: ["lspServers"] },
@@ -1122,17 +1121,19 @@ test("ENBL-06 / INV-04: a disabled PARTIAL renders bare `(disabled)` beside an e
       out,
       [
         "● mp1 [user]",
-        "  ◍ alpha v1.0.0 (disabled)",
-        "  ◉ beta v1.0.0 (partially-installed) {lsp}",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+        "  ◉ beta v1.0.0 (partially-installed) {not in manifest, lsp}",
       ].join("\n"),
     );
 
-    // Row-scoped negatives so a regression names itself. A whole-output brace
-    // check would be defeated by beta's legitimate `{lsp}`.
+    // Row-scoped negatives so a regression names itself. A whole-output check
+    // for `lsp` would be defeated by beta's legitimate token. The disabled
+    // row's reason list holds AT MOST one member, so no ordering rule applies
+    // to it -- the join above is the whole assertion.
     const alphaRow = out.split("\n").find((line) => line.includes("alpha")) ?? "";
-    assert.equal(alphaRow.includes("{"), false, `the disabled row carries no brace: ${alphaRow}`);
+    assert.equal(alphaRow.includes("{lsp}"), false, alphaRow);
+    assert.equal(alphaRow.includes("lsp"), false, `no unsupported-kind token: ${alphaRow}`);
     assert.equal(alphaRow.includes("(partially-installed)"), false, alphaRow);
-    assert.equal(alphaRow.includes("{not in manifest}"), false, alphaRow);
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
   });
 });
