@@ -1098,13 +1098,15 @@ test("D-100-08 / ENBL-17: a manifest-absent DISABLED record renders `(disabled) 
   });
 });
 
-// The disabled-PARTIAL half. The persisted unsupported kind rides the same
-// reason brace it does on an enabled state-only record, AFTER the absence
-// token -- `narrowUnsupportedKinds` stays the sole producer of the kind tokens
-// and the disabled status does not suppress them. What the injection changes is
-// the STATUS: without it this record derives `(partially-installed)`, which
-// would tell the user a deregistered plugin is running.
-test("D-100-08 / ENBL-17: a manifest-absent DISABLED PARTIAL keeps `(disabled)`, not the derived `(partially-installed)`", async () => {
+// The disabled-PARTIAL half, which pins BOTH halves of the disabled row shape
+// on one record. The STATUS: without the injection this record derives
+// `(partially-installed)`, which would tell the user a deregistered plugin is
+// running. The REASON BRACE: the record carries a persisted unsupported kind,
+// and the row hides it (ENBL-16 / D-100-07). A dropped component kind describes
+// runtime behavior that the disable suspended, so it waits for the plugin to be
+// re-enabled; manifest absence blocks `enable` itself, so it stays. The same
+// record renders the same bytes on the `list` surface.
+test("D-100-08 / ENBL-16 / ENBL-17: a manifest-absent DISABLED PARTIAL keeps `(disabled)` and hides its unsupported-kind token", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -1128,10 +1130,13 @@ test("D-100-08 / ENBL-17: a manifest-absent DISABLED PARTIAL keeps `(disabled)`,
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest, lsp}",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
         "    skills: alpha-skill",
       ].join("\n"),
     );
+    // Row-scoped: the token is absent from the ROW, not merely absent from a
+    // brace an equality could also lose by moving the line.
+    assert.equal(notifications[0]!.message.split("\n")[1]!.includes("lsp"), false);
   });
 });
 
@@ -1230,7 +1235,7 @@ test("ENBL-06 / D-96-04: `info --fetch` on a DISABLED PARTIAL skips for the disa
       notifications[0]!.message,
       [
         "● mp [user] <no autoupdate>",
-        "  ◍ alpha v1.0.0 (disabled) {not in manifest, lsp}",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
         "    skills: alpha-skill",
       ].join("\n"),
     );

@@ -829,7 +829,7 @@ async function buildBlock(
         marketplace,
         scope,
         marketplaceDetails,
-        applyDisabledStatus(stateOnlyRow, installed),
+        applyDisabledRowShape(stateOnlyRow, installed),
         skipReasonFor(installed, true),
       );
     }
@@ -874,7 +874,7 @@ async function buildBlock(
       marketplace,
       scope,
       marketplaceDetails,
-      applyDisabledStatus(row, installed),
+      applyDisabledRowShape(row, installed),
       skipReasonFor(installed, false),
     );
   }
@@ -920,19 +920,49 @@ function wrapBlock(
 }
 
 /**
- * D-100-08 / ENBL-17: the disabled status wins over whatever status the arm
- * derived. `derivePersistedInstalledStatus` answers a different question --
- * whether the install dropped components -- and can return nothing but
- * `installed` or `partially-installed`, so an un-injected disabled record would
- * render as running. Applied at every arm of `buildBlock` that can see an
- * installation record, and read through the shared predicate so this site
- * cannot drift from the single definition of disabled-ness.
+ * ENBL-16 / D-100-07: the only reason a disabled row may carry, on this surface
+ * and on the list surface alike.
  */
-function applyDisabledStatus(
+const DISABLED_ROW_REASON: ContentReason = "not in manifest";
+
+/**
+ * D-100-08 / ENBL-16 / ENBL-17: the disabled row's shape. Applied at every arm
+ * of `buildBlock` that can see an installation record, and read through the
+ * shared predicate so this site cannot drift from the single definition of
+ * disabled-ness.
+ *
+ * Two edits, one rule: report the durable facts that constrain what the user
+ * can do next, and hide the facts about runtime behavior that is currently
+ * suspended.
+ *
+ * The status wins over whatever the arm derived, because
+ * `derivePersistedInstalledStatus` answers a different question -- whether the
+ * install dropped components -- and can return nothing but `installed` or
+ * `partially-installed`, so an un-injected disabled record would tell the user
+ * a suspended plugin is running.
+ *
+ * The reason brace narrows to at most `{not in manifest}`. `enable` re-runs the
+ * install ledger, which resolves the plugin from the marketplace manifest, so
+ * manifest absence is exactly a fact that blocks the user's next action and it
+ * stays. A dropped component kind and an unlistable hooks configuration
+ * describe a runtime that is not running; they stay hidden until the plugin is
+ * re-enabled, at which point the enabled row reports them again. The `list`
+ * surface narrows the same way, in `list.ts::disabledReasonsField`, so the two
+ * surfaces render one disabled record identically.
+ */
+function applyDisabledRowShape(
   row: PluginInfoRow,
   record: MarketplaceRecord["plugins"][string],
 ): PluginInfoRow {
-  return isRecordedButDisabled(record) ? { ...row, status: "disabled" } : row;
+  if (!isRecordedButDisabled(record)) {
+    return row;
+  }
+
+  return {
+    ...row,
+    status: "disabled",
+    reasons: (row.reasons ?? []).filter((reason) => reason === DISABLED_ROW_REASON),
+  };
 }
 
 /**
@@ -2200,7 +2230,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // resolves exactly as an uninstalled one does, and a disabled record the
   // manifest dropped resolves from its own installation record -- so it reports
   // its description and component inventory instead of a bare foreign-shaped
-  // row, while `applyDisabledStatus` keeps the row saying `(disabled)`.
+  // row, while `applyDisabledRowShape` keeps the row saying `(disabled)` and
+  // holds its reason brace to at most `{not in manifest}`.
 
   // Destructure to make the branch choice unambiguous and avoid the
   // silent fall-through hazard `if (found.length === 1) / if (sole !==
