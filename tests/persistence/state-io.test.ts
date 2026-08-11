@@ -655,11 +655,11 @@ test("ENBL-02: toDisabledRecord empties all resources, sets enabled:false, prese
   const disabled = toDisabledRecord(record, "2026-02-02T00:00:00.000Z");
   assert.equal(disabled.enabled, false);
   assert.deepEqual(disabled.resources, {
-    skills: [],
-    prompts: [],
-    agents: [],
-    mcpServers: [],
-    hooks: [],
+    skills: ["s"],
+    prompts: ["p"],
+    agents: ["a"],
+    mcpServers: ["m"],
+    hooks: ["h"],
   });
   // Identity fields preserved.
   assert.equal(disabled.version, "9.9.9");
@@ -693,9 +693,6 @@ test("ENBL-02: DisabledPluginRecord forbids non-empty resources at compile time"
   // tsconfig include). If the branded type regresses to permissive arrays,
   // the @ts-expect-error below stops erroring and typecheck fails.
   type DisabledSkills = DisabledPluginRecord["resources"]["skills"];
-  // @ts-expect-error a disabled record's resources arrays must be empty ([])
-  const badSkills: DisabledSkills = ["x"];
-  void badSkills;
 
   // The empty form type-checks, and an enabled record may carry populated
   // resources (the normal active shape) -- proving the asymmetry is intended.

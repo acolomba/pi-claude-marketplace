@@ -136,6 +136,7 @@ import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
   maybeWritePluginConfigBack,
+  removePluginRecord,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
@@ -3022,35 +3023,4 @@ async function loadCachedMarketplaceManifest(
   manifestPath: string,
 ): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
   return loadMarketplaceManifest(manifestPath);
-}
-
-/**
- * PI-6 cross-plugin guard helper. Returns a shallow-cloned state with the
- * (marketplace, plugin) record removed -- so the guard counts this plugin's
- * OWN current resources as "not yet owned" and only catches conflicts
- * against OTHER plugins.
- *
- * Shallow-clone discipline: deep-clone only the bytes the guard reads
- * (marketplaces -> per-mp -> plugins map). Every other branch reference is
- * shared. This keeps the helper cheap on hot paths.
- */
-function removePluginRecord(
-  state: ExtensionState,
-  marketplace: string,
-  plugin: string,
-): ExtensionState {
-  const cloned: ExtensionState = {
-    schemaVersion: state.schemaVersion,
-    marketplaces: { ...state.marketplaces },
-  };
-  const mp = cloned.marketplaces[marketplace];
-  if (mp === undefined) {
-    return cloned;
-  }
-
-  const newPlugins = { ...mp.plugins };
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- newPlugins is a Record<string,...>.
-  delete newPlugins[plugin];
-  cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
-  return cloned;
 }

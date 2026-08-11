@@ -43,7 +43,12 @@ import {
 } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { DEFAULT_STATE, loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  DEFAULT_STATE,
+  isRecordedButDisabled,
+  loadState,
+  type ExtensionState,
+} from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
@@ -576,10 +581,11 @@ async function hydrateCacheFromDisk(opts: {
 }
 
 /**
- * Per-scope hydrate: iterate state.marketplaces filtered by scope, find
- * plugins with declared hook resources, read + parse each hooks.json, and
- * populate the cache. Parse failures are logged through hookDebugLog and
- * skipped (the resolver flips installable: false on the next reconcile).
+ * Per-scope hydrate: iterate state.marketplaces filtered by scope, skip
+ * disabled records (ENBL-14), find plugins with declared hook resources, read +
+ * parse each hooks.json, and populate the cache. Parse failures are logged
+ * through hookDebugLog and skipped (the resolver flips installable: false on
+ * the next reconcile).
  */
 async function hydrateScopeFromState(
   state: ExtensionState,
@@ -592,6 +598,16 @@ async function hydrateScopeFromState(
     }
 
     for (const [pluginId, pluginRecord] of Object.entries(mpRecord.plugins)) {
+      // ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register.
+      // The protection used to be incidental -- disable deleted hooks.json, so
+      // the read below failed and only logged. ENBL-18 keeps `resources.hooks`
+      // populated on a disabled record, so a file restored by any means would
+      // hydrate again; the guard makes the deregistration explicit. Read
+      // through the single predicate so this site cannot drift from ENBL-05.
+      if (isRecordedButDisabled(pluginRecord)) {
+        continue;
+      }
+
       const hookSlugs = pluginRecord.resources.hooks;
       if (hookSlugs.length === 0) {
         continue;

@@ -88,44 +88,45 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
 export type PluginInstallRecord = Type.Static<typeof PLUGIN_INSTALL_RECORD_SCHEMA>;
 
 /**
- * ENBL-02 two-signal invariant, expressed in the type system.
+ * ENBL-02 / ENBL-18 / D-100-10: the disable transform's guarantee, expressed
+ * in the type system.
  *
- * The stored record permits any `enabled` + `resources` combination, but
- * only three are legal: enabled + populated (active), disabled + empty (the
- * disable terminal state), and enabled + empty (the transient
- * post-migration / pre-self-heal shape). The fourth -- disabled + populated
- * -- is the contradiction these branded types forbid: `DisabledPluginRecord`
- * pins every resources array to the empty tuple `[]`, so a literal carrying a
- * non-empty array is a compile error. `toDisabledRecord` is the sole
- * sanctioned producer; the disable orchestrator routes through it (replacing
- * the record in the map) instead of mutating fields in place, so the branded
- * type survives to the assignment.
+ * `enabled` is the sole disable marker, and disabling changes `enabled` and
+ * `updatedAt` and NOTHING ELSE. The record is a description of the
+ * INSTALLATION, not a mirror of the current disk contents: the disable cascade
+ * still unstages every artifact of all five kinds (ENBL-13 / D-100-04), but the
+ * record keeps naming what the install materialized, so `info` can report what
+ * a disabled plugin contains -- including after its marketplace manifest entry
+ * has disappeared and nothing else can answer.
+ *
+ * The resources shape rides through as the type parameter `R`, so a producer
+ * returning a record whose `resources` differs from its input's is a compile
+ * error. `toDisabledRecord` is the sole sanctioned producer; the disable
+ * orchestrator routes through it (replacing the record in the map) instead of
+ * mutating fields in place, so the type survives to the assignment. Because the
+ * generic constrains only the producer, the behavioral proof that disable
+ * preserves the inventory lives in the orchestrator suite.
  */
 export type EnabledPluginRecord = PluginInstallRecord & { enabled: true };
-export type DisabledPluginRecord = PluginInstallRecord & {
+export type DisabledPluginRecord<
+  R extends PluginInstallRecord["resources"] = PluginInstallRecord["resources"],
+> = PluginInstallRecord & {
   enabled: false;
-  resources: {
-    skills: [];
-    prompts: [];
-    agents: [];
-    mcpServers: [];
-    hooks: [];
-  };
+  resources: R;
 };
 
 /**
- * Build the disabled form of a plugin record: preserve version /
- * resolvedSource / compatibility / installedAt, reset every resources array
- * to empty, set `enabled: false`, and stamp `updatedAt`. The empty-tuple
- * return type makes "disabled but populated" unrepresentable at the call site.
+ * ENBL-18 / D-100-10: build the disabled form of a plugin record -- set
+ * `enabled: false`, stamp `updatedAt`, preserve everything else including every
+ * `resources.*` array. The `resources: R` passthrough in the return type makes
+ * any change to the inventory a compile error here at the producer.
  */
-export function toDisabledRecord(
-  record: PluginInstallRecord,
+export function toDisabledRecord<R extends PluginInstallRecord["resources"]>(
+  record: PluginInstallRecord & { resources: R },
   updatedAt: string,
-): DisabledPluginRecord {
+): DisabledPluginRecord<R> {
   return {
     ...record,
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: false,
     updatedAt,
   };

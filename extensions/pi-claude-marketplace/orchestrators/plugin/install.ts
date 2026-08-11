@@ -146,6 +146,7 @@ import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
   pickAgentsSourceDir,
+  removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   selectConfigWriteTarget,
@@ -860,7 +861,20 @@ export async function runInstallLedger(
   // PI-6 / RN-3: pre-flight cross-bridge conflict guard. Throws
   // CrossPluginConflictError BEFORE any disk write if a generated name
   // is already owned by a different plugin IN THE SAME SCOPE.
-  assertNoCrossPluginConflicts(scope, generatedNames, state);
+  //
+  // ENBL-19: check against the state EXCLUDING this plugin's own recorded
+  // resources, exactly as `update` and `reinstall` already do -- re-installing
+  // your own plugin over your own record must not count as a cross-plugin
+  // conflict. Applied unconditionally: a fresh install has no record, so the
+  // exclusion is a no-op there; the enable path reaches this call through
+  // `runEnableBranch` and a disabled record now RETAINS its inventory
+  // (ENBL-18), so without the exclusion every enable of a plugin owning at
+  // least one skill, command or agent would self-conflict.
+  assertNoCrossPluginConflicts(
+    scope,
+    generatedNames,
+    removePluginRecord(state, marketplace, plugin),
+  );
 
   // PI-7 version precedence. D-54-01 / ENBL-02: `pinVersionOverride` (the
   // enable branch) always wins -- an enable re-materialization reuses the

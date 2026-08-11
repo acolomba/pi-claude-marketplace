@@ -391,10 +391,10 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// ENBL-02: disable preserves version pin + empties resources
+// ENBL-02 / ENBL-18: disable preserves the version pin AND the inventory
 // ──────────────────────────────────────────────────────────────────────────
 
-test("ENBL-02: disable preserves version pin and empties resources arrays", async () => {
+test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's resource inventory", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { statePath } = await writeUserState(home, {
       marketplaceName: "mp",
@@ -441,6 +441,7 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
                 prompts: string[];
                 agents: string[];
                 mcpServers: string[];
+                hooks: string[];
               };
               compatibility: { installable: boolean };
               installedAt: string;
@@ -454,10 +455,15 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
     assert.equal(rec.version, "9.9.9", "version pin preserved");
     assert.equal(rec.compatibility.installable, true, "installable flag preserved");
     assert.equal(rec.installedAt, "2026-01-01T00:00:00.000Z", "installedAt preserved");
-    assert.deepEqual(rec.resources.skills, [], "resources.skills emptied");
-    assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
-    assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
-    assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
+    // ENBL-18 / D-100-10: the whole `resources` block is deep-equal to the
+    // seeded record, element order included. The record describes what was
+    // INSTALLED, not what is currently on disk, so disabling changes `enabled`
+    // and `updatedAt` and nothing else.
+    assert.deepEqual(
+      rec.resources,
+      { skills: ["s1"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      "ENBL-18: disable retains the record's inventory verbatim",
+    );
     // ENBL-02: the explicit disabled marker must be written -- without this
     // assertion, a regression dropping `enabled = false` in runDisableBranch
     // would pass while isRecordedButDisabled silently breaks.
@@ -465,21 +471,37 @@ test("ENBL-02: disable preserves version pin and empties resources arrays", asyn
   });
 });
 
-// D-63-04: runDisableBranch must zero resources.hooks alongside the
-// other four axes. cascadeUnstagePlugin physically unstages hooks via
-// removeHookConfig, so leaving the in-memory hooks array populated
-// would create a state.json that lies about what is on disk -- and the
-// (now five-axis) isCurrentlyDisabled predicate would misclassify the
-// disabled record as installed on the next list call.
-test("D-63-04: disable of a hooks-only plugin empties resources.hooks", async () => {
+// ENBL-13 / ENBL-18 / D-100-04: artifact removal stays symmetric across all
+// five kinds -- cascadeUnstagePlugin still unstages hooks via removeHookConfig,
+// so hooks.json is gone from disk. What the record keeps is the DESCRIPTION of
+// what was installed, not the artifact: `resources.hooks` survives the disable
+// so `info` can still report the plugin's contents while it is disabled, and
+// even after its marketplace manifest entry disappears. The read-side disabled
+// predicate never consulted the arrays (state-io.ts), so nothing misclassifies.
+test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but retains resources.hooks", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const { statePath } = await writeUserState(home, {
+    const { statePath, scopeRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
       version: "9.9.9",
       hooksOnly: true,
     });
+    // Materialize the hooks artifact the record names, so the disk-side half
+    // of ENBL-13 is a real removal rather than an ENOENT-tolerant no-op.
+    const hooksJsonPath = path.join(
+      scopeRoot,
+      "pi-claude-marketplace",
+      "hooks",
+      "foo",
+      "hooks.json",
+    );
+    await mkdir(path.dirname(hooksJsonPath), { recursive: true });
+    await writeFile(
+      hooksJsonPath,
+      JSON.stringify({ PreToolUse: [{ hooks: [{ type: "command", command: "echo hi" }] }] }),
+      "utf8",
+    );
     const { ctx, notifications } = makeCtx(cwd);
     await setPluginEnabled({
       ctx,
@@ -523,11 +545,17 @@ test("D-63-04: disable of a hooks-only plugin empties resources.hooks", async ()
       >;
     };
     const rec = state.marketplaces.mp!.plugins.foo!;
-    assert.deepEqual(rec.resources.skills, [], "resources.skills emptied");
-    assert.deepEqual(rec.resources.prompts, [], "resources.prompts emptied");
-    assert.deepEqual(rec.resources.agents, [], "resources.agents emptied");
-    assert.deepEqual(rec.resources.mcpServers, [], "resources.mcpServers emptied");
-    assert.deepEqual(rec.resources.hooks, [], "resources.hooks emptied (D-63-04)");
+    assert.deepEqual(
+      rec.resources,
+      { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["foo"] },
+      "ENBL-18: the hooks-only inventory survives the disable verbatim",
+    );
+    // ENBL-13 / D-100-04: the artifact itself is gone.
+    await assert.rejects(
+      () => stat(hooksJsonPath),
+      /ENOENT/,
+      "ENBL-13: disable still unstages hooks.json from disk",
+    );
   });
 });
 

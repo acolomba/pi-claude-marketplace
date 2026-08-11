@@ -712,6 +712,43 @@ export function assertNoCrossPluginConflicts(
 }
 
 /**
+ * PI-6 cross-plugin guard helper. Returns a shallow-cloned state with the
+ * (marketplace, plugin) record removed -- so {@link assertNoCrossPluginConflicts}
+ * counts this plugin's OWN current resources as "not yet owned" and only
+ * catches conflicts against OTHER plugins.
+ *
+ * Shallow-clone discipline: deep-clone only the bytes the guard reads
+ * (marketplaces -> per-mp -> plugins map). Every other branch reference is
+ * shared, and the caller's state object is never mutated. This keeps the helper
+ * cheap on hot paths.
+ *
+ * Single implementation: the install, update and reinstall ledgers all consume
+ * this export. Two near-identical private copies once lived in `update.ts` and
+ * `reinstall.ts`; `sonarjs/no-identical-functions` is an error in this repo, so
+ * a third copy is not an option and the shared tier is the right home anyway.
+ */
+export function removePluginRecord(
+  state: ExtensionState,
+  marketplace: string,
+  plugin: string,
+): ExtensionState {
+  const cloned: ExtensionState = {
+    schemaVersion: state.schemaVersion,
+    marketplaces: { ...state.marketplaces },
+  };
+  const mp = cloned.marketplaces[marketplace];
+  if (mp === undefined) {
+    return cloned;
+  }
+
+  const newPlugins = { ...mp.plugins };
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- newPlugins is a Record<string,...> local to this helper.
+  delete newPlugins[plugin];
+  cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
+  return cloned;
+}
+
+/**
  * WB-01 / A7: deep-equal short-circuited plugin write-back shared by the
  * update and reinstall post-success paths. Loads the target config (base or
  * local per `--local`), compares the prospective patched entry against the

@@ -104,6 +104,7 @@ import {
   assertNoCrossPluginConflicts,
   MarketplaceNotAddedSignal,
   maybeWritePluginConfigBack,
+  removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
 } from "./shared.ts";
@@ -2031,25 +2032,4 @@ function clonePluginRecord(record: PluginRecord): PluginRecord {
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,
   };
-}
-
-function removePluginRecord(
-  state: ExtensionState,
-  marketplace: string,
-  plugin: string,
-): ExtensionState {
-  const cloned: ExtensionState = {
-    schemaVersion: state.schemaVersion,
-    marketplaces: { ...state.marketplaces },
-  };
-  const mp = cloned.marketplaces[marketplace];
-  if (mp === undefined) {
-    return cloned;
-  }
-
-  const plugins = { ...mp.plugins };
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- cloned record map is local to the guard helper.
-  delete plugins[plugin];
-  cloned.marketplaces[marketplace] = { ...mp, plugins };
-  return cloned;
 }

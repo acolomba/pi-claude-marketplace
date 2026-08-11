@@ -315,10 +315,11 @@ async function runEnableBranch(
 }
 
 /**
- * Run the disable branch: cascade-unstage artifacts via the existing
- * `cascadeUnstagePlugin` primitive, then reset `resources.*` to [] in place
- * (PRESERVING `version` / `resolvedSource` / `compatibility` / `installedAt`
- * per ENBL-02). Returns the outcome sentinel.
+ * Run the disable branch: cascade-unstage every artifact via the existing
+ * `cascadeUnstagePlugin` primitive, then flip the record to its disabled form
+ * (ENBL-02 / ENBL-18: `enabled: false` plus a fresh `updatedAt`, everything
+ * else -- `version` / `resolvedSource` / `compatibility` / `installedAt` /
+ * `resources` -- preserved). Returns the outcome sentinel.
  *
  * Parameters carry the REAL types (`ScopedLocations` and the state
  * record shape) so the `cascadeUnstagePlugin` call type-checks without
@@ -360,18 +361,21 @@ async function runDisableBranch(
     };
   }
 
-  // PRESERVE version / resolvedSource / compatibility / installedAt;
-  // RESET resources.*; SET enabled: false; BUMP updatedAt.
-  // D-63-04 / COMPONENT_KINDS 5-tuple: cascadeUnstagePlugin physically
-  // unstages hooks via removeHookConfig, so the disabled record's hooks
-  // array must be zeroed alongside the other four axes to stay consistent
-  // with what landed on disk.
-  // ENBL-02: `toDisabledRecord` is the sole sanctioned producer of the
-  // disabled shape -- its empty-tuple return type makes a disabled-but-
-  // populated record a compile error. The resources arrays stay zeroed for
-  // the convergence proof and any reader not yet migrated to the boolean
-  // check. The caller replaces the map slot with the returned record (rather
-  // than mutating in place) so the branded type survives to the assignment.
+  // SET enabled: false; BUMP updatedAt; PRESERVE everything else.
+  // ENBL-13 / D-100-04 / COMPONENT_KINDS 5-tuple: artifact removal stays
+  // symmetric across all five kinds -- the cascade above physically unstages
+  // hooks via removeHookConfig alongside skills, commands, agents and mcp.
+  // ENBL-18 / D-100-10: what the record retains is its DESCRIPTION of the
+  // installation, not the artifacts. The record answers "what does this plugin
+  // contain", which stays true while the plugin is disabled and stays
+  // answerable after the marketplace manifest drops the entry; it was never a
+  // mirror of the current disk contents. Nothing reads emptiness as the
+  // disabled marker -- `isRecordedButDisabled` reads the boolean alone.
+  // ENBL-02: `toDisabledRecord` is the sole sanctioned producer of the disabled
+  // shape -- its `resources: R` passthrough makes changing the inventory a
+  // compile error there. The caller replaces the map slot with the returned
+  // record (rather than mutating in place) so the type survives to the
+  // assignment.
   const disabled = toDisabledRecord(installed, new Date().toISOString());
 
   // The cascade unstaged the on-disk hooks.json via removeHookConfig;
