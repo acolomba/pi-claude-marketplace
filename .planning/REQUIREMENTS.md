@@ -12,7 +12,7 @@
 - [x] **INV-01**: In the default plugin list, an enabled fully supported installation record whose name is absent from a successfully loaded marketplace manifest appears under that marketplace as `● <plugin> v<recorded-version> (installed) {not in manifest}`.
 - [x] **INV-02**: An enabled installation record with one or more persisted `compatibility.unsupported` kinds retains the existing `(partially-installed)` status and unsupported-kind reasons, with `not in manifest` added first. Manifest-absent partial records are already classified from `compatibility.unsupported` alone, which is manifest-independent, so they are neither flattened to `(installed)` nor omitted today; adding the reason is the only change. Pin the existing classification with a characterization test before touching it.
 - [x] **INV-03**: `plugin list --installed` includes both fully installed and partially-installed manifest-absent records. This already holds; the requirement is regression coverage, not new behavior.
-- [x] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true` -- because the partial-disabled shape is not recognized as disabled by any surface until ENBL-05 repairs the predicate in Phase 97. Do not pin the current partial-disabled rendering as correct here; ENBL-06 widens this coverage after the repair.
+- [x] **INV-04**: A disabled installation record absent from a successfully loaded manifest remains `(disabled)` without a `{not in manifest}` reason. Scope is the canonical disabled shape only -- `enabled: false` with `compatibility.installable: true` -- because the partial-disabled shape is not recognized as disabled by any surface until ENBL-05 repairs the predicate in Phase 97. Do not pin the current partial-disabled rendering as correct here; ENBL-06 widens this coverage after the repair. **SUPERSEDED by ENBL-16 (Phase 100).** ENBL-16 reverses the no-reason clause: a disabled manifest-absent record now renders the `{not in manifest}` reason on both `list` and `info`, because manifest absence is what blocks re-enabling the plugin. The remainder of INV-04 still holds -- the record stays `(disabled)`, and no other reason may join that row.
 - [x] **INV-05**: The LLM tool surface forwards reasons for `installed` and `partially-installed` rows, joining the `unavailable` / `partially-available` / `upgradable` set already handled by `pluginReasons`. Without it, `{not in manifest}` renders on the slash command and silently vanishes from the tool payload. This also closes a pre-existing loss unrelated to manifest absence: `projectRowStatus` already flattens `installed`, `upgradable`, `partially-installed`, and `partially-upgradable` into a single `installed` tool status, so a degraded install is today indistinguishable from a clean one and its unsupported-kind reasons are discarded. `PluginPartiallyInstalledMessage.reasons` is required and drops in cleanly; `PluginInstalledMessage.reasons` is optional and needs an undefined guard before the length check. Adds no status token, reason token, glyph, state field, migration, or network path, so COMPAT-01 continues to hold. (Entered scope 2026-08-08 by operator decision at Phase 95 discuss, reversing the same-milestone exclusion; rationale D-95-06 / D-95-07.)
 
 ### Plugin Information
@@ -61,6 +61,29 @@ Repairing the predicate is a read-time change, so records already on disk in the
 unrecognized shape are reclassified correctly on the next load with no state
 migration, no schema-version bump, and no persisted change.
 
+### Disabled-Plugin Information Retention
+
+Disabling a plugin deregisters its resources from Pi without discarding the
+installation record's description of them, so `info` on a disabled plugin reports
+what the plugin contains -- including when the marketplace manifest no longer
+declares it -- while still reporting the plugin as disabled.
+
+- [x] **ENBL-10**: The installation record carries a new top-level **optional** key holding the plugin's supported hook entries. Additive, no `schemaVersion` bump, a legacy record without it loads unchanged, no migrate fill.
+- [x] **ENBL-11**: The persisted payload is the **supported** entries only (event plus matcher), at byte parity with today's rendered hooks line.
+- [x] **ENBL-12**: `info` reads hook entries from the record when the key is present and falls back to the materialized-file read when it is absent.
+- [x] **ENBL-13**: Disable continues to unstage all five artifact kinds, hook configuration included; only the record's description is retained.
+- [x] **ENBL-14**: Hook hydration skips a record the disabled-state predicate reports disabled, so a disabled plugin's hooks do not re-register on reload.
+- [x] **ENBL-15**: A disabled row on `list` renders byte-identically to today: no soft-dependency marker, whatever the record's retained inventory holds.
+- [ ] **ENBL-16**: A disabled row may carry `{not in manifest}` and no other reason, on both `list` and `info`. **Supersedes INV-04.** The reason is load-bearing: `plugin enable` re-runs the install ledger, which resolves from the marketplace manifest, so a disabled manifest-absent record cannot be re-enabled and the bare row gave no warning before the attempt. The `list` half has landed; the `info` half rides with the ENBL-17 reroute.
+- [ ] **ENBL-17**: `info` on a disabled record routes through the shared block builder, reporting description and components; the `{already disabled}` fetch-skip note survives.
+- [x] **ENBL-18**: Disable preserves the record's inventory exactly; the producer type makes any change to it a compile error.
+- [x] **ENBL-19**: Enabling a disabled plugin does not self-conflict against its own retained resource names.
+
+The governing rule these rows record for future authors, a refinement of D-95's
+durable-versus-transient guidance: render durable facts that constrain what the
+user can do next; suppress facts about runtime behavior that is currently
+suspended.
+
 ### Compatibility and Documentation
 
 <!-- DOC numbering continues from v1.17 (DOC-06/07). -->
@@ -108,6 +131,16 @@ Which phases cover which requirements.
 | ENBL-07 | Phase 97 | Complete |
 | ENBL-08 | Phase 97 | Complete |
 | ENBL-09 | Phase 97 | Complete |
+| ENBL-10 | Phase 100 | Complete |
+| ENBL-11 | Phase 100 | Complete |
+| ENBL-12 | Phase 100 | Complete |
+| ENBL-13 | Phase 100 | Complete |
+| ENBL-14 | Phase 100 | Complete |
+| ENBL-15 | Phase 100 | Complete |
+| ENBL-16 | Phase 100 | In progress (list half complete) |
+| ENBL-17 | Phase 100 | Pending |
+| ENBL-18 | Phase 100 | Complete |
+| ENBL-19 | Phase 100 | Complete |
 | LIFE-04 | Phase 98 | Complete |
 | LIFE-05 | Phase 98 | Complete |
 | LIFE-06 | Phase 98 | Complete |
@@ -116,11 +149,11 @@ Which phases cover which requirements.
 
 **Coverage:**
 
-- v1 requirements: 22 total
-- Mapped to phases: 22
+- v1 requirements: 32 total
+- Mapped to phases: 32
 - Unmapped: 0 ✓
 
-Eight of the twenty-two -- INV-02, INV-03, INV-04, BOUND-01, BOUND-02, LIFE-04,
+Eight of the original twenty-two -- INV-02, INV-03, INV-04, BOUND-01, BOUND-02, LIFE-04,
 LIFE-05, LIFE-06 -- describe behavior the code already exhibits. They are carried
 as requirements because they are contracts this milestone must not break, and
 their deliverable is characterization and regression coverage rather than new
@@ -132,10 +165,22 @@ shipped requirement (ENBL-04) that the partial-install feature silently broke.
 They entered scope on 2026-08-07 by operator decision, after being recorded as
 out of scope earlier the same day.
 
+ENBL-10 through ENBL-19 entered scope on 2026-08-11 by operator decision. They
+extend the milestone's manifest-independence goal to disabled records: the
+installation record has to keep describing what a plugin installed, because a
+manifest that later drops the entry leaves nothing else able to answer. ENBL-16
+supersedes INV-04, and ENBL-19 covers a hazard no earlier decision anticipated --
+retaining the record's resource names makes `plugin enable` conflict against the
+plugin's own record unless the install ledger's cross-plugin guard excludes it.
+
 ---
 
 _Requirements defined: 2026-08-07_
-_Last updated: 2026-08-08 by quick task 260808-dhm: added INV-05 (LLM tool-surface
+_Last updated: 2026-08-11 during Phase 100: added ENBL-10 through ENBL-19
+(disabled-plugin information retention) and marked INV-04 superseded by ENBL-16
+(32/32 requirements mapped)_
+
+_Previously: 2026-08-08 by quick task 260808-dhm: added INV-05 (LLM tool-surface
 reason widening) per the Phase 95 discuss decision D-95-06, and replaced the
 corresponding Out of Scope row with the narrower "no `info` tool" exclusion
 (22/22 requirements mapped)_

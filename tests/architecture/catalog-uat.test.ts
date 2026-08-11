@@ -699,6 +699,35 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // ENBL-16 / D-100-07: the disabled inventory row carries `not in manifest`
+    // -- and no other reason. The stamp is an orchestrator decision made at the
+    // inventory site, so the fresh-disable transition row (which stamps
+    // nothing) keeps rendering bare. `piWithBothLoaded` is not what suppresses
+    // the soft-dep markers here: the renderer passes both soft-dep flags as
+    // `false` for this variant whatever the probe reports (ENBL-15).
+    "disabled-inventory-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "disabled",
+                name: "foo-plugin",
+                version: "1.2.3",
+                reasons: ["not in manifest"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
     // git-source plugin whose clone/mirror is not materialized locally. The
     // `(remote)` closed-set token wears the dedicated `◌` glyph. Bare row --
