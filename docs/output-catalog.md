@@ -1545,7 +1545,7 @@ ______________________________________________________________________
 
 Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{not added}` missing-marketplace, `{not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 ### Success -- installed single scope
 
@@ -1631,7 +1631,7 @@ The installation record names a hooks container, but the materialized configurat
 
 ### Warning -- the requested fetch was skipped (D-96-04)
 
-The user gives `--fetch`, the marketplace manifest loads, the manifest does not declare the plugin, and an installation record exists. There is no manifest entry, thus there is no source to fetch from, and the command fetches nothing. This note tells the user that the flag did not run. The info block shows beside this note, and its bytes are the same as those of a bare run. The row uses the `(skipped) {not in manifest}` form that `update` already emits. This is one of the two causes of a `warning` on this surface. The other is `disabled-fetch-skipped` below. A run that hits both causes shows `mixed-fetch-skipped`, which composes the two. The note is a SECOND notification, because the standalone info row cannot hold a `skipped` status. The disabled inventory row above breaks IL-2 in the same manner and for the same reason. A bare run and a plugin that the manifest DOES declare show no note. Severity `warning`; no reload-hint (read-only surface).
+The user gives `--fetch`, the marketplace manifest loads, the manifest does not declare the plugin, and an installation record exists. There is no manifest entry, thus there is no source to fetch from, and the command fetches nothing. This note tells the user that the flag did not run. The info block shows beside this note, and its bytes are the same as those of a bare run. The row uses the `(skipped) {not in manifest}` form that `update` already emits. This is one of the two causes of a `warning` on this surface. The other is `disabled-fetch-skipped` below. A run that hits both causes shows `mixed-fetch-skipped`, which composes the two. The note is a SECOND notification, because the standalone info row cannot hold a `skipped` status. The `(disabled)` inventory row needs no second notification of its own: it renders inside the info block (ENBL-17). Thus a run with one disabled scope and one state-only scope emits two notifications, and not three. A bare run and a plugin that the manifest DOES declare show no note. Severity `warning`; no reload-hint (read-only surface).
 
 Header note: this note uses the LIST-arm marketplace header, which shows the `<autoupdate>` marker only when autoupdate is on, and shows no marker at all when it is off. The standalone info block always spells one of `<autoupdate>` / `<no autoupdate>`. Thus, when autoupdate is off, one run shows two different headers for the same marketplace and scope: `● mp [user] <no autoupdate>` on the info block and `● mp [user]` on this note. The marker still agrees with the info block, because it shows in exactly the conditions in which the info block reports autoupdate as on. This difference is a property of the two header arms and is recorded here on purpose.
 
@@ -1646,7 +1646,7 @@ A plugin operation needs attention.
 
 ### Warning -- the requested fetch was skipped for a disabled plugin (D-96-04)
 
-The user gives `--fetch` and at least one found scope holds the recorded-but-disabled marker. A disabled plugin has no materialized artifacts (ENBL-02), thus there is nothing to refresh for that scope. The command emits the note per disabled scope, and one notification carries all of the rows in project-first scope order (MSG-GR-3). If EVERY found scope is disabled, the command returns before any probe runs, thus without this note the run shows bytes that are the same as those of a bare run. If only some of the found scopes are disabled, the note shows beside the info block of each other scope. Each of those other scopes fetches only if the manifest declares its plugin. A scope whose installation record outlived its manifest entry fetches nothing (INFO-12), and adds its own `{not in manifest}` row to this same note. The reason token is different from the state-only note above because the cause is different: the plugin is disabled, and the manifest can still declare it. The `(disabled)` inventory block shows before this note and keeps its own `info` severity. A bare run on the same input shows no note. Severity `warning`; no reload-hint (read-only surface).
+The user gives `--fetch` and at least one found scope holds the recorded-but-disabled marker. A disabled plugin has no materialized artifacts (ENBL-02), thus there is nothing to refresh for that scope. The command emits the note per disabled scope, and one notification carries all of the rows in project-first scope order (MSG-GR-3). If EVERY found scope is disabled, no probe runs at all, thus without this note the run would show bytes that are the same as those of a bare run. If only some of the found scopes are disabled, the note shows beside the info block of each other scope. Each of those other scopes fetches only if the manifest declares its plugin. A scope whose installation record outlived its manifest entry fetches nothing (INFO-12), and adds its own `{not in manifest}` row to this same note. The reason token is different from the state-only note above because the cause is different: the plugin is disabled, and the manifest can still declare it. The `(disabled)` inventory block shows before this note and keeps its own `info` severity. A bare run on the same input shows no note. Severity `warning`; no reload-hint (read-only surface).
 
 <!-- catalog-state: disabled-fetch-skipped -->
 
@@ -1659,7 +1659,9 @@ A plugin operation needs attention.
 
 ### Warning -- one run skips the fetch for both causes (D-96-04)
 
-The two causes above can occur in one run: one found scope holds the disabled marker, and another holds a record that the manifest does not declare. One notification carries both rows in project-first scope order (MSG-GR-3). Each row keeps the reason token of its own cause, and each scope keeps its own marketplace header. The summary line takes the plural form, because the note now accounts for two rows. This state is the composition of the two states above, and not a third cause of a skipped fetch. Severity `warning`; no reload-hint (read-only surface).
+The two causes above can occur in one run. The example below shows the usual arrangement: one found scope holds the disabled marker, and a different scope holds a record that the manifest does not declare. One notification carries both rows in project-first scope order (MSG-GR-3). Each row keeps the reason token of its own cause, and each scope keeps its own marketplace header. The summary line takes the plural form, because the note now accounts for two rows. This state is the composition of the two states above, and not a third cause of a skipped fetch. Severity `warning`; no reload-hint (read-only surface).
+
+The two causes do not always occur in different scopes. ONE scope can hold both: a disabled record that the manifest no longer declares. That scope emits ONE row, and the row names the disabled cause. Each scope reports one skip reason, and the disabled cause wins, thus two rows for one scope cannot occur. The two facts still show, but in different places, and the split follows one rule: this note tells the user why the fetch did nothing, and the inventory row above it tells the user what limits the next action. Thus such a scope shows `⊘ alpha v1.0.0 (skipped) {already disabled}` in this note, and `◍ alpha v1.0.0 (disabled) {not in manifest}` in the info block.
 
 <!-- catalog-state: mixed-fetch-skipped -->
 
@@ -1700,9 +1702,36 @@ Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-so
     components: not resolved
 ```
 
-### Disabled inventory row (D-54-01 / ENBL-04)
+### Disabled inventory row (D-54-01 / ENBL-04 / ENBL-17)
 
-The `info` surface conveys a recorded-but-disabled plugin via the SAME `(disabled)` token used by the list surface (see [`## /claude:plugin list`](#claudeplugin-list) `disabled-inventory` catalog state). The orchestrator renders through the cascade path (list-arm marketplace header + `PluginDisabledMessage` row) rather than the `PluginInfoMessage` standalone variant -- a disabled plugin has no materialized artifacts (ENBL-02), so the per-kind component/dependencies block would be misleading. Severity `info`; no reload-hint. Byte form: see the list section's `disabled-inventory` state.
+The `info` surface conveys a recorded-but-disabled plugin via the SAME `(disabled)` token the list surface uses (see [`## /claude:plugin list`](#claudeplugin-list) `disabled-inventory` catalog state). That the row reports the plugin as disabled is preserved behavior, not new behavior.
+
+What is new is the path. The orchestrator renders this row through the standalone `PluginInfoMessage` variant, and through the same block builder that every other installation record uses (ENBL-17). Earlier releases sent it through the cascade path (list-arm marketplace header + `PluginDisabledMessage` row) and showed no component block. Thus this row now carries lines the list-surface row does not: a description when the manifest supplies one, and the per-kind component inventory, which the disable preserves (ENBL-18).
+
+A manifest that still declares the plugin supplies the description and the components, exactly as it does for a not-installed plugin, and the row carries no reason brace. A manifest that no longer declares it sends every line to the installation record; for that byte form see the state below. Severity `info`; no reload-hint.
+
+### Success -- disabled from the installation record (ENBL-16 / ENBL-17)
+
+The state record carries the explicit `enabled: false` marker (ENBL-05), and the marketplace manifest loads correctly but does not declare the plugin. Every line comes from the installation record. The manifest declares nothing about this plugin, and the disable deleted the materialized artifacts (ENBL-02), thus neither can supply a line. Disable preserves the record's component inventory (ENBL-18), and that inventory is what this state reports.
+
+The hook entries come from the record's `hookEntries` key. For a disabled plugin this key is the ONLY source, because the materialized hooks configuration that the enabled states above read is gone. A record written before the key existed shows no `hooks:` line, because there is no file left to fall back to (D-100-03).
+
+No description line and no dependencies line show. The manifest is the only source of both, and this state does not reconstruct them -- the same limit that the `state-only-installed-single-scope` state above records.
+
+`{not in manifest}` is the only reason this row can carry, which is the rule the list surface applies to its own disabled row (ENBL-16 / D-100-07). A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden here too, and the soft-dependency markers cannot appear (ENBL-15 / D-100-06). The governing rule: report the durable facts that limit what the user can do next, and hide the facts about runtime behavior that the disable suspended. `/claude:plugin enable` re-runs the install ledger against the manifest, thus manifest absence stops the user from enabling the plugin again. A dropped component kind describes a runtime that is not running, thus it stays hidden until the plugin runs again.
+
+Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-disabled-with-components -->
+
+```text
+● mp [user] <no autoupdate>
+  ◍ alpha v1.0.0 (disabled) {not in manifest}
+    hooks:
+      SessionStart
+      PostToolUse(Read)
+    skills: alpha-skill
+```
 
 ### Success -- unavailable single scope
 

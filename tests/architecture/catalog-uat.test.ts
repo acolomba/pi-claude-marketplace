@@ -2907,6 +2907,7 @@ const FIXTURES: FixtureMap = {
   //     * state-only-partially-installed-single-scope  (INFO-10 record-backed partial)
   //     * state-only-installed-with-hooks              (INFO-11 materialized hooks block)
   //     * state-only-installed-hooks-degraded          (D-96-03 unlistable hooks marker)
+  //     * state-only-disabled-with-components          (ENBL-17 disabled record, retained inventory)
   //     * available-single-scope                       (INFO-02 available bucket)
   //     * unavailable-single-scope                     (INFO-02 unavailable + {unsupported hooks})
   //   - Warning states:
@@ -3049,6 +3050,34 @@ const FIXTURES: FixtureMap = {
           reasons: ["not in manifest", "source missing"],
           componentsResolved: true,
           components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    // ENBL-16 / ENBL-17: a recorded-but-disabled record the manifest no longer
+    // declares. `status: "disabled"` on a `PluginInfoRow` is what the reroute
+    // added: the row travels the shared block builder, so it carries the
+    // component inventory the disable preserved (ENBL-18) and the hook entries
+    // the record holds -- the materialized configuration is gone. `reasons`
+    // carries the absence token ALONE: a persisted unsupported kind would be
+    // suppressed on this row (ENBL-16 / D-100-07), so no fixture can show one.
+    "state-only-disabled-with-components": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "disabled",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            hooks: [{ event: "SessionStart" }, { event: "PostToolUse", matcher: "Read" }],
             skills: ["alpha-skill"],
           },
         },
