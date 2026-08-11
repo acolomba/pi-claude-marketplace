@@ -1204,6 +1204,45 @@ test("ENBL-16 / ENBL-17: a disabled, manifest-absent record lists its recorded h
   });
 });
 
+// ENBL-16 / D-100-07 / D-96-03: the failure class SURVIVES the disabled row's
+// reason narrowing. The suppression rule is "hide the runtime the disable
+// suspended", and a container the command could not read is not that: it is a
+// fact about disk, and the enabled twin of this fixture
+// (`state-only-installed-hooks-degraded`) reports it. The record names a hooks
+// container, carries no `hookEntries`, and no materialized configuration exists
+// -- so the read fails and the row must say so. Without the reason the row
+// renders bare, and silence there reads as verified absence of hooks, which is
+// exactly the conflation the discriminated read result exists to prevent.
+test("ENBL-16 / D-96-03: a DISABLED record whose recorded hooks container cannot be listed keeps the read reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", disabled: true, resources: { hooks: ["alpha"] } },
+      },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined, "a disabled record is not a failure");
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ alpha v1.0.0 (disabled) {not in manifest, source missing}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
 // The still-declared control for the disabled arm, the twin of the INFO-09
 // boundary above. The manifest DECLARES this disabled plugin, so the row
 // resolves from the manifest and carries no absence brace. This is what proves

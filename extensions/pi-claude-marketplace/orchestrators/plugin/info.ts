@@ -928,10 +928,29 @@ function wrapBlock(
 }
 
 /**
- * ENBL-16 / D-100-07: the only reason a disabled row may carry, on this surface
- * and on the list surface alike.
+ * ENBL-16 / D-100-07: the reasons a disabled row may carry.
+ *
+ * Manifest absence plus the failure class, and nothing else. Both halves answer
+ * the same question -- what stops the user's next action -- because `enable`
+ * re-runs the install ledger against the marketplace entry and its source: a
+ * name the manifest no longer declares has nothing to resolve, and a source
+ * that cannot be read has nothing to materialize. The unsupported-kind tokens
+ * and the soft-dependency markers are excluded because they describe a runtime
+ * the disable suspended, and they return on their own once the plugin is
+ * enabled again.
+ *
+ * `unparseable` and `invalid manifest` are deliberately absent: both name a
+ * marketplace-manifest defect, and a block that could not read its manifest
+ * never reaches this shape (arm (a) returns first).
  */
-const DISABLED_ROW_REASON: ContentReason = "not in manifest";
+const DISABLED_ROW_REASONS: ReadonlySet<ContentReason> = new Set<ContentReason>([
+  "not in manifest",
+  "source missing",
+  "unreadable",
+  "permission denied",
+  "network unreachable",
+  "authentication required",
+]);
 
 /**
  * D-100-08 / ENBL-16 / ENBL-17: the disabled row's shape. Applied at every arm
@@ -949,14 +968,20 @@ const DISABLED_ROW_REASON: ContentReason = "not in manifest";
  * `partially-installed`, so an un-injected disabled record would tell the user
  * a suspended plugin is running.
  *
- * The reason brace narrows to at most `{not in manifest}`. `enable` re-runs the
- * install ledger, which resolves the plugin from the marketplace manifest, so
- * manifest absence is exactly a fact that blocks the user's next action and it
- * stays. A dropped component kind and an unlistable hooks configuration
- * describe a runtime that is not running; they stay hidden until the plugin is
- * re-enabled, at which point the enabled row reports them again. The `list`
- * surface narrows the same way, in `list.ts::disabledReasonsField`, so the two
- * surfaces render one disabled record identically.
+ * The reason brace narrows to `DISABLED_ROW_REASONS` -- manifest absence and
+ * the failure class. `enable` re-runs the install ledger, which resolves the
+ * plugin from the marketplace manifest and reads its source, so both kinds of
+ * fact block the user's next action and both stay. A dropped component kind and
+ * a soft-dependency marker describe a runtime that is not running; they stay
+ * hidden until the plugin is re-enabled, at which point the enabled row reports
+ * them again.
+ *
+ * Parity with `list.ts::disabledReasonsField` holds for every input the list
+ * surface can express: that builder reads the record alone and runs no probe,
+ * so manifest absence is the only reason it ever HAS. This surface additionally
+ * reads disk, so it can name a read failure the list surface never learns
+ * about; suppressing it here would not buy agreement, it would only drop the
+ * one fact the extra read produced.
  */
 function applyDisabledRowShape(
   row: PluginInfoRow,
@@ -969,7 +994,7 @@ function applyDisabledRowShape(
   return {
     ...row,
     status: "disabled",
-    reasons: (row.reasons ?? []).filter((reason) => reason === DISABLED_ROW_REASON),
+    reasons: (row.reasons ?? []).filter((reason) => DISABLED_ROW_REASONS.has(reason)),
   };
 }
 
