@@ -2,6 +2,52 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.18 -- Manifest-Independent Installed Plugin Info
+
+**Shipped:** 2026-08-12 (npm 0.14.0, PR #120)
+**Phases:** 6 (95-100) | **Plans:** 29 | **Tasks:** 64 | **Requirements:** 32/32 | **Tests:** 3386 unit + 18 integration green, plus live human UAT on Pi 0.84.1 | **Audit:** passed (6/6 phases, 5/5 integration seams, 3/3 flows, `threats_open: 0`)
+
+### What Was Built
+- Manifest-independent inventory: `list` states `{not in manifest}` on installed and degraded rows whose marketplace no longer declares them, judged through a `ManifestLookup` discriminated value that keeps "read failed" distinguishable from "read fine, entry missing", so a failed read never claims absence. The LLM tool surface forwards reasons on all four installed-family arms.
+- Record-backed `info`: falls through to the installation record when a valid manifest lacks the entry, reconstructing the component inventory locally and reading hooks from a new additive `hookEntries` record key (materialized file kept as legacy fallback). When it cannot read them, the `hooks:` line disappears in favor of a closed-set reason.
+- Disabled-state repair: four independently-drifting copies of `installable && !enabled` collapsed onto one `enabled`-keyed predicate in `persistence/state-io.ts`, under a whole-tree drift gate covering the destructured, bracket-access and `Boolean()`-coercion spellings. `enable` re-materializes a partial through the partially-available ledger arm; backfill is a fixed point for disabled records.
+- Disabled-plugin information retention (Phase 100, added mid-milestone): disable keeps the record's inventory and drops only artifacts, so a disabled plugin keeps describing itself.
+- Lifecycle pins and the COMPAT-01 no-expansion architecture test: four closed sets by enumeration equality, seven glyph code points with an eighth-glyph tripwire, the record's key set, the schema-version union, and the network clause.
+
+### What Worked
+- **Characterize first, then change.** Phases 95 and 98 established that much of the target behavior already held and converted it into characterization tests, so the production diffs stayed small and the regressions that mattered were pinned before anything moved.
+- **The root-cause write-up in Phase 97 generalized past its own bug.** The finding — a guard whose two conditions have silently become mutually exclusive is *worse* than a redundant one, because it excludes exactly one reachable shape and reports no error — is now a knowledge-base entry, and it directly predicted Phase 100's ENBL-04 retirement.
+- **Inverting the drift gate.** Phase 97 changed the guard's question from "does the twin have the right body" to "no twin survives", which is the form that actually blocks a fifth copy. Phase 99 extended it to three non-global spellings, each proven TRUE on its twin and FALSE on a legitimate predicate call.
+- **Phase 99 re-measured instead of trusting the carried table.** The coverage question had been filed in June against a 49.7% capture; a fresh run showed the module at 100%. Re-deriving the premise turned a planned exclusion decision into a non-question and narrowed the remaining work to seven genuinely reachable arms.
+- **Extending the milestone beat opening a new one.** Phase 100 was added 2026-08-11 rather than deferring retention to v1.19, which kept the ENBL-04 retirement in the same milestone as the ENBL-05 collapse that made it safe.
+
+### What Was Inefficient
+- **The 2026-08-11 audit went stale the same day it ran.** It returned `passed` over Phases 95-99; Phase 100 was added hours later, forcing a full re-audit on 2026-08-12. Auditing before the phase list is frozen buys nothing.
+- **Phase 100 shipped without a SECURITY.md while its five siblings each had one** — caught by the audit as `tech_debt`, then closed by an amendment (16/16 threats, `threats_open: 0`). The finding was right and its stated premise was wrong, which cost a second pass to sort out.
+- **VALIDATION.md left in `draft` again**, now on Phases 99 and 100 — the same recurring miss as v1.15's Phase 86, v1.16's Phases 88/89 and v1.17's Phase 90. Coverage is real; `/gsd-validate-phase` simply never ran to promote the file. Four milestones is a pattern, not an accident.
+- **A deferred item sat open for the whole milestone for want of one command.** The two pi-subagents integration tests failed locally from Phase 95 onward against a global peer at 0.24.3 (floor `>=0.35.0`). The fix was `npm i -g pi-subagents@latest`, and it took until the milestone-close audit to run it. The suite went 16/18 → 18/18 with no source change.
+- **The pre-close artifact audit surfaced eight items, six of which were scanner artifacts** — a knowledge base counted as an open debug session, a UAT reading `passed` where the terminal vocabulary is `{complete, resolved}`, two quick-task summaries missing a `status:` field. Real signal was outnumbered 3:1 by bookkeeping.
+
+### Patterns Established
+- **One question, one answering site, one gate against the second copy.** Phase 99 consolidated "does this manifest declare this plugin" into a single authority with a source walk standing between the tree and a fourth copy — the same shape as Phase 97's predicate collapse. When a fact is rendered on several surfaces, the anti-drift gate is part of the fix, not a follow-up.
+- **A discriminated value where a boolean would lose information.** `ManifestLookup` exists because "no entry" and "no answer" are different claims and a boolean cannot hold both.
+- **Additive-optional over migration.** `hookEntries` landed as an optional top-level key with the old read path as fallback, so a record gained self-description with no schema bump and no migration.
+- **Silence must be falsifiable.** Where `info` cannot read hooks, it says so with a closed-set reason instead of omitting the line, so an absence is never indistinguishable from a verified empty.
+
+### Key Lessons
+1. **Audit after the phase list is frozen.** A milestone audit is a snapshot; adding a phase invalidates it entirely. Freeze scope, then audit.
+2. **When a field's meaning shifts, re-audit every predicate that reads it — not just the ones the change touched.** `installable: false` went from "soft-degraded" to "also partially installed", and the four predicates that had encoded the old meaning stayed green while going silently wrong.
+3. **Re-measure a carried premise before acting on it.** The coverage todo's numbers were two months old and the module in question had reached 100% in the interim.
+4. **An environment-only deferral is still a deferral.** "Not a code defect" is a correct classification and a bad reason to leave a red suite red for six days.
+5. **`/gsd-validate-phase` needs to be part of phase close, not a separate intention.** Four consecutive milestones have shipped with at least one VALIDATION.md in `draft`.
+
+### Cost Observations
+- Model mix: opus-weighted (`model_profile: quality`), `mode: yolo` throughout
+- Phases: 6 over 6 days (2026-08-07 → 2026-08-12), 306 commits on the branch
+- Notable: three phases ran multi-iteration review-fix loops to `all_fixed` (97, 98, 99), with findings deliberately carried forward as named riders rather than fixed out of scope — Phase 97's four carriers all landed in Phase 98
+
+---
+
 ## Milestone: v1.17 -- env-parity
 
 **Shipped:** 2026-08-05 (target npm 0.13.0; release pending PR #115 merge)
@@ -558,6 +604,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.2 | 2 | Pure desired-state planning boundary (D-28); both-scope default with explicit-scope override |
 | v1.3 | 5 | Drift contract via YAML frontmatter; byte-equality catalog UAT; atomic user-contract supersession commits |
 | v1.12 | 6 | Declarative desired-state config + load-time reconciliation; architecture-test ratchets (write-seams, cast allow-list, planner purity) |
+| v1.18 | 6 | Characterize-then-change phasing; predicate collapse behind an inverted drift gate ("no twin survives"); milestone extended mid-flight rather than opening a successor |
 
 ### Cumulative Quality
 
@@ -568,9 +615,11 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.2 | ~1000 | Catalog-UAT fixture pattern seeded |
 | v1.3 | 1249/1249 | Byte-equality catalog UAT + 34-rule MSG-* drift-guard plugin; v1.3 user-contract structurally enforced |
 | v1.12 | 1804 + 10 int | Config/state split architecture-tested; two-process reconcile race coverage; 5 review criticals fixed pre-ship |
+| v1.18 | 3386 + 18 int | COMPAT-01 no-expansion gate (closed sets, glyph roster, record key set, schema union, network clause) in one test; whole-tree predicate drift gate covering four spellings |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. **Spec-then-refactor beats refactor-and-spec.** v1.3 Phase 12 (foundations) before Phase 13 (refactor) mirrored v1.0 Phase 2 (primitives) before Phases 3-7 (consumers). The "load-bearing primitive lands first" pattern has now shipped across 4 milestones.
 2. **Atomic transaction boundaries are non-negotiable.** v1.1's `withLockedStateTransaction` and v1.3's `c4d87d4` supersession commit both ship as single atomic units. Any cross-file user-contract change that can't fit in one commit is a design smell.
-3. **Discriminated unions catch design errors at the type level.** NFR-7's `installable: true | false` (v1.0), `failureClass: "manual-recovery" | "rollback-partial" | ...` (v1.3), and `PluginCascadeRow.declaresAgents/Mcp` (v1.3) all use the same pattern: a closed set discriminant where consumers can't read forbidden fields without narrowing.
+3. **Discriminated unions catch design errors at the type level.** NFR-7's `installable: true | false` (v1.0), `failureClass: "manual-recovery" | "rollback-partial" | ...` (v1.3), `PluginCascadeRow.declaresAgents/Mcp` (v1.3), and `ManifestLookup` (v1.18) all use the same pattern: a closed-set discriminant where consumers can't read forbidden fields without narrowing — and in v1.18's case, where a boolean would have collapsed "no entry" and "no answer" into one wrong claim.
+4. **A duplicated predicate drifts; the gate must forbid the copy, not audit it.** v1.18 Phase 97 collapsed four copies of a disabled-state check and replaced a "does the twin have the right body" test with "no twin survives" — the only form that blocks a fifth. The generalizable half: when a field's meaning shifts, every predicate reading it needs re-auditing, because a guard whose conditions have become mutually exclusive excludes exactly one reachable shape and reports no error.
