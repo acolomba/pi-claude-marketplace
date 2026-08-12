@@ -208,8 +208,13 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
   partiallyInstalledRow(p, mpScope, probe);
 
 /**
- * `(disabled)` -- realized disable inventory row. NO reasons / dependencies.
- * Lifted verbatim from the central `renderPluginRow` `disabled` arm.
+ * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
+ * the central `renderPluginRow` `disabled` arm, including its ENBL-16 /
+ * D-100-07 reason threading: reconcile's producer stamps no reason today (the
+ * row reports a transition it just carried out), so this passes an absent field
+ * through and the brace collapses, but a reason a later producer stamps cannot
+ * be dropped here without a byte change anyone can see. Both soft-dep flags
+ * stay hard-coded false (ENBL-15 / D-100-06).
  */
 const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
   joinTokens([
@@ -218,7 +223,7 @@ const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(disabled)",
-    composeReasons(undefined, false, false, probe),
+    composeReasons(p.reasons, false, false, probe),
   ]);
 
 /**

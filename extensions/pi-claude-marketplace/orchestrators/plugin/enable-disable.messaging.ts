@@ -91,8 +91,16 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
 
 /**
  * Render map total over disable's OWN statuses (D-10). The `disabled` arm uses
- * the dedicated `ICON_DISABLED` glyph and carries no reasons (a disabled plugin
- * is in the requested state, not a failure state).
+ * the dedicated `ICON_DISABLED` glyph.
+ *
+ * ENBL-16 / D-100-07: the row's `reasons` are THREADED, as in the two sibling
+ * arms (`notify.ts`'s central `disabled` arm and `list.messaging.ts`). This
+ * command's producer stamps none today -- a fresh disable reaches the requested
+ * state, so there is nothing to report and the brace collapses -- so the
+ * threading changes no byte now and cannot silently drop a reason a later
+ * producer stamps. Both soft-dep flags stay hard-coded false, which keeps a
+ * disabled row free of a soft-dep marker whatever inventory the record retained
+ * (ENBL-15 / D-100-06).
  */
 const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { status: K }>> } = {
   disabled: (p, probe, mpScope) =>
@@ -102,7 +110,7 @@ const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { sta
       renderScopeBracket(p.scope, mpScope),
       renderVersion(p.version),
       "(disabled)",
-      composeReasons(undefined, false, false, probe),
+      composeReasons(p.reasons, false, false, probe),
     ]),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
