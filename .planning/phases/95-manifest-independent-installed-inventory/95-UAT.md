@@ -1,5 +1,5 @@
 ---
-status: passed
+status: complete
 phase: 95-manifest-independent-installed-inventory
 source: [95-VERIFICATION.md]
 started: 2026-08-08T18:30:00Z

@@ -1,6 +1,14 @@
+---
+status: resolved
+---
+
 # GSD Debug Knowledge Base
 
 Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypotheses at the start of new investigations.
+
+`status: resolved` is bookkeeping, not a session state: `audit-open` treats every
+top-level `.md` under `.planning/debug/` as a debug session, and this file is the
+knowledge base itself. The marker keeps it out of the open-session count.
 
 ---
 

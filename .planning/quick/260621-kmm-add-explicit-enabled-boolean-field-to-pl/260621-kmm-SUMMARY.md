@@ -1,4 +1,5 @@
 ---
+status: complete
 quick-task: 260621-kmm
 subsystem: persistence, reconcile, plugin-orchestrators
 tags: [schema, state-migration, enable-disable, enbl-02]

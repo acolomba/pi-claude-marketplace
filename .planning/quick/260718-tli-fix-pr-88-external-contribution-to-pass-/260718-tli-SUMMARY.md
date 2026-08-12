@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260718-tli
 plan: 01
 subsystem: bridges/skills

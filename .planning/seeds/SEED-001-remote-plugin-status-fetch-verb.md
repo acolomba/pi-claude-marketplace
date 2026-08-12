@@ -1,11 +1,18 @@
 ---
 id: SEED-001
-status: dormant
+status: promoted
 planted: 2026-07-13
 planted_during: url-source milestone (post-audit, pre-completion)
+promoted: 2026-08-12
+promoted_to: .planning/BACKLOG.md "RSTA/FTCH" entry
 trigger_when: next milestone planning (any plugin/marketplace UX or lifecycle scope)
 scope: medium
 ---
+
+> **Promoted 2026-08-12 at the v1.18 close.** The trigger condition -- next
+> milestone planning -- was reached, so the requirement set now lives in
+> `.planning/BACKLOG.md` under "RSTA/FTCH", where `/gsd-new-milestone` reads it.
+> This file is kept as the planting record.
 
 # SEED-001: (remote) plugin status, fetch verb, and glyph reassignment
 
