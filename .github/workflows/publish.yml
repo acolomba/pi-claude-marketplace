@@ -8,8 +8,14 @@ on:
 permissions:
   contents: read
 
+# The group MUST NOT collide with the one ci.yml declares. Inside a called
+# workflow, `github.workflow` resolves to the CALLER's name and `github.ref` to
+# the caller's ref, so ci.yml's own group evaluates to the same string this one
+# would if it used `github.workflow`. The callee then waits on a group its own
+# caller holds, and the run dies before either job starts -- which is what
+# happened to the first v0.14.0 tag push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: publish-npm-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
