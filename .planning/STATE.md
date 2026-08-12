@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 100
-status: completed
+current_phase_name: disabled-plugin-information-retention
+status: "v1.18 shipped — PR #120, version 0.14.0"
 stopped_at: Completed 100-05-PLAN.md
-last_updated: "2026-08-12T15:28:23.730Z"
+last_updated: "2026-08-12T20:08:42.425Z"
 last_activity: 2026-08-12
-last_activity_desc: Phase 100 complete
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 29
   completed_plans: 29
   percent: 100
-current_phase_name: disabled-plugin-information-retention
+last_activity_desc: Phase 100 complete
 ---
 
 # Project State
@@ -35,8 +35,8 @@ to 0.14.0 with CHANGELOG, then complete and land PR #120. All six phases
 
 Phase: 100 (disabled-plugin-information-retention) — COMPLETE 2026-08-12
 Plan: 5 of 5 complete
-Status: v1.18 is 100% complete. All six phases are done and verified; nothing
-remains inside the milestone's phase scope.
+Status: v1.18 shipped — PR #120, version 0.14.0. All six phases are done and
+verified; nothing remains inside the milestone's phase scope.
 
 Phase 100 closed on human UAT. `100-VERIFICATION.md` had held at `human_needed`
 with three open items — the manual end-to-end retention test, a
@@ -65,9 +65,21 @@ D-96-01 — description and dependencies are manifest-only metadata that arm doe
 not reconstruct). The still-declared sibling keeps its description because its
 manifest entry is intact. The prose overstated; the behavior is correct.
 
-Next is milestone close, not more phase work: re-run `/gsd-audit-milestone`
-(the 2026-08-11 audit covered 95-99 and is stale), bump to 0.14.0 with
-CHANGELOG, then `/gsd-complete-milestone v1.18` and land PR #120.
+Milestone close is under way and three of its four steps are done. The audit was
+re-run over all six phases and returned `passed` (32/32 requirements, no orphans;
+5/5 integration seams; 3/3 E2E flows). The skipped security gate it found is
+closed — `100-SECURITY.md`, verdict SECURED, 16/16 threats, `threats_open: 0`.
+The version bump to 0.14.0 landed across `package.json`, the lockfile,
+`EXTENSION_VERSION`, `sonar.projectVersion` and `CHANGELOG.md`, and the branch is
+pushed: PR #120 now carries the whole milestone for the first time.
+
+Worth remembering from this session: `workflow.security_enforcement` is absent
+from `.planning/config.json` but resolves to `true`. Reading the file instead of
+`config-get` is what let the verify:post security step be skipped after Phase
+100's UAT. Resolve hook activation through the registry, never from the config
+file's key set.
+
+Remaining: `/gsd-complete-milestone v1.18`, then merge #120 with `--squash`.
 
 Phase 100 was added 2026-08-11 by operator
 decision, extending v1.18
@@ -503,7 +515,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-12 — Phase 100 complete
+Last activity: 2026-08-12
 
 ## Roadmap Summary
 
