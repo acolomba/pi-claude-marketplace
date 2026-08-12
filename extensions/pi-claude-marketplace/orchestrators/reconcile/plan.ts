@@ -303,14 +303,17 @@ function classifyDeclaredPlugin(
 
   if (enabledExplicitFalse) {
     // WR-05 convergence: the terminal state of a successful disable is
-    // exactly "recorded with empty resources + config `enabled: false`"
-    // (ENBL-02 keeps the record). That steady state is NOT a config<->state
-    // divergence -- pushing a disable for it would render
-    // `(will disable)` forever and make the apply path re-run a
-    // no-op disable on every reload. Only a recorded record that is NOT
-    // already disabled (artifacts still materialised) needs the action --
-    // symmetric with the enable branch's "recorded + populated + enabled"
-    // steady state below.
+    // exactly "recorded with config `enabled: false`" (ENBL-02 keeps the
+    // record). ENBL-18 / D-100-10: disable changes `enabled` and `updatedAt`
+    // and nothing else -- `resources.*` and `hookEntries` are PRESERVED and are
+    // no part of the marker, which is why the guard below reads
+    // `isRecordedButDisabled` alone and must never re-acquire an inventory
+    // test. That steady state is NOT a config<->state divergence -- pushing a
+    // disable for it would render `(will disable)` forever and make the apply
+    // path re-run a no-op disable on every reload. Only a recorded record that
+    // is NOT already disabled (artifacts still materialised) needs the action --
+    // symmetric with the enable branch's "recorded + enabled" steady state
+    // below.
     const record = state.marketplaces[marketplace]?.plugins[plugin];
     if (recorded && record !== undefined && !isRecordedButDisabled(record)) {
       // Declared-disabled but still materialised: drop artifacts without
@@ -334,7 +337,9 @@ function classifyDeclaredPlugin(
   if (record !== undefined && isRecordedButDisabled(record)) {
     acc.enable.push({ scope, plugin, marketplace });
   }
-  // Declared-enabled, recorded, populated: steady state, no action.
+  // Declared-enabled, recorded, not disabled: steady state, no action. The
+  // record's inventory is not consulted -- ENBL-18 keeps it populated across a
+  // disable, so it distinguishes nothing here.
 }
 
 /**

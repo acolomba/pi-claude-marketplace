@@ -279,9 +279,13 @@ async function seedRealDisabledMarketplace(
     }),
   );
 
-  // State: the KEPT disabled record -- empty resources + the pinned version +
-  // explicit enabled: false. `installable` mirrors the seeded availability
-  // axis, which is orthogonal to the disabled marker (ENBL-05).
+  // State: the KEPT disabled record -- the pinned version + explicit
+  // enabled: false. `installable` mirrors the seeded availability axis, which
+  // is orthogonal to the disabled marker (ENBL-05). The empty `resources`
+  // arrays below are this fixture's CHOICE of the simplest legal inventory, NOT
+  // a property of disabled records: ENBL-18 preserves whatever inventory the
+  // install wrote, so a production disabled record usually carries a populated
+  // one.
   const compatibility =
     opts.unsupportedKind === undefined || opts.staleInstallableGate === true
       ? { installable: true, notes: [], supported: [], unsupported: [] }

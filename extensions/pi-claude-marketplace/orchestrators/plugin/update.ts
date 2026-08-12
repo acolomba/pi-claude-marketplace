@@ -1864,7 +1864,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // not, since availability is an orthogonal axis) must NOT re-materialize
   // artifacts; an `enable` after the update is the rematerialization surface.
   // ENBL-09: refresh the record's version, resolvedSource and compatibility so
-  // a future enable reads the current pin, but keep `resources.*` empty.
+  // a future enable reads the current pin. ENBL-18: `resources.*` and
+  // `hookEntries` are left alone -- they describe the last installation, and
+  // only a re-materialization can move them (see `refreshDisabledRecord`).
   if (isRecordedButDisabled(preflight.record)) {
     return runDisabledRecordRefresh(args, preflight);
   }
