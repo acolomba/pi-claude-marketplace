@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 current_phase: 100
-current_phase_name: disabled-plugin-information-retention
-status: ready_for_verification
+status: completed
 stopped_at: Completed 100-05-PLAN.md
-last_updated: "2026-08-11T19:10:57.913Z"
-last_activity: 2026-08-11
+last_updated: "2026-08-12T15:28:23.730Z"
+last_activity: 2026-08-12
+last_activity_desc: Phase 100 complete
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 29
   completed_plans: 29
   percent: 100
-last_activity_desc: "Phase 100 plan 05 complete — the disabled info row got a byte contract and one answer. The two surfaces had disagreed for one input: a disabled record carrying a persisted unsupported kind rendered {not in manifest, lsp} on info and {not in manifest} on list. Operator ruling: force them identical, and the catalog already said so — 100-03 wrote both sentences a plan earlier, so the code was what was wrong, not the docs. applyDisabledStatus became applyDisabledRowShape and now owns the whole row form: the status injection it already did plus an allow-list filter admitting the single reason member, at the command, so notify.ts still probes nothing. The filter closes over every reason the arm can produce today and tomorrow (the absence token, the unsupported kinds, the four hooks-read markers) rather than subtracting the two known offenders. Mutation-checked: reverting the filter fails exactly the two tests that see such a record and leaves the other 33 green. Coverage for the rerouted arm followed — the central case pins a disabled record's recorded hook entries with NO materialized configuration on disk, which is the disk state a disable actually leaves, so the rendered hooks block can only have come from hookEntries; a DECLARED disabled control proves the absence reason is derived from the manifest lookup rather than hard-coded on the disabled arm; and a remote-shaped disabled record under --fetch pins all five clone-seam and credential-seam counters at zero with the full inventory asserted beside them, so an empty-block guard cannot pass. state-only-disabled-with-components and its fixture landed in one commit, mutation-checked in both directions. It deliberately carries NO description line: the state-only arm reconstructs none, and writing one in would have been a falsified example in the file whose prose the byte gate does not cover. Five catalog prose corrections, two more than the plan named: the retired cross-reference, the retired cascade-path claim, the scope-disjointness assumption the single skip-reason carrier broke, the claim that the disabled inventory row is a second notification (it rides the info block — a mixed run emits two, not three), and the all-disabled early return the reroute deleted. Task 1 produced no commit: 100-04 and 100-02 had already landed every one of its acceptance criteria. The ENBL-16 register entry was reconciled — the no-other-reason clause binds BOTH surfaces. Previous: Phase 100 plan 04 complete — `info` on a disabled plugin stops being a foreign shape. Every found scope now goes through the same block builder, so a disabled record its manifest still declares resolves from the manifest exactly as an uninstalled one does and reports its description and resolved components, while one the manifest dropped reports the inventory the disable retained. The row still says (disabled) because the status is injected at the two block-builder arms that can see an installation record, read through the shared predicate, AHEAD of the persisted derivation — that derivation answers a different question (did the install drop components) and can return nothing but installed or partially-installed, so an un-injected disabled PARTIAL would have rendered (partially-installed). The fetch-skip note survived the reroute on a single optional InfoBlock.skipReason replacing the stateOnly boolean: the emitter maps ONE list, so a scope that is both disabled and manifest-absent emits one skip row naming the disabled cause while its inventory row keeps {not in manifest} — two lists could concatenate, one field cannot. Four disabled-specific branches went with the divert, including the second notify for mixed results, so a mixed run drops from three notifications to two. No closed set grew: disabled was already a plugin-status member and ICON_DISABLED already existed, so both enumeration gates passed unamended. Four deviations, all corrections to what the plan could prove or what its deletion left behind: the test seeder still emptied resources on disabled, which would have made the reroute unverifiable; info.messaging.ts's disabled render arm became unreachable dead code and was deleted rather than left as a divergent second renderer; partitionDisabledScopes collapsed to the identity so it was deleted rather than kept; and two comments named deleted symbols. ENBL-16 and ENBL-17 are now complete. Previous: Phase 100 plan 02 complete — the installation record now describes a plugin's hooks itself. A new top-level optional `hookEntries` key follows the resolvedSha precedent exactly (additive, no schemaVersion bump, no migrate fill), so COMPAT-01's version clause and its manifest-snapshot clause both pass unedited and the key-set clause is amended by one insertion. The element schema has exactly two properties, event and an optional matcher, so a handler command cannot be persisted even by accident — the record is a rendering source, never a routing source, and the hooks event-router contains zero non-comment references to the key. All three write sites populate it, with update writing inside the existing hooks-success guard so a failed hooks commit leaves resources.hooks and hookEntries both at version A. `info` now prefers the record and composes no path at all on that branch, which REDUCES the traversal surface; the materialized-file read survives as the legacy fallback so records written before the key keep reporting truthfully. Absence and present-empty are deliberately different facts, both covered by tests that seed a materialized file whose entries DIFFER from the record's, so neither source can win by coincidence. Two deviations, both closing gaps between the plan's must_haves and what its checks could prove: the three write sites had no end-to-end assertion (added to the existing WR-03 hooks install test), and the reinstall snapshot's preservation was unobservable because clonePluginRecord's output is read only for version, resolvedSha and installedAt (exported as a __test_ seam, following four siblings in the same file). Carrier findings the plan asked to verify all held, with one divergence: update's finalize is a sibling function rather than a closure, so the captured entries pass as a parameter. Previous: Phase 100 plan 01 complete — the retention spine. Disable stopped zeroing the record's five resources arrays; the installation record is now a description of what was installed rather than a mirror of what is on disk, which is what lets a later plan report a disabled plugin's contents after its manifest entry disappears. Artifact removal is unchanged — the cascade still unstages all five kinds, hooks.json included (ENBL-13). The type invariant was RE-POINTED, not dropped: toDisabledRecord<R> returns resources: R, so changing the inventory is a compile error at the producer, the same enforcement strength the retired empty-tuple brand carried aimed at the guarantee this phase actually makes. Both guards retention would otherwise have broken landed in the same commit: hydrateScopeFromState gained an explicit isRecordedButDisabled guard (the protection was previously incidental file-absence), and install.ts's cross-plugin conflict guard now excludes the plugin's own record as update and reinstall already did. Two deviations closed gaps between what the plan's must_haves claimed and what its tests proved: ENBL-19 was shipping UNPROVEN end-to-end — removing the install.ts exclusion left all 39 existing enable-disable tests green, because every hand-seeded disabled record in the suite carries empty arrays — so an enable/disable/enable round-trip test was added and mutation-checked; and ENBL-13's disk-side half asserted against nothing, since the fixture never materialized a hooks.json for removeHookConfig to remove. removePluginRecord now exists once in the tree. Previous: Phase 99 plan 07 complete — D-99-05b closed and ALL SEVEN PLANS DONE. The measure-then-scope ordering paid: the carrier's 2026-06-12 table was wrong in BOTH directions, and edge-deps.ts — the module the coverage-exclusion question was about — measured 100%, dissolving that question rather than deciding it. Previous: plan 06 closed D-99-05a: the equal-version short-circuit is now scoped to ENABLED records, so a disabled record falls through to a new `runDisabledRecordRefresh` helper and its pin self-heals when the resolved source or compatibility block moves under an unchanged version. The plan's premise was FALSIFIED — the guard it said to recover from history does not exist there (research had already marked that recovery [ASSUMED]) — so the sanctioned alternative was used: a positional normalized projection over the seven fields the refresh writes. The guard is proven load-bearing by observed red, and `(skipped) {up-to-date}` deliberately keeps its bytes. Previous: plan 05 closed D-99-02a, the audit's largest remaining warning: `domain/manifest-lookup.ts` now owns the membership rule and its successful-read derivation, and list, info and update all consume it instead of each re-implementing exact-string identity. `lookupDeclaredPlugin`'s return type is narrowed to declared|absent so it CANNOT express what a failed read means, keeping the per-surface read-failure asymmetry (list continues, info returns a (failed) row, update throws) as the contract it is. A whole-tree drift gate with three non-global patterns and five purpose-stated exemptions blocks a fourth ungated copy, and a staleness clause makes an exemption unable to outlive its site. No test assertion was edited to stay green. Previous: plan 04 closed WR-12 / D-99-03: the malformed-component degradation signal is threaded through the update verb, so a degraded update no longer renders a clean row while `list` one command later reports the record's real state. `PluginUpdateUpdatedOutcome` now inherits `LedgerDegradationSignals` DIRECTLY (no Pick, no Omit — the blocking constraint held, and typecheck passed on the first run after the edit, confirming 99-01 had removed the TS2430 collision). The plan named two render surfaces; a THIRD was found and threaded. Previous: plan 03 closed D-99-04: the version-less autoupdate cascade skip row gained a catalog state shipped in the same commit as its byte fixture, the description-bearing variant count was re-derived from the interfaces as nine, and the dangling anchor pair was dropped at SEVEN paired sites (research was right; CONTEXT and the 98-06 note both said six). The eight files where that identifier carries its own live meaning are untouched, and the extensions diff contains no non-comment line"
+current_phase_name: disabled-plugin-information-retention
 ---
 
 # Project State
@@ -27,19 +27,49 @@ See: .planning/PROJECT.md (updated 2026-08-10 after Phase 98)
 and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
-**Current focus:** Phase 100 — disabled-plugin information retention, then
-milestone close: version bump + PR. Phases 95-99 complete and verified.
+**Current focus:** Milestone close for v1.18 — re-run the milestone audit, bump
+to 0.14.0 with CHANGELOG, then complete and land PR #120. All six phases
+(95-100) are complete and verified.
 
 ## Current Position
 
-Phase: 100 (disabled-plugin-information-retention) — READY FOR VERIFICATION
-Plan: 5 of 5 (100-01 through 100-05 complete; all waves done)
-Status: All five plans have landed and `npm run check` is green (modulo the two
-`pi-subagents` global-peer integration failures that reproduce on unmodified
-`main`). One manual UAT is outstanding: install a plugin, disable it, remove its
-entry from the marketplace manifest, reload, then run `plugin info` — expect the
-component inventory, the `(disabled)` token and `{not in manifest}`, and confirm
-the plugin's hooks do not fire. Phase 100 was added 2026-08-11 by operator
+Phase: 100 (disabled-plugin-information-retention) — COMPLETE 2026-08-12
+Plan: 5 of 5 complete
+Status: v1.18 is 100% complete. All six phases are done and verified; nothing
+remains inside the milestone's phase scope.
+
+Phase 100 closed on human UAT. `100-VERIFICATION.md` had held at `human_needed`
+with three open items — the manual end-to-end retention test, a
+`verification: backstop` concurrency claim, and a `verification: judgment`
+prohibition — and all three passed against a live Pi 0.84.1 host on the
+worktree build, so verification is now `passed` and `100-UAT.md` is `complete`
+at 3/3, zero issues.
+
+The UAT ran against a disposable fixture at `tmp/uat-100/` (git-ignored):
+a path-source marketplace whose `hooked-inventory` plugin carries all five
+component kinds plus a `UserPromptSubmit` probe hook, a still-declared disabled
+sibling for contrast, a live control plugin, and a 200-skill plugin used as a
+write-side lock driver. Observed: the disabled, manifest-absent row rendered
+`(disabled) {not in manifest}` with its full inventory — the `hooks` line
+sourced from the record's `hookEntries`, not from the `hooks.json` still on
+disk — and the probe hook did not fire after `/reload`. The concurrency claim
+was exercised the harder way, reading from Pi while an in-process driver held
+the state lock across 24 install/uninstall cycles; no torn read, no lock error
+on a read path.
+
+One wording correction the UAT surfaced, recorded as an observation rather than
+a gap: the checkpoint prose said the disabled row retains "the description and
+component inventory". The inventory is retained; the description is not, and
+that is the documented contract (`info.ts` record-backed arm, INFO-09/10/11,
+D-96-01 — description and dependencies are manifest-only metadata that arm does
+not reconstruct). The still-declared sibling keeps its description because its
+manifest entry is intact. The prose overstated; the behavior is correct.
+
+Next is milestone close, not more phase work: re-run `/gsd-audit-milestone`
+(the 2026-08-11 audit covered 95-99 and is stale), bump to 0.14.0 with
+CHANGELOG, then `/gsd-complete-milestone v1.18` and land PR #120.
+
+Phase 100 was added 2026-08-11 by operator
 decision, extending v1.18
 rather than opening v1.19. A disabled plugin must keep describing itself: its
 resources deregister from Pi, but the record's inventory of them stays, so
@@ -473,7 +503,7 @@ threats_open 0. Carriers into Phase 98: WR-02/WR-04/WR-06 enable-surface
 warnings, the IN-07 install-arm orphan-rewake asymmetry, and the DOC-08
 stale-comment reconciliation; the stale-resolvedSource-on-unchanged-version
 gap is a backlog todo.
-Last activity: 2026-08-11
+Last activity: 2026-08-12 — Phase 100 complete
 
 ## Roadmap Summary
 
@@ -729,8 +759,10 @@ None of the carryover items originate from v1.17 env-parity.
 
 ## Session
 
-**Last session:** 2026-08-11T19:10:57.861Z
-**Stopped at:** Completed 100-05-PLAN.md
+**Last session:** 2026-08-12
+**Stopped at:** Phase 100 complete — human UAT passed 3/3 against a live Pi
+0.84.1 host, verification canonicalized to `passed`, v1.18 at 100%. Next is
+milestone close, not phase work.
 **Resume file:** None
 (retained until Phase 99 closes — it carries the 99-04 blocking constraint
 against reintroducing the Pick/Omit workaround 99-01 lifted)

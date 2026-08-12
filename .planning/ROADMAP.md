@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-100 (95-99 complete and verified; Phase 100 added 2026-08-11, not started; target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, a disabled partially-installed plugin is once again recognized as disabled, and a disabled plugin keeps describing itself
+- 🚧 **v1.18 Manifest-Independent Installed Plugin Info** — Phases 95-100 (all six complete and verified; Phase 100 closed 2026-08-12 on human UAT; target npm 0.14.0) — installed plugins remain visible, inspectable, and uninstallable after their entry disappears from a valid marketplace manifest, a disabled partially-installed plugin is once again recognized as disabled, and a disabled plugin keeps describing itself
 - ✅ **v1.17 env-parity** — Phases 90-94 (shipped 2026-08-05, target npm 0.13.0) — full detail: `milestones/v1.17-ROADMAP.md`
 - ✅ **v1.16 stop-hooks** — Phases 87-89 (shipped 2026-07-31, npm 0.12.0) — full detail: `milestones/v1.16-ROADMAP.md`
 - ✅ **v1.15 frontmatter-compliance** — Phase 86 (shipped 2026-07-27, npm 0.11.1) — full detail: `milestones/v1.15-ROADMAP.md`
@@ -302,7 +302,7 @@ Plans:
 | 97. Disabled-state classification repair | v1.18 | 5/5 | Complete    | 2026-08-09 |
 | 98. Lifecycle regression and contract documentation | v1.18 | 6/6 | Complete    | 2026-08-10 |
 | 99. Post-audit tech-debt closure | v1.18 | 7/7 | Complete    | 2026-08-10 |
-| 100. Disabled-plugin information retention | v1.18 | 5/5 | In Progress | — |
+| 100. Disabled-plugin information retention | v1.18 | 5/5 | Complete    | 2026-08-12 |
 | 90. Session environment initialization | v1.17 | 3/3 | Complete    | 2026-08-04 |
 | 91. Hook environment parity | v1.17 | 1/1 | Complete    | 2026-08-03 |
 | 92. MCP staging parity | v1.17 | 2/2 | Complete    | 2026-08-03 |
@@ -432,7 +432,7 @@ plugin renders a bare `(disabled)` row from both `list` and `info`, with
 > state, so retention makes an enable self-conflict. Two of the three readers
 > named at discuss need no code change; a fourth, found at research, does.
 
-**Plans:** 5/5 plans executed in 4 waves
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**

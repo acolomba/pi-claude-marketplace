@@ -1,7 +1,7 @@
 ---
 phase: 100-disabled-plugin-information-retention
 verified: 2026-08-12T01:05:00Z
-status: human_needed
+status: passed
 score: 13/13 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -9,16 +9,20 @@ re_verification:
   previous_status: gaps_found
   previous_score: 12/13
   gaps_closed:
+
     - "INV-04 is retired everywhere that asserted the no-reason clause, not just in one artifact."
   gaps_remaining: []
   regressions: []
 human_verification:
+
   - test: "Install a plugin, disable it, remove its entry from the marketplace manifest, `/reload`, then run `/claude:plugin info <plugin>@<marketplace>`."
     expected: "The row reports `(disabled) {not in manifest}` with the retained description and component inventory (including hooks sourced from the record), and the plugin's hooks do not fire after `/reload`."
     why_human: "Spans the Pi extension host lifecycle, which no automated suite exercises. Explicitly scoped manual-only in `100-VALIDATION.md`, still pending per `100-05-SUMMARY.md`'s carriers (R7: status pending)."
+
   - test: "Run two concurrent `info` / `info --fetch` invocations against one scope."
     expected: "No interleaved partial read; each run reads one already-loaded state snapshot, because `list`/`info` acquire no lock and perform no write."
     why_human: "Marked `verification: backstop` in two PLAN.md frontmatter blocks (100-02, 100-04) -- no automated concurrency test was produced. LLM-judge assessment: structurally sound by inspection (no lock acquisition, no `saveState` call anywhere on the `list`/`info` path), but this is inference, not a test. Non-authoritative; human confirmation recommended."
+
   - test: "Confirm a disabled plugin's retained inventory is never presented as though its components are live."
     expected: "The disabled status token holds its position at the head of every rerouted row; description/component lines never displace or soften it."
     why_human: "Marked `verification: judgment` in 100-04-PLAN.md's prohibitions block. LLM-judge assessment: PASS by direct inspection -- every disabled-row byte fixture read during this verification keeps the `(disabled)` token in its existing position, with component/description lines rendered below it in the same slots an installed row uses. Non-authoritative; human confirmation recommended per the escalation protocol for judgment-tier prohibitions."
@@ -49,12 +53,14 @@ the current code (not re-trusted from the commit message):
 - **`info.ts::DISABLED_ROW_REASONS`** (`info.ts:946-952`) holds exactly six tokens: `not in
   manifest`, `source missing`, `unreadable`, `permission denied`, `network unreachable`,
   `authentication required`. Confirmed by direct read, matching the commit's claim exactly.
+
 - **`list.ts::disabledReasonsField`** (`list.ts:348-350`) takes a single boolean (`notInManifest`,
   itself derived only from `ManifestLookup.kind === "absent"`, a manifest-read result) and returns
   either `{ reasons: ["not in manifest"] }` or `{}`. It reads no `compatibility.unsupported`, opens
   no file, and calls no probe. The claim "list builds its row from the record alone and runs no
   probe, so manifest absence is the only reason it can ever have" is TRUE -- confirmed by reading
   the full function body, not inferred from the docstring above it.
+
 - Because that claim holds, the new REQUIREMENTS.md wording ("not a rendered-byte divergence...
   for every input the list surface can express, the two rows are identical") is also factually
   accurate, not merely plausible.
@@ -68,6 +74,7 @@ Two categories of near-miss were checked and ruled not-in-scope:
   each is scoped to the `list` surface specifically (where the property is still literally true,
   per the `disabledReasonsField` read above) or explicitly frames it as INV-04's retired clause
   being superseded, not as current unscoped fact.
+
 - `.planning/milestones/**` and other historical phase artifacts (`95-REVIEW-FIX*.md`,
   `97-RESEARCH.md`, `100-RESEARCH.md`, `100-03-PLAN.md`) contain the old phrasing in a
   point-in-time-narrative context (documenting what was true when written, or quoting the
@@ -158,6 +165,7 @@ Both named failure modes from the verification brief were specifically probed:
    seeders (`seedRealDisabledMarketplace`, the private seeder in `list-manifest-absent.test.ts`,
    `seedPathMarketplace` in `info.test.ts`) still hard-code empty resources on their disabled branch
    but are confirmed not used by any pinned retention/reason test.
+
 2. **The `*.messaging.ts` dispatch trap.** Confirmed all four disabled-row-owning surfaces
    (`list.messaging.ts`, `info.messaging.ts`, `enable-disable.messaging.ts`,
    `reconcile/reconcile.messaging.ts`) thread `p.reasons` or had their now-unreachable arm deleted.
