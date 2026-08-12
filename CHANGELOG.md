@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0] - 2026-08-12
+
+- An installed plugin now survives its entry disappearing from the marketplace manifest. `list` keeps the installation record and marks the row `{not in manifest}` instead of dropping the plugin, and the same reason reaches the LLM `list` tool. A manifest that cannot be read is never reported as a missing entry: absence can only be asserted after a successful load, so an unreadable or malformed manifest keeps its own failure reason instead.
+- `info` on such a plugin reports from the installation record rather than returning `(failed)`. Version, install status, and the component inventory across all five kinds are reconstructed from the record, and `info --fetch` emits a skip note instead of reaching the network. Description and dependencies are deliberately not reconstructed -- both are manifest-only metadata, and inferring them from unrelated local state would be a fabrication.
+- `uninstall` works on a record whose manifest entry is gone, removing both the staged artifacts and the record, and `update` renders `(skipped) {not in manifest}` rather than failing.
+- Disabling a partially installed plugin is recognized as disabled again. The disabled predicate conjoined `compatibility.installable` with `!enabled`, and a partial install always persists `installable: false`, so disabling one produced a record no surface read as disabled. The predicate is now keyed only on `enabled`, which restores list and info rendering, enable and disable idempotency, reconcile steady state, and the update short-circuit.
+- A disabled plugin keeps describing itself. Disable still deregisters every artifact -- skills, commands, agents, hooks, and MCP servers are all unstaged -- but the installation record retains its inventory of them, so `info` on a disabled plugin still reports what the plugin contains and still reports it as disabled. Hook detail is read from the record rather than from disk, so it survives the materialized `hooks.json` being removed. A disabled plugin's hooks are not registered on reload even when a `hooks.json` is present on disk, and re-enabling a plugin that owns a skill, command, or agent no longer conflicts with its own record.
+
 ## [0.13.0] - 2026-08-05
 
 - Session environment parity. At session start, and again after a session switch or `/reload`, the extension now sets `CLAUDECODE=1`, `CLAUDE_CODE_SESSION_ID`, and the pi-only alias `CLAUDE_SESSION_ID` on Pi's live environment. Bash children and MCP servers spawned afterwards then see the same session variables Claude Code provides. Each installed, enabled plugin's `bin/` directory is appended to `PATH`, deduplicated and recomputed from install state on every session start, and the ledger only removes entries it added itself.
