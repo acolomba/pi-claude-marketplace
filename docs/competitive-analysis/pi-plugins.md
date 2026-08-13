@@ -222,7 +222,7 @@ Their source model is two disjoint strict zod unions (`src/domain/source.ts:176-
 | `marketplace-path` (`./relative`)                  | Plugin source                                                       | Supported as `path`                                                        |
 | `git-subdir`                                       | Plugin source                                                       | Supported for plugins; not supported at marketplace level                  |
 | `npm`                                              | Plugin source, fully implemented                                    | Parsed and listed, but the resolver returns `unsupported source kind: npm` |
-| Archive or file over `url`                         | No such plugin source; TAR and HTTP are acquisition mechanisms only | Supported                                                                  |
+| `archive` (zip over HTTPS, Claude Code's own kind) | No such plugin source; TAR and HTTP are acquisition mechanisms only | No `ArchiveSource` variant at all; falls through to `unknown`              |
 | Remote `marketplace.json` URL                      | Rejected as a marketplace source                                    | Rejected                                                                   |
 | `http://`, `~user/...`, browser `/tree/<ref>` URLs | Not applicable                                                      | Rejected by design                                                         |
 

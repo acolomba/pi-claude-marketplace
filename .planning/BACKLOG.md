@@ -107,6 +107,138 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
+## WFLW-01: `workflows` component kind is unrecognized (silent gap)
+
+Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
+plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
+our own resolver. Claude Code's manifest schema has shipped a `workflows`
+field (`string|array`, "Custom workflow script files or directories,
+replaces default `workflows/`") as a first-class component kind alongside
+skills/commands/agents/hooks -- confirmed via direct fetch of the live docs,
+not inferred.
+
+`domain/resolver.ts` carries two closed component-kind lists:
+`SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"]` and
+`UNSUPPORTED_COMPONENT_KINDS = ["lspServers", "monitors", "themes",
+"outputStyles", "channels", "userConfig", "settings"]`. `workflows` is in
+neither. The code carries its own warning directly above the unsupported
+list (T-02-25): "The list is closed. A new kind upstream that's neither in
+SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
+Re-audit when Claude Code adds new component kinds." That is exactly what
+happened -- a plugin declaring `workflows` today gets no degradation, no
+reason token, and no signal at all, unlike `monitors`/`themes`/etc., which
+are all correctly tracked and correctly demote the plugin to
+`partially-available`.
+
+Direction for later: add `workflows` to `UNSUPPORTED_COMPONENT_KINDS` (the
+mechanical fix that restores the closed-set guarantee and produces a
+`{unsupported workflows}` reason) as the immediate fix; a real bridge that
+translates a Claude workflow script into a Pi-native equivalent is a
+separate, larger question with no known Pi analog yet.
+
+Code seams: `domain/resolver.ts` (`SUPPORTED_COMPONENT_KINDS`,
+`UNSUPPORTED_COMPONENT_KINDS`, `UNSUPPORTED_COMPONENT_CONVENTIONS`),
+`domain/components/plugin.ts` (`UNSUPPORTED_COMPONENT_FIELDS` schema),
+`shared/notify.ts` / `docs/output-catalog.md` (the closed REASONS set).
+
+## PSRC-01: two real Claude Code plugin-source kinds unresolved (`npm`, `archive`)
+
+Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace docs
+against `domain/source.ts` and `domain/resolver.ts`.
+
+**`npm`**: Claude Code's documented shape --
+`{source: "npm", package, version?, registry?}`, installed via `npm install`
+-- matches our own `NpmSource` interface field-for-field. We parse and list
+it, but the resolver hard-rejects it: `unsupported source kind: npm`. This is
+the same gap recommendation #5 in `docs/competitive-analysis/pi-plugins.md`
+names ("npm plugin sources... removes our one unsupported plugin-source
+kind") -- confirmed here as real Claude Code parity, not a competitor-only
+convenience.
+
+**`archive`**: a second, genuinely distinct Claude Code source kind --
+`{source: "archive", url, sha256?}`, a zip archive downloaded over HTTPS,
+"works without git or npm on the user's machine," requires Claude Code
+v2.1.224+. `domain/source.ts`'s `ParsedSource` union (`PathSource |
+GitHubSource | UrlSource | GitSubdirSource | NpmSource | UnknownSource`) has
+no representation for it at all -- not even a recognized-but-unsupported case
+in `parseKindObjectSource`'s switch, so an `archive`-sourced entry falls
+through to `unknown` today. Neither `@nklisch/pi-plugins` nor this project
+implements it; their own TAR-reader hardening is npm-tarball-specific and
+does not cover Claude's zip-based `archive` format either.
+
+Direction for later: `npm` needs resolver-side materialization (packument
+fetch, tarball fetch, verify, extract -- the acquisition mechanics
+`@nklisch/pi-plugins` already built, minus the SHA-512 absolutism their own
+backlog flags as harmful -- see the cautions in `pi-plugins.md`). `archive`
+needs a new `ArchiveSource` variant in `ParsedSource` plus a
+zip-download-and-extract materialization path, likely sharing
+containment/hardening concerns with whatever npm-tarball work lands first
+(path traversal, symlink escapes, decompression bombs -- the same class of
+hazard `@nklisch/pi-plugins`' `tar-reader.ts` defends against, for a
+different archive format).
+
+Code seams: `domain/source.ts` (`ParsedSource` union, `parsePluginSource`),
+`domain/resolver.ts` (source-kind dispatch), `orchestrators/plugin/clone-cache.ts`
+(the only existing acquisition seam, currently git-only).
+
+## PKGDEP-01: no auto-install of a plugin's own Node.js/Bun dependencies
+
+Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs
+(`code.claude.com/docs/en/plugins-reference`, "Node.js package
+dependencies"). When a plugin's own root ships a `package.json` plus a
+supported lockfile (`bun.lock`, `bun.lockb`, `npm-shrinkwrap.json`, or
+`package-lock.json`), Claude Code runs a frozen-resolution, `--ignore-scripts`,
+60-second-bounded install (`npm ci --ignore-scripts` or `bun install
+--frozen-lockfile --ignore-scripts`) into the cached copy at install time,
+update time, and at session start on a fresh machine, so the plugin's own
+hooks and MCP servers can load their dependencies. A failed or skipped
+install never blocks the plugin; a `package.json` with no recognized
+lockfile is skipped silently.
+
+We have no equivalent anywhere in the codebase (confirmed by grep -- zero
+hits for lockfile names or `--ignore-scripts`/`--frozen-lockfile`). A plugin
+that bundles its own npm dependencies installs today with hooks or MCP
+servers that fail at runtime on an unresolved `node_modules`, with no
+diagnostic pointing at the real cause.
+
+Direction for later: a new phase in the install/update ledger (or a step
+inside the existing skills/commands/agents/hooks/mcp five-phase sequence)
+that detects `<pluginRoot>/package.json` + a recognized lockfile and runs the
+matching frozen, no-lifecycle-scripts install into the staged copy, mirroring
+Claude Code's exact lockfile-priority order and timeout. Failure should
+degrade (warning-level note), never block the install.
+
+Code seams: `transaction/phase-ledger.ts` (the 5-phase ledger pattern),
+`orchestrators/plugin/install.ts` / `update.ts` (ledger composition),
+`shared/notify.ts` (a new closed-set reason for a skipped/failed dependency
+install).
+
+## DFEN-01: `defaultEnabled` manifest field unsupported
+
+Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs. A
+`plugin.json` (or marketplace entry, which takes precedence) can set
+`defaultEnabled: false` (requires Claude Code v2.1.154+) so a plugin installs
+in a disabled state until the user explicitly turns it on -- intended for
+plugins that add cost or scope a user should opt into. Two things override it
+when present: an existing `enabledPlugins` setting for the plugin, and a
+dependency requirement from another active plugin.
+
+We have no representation of this field anywhere (confirmed by grep). Every
+plugin we install is enabled by default with no way for a plugin author to
+request otherwise, and no field carries the marketplace-entry override
+precedence rule either.
+
+Direction for later: read `defaultEnabled` from the manifest
+(marketplace entry wins per Claude's precedence rule) at install time, and
+thread it into the same state-write the install ledger already performs for
+the `enabled` flag -- this is a small, self-contained resolver + install-ledger
+change with no new component-kind or bridge involved.
+
+Code seams: `domain/components/plugin.ts` (schema field), `domain/resolver.ts`
+(read + surface the value), `orchestrators/plugin/install.ts` (state write),
+`persistence/state-io.ts` (the `enabled` flag this would set the initial
+value of).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
