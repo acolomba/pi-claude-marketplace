@@ -200,3 +200,19 @@ Outside that tree, `zmarketplace` must resume commits before it can merge our pu
 Each of the four reports cloned its subject, read the source rather than the README, and cited files and line numbers for non-obvious claims. Each one queried the npm and GitHub APIs for market signals on 2026-08-10. Each one marked claims it could not verify with the token UNVERIFIED and counted them in its header. The counts are three for `@nklisch/pi-plugins`, two for `@asermax/pi-cc-plugins`, two for `pi-claude-plugins`, and three for `zmarketplace`.
 
 Four limits apply to this summary. It reviews no source itself, so an error in a source report propagates here unchanged. It compresses four documents that disagree slightly on market counts measured at different moments of the same day. Where they differ, this table uses the later measurement. It carries none of the subsystem detail that makes the individual reports useful for implementation. And competitive analysis has a short shelf life, so read the snapshot rule in each report again before you act on a claim about a competitor's code.
+
+## Appendix: scope decisions
+
+Decisions the operator made after reading a recommendation in this document, recorded so the reasoning survives past the conversation that produced it. See also `pi-plugins.md`'s own Appendix D for the automation-surface decisions in that report.
+
+### Not adopted: mirror mode (2026-08-13)
+
+"A product mode we do not have" above names the mode two competitors built: `@asermax/pi-cc-plugins` reads the user's own `.claude/skills` and `.claude/agents` in place, and `pi-claude-plugins` goes further and mirrors a whole Claude Code installation, giving Pi paths that stay where they are, installing nothing.
+
+The operator's decision: do not build this. Two reasons.
+
+`import` already covers the read half. Our `import` orchestrator already reads Claude's settings files in both scopes and honors `CLAUDE_CONFIG_DIR`. A live projection and an install both start from the same read; we already have that read, wired to the install path.
+
+The plugin system is meant to own a lifecycle, not project one. This project's whole architecture -- resolve, stage, commit, record, reconcile -- exists to give an installed plugin transactions, rollback, partial installs, and self-healing. A mirror mode has none of that by construction: it reads Claude's live files and reflects them, so there is nothing to roll back, nothing to partially install, and nothing to self-heal -- Claude's own files are the only source of truth. Building it would mean carrying a second, structurally simpler lifecycle model alongside the real one, permanently, for a use case `import` already serves once the user is willing to take a copy.
+
+The cost this decision accepts: a user who runs both Claude Code and Pi and wants zero-copy visibility into Claude's set, with no install step at all, has no answer here. That user's alternative is `import`, a one-time or repeatable install rather than a live passthrough.
