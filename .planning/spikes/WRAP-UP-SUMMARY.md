@@ -9,11 +9,11 @@
 
 ### Processed Spikes
 
-| # | Name | Type | Verdict | Feature Area |
-|---|------|------|---------|--------------|
-| 001 | installed-record-backcompat-audit | standard | ✓ VALIDATED | Backward-compat removal |
-| 002 | config-file-backcompat-audit | standard | ⚠ PARTIAL | Backward-compat removal |
-| 003 | force-reinstall-on-version-mismatch | standard | ⚠ PARTIAL | Backward-compat removal |
+| #   | Name                                | Type     | Verdict     | Feature Area            |
+| --- | ----------------------------------- | -------- | ----------- | ----------------------- |
+| 001 | installed-record-backcompat-audit   | standard | ✓ VALIDATED | Backward-compat removal |
+| 002 | config-file-backcompat-audit        | standard | ⚠ PARTIAL   | Backward-compat removal |
+| 003 | force-reinstall-on-version-mismatch | standard | ⚠ PARTIAL   | Backward-compat removal |
 
 ### Key Findings
 
@@ -49,10 +49,10 @@
 
 ### Processed Spikes
 
-| # | Name | Type | Verdict | Feature Area |
-|---|------|------|---------|--------------|
+| #   | Name                          | Type     | Verdict     | Feature Area                     |
+| --- | ----------------------------- | -------- | ----------- | -------------------------------- |
 | 004 | claude-plugin-dependency-spec | standard | ✓ VALIDATED | Claude plugin dependency support |
-| 005 | pi-cm-dependency-behavior | standard | ⚠ PARTIAL | Claude plugin dependency support |
+| 005 | pi-cm-dependency-behavior     | standard | ⚠ PARTIAL   | Claude plugin dependency support |
 
 ### Key Findings
 
@@ -81,3 +81,53 @@
   a pi-claude-marketplace user through every command surface. No crashes
   or correctness defects; purely a lost-information gap, fixable with a
   narrow change to `info.ts`.
+
+## Session: 2026-08-13 (progress messages)
+
+**Date:** 2026-08-13
+**Spikes processed:** 3
+**Feature areas:** Progress messages for long-running operations
+**Skill output:** `./.claude/skills/spike-findings-pi-claude-marketplace/`
+
+### Processed Spikes
+
+| #    | Name                              | Type       | Verdict             | Feature Area      |
+| ---- | --------------------------------- | ---------- | ------------------- | ----------------- |
+| 006  | delayed-status-progress           | standard   | ✓ VALIDATED         | Progress messages |
+| 007a | progress-modality-widget          | comparison | ✓ VALIDATED (loses) | Progress messages |
+| 007b | progress-modality-bordered-loader | comparison | ✓ WINNER            | Progress messages |
+
+### Key Findings
+
+- `@earendil-works/pi-coding-agent`'s `ctx.ui` has no built-in
+  delayed-show/auto-clear progress primitive; it has to be hand-rolled on
+  top of `setStatus`, `setWidget`, or `ctx.ui.custom()` + `BorderedLoader`.
+- The mechanism itself is sound: `setExtensionStatus()`/`renderWidgets()`
+  in the shipped runtime call `this.ui.requestRender()` unconditionally,
+  proven by reading the actual `.js` (not just the `.d.ts`), then
+  confirmed live -- a `setTimeout` callback firing mid-`await` inside a
+  `registerCommand` handler repaints the TUI correctly with no keystroke
+  or LLM-stream tick involved.
+- Human-verified head-to-head comparison: `ctx.ui.custom()` +
+  `BorderedLoader` won over `setStatus`/`setWidget` for foreground
+  install/update/marketplace-add progress. `docs/tui.md` names
+  `BorderedLoader` for exactly this job ("operations that take time and
+  should be cancellable"), and `@nklisch/pi-plugins` -- the one real
+  competitor -- mounts its entire interactive manager through the same
+  primitive. `setStatus`/`setWidget` are the right register for ambient,
+  ignorable state instead (a mode indicator, a non-blocking batch
+  checklist), not a single bounded wait.
+- Two real gaps found by testing, not by reading docs: `ctx.ui.custom()`
+  returns `undefined` when `ctx.hasUI` is false despite being typed
+  `Promise<T>` with no `| undefined` (caught by an automated
+  `--print`-mode smoke test before it could waste a human's time in the
+  interactive checkpoint); and `BorderedLoader` has no label-update
+  method, so a multi-phase operation's label change means destroying and
+  recreating the component.
+- Competitive research reframed scope before any code was written:
+  `@nklisch/pi-plugins` shows no live progress for its own background
+  autoupdate (silent staging + one after-the-fact "update staged" line),
+  confirming this work is correctly scoped to foreground commands only --
+  this project has no background autoupdate daemon to begin with.
+- The ~1s delay-before-show interval traces to Nielsen Norman Group's
+  classic response-time threshold, not an arbitrary guess.
