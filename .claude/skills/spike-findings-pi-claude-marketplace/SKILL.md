@@ -1,6 +1,6 @@
 ---
 name: spike-findings-pi-claude-marketplace
-description: Implementation blueprint from spike experiments on pi-claude-marketplace -- backward-compat migration removal and Claude plugin dependency-declaration handling. Requirements, proven patterns, and verified knowledge for both. Auto-loaded during implementation work on either.
+description: Implementation blueprint from spike experiments on pi-claude-marketplace -- backward-compat migration removal, Claude plugin dependency-declaration handling, and progress-message UI for long-running operations. Requirements, proven patterns, and verified knowledge for all three. Auto-loaded during implementation work on any of them.
 ---
 
 <context>
@@ -18,6 +18,13 @@ plugins support declaring a dependency on another plugin, whether that
 dependency is actually resolved anywhere -- upstream in Claude Code
 itself, or in this repo's own `plugin.json`/`marketplace.json` handling --
 or is purely informational.
+
+**Progress messages for long-running operations:** investigated whether
+Pi's extension UI (`ctx.ui`) supports a progress message that appears
+only after a short delay (avoiding flicker on fast paths) and disappears
+when the operation completes, for foreground commands like
+`install`/`update`/`marketplace add` that await network I/O. Compared
+three candidate UI primitives head-to-head in a live session.
 
 Spike sessions wrapped: 2026-08-13
 </context>
@@ -54,6 +61,18 @@ Spike sessions wrapped: 2026-08-13
   no auto-resolution MUST actually reach the user for every valid
   dependency shape, including the version-pinned object form -- it
   currently does not (see references/plugin-dependencies.md).
+
+### Progress messages for long-running operations
+
+- Live progress feedback is a foreground, user-initiated-command concern
+  only (`install`, `update`, `marketplace add`, `marketplace update`) --
+  never a background-autoupdate concern, since this project's autoupdate
+  has no timer or session-start run to show progress for.
+- Use `ctx.ui.custom()` + `BorderedLoader`, gated behind a ~1s
+  delay-before-open helper, not `ctx.ui.setStatus`/`setWidget` -- those
+  are for ambient, ignorable state, not a bounded operation the user is
+  actively waiting on and might want to cancel (see
+  references/progress-messages.md).
 </requirements>
 
 <findings_index>
@@ -63,14 +82,20 @@ Spike sessions wrapped: 2026-08-13
 |------|-----------|-------------|
 | Backward-compat removal | references/backward-compat-removal.md | `STATE_VALIDATOR.Check()` on raw JSON is a complete, zero-new-code staleness detector; deletes `migrate.ts` outright, but `migrate-config.ts` needs a loud-failure guard, not a bare deletion |
 | Claude plugin dependency support | references/plugin-dependencies.md | Upstream fully auto-installs declared dependencies (semver, prune, cascades); this repo stays opaque by design, but `info.ts`'s `normalizeDependencies` silently drops the version-pinned object form of a dependency, making it invisible on every command surface |
+| Progress messages | references/progress-messages.md | `ctx.ui.custom()` + `BorderedLoader` behind a ~1s delay helper wins over `setStatus`/`setWidget` for foreground install/update progress -- human-verified head-to-head, backed by `docs/tui.md`'s own naming and competitor precedent |
 
 ## Source Files
 
 Original spike source files are preserved in `sources/` for complete
 reference -- including `sources/003-force-reinstall-on-version-mismatch/prototype.ts`,
-a runnable proof against the real production `STATE_VALIDATOR`, and
+a runnable proof against the real production `STATE_VALIDATOR`,
 `sources/005-pi-cm-dependency-behavior/prototype.ts`, a runnable proof
-against the real production `resolveStrict` and `getPluginInfo`.
+against the real production `resolveStrict` and `getPluginInfo`, and
+`sources/006-delayed-status-progress/extension.ts` /
+`sources/007-a-progress-modality-widget/extension.ts` /
+`sources/007-b-progress-modality-bordered-loader/extension.ts`, three
+runnable Pi extensions (`pi -e <path>`) exercising the delay/auto-clear
+mechanism against the real `ctx.ui` API.
 </findings_index>
 
 <metadata>
@@ -81,4 +106,7 @@ against the real production `resolveStrict` and `getPluginInfo`.
 - 003-force-reinstall-on-version-mismatch
 - 004-claude-plugin-dependency-spec
 - 005-pi-cm-dependency-behavior
+- 006-delayed-status-progress
+- 007-a-progress-modality-widget
+- 007-b-progress-modality-bordered-loader
 </metadata>
