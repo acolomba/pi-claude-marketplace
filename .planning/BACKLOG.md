@@ -517,6 +517,71 @@ existing cross-scope-presence pattern to reuse), `orchestrators/reconcile/apply.
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
+## SKFM-01: repair single-line frontmatter scalars instead of degrading the whole skill
+
+Surfaced 2026-08-13 from a competitive-analysis gap review
+(`docs/competitive-analysis/asermax-pi-cc-plugins.md`, README.md
+consolidated recommendation #4: "their headline feature without their
+defect"). Scoped deliberately narrower than the source report's own
+implementation, per its own caution.
+
+**The problem:** Claude Code's `SKILL.md` frontmatter parser is lenient;
+Pi's is strict. A `description:` line containing an unquoted colon --
+`description: Use this: when reviewing pull requests` -- parses fine under
+Claude Code and is fatal under Pi's parser.
+
+**Our behavior today:** `bridges/skills/stage.ts`'s `PARSE-01` block
+(~line 280) tries `parseFrontmatter(content)`; on throw it calls
+`synthesizeUnparseableSkill()` (`bridges/skills/frontmatter-degrade.ts:46`),
+which replaces the ENTIRE frontmatter block with a generated name, the
+fixed placeholder string `"Source frontmatter could not be parsed."`, and
+`disable-model-invocation: true`. The skill still installs, but the model
+never sees its real description -- confirmed by direct read of the
+`PARSE-01` catch arm, not inferred.
+
+**What `@asermax/pi-cc-plugins` got right, and where their build breaks:**
+they're the only one of the four competitors that tries to repair loose
+frontmatter rather than degrade or route around it -- a real, useful
+instinct. Their `sanitizeFrontmatterLines` walks the block line by line and
+JSON-stringify-quotes any value that isn't already boolean/null/number.
+Verified by executing their own exported `sanitizeSkillMarkdown`:
+`description: Use this: when reviewing` correctly becomes
+`description: "Use this: when reviewing"`, but `tags: [a, b]` becomes the
+literal string `tags: "[a, b]"` (a sequence corrupted into a string), and a
+`description:` spanning two lines gets its first line quoted while the
+indented continuation line is left orphaned, so a document that Pi
+originally accepted no longer parses at all. Their line-by-line rule
+cannot tell a single-line scalar from the start of a multi-line one.
+
+Direction for later: repair ONLY single-line inline scalars -- the exact
+case that fails today and the only case verified safe to rewrite. Two
+existing pieces of machinery in `bridges/skills/frontmatter-degrade.ts`
+already do most of the work, just for a different call site: the private
+`emitSafeDoubleQuotedScalar()` helper (line 146) already implements the
+correct escaping (newlines collapse to spaces, `\` escaped before `"`) and
+is already proven via `setDescriptionScalar()`'s SKILL-03 full-node-span
+replacement; `descriptionValueEnd()` already distinguishes a single-line
+value from a multi-line one by checking whether the following line is
+indented. The new work is a pre-parse repair step inserted into
+`stage.ts`'s `PARSE-01` catch arm (before falling through to
+`synthesizeUnparseableSkill`): detect a single top-level `key: value` line
+whose value is unquoted and contains a YAML-significant character, re-emit
+it through the same safe-quoting logic, and retry `parseFrontmatter`. Any
+line that is a sequence (`[...]`), a mapping (`{...}`), or has an indented
+continuation line MUST fall straight through to the existing
+`synthesizeUnparseableSkill` degrade unchanged -- reproducing either of
+those is exactly the asermax defect this item exists to avoid. A repair
+that still fails to parse must never replace the working degrade path; a
+synthesized block that parses beats a repair attempt that does not.
+
+Code seams: `bridges/skills/stage.ts` (`PARSE-01` catch arm, ~line 280 --
+the insertion point), `bridges/skills/frontmatter-degrade.ts`
+(`emitSafeDoubleQuotedScalar` to reuse/export, `descriptionValueEnd`'s
+single-vs-multi-line detection pattern to reuse, `synthesizeUnparseableSkill`
+as the required fallback), `bridges/skills/rewrite-frontmatter.ts` (the
+sibling single-node-rewrite pattern this follows -- rewrite exactly one
+node span, leave every other key byte-identical).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
