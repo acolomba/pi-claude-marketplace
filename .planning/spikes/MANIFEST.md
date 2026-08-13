@@ -12,10 +12,14 @@ acceptable cost?
 
 ## Requirements
 
-- [to be filled in as spikes progress]
+- Any replacement for `migrate-config.ts` MUST NOT let "config file
+  absent" collapse to "empty desired state" for a scope with a populated
+  `state.json` -- that reads as "uninstall everything" to
+  `reconcile/plan.ts`'s `buildUninstallBucket` (Spike 002).
 
 ## Spikes
 
 | # | Name | Type | Validates | Verdict | Tags |
 |---|------|------|-----------|---------|------|
 | 001 | installed-record-backcompat-audit | standard | Given state.json/agent-marker backward-compat code, when audited against force-reinstall, then produce an exact removal inventory | ✓ VALIDATED | backward-compat, migration, state-json, audit |
+| 002 | config-file-backcompat-audit | standard | Given claude-plugins.json's first-run migration, when audited for removability, then produce an exact inventory and flag any unsafe removal | ⚠ PARTIAL | backward-compat, migration, config-file, audit |
