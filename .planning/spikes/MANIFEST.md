@@ -44,7 +44,21 @@ declaration the user must act on manually?
 
 ### Claude plugin dependency support
 
-[Updated as spikes 004-005 progress.]
+- Upstream Claude Code's `dependencies` field is a real, fully-resolved
+  feature (auto-install, semver ranges, cross-marketplace guards,
+  enable/disable cascade, `prune`) -- not informational. Any future work
+  that assumes it's inert or purely advisory is working from a stale
+  premise (Spike 004).
+- pi-claude-marketplace's own `dependencies` handling is intentionally
+  narrower (opaque field, no auto-resolution) -- that scope decision
+  stands. But the "manual-install warning" that's supposed to compensate
+  for the missing auto-resolution does not reliably reach the user today:
+  it's dropped from `install`, never read by `list` for an installable
+  plugin, and `info` -- the only surface left -- silently drops or omits
+  the version-constrained object shape (`{name, version}`), which is the
+  shape that matters most (Spike 005). A future fix here is a narrow
+  display fix to `info.ts`'s `normalizeDependencies`, not a rebuild of
+  upstream's resolution machinery.
 
 ## Spikes
 
@@ -54,3 +68,4 @@ declaration the user must act on manually?
 | 002 | config-file-backcompat-audit | standard | Given claude-plugins.json's first-run migration, when audited for removability, then produce an exact inventory and flag any unsafe removal | ⚠ PARTIAL | backward-compat, migration, config-file, audit |
 | 003 | force-reinstall-on-version-mismatch | standard | Given a stale record, when STATE_VALIDATOR.Check() gates loading instead of field-by-field migration, then stale records are detected with no new plumbing, covering plugin- and marketplace-level records alike | ⚠ PARTIAL | backward-compat, migration, force-reinstall, design, prototype |
 | 004 | claude-plugin-dependency-spec | standard | Given Anthropic's official Claude Code plugin/marketplace docs, when researched for a `dependencies` field, then determine whether it exists, its shape, and what Claude Code itself does with it at install time | ✓ VALIDATED | claude-code, plugin-dependencies, upstream-spec, research |
+| 005 | pi-cm-dependency-behavior | standard | Given this repo's real resolver/install code, when a plugin entry declares `dependencies`, then observe end-to-end what actually happens on install | ⚠ PARTIAL | claude-code, plugin-dependencies, resolver, info-command, prototype, bug |
