@@ -239,6 +239,63 @@ Code seams: `domain/components/plugin.ts` (schema field), `domain/resolver.ts`
 `persistence/state-io.ts` (the `enabled` flag this would set the initial
 value of).
 
+## AUTOUP-01: autoupdate is a manual-trigger flag, not a background update
+
+Surfaced 2026-08-13 comparing our `marketplace autoupdate`/`noautoupdate`
+against Claude Code's own autoupdate model (`code.claude.com/docs/en/
+discover-plugins#configure-auto-updates`) and the parallel design pattern
+already named in `docs/competitive-analysis/pi-plugins.md` ("Update
+discovery, notices, and staged updates" -- `@nklisch/pi-plugins` built a
+lease-based background coordinator toward the same end).
+
+Claude Code's real behavior: after a session starts, with a random delay of
+up to ten minutes (so the running session keeps using what it loaded at
+launch), Claude Code refreshes the marketplace catalog AND updates installed
+plugins to their latest versions on disk, unattended -- no command, no
+prompt. If anything updated, the user sees a passive notification offering
+`/reload-plugins`; otherwise the new versions are just there on next launch.
+The default is kind-aware: official Anthropic marketplaces have autoupdate
+on by default, third-party and local-dev marketplaces have it off by
+default. `DISABLE_AUTOUPDATER` / `FORCE_AUTOUPDATE_PLUGINS=1` let an
+operator decouple "update the Claude Code binary" from "update plugins."
+
+Ours is a different mechanism wearing the same name. `marketplace
+autoupdate` / `noautoupdate` (`orchestrators/marketplace/autoupdate.ts`)
+only flips a per-marketplace boolean in `claude-plugins.json`. That flag is
+read in exactly one place (`orchestrators/marketplace/update.ts:508,542,978`)
+to decide whether an explicitly user-run `marketplace update <name>` also
+cascades into updating that marketplace's installed plugins, or only
+refreshes the manifest. Nothing runs on a timer, nothing runs unattended,
+and neither `session_start` nor `resources_discover` in `index.ts` triggers
+any refresh-and-update sweep -- confirmed by grep, and by reading both
+lifecycle handlers directly. The flag governs cascade SCOPE of a manual
+command, not automaticity.
+
+Direction for later: a real background sweep is a genuinely new capability,
+not a rename of the existing flag. Open design questions before scoping a
+plan: (1) a bare `setTimeout` from `session_start` is enough to get
+"jittered delay after startup" -- Pi extensions are long-lived JS in the
+host process, no special API needed -- but the sweep would then contend for
+the SAME `withLockedStateTransaction` lock (`retries: 0`, not re-entrant)
+that a concurrently-typed `/claude:plugin` command holds, which Claude
+Code's single-process model doesn't have to reason about; (2) NFR-2's
+"never propagate past resources_discover/session_start" boundary discipline
+would need to extend to whatever fires the background sweep; (3) our
+architecture has no "official marketplace" concept to hang a kind-aware
+default off of -- the on-by-default / off-by-default split may not port
+directly and needs its own decision; (4) the passive
+"updated -- run /reload-plugins" notification is close to what `pending`
+already renders network-free, but this would be the first NOTIFICATION
+that fires with no user-issued command behind it at all.
+
+Code seams: `orchestrators/marketplace/autoupdate.ts` (the existing flag,
+kept as the per-marketplace opt-in surface), `orchestrators/marketplace/update.ts`
+(the cascade logic to reuse, currently manual-trigger only), `index.ts`
+(`session_start` / `resources_discover` -- candidate trigger sites),
+`transaction/with-state-guard.ts` (the lock a background sweep would need to
+coordinate with foreground commands around), `shared/notify.ts` (a new
+notification shape for an update that fired with no command behind it).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
