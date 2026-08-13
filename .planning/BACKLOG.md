@@ -689,6 +689,57 @@ footnote list at 33-35; per-surface tables; the "MCP runtime env
 inheritance" subsection at 151). Documentation only -- no extension source
 changes, since we neither set nor consume `AI_AGENT`.
 
+## ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity
+
+Surfaced 2026-08-13 from the upstream release review. The doc-accuracy
+half of this is [ENVDOC-01]; this item is the behavioral question, which
+is genuinely open and needs a fact we do not currently have.
+
+**What upstream added:** pi-mcp-adapter 2.21.0 added
+`literalEnv?: boolean` to `ServerEntry`, consumed in
+`server-manager.ts::resolveEnv` as an early return:
+
+```text
+if (literalEnv) return env ? { ...resolved, ...env } : resolved;
+```
+
+It skips `resolveCommandSecretsRecord` entirely while still inheriting
+`process.env`. Upstream uses it for Agent Plugin env rules, where declared
+values are already fully resolved and must not be re-interpolated.
+
+**Why it might matter to us:** we never set it, so every `env` value our
+MCP bridge writes takes the interpolating path -- `${VAR}` and `$env:VAR`
+are expanded, and an unknown variable resolves to the empty string, not to
+the literal text. A Claude plugin author who writes a literal `$` or a
+`${...}` that is NOT meant as host interpolation therefore gets a
+different value under Pi than the one they wrote.
+
+**The fact we are missing:** whether Claude Code interpolates `${VAR}` in
+stdio MCP server `env` values at all. `docs/env-vars.md`'s existing claim
+that our behavior "matches Claude Code" is about which vars Claude Code
+INJECTS into the spawn env, not about whether it EXPANDS declared values;
+the interpolation half was never verified. Establish that first, because
+it decides the whole item:
+
+- if Claude Code also interpolates, our pass-through is already correct
+  and `literalEnv` should stay unused -- close this as verified-no-change
+- if Claude Code treats declared `env` values as literals, we have a real
+  and undocumented MENV divergence, and `literalEnv: true` is the exact
+  lever that closes it
+
+Do not set `literalEnv` speculatively. Turning it on would silently stop
+expanding `${CLAUDE_PLUGIN_ROOT}`-style values that plugins may already
+depend on, which would be a worse regression than the defect it targets --
+check how our own `bridges/mcp/substitute.ts` install-time substitution
+interacts before touching the runtime path, since the two layers both
+rewrite the same values at different times.
+
+Code seams: `bridges/mcp/substitute.ts` (install-time `${CLAUDE_*}`
+substitution -- the layer that runs BEFORE pi-mcp-adapter sees the value),
+`bridges/mcp/stage.ts` (where the `env` map is composed and where a
+`literalEnv` field would be written), `docs/env-vars.md` ("MCP runtime env
+inheritance" and the MCP env column of the overview matrix).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
