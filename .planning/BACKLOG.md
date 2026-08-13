@@ -582,6 +582,72 @@ as the required fallback), `bridges/skills/rewrite-frontmatter.ts` (the
 sibling single-node-rewrite pattern this follows -- rewrite exactly one
 node span, leave every other key byte-identical).
 
+## MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter
+
+Surfaced 2026-08-13 from the upstream release review covering
+2026-08-05..2026-08-12 (pi 0.84.0-0.84.1, pi-subagents 0.41.0-0.47.1,
+pi-mcp-adapter 2.21.0-2.23.0). The agent-plugin half is in-window; the
+`.agents` half is older drift the same review turned up.
+
+**The problem:** `MCP_COLLISION_SLOTS(cwd)`
+(`bridges/mcp/collision-slots.ts:29`) returns four frozen paths and its
+doc comment calls them "the four pi-mcp-adapter configuration paths".
+Read against pi-mcp-adapter 2.23.0 `config.ts::getConfigSources()`, the
+adapter reads six, plus a seventh source added in the review window:
+
+```text
+~/.config/mcp/mcp.json          checked
+~/.agents/mcp.json              NOT CHECKED  (added 2.13.0, 2026-07-25)
+~/.agents/mcp/mcp.json          NOT CHECKED  (added 2.13.0)
+<agentDir>/mcp.json             checked
+<cwd>/.mcp.json                 checked
+<cwd>/.pi/mcp.json              checked
+settings.agentPluginPaths ->    NOT CHECKED  (added 2.21.0, 2026-08-06)
+  <plugin>/mcp.json
+```
+
+Verified by reading `config.ts` at tag v2.23.0, not from the changelog
+prose. The `.agents` pair traces to upstream commit `084c56c`
+("feat: discover global .agents MCP configs"), first tagged v2.13.0.
+
+**Why the two halves differ in severity:** the `.agents` slots hold
+VERBATIM server names -- the same namespace our bridge writes into, since
+`bridges/mcp/stage.ts:220` takes `Object.keys(servers)` straight from the
+Claude plugin with no prefixing. A user with `~/.agents/mcp.json`
+declaring `github` who installs a Claude plugin also declaring `github`
+gets no MC-4/RN-5 collision warning at all, and precedence silently
+decides which one the adapter actually connects. That is the realistic
+failure. The agent-plugin source is narrower: those names are normalized
+to `<plugin>__<server>` by `formatAgentPluginServerName`
+(`agent-plugin-loader.ts:250`), so colliding needs a Claude plugin to
+declare a server literally named `foo__bar`. Real, but unlikely.
+
+**Which side wins on collision:** `loadMcpConfig` ends with
+`mergeConfigs(pluginConfig, config)`, and `mergeConfigs(base, next)` lets
+`next` win -- so standard config, including the `<scopeRoot>/mcp.json` we
+write, beats an agent-plugin entry. On an undetected collision OUR server
+shadows the user's, which is the worse direction: the user's own
+declaration disappears with no diagnostic from either side.
+
+Direction for later: extend the slot tuple with the two `.agents` paths
+and re-word the MC-4/RN-5 contract comment away from "four". The
+agent-plugin source is a separate and harder question -- its paths are
+not fixed, they come from `settings.agentPluginPaths` inside whichever
+config slot declares it, so enumerating them means reading `settings`
+across slots first and then resolving each plugin's own `mcp.json`. Worth
+deciding whether that is in scope for collision detection at all, or
+whether MC-4 should explicitly document agent-plugin servers as out of
+contract. Do NOT silently widen the tuple without also updating the user
+contract text -- the array is frozen and snapshot-tested precisely so the
+slot order and membership are a deliberate, reviewed change.
+
+Code seams: `bridges/mcp/collision-slots.ts` (`MCP_COLLISION_SLOTS`, the
+frozen tuple and its doc comment; `loadEffectiveServerNames`'s
+first-declarer-wins walk), `bridges/mcp/stage.ts`
+(`assertNoMcpCollisions` call site, ~line 224), plus the snapshot test
+that locks the slot order, and the RN-5 user-contract wording wherever it
+enumerates the slots.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
