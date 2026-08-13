@@ -648,6 +648,47 @@ first-declarer-wins walk), `bridges/mcp/stage.ts`
 that locks the slot order, and the RN-5 user-contract wording wherever it
 enumerates the slots.
 
+## ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams
+
+Surfaced 2026-08-13 from the same upstream release review that produced
+[MCPSRC-01]. Two independent staleness points, both in `docs/env-vars.md`,
+both small enough for one `/gsd-quick` pass over the file.
+
+**Point 1 -- the pi-mcp-adapter anchor is 13 minor versions old.** The
+"MCP runtime env inheritance" subsection (`docs/env-vars.md:151`) opens
+with "behavior verified against 2.10.0". Current upstream is 2.23.0. The
+CLAIM is still correct: `server-manager.ts::resolveEnv` at v2.23.0 still
+builds `{...process.env, ...interpolated(config.env)}` for the path our
+entries take, so nothing in the divergence text is wrong. What is missing
+is that the signature became
+`resolveEnv(env, serverName, literalEnv = false)` in 2.21.0, adding an
+opt-out the doc does not mention. Re-anchor the version and add one
+sentence for the third parameter. The behavioral question that opt-out
+raises is filed separately as [ENVLIT-01] -- keep this one to doc accuracy.
+
+**Point 2 -- `AI_AGENT=pi` has no row in the overview matrix.** pi 0.84.0
+added it (#7493). It is set as `process.env.AI_AGENT = "pi"` at the top of
+`packages/coding-agent/src/cli.ts` and `rpc-entry.ts` -- on the Pi process
+itself, at startup, before any extension code runs. It therefore reaches
+every surface the matrix documents purely by inheritance, with no work
+from us: bash children, both hook lanes (both spread `...process.env`),
+and MCP servers (pi-mcp-adapter's `resolveEnv` seeds from
+`{...process.env}`). No Claude Code equivalent exists, so it belongs in
+the matrix the same way `CLAUDE_SESSION_ID` and
+`PI_CLAUDE_MARKETPLACE_PATH` do (rows at `docs/env-vars.md:29-30`), with
+`--` in the Claude Code column.
+
+One real difference from those two pi-only rows, worth getting right in
+the footnote rather than copying theirs verbatim: `AI_AGENT` is set at
+process start, so it carries NO spawn-order caveat. The `‡` footnote
+exists because our session vars are set in the `session_start` handler and
+so miss servers spawned before it runs. `AI_AGENT` cannot miss anything.
+
+Code seams: `docs/env-vars.md` (overview matrix at lines 19-31 and its
+footnote list at 33-35; per-surface tables; the "MCP runtime env
+inheritance" subsection at 151). Documentation only -- no extension source
+changes, since we neither set nor consume `AI_AGENT`.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
