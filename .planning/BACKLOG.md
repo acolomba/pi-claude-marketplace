@@ -338,6 +338,53 @@ Code seams: `persistence/migrate.ts` (delete), `persistence/migrate-config.ts`
 `STATE_SCHEMA.schemaVersion` union simplification), `orchestrators/reconcile/apply.ts`
 (`migrateFirstRunConfig` call site, new loud-failure guard).
 
+## PDEP-01: `claude:plugin info` silently drops version-pinned plugin dependencies
+
+Surfaced 2026-08-13 spiking whether Claude Code plugins support declaring
+dependencies on other plugins and how this repo handles the field. Full
+investigation, live prototype, and requirements:
+`.claude/skills/spike-findings-pi-claude-marketplace/references/plugin-dependencies.md`
+(2 spikes: `claude-plugin-dependency-spec` VALIDATED,
+`pi-cm-dependency-behavior` PARTIAL).
+
+**The finding, in short:** Claude Code's `plugin.json` `dependencies` field
+accepts array elements in two shapes -- a bare string (plugin name) or an
+object `{name, version, marketplace}` carrying a semver constraint --
+confirmed against the official reference docs, not inferred. Upstream
+auto-resolves and auto-installs these; this repo intentionally stays
+opaque (no auto-resolution -- PI-13/PR-5, a standing scope decision, not
+in question here). What IS a real defect: the "manual-install warning"
+meant to compensate for the missing auto-resolution does not reliably
+reach the user. `claude:plugin install` drops the note per D-19-01;
+`claude:plugin list` only reads resolver notes for an `unavailable`
+plugin, never an `installable` one; and `claude:plugin info` --
+`orchestrators/plugin/info.ts`'s `normalizeDependencies()` -- filters the
+`dependencies` array to `typeof d === "string"` only, silently dropping
+every object-shaped (version-pinned) entry. Confirmed live against the
+real resolver and `info` orchestrator
+(`sources/005-pi-cm-dependency-behavior/prototype.ts`): an array of three
+shapes (all-strings, mixed, all-objects) renders correctly, partially, and
+not at all, respectively -- no crash, pure lost information. Net effect: a
+plugin declaring a version-pinned dependency, the shape upstream documents
+as the primary use case, is invisible to a pi-claude-marketplace user
+through every command surface.
+
+Direction for later: the minimum fix is narrow -- `normalizeDependencies`
+should render object-shaped entries too (at minimum `name`, ideally
+`name@version`) instead of filtering them out. Separate, still-open
+question: whether the PI-13 note should also reappear on `install`/`list`
+for an installable plugin, or whether `info` remains the intended sole
+surface (in which case only the display fix is needed, but requirements
+docs should say "discoverable via `info`" rather than implying a warning
+appears at install time).
+
+Code seams: `orchestrators/plugin/info.ts` (`normalizeDependencies`),
+`domain/resolver.ts` (`resolveStrict`/`resolveLoose`, the PI-13 note-push
+-- shape-agnostic, no change needed), `orchestrators/plugin/install.ts`
+(D-19-01 drop site, if install-time surfacing is later decided),
+`orchestrators/plugin/list.ts` (`sharedNarrowResolverNotes` scoping, if
+list-time surfacing is later decided).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10

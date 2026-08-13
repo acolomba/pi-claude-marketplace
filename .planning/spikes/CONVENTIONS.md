@@ -41,7 +41,32 @@ at "this code is unreachable from the live write path" (spike 001) is not
 the same question as "is it *safe* to delete" (spike 002 found the
 opposite answer for a structurally similar-looking file). Always trace one
 step further: what does the calling code do on the path this code
-currently prevents from being taken.
+currently prevents from being taken. Applies beyond dead-code audits too
+-- spike 005 found a field silently dropped by one renderer, then traced
+whether any *other* surface (install, list) picked up the slack before
+concluding the information was lost entirely.
+
+**Read the schema before hand-building a fixture, don't guess-and-fail:**
+when a live prototype needs an on-disk `state.json`/`marketplace.json`
+fixture, read the actual TypeBox schema (`*_SCHEMA` constants in
+`persistence/state-io.ts` / `domain/components/*.ts`) for the exact
+required-field set and nested shapes first. Guessing a plausible-looking
+shape (spike 005 initially guessed `{ type, path }` for a marketplace
+`source`, and omitted several `MARKETPLACE_RECORD_SCHEMA` required fields)
+costs a run-fail-read-schema-retry cycle per wrong guess; reading the
+schema first is strictly faster once a spike exercises persistence, not
+just domain logic.
+
+**Verify external research claims from primary sources, not search
+summaries:** for spikes researching an external product's current
+behavior (spike 004, the first spec-research spike in this project), an
+auto-generated WebSearch summary can conflate an old, superseded
+feature-request issue with a newer bug-fix issue and produce a confidently
+wrong answer. Fetch the actual doc pages and, for any GitHub issue used as
+corroborating evidence, its full body + state (open/closed) + date --
+dates alone can resolve an apparent contradiction between two issues.
+Prefer the official reference docs as the authoritative source; treat
+issues/trackers as corroborating signal only.
 
 ## Tools & Libraries
 
