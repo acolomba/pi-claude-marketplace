@@ -13,6 +13,7 @@ during the reload pipeline are erased. `@earendil-works/pi-coding-agent` is not
 our fork; operator decided (2026-06-11) NOT to file an upstream issue for now.
 
 Candidate directions for later brainstorming:
+
 - queue-and-flush: stash the cascade when `reason === "reload"`, emit on the
   next extension event with a live UI (deterministic but late-arriving)
 - persistent `ui.setWidget` badge summarizing the last reconcile
@@ -25,17 +26,18 @@ Workaround today: run `/claude:plugin pending` before reloading, or `list` after
 
 Surfaced during v1.14 Phase 85 discuss (2026-07-22). The `UNSUPPORTED_REASONS`
 tokens (`unsupported hooks`, `lsp`, `unsupported source`) semantically mean a
-*well-formed but unsupported component KIND* -- lsp / monitors / themes / etc.,
-whose content the resolver never parses. Malformed input to a *supported*
+_well-formed but unsupported component KIND_ -- lsp / monitors / themes / etc.,
+whose content the resolver never parses. Malformed input to a _supported_
 feature is a different axis (a parse / structural defect) and belongs with the
 failure family, parallel to `{invalid manifest}` and `{unparseable}`.
 
 Two existing cases mislabel that axis:
+
 - inline malformed `mcpServers` -> `{unsupported source}` (the `narrowResolverNotes` catch-all)
 - malformed `hooks.json` (invalid JSON / schema) -> `{unsupported hooks}`
 
 Phase 85 introduces the correct token `{malformed mcp}` for a broken/malformed
-mcpServers *string reference*, but deliberately leaves the two cases above
+mcpServers _string reference_, but deliberately leaves the two cases above
 unchanged (existing behavior, out of scope for this milestone).
 
 Direction for later: introduce a consistent `{malformed <feature>}` failure-class
@@ -452,6 +454,68 @@ Code seams: `domain/components/plugin.ts` (`UNSUPPORTED_COMPONENT_FIELDS`
 extend), `persistence/state-io.ts` (storage location for non-sensitive
 values), `orchestrators/plugin/install.ts` / `enable-disable.ts`
 (prompt-at-install/enable touchpoints).
+
+## UDISP-01: uninstall deletes plugin data unconditionally, no `--keep-data` escape hatch
+
+Surfaced 2026-08-13 from a competitive-analysis gap review
+(`docs/competitive-analysis/pi-plugins.md` recommendation #1: "Uninstall
+data disposition... the smallest change here... closes a real data-loss
+path") -- initially framed against the competitor's own model (a required
+`--keep-data`/`--delete-data` mutex pair), then re-checked directly against
+Claude Code's own official behavior
+(`code.claude.com/docs/en/plugins-reference`). The two differ, and upstream
+is the one worth matching per this project's stated `/claude:plugin`
+alignment goal.
+
+**Claude Code's actual behavior:** `claude plugin uninstall <plugin>
+[--scope] [--keep-data] [--prune] [-y]`. There is no `--delete-data` flag.
+Default is delete, but only when the plugin has no other scope installation
+to fall back on: "By default, uninstalling from the last remaining scope
+also deletes the plugin's `${CLAUDE_PLUGIN_DATA}` directory. Use
+`--keep-data` to preserve it." Deletion is scope-aware and silent -- no
+confirmation prompt for data specifically (`-y`/`--yes` gates a different,
+unrelated `--prune` dependency-removal confirmation).
+
+**Our behavior today:** `orchestrators/plugin/uninstall.ts:635` -- `await
+rm(dataDir, { recursive: true, force: true })` -- runs unconditionally on
+every uninstall, with no flag, no scope check, and no way to opt out.
+Confirmed by direct read, not inferred. The contents of
+`${CLAUDE_PLUGIN_DATA}` are lost on uninstall even when the plugin remains
+installed in the other scope.
+
+**Two call sites, one fix needed in both:** `uninstallPlugin()`
+(`orchestrators/plugin/uninstall.ts`) is called from the interactive
+`/claude:plugin uninstall` command AND from
+`orchestrators/reconcile/apply.ts`'s `applyPluginUninstalls()`, which fires
+non-interactively from `resources_discover`/`session_start` whenever a
+plugin is dropped from `claude-plugins.json`. Both paths need the same
+scope-aware rule; the reconcile path was never going to be interactive
+under Claude Code's own model either (their default is a scope-state
+check, not a prompt), so no special-casing is needed between the two call
+sites.
+
+Direction for later: add an optional `--keep-data` flag to the interactive
+command -- no `--delete-data`, matching upstream exactly; inventing one
+would add a flag Claude Code doesn't have. Before deleting, check whether
+the plugin is still installed in the other scope using the existing
+`otherScope()` + `locationsFor()` + `loadState()` seam
+(`orchestrators/plugin/shared.ts:216`, already reused by
+`reinstall.ts`/`update.ts`/`list.ts` for the identical "is this plugin
+present in the other scope" question -- "ONE extra `loadState` of the
+other scope" is the documented cost there). Delete only when this is the
+last remaining scope AND `--keep-data` was not passed; the
+reconcile-triggered path applies the identical rule with no flag to
+consult, since there is no command line to put one on. A GC sweep for
+orphaned `--keep-data`-retained data directories is out of scope here --
+keeping is opt-in under this model, not a default-driven accumulation
+path, so it is a reasonable separate follow-on item, not a blocker.
+
+Code seams: `orchestrators/plugin/uninstall.ts` (the unconditional `rm()`
+call, line 635), `orchestrators/plugin/shared.ts` (`otherScope()`, the
+existing cross-scope-presence pattern to reuse), `orchestrators/reconcile/apply.ts`
+(`applyPluginUninstalls()`, the non-interactive call site),
+`edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
+`edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
