@@ -75,6 +75,38 @@ original carrier. Their uncovered remainder is the same shape the bounded sweep
 worked -- rare-failure and cascade-diagnostic arms. Decide whether they get a
 follow-on bounded sweep or are accepted as-is. Do not decide it by exclusion.
 
+## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
+
+Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
+(`docs/competitive-analysis/pi-plugins.md`, recommendation #11). Verified
+2026-08-13 directly against our own pinned `@earendil-works/pi-coding-agent`:
+every `ExtensionContext` carries a real `mode: "tui" | "rpc" | "json" |
+"print"` field, set by how the user invoked Pi (`pi` interactive, `pi -p`,
+`pi --mode json`, or the RPC stdin/stdout protocol). We never read it. Our
+sole output primitive, `ctx.ui.notify(message: string, type?)`, takes a plain
+formatted string and a severity -- no structured-payload slot.
+
+A user driving `/claude:plugin` through `pi --mode json` or RPC gets the same
+human-formatted string wrapped in a JSON envelope today, not real
+machine-readable data. `@nklisch/pi-plugins` solved this on the low-level
+`pi.appendEntry<T>(customType, data)` primitive -- confirmed present in our
+own pinned Pi version too, under "Append a custom entry to the session for
+state persistence (not sent to LLM)". Their `pi-control-channel.ts` keys
+output by mode: rpc/json modes emit `appendEntry` frames, print mode writes
+stdout lines, tui is a no-op. A versioned grammar, closed exit-code
+vocabulary, and pagination sit on top of that channel, none of which are
+scoped here.
+
+Direction for later: design a structured shape for the existing
+`NotificationMessage` / `PluginInfoRow` discriminated types in
+`shared/notify.ts` (most of the shape work already exists), and emit it via
+`pi.appendEntry` when `ctx.mode` is `"json"` or `"rpc"`, alongside (not
+instead of) the existing human `notify()` line.
+
+Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
+(re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
+command entry point every handler's `ctx` flows through).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
