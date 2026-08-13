@@ -385,6 +385,74 @@ Code seams: `orchestrators/plugin/info.ts` (`normalizeDependencies`),
 `orchestrators/plugin/list.ts` (`sharedNarrowResolverNotes` scoping, if
 list-time surfacing is later decided).
 
+## USRCFG-01: no equivalent to Claude Code's `userConfig` plugin settings
+
+Surfaced 2026-08-13 reviewing `docs/competitive-analysis/` against
+`.planning/BACKLOG.md` for coverage gaps, then researching Claude Code's
+official `userConfig` spec and `@nklisch/pi-plugins`' implementation of it
+directly.
+
+Claude Code's `plugin.json` `userConfig` field lets a plugin declare
+settings (`type`: string/number/boolean/directory/file, `title`,
+`description`, `required`, `sensitive`, `default`, `min`/`max`, `multiple`)
+that Claude Code prompts the user for at enable time, then substitutes as
+`${user_config.KEY}` into skill/agent content, MCP/LSP server fields, and
+hook commands (exec-form only -- shell-form hook/monitor commands reject the
+substitution as of v2.1.207 to block injection; those read
+`CLAUDE_PLUGIN_OPTION_<KEY>` from the environment instead). Non-sensitive
+values store in `settings.json` under `pluginConfigs[<plugin-id>].options`
+(user settings / `--settings` / managed policy only -- project settings are
+explicitly excluded); sensitive values go to macOS Keychain or
+`~/.claude/.credentials.json` (~2KB, shared with OAuth tokens).
+
+We have no equivalent (confirmed by grep -- zero hits for `userConfig`
+anywhere). A plugin declaring it downgrades to `partially-available` today,
+treated as an unsupported component-kind field.
+
+Pi itself provides no comparable primitive to build this on -- confirmed
+against `@earendil-works/pi-coding-agent`'s docs and shipped types directly,
+not inferred. `pi.registerFlag()` is ephemeral CLI-only; the provider
+credential system (`interaction.prompt({type: "secret"})`,
+`~/.pi/agent/auth.json`) is scoped to model-provider auth and not callable
+by an arbitrary extension; `context.store` is scoped to `refreshModels()`'s
+catalog cache; and `ctx.ui.input()` has no masked/secret mode. There is no
+OS Keychain integration exposed to extensions at all.
+
+`@nklisch/pi-plugins` (`docs/competitive-analysis/pi-plugins.md`) is the one
+project in the field that implements `userConfig`, and it proves the shape
+of the problem rather than solving it for us: they built their own schema
+parser (`src/formats/claude/user-config-reader.ts`), their own masked-input
+TUI component (`MaskedInputSurface` / `SensitiveValue`, built on raw
+`pi-tui` primitives via `ctx.ui.custom()`, since Pi's own `ctx.ui.input()`
+has no masking), and their own SQLite storage for non-sensitive values --
+none of it drawn from a Pi-provided `userConfig` API, because none exists.
+Their sensitive-value custody is unfinished even so:
+`src/infrastructure/secrets/create-platform-secret-store.ts` returns
+`createUnavailableSecretStore()` unconditionally on every platform at this
+commit -- no Keychain, libsecret, or Credential Manager code shipped, and a
+plugin requiring a sensitive value cannot activate on their own
+implementation either (diagnostic: `SECRET_CUSTODY_UNAVAILABLE`).
+
+Direction for later: non-sensitive subset first, matching both competitor
+reports' own recommendation and the only part `@nklisch/pi-plugins` has
+actually gotten working. Read the `userConfig` schema from `plugin.json`,
+prompt-and-validate via `ctx.ui.input()`/`confirm()` dialogs at
+install/enable time (no schema-driven form exists in Pi; validation is ours
+to write), store plaintext values in `state.json` using the existing atomic
+per-scope write path, and extend `shared/vars.ts`'s
+`${CLAUDE_PLUGIN_DATA}`-style substitution to cover `${user_config.KEY}` /
+`CLAUDE_PLUGIN_OPTION_<KEY>`. Explicitly scope out `sensitive: true` (would
+require building OS-level secret custody from scratch -- a separate, much
+larger piece of work with no Pi primitive and no working prior art to
+borrow from, per the competitor's own unfinished attempt).
+
+Code seams: `domain/components/plugin.ts` (`UNSUPPORTED_COMPONENT_FIELDS`
+-- `userConfig` currently classified here), `domain/resolver.ts`
+(component-kind handling), `shared/vars.ts` (substitution machinery to
+extend), `persistence/state-io.ts` (storage location for non-sensitive
+values), `orchestrators/plugin/install.ts` / `enable-disable.ts`
+(prompt-at-install/enable touchpoints).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
