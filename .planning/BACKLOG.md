@@ -296,6 +296,48 @@ kept as the per-marketplace opt-in surface), `orchestrators/marketplace/update.t
 coordinate with foreground commands around), `shared/notify.ts` (a new
 notification shape for an update that fired with no command behind it).
 
+## MIGR-01: replace field-level backward-compat migration with a staleness gate
+
+Surfaced 2026-08-13 spiking whether `state.json` and `claude-plugins.json`
+still need per-field backward-compat migration now that a desired-state
+config file exists to rebuild from, and the project has few enough users
+that a forced resync on upgrade is an acceptable cost. Full investigation,
+prototype, and requirements: `.claude/skills/spike-findings-pi-claude-marketplace/`
+(3 spikes: `installed-record-backcompat-audit` VALIDATED,
+`config-file-backcompat-audit` PARTIAL, `force-reinstall-on-version-mismatch`
+PARTIAL).
+
+**The finding, in short:** `persistence/migrate.ts` (283 prod / 529 test
+LOC -- `state.json` field-fills for `manifestPath`/`marketplaceRoot`,
+`resources.*` defaults, `enabled` default) is pure legacy-catchup with
+zero overlap with the live install/add write paths, and
+`STATE_VALIDATOR.Check()` on the RAW un-migrated JSON already fails on
+every shape it exists to heal -- proven against the real, unmodified
+validator in `sources/003-force-reinstall-on-version-mismatch/prototype.ts`.
+No new version-stamp field is needed; the existing strict schema already
+is the staleness detector, for both plugin- and marketplace-level records
+in one check. `persistence/migrate-config.ts` (197 prod / 570 test LOC --
+first-run `state.json` -> `claude-plugins.json` bootstrap) looks
+structurally similar but is NOT free to delete: it is the only thing
+stopping "config file absent" from being read as "uninstall everything"
+by `reconcile/plan.ts`'s `buildUninstallBucket`. Net estimated impact if
+implemented as designed: `migrate.ts` deleted outright; `migrate-config.ts`
+deleted and replaced by a small (~10-20 LOC) loud-failure guard for the
+one edge case (stale state + absent config) that must notify and refuse
+rather than silently wipe or silently auto-migrate; `bridges/agents/marker.ts`'s
+legacy marker constant and the scattered D-13 `autoupdate` scrub are
+explicitly left alone (both provably inert / out of scope).
+
+Direction for later: the guard's exact `notify()` wording and the recovery
+command it should point users at (re-run install per plugin? a
+`--rebuild-config-from-disk` escape hatch?) is unresolved -- an open design
+question for planning, not answered by the spike.
+
+Code seams: `persistence/migrate.ts` (delete), `persistence/migrate-config.ts`
+(delete, replace call site), `persistence/state-io.ts` (`loadState`,
+`STATE_SCHEMA.schemaVersion` union simplification), `orchestrators/reconcile/apply.ts`
+(`migrateFirstRunConfig` call site, new loud-failure guard).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
