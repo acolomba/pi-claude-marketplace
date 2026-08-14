@@ -20,7 +20,7 @@
 // caught the runtime bug the unit tests missed.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -315,5 +315,49 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     assert.equal(executorCalls[0]!.pluginId, "project-session-start");
     assert.equal(executorCalls[0]!.claudeEvent, "SessionStart");
     assert.equal(executorCalls[0]!.scope, "project");
+  });
+});
+
+test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async (t) => {
+  _resetForTest();
+  t.after(() => {
+    _resetForTest();
+    _resetExecutorForTest();
+  });
+
+  await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+    // USER scope owns the only SessionStart-declaring plugin; the project
+    // scope is pristine (no state.json, no hooks.json, no `.pi` at all).
+    const userExtensionRoot = path.join(agentDir, "pi-claude-marketplace");
+    const userHooksDir = path.join(userExtensionRoot, "hooks", "learning-output-style");
+    await mkdir(userHooksDir, { recursive: true });
+    await saveState(userExtensionRoot, buildUserScopeStateWithHooksPlugin());
+    await writeFile(path.join(userHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
+
+    _setExecutorForTest(() => Promise.resolve({ kind: "noop" }));
+
+    // Boot against a THIRD cwd so the factory's own `_shared` mkdir cannot
+    // land in projectCwd and mask what the session_start path does.
+    const bootCwd = path.join(agentDir, "boot-cwd");
+    await mkdir(bootCwd, { recursive: true });
+
+    const { pi, registrations } = makeMockPi();
+    const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
+    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: bootCwd });
+
+    const sessionStartReg = registrations.find((r) => r.event === "session_start");
+    assert.ok(sessionStartReg, "bridge must register session_start handler");
+
+    await sessionStartReg.handler({ type: "session_start", reason: "startup" }, placeholderCtx);
+
+    // The lazy hydrate gates its `_shared` mkdir on a PROJECT-scope
+    // SessionStart entry actually existing. With only a user-scope plugin
+    // installed, an unsolicited mkdir here would create `<cwd>/.pi/...` in
+    // the user's project on every session start -- the WR-05 violation.
+    assert.deepEqual(
+      await readdir(projectCwd),
+      [],
+      "pristine project cwd must stay empty across session_start (WR-05)",
+    );
   });
 });

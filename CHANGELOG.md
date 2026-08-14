@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- A project-scope plugin's `SessionStart` hooks now fire on the session that starts them. Pi emits `session_start` before `resources_discover`, and the project-scope hook cache was only hydrated on `resources_discover` -- so at dispatch time the `SessionStart` routing bucket held no project entries and those hooks were skipped, becoming reachable only after a later `/reload`. The bridge now hydrates project scope against the event's own `cwd` before dispatching `SessionStart`. User-scope hooks were never affected. Thanks to @rakesh-vs for the contribution (#127).
+
 ## [0.14.0] - 2026-08-12
 
 - An installed plugin now survives its entry disappearing from the marketplace manifest. `list` keeps the installation record and marks the row `{not in manifest}` instead of dropping the plugin, and the same reason reaches the LLM `list` tool. A manifest that cannot be read is never reported as a missing entry: absence can only be asserted after a successful load, so an unreadable or malformed manifest keeps its own failure reason instead.
