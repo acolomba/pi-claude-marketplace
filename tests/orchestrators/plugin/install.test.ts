@@ -146,14 +146,17 @@ async function seedPathMarketplaceWithPlugin(opts: {
    */
   pluginJsonVersion?: string | null;
   /**
-   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE entry (distinct from
-   * `pluginJsonDefaultEnabled`, which stamps the plugin's OWN plugin.json).
+   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE entry -- the side that
+   * WINS the precedence rule. Both sides are named, unlike the version pair
+   * above, because picking the wrong one yields a fixture that resolves through
+   * the fallback instead of the winner and passes for the wrong reason.
    * Absent -> the entry is written exactly as it is without this knob.
    */
-  defaultEnabled?: boolean;
+  entryDefaultEnabled?: boolean;
   /**
    * DFEN-01: stamp `defaultEnabled` on the plugin's own
-   * `.claude-plugin/plugin.json`, leaving the marketplace entry silent.
+   * `.claude-plugin/plugin.json` -- the precedence FALLBACK, consulted only
+   * when `entryDefaultEnabled` is absent.
    * Absent -> plugin.json is written exactly as it is without this knob.
    */
   pluginJsonDefaultEnabled?: boolean;
@@ -288,8 +291,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
     entry.dependencies = { "some-other-plugin": "*" };
   }
 
-  if (opts.defaultEnabled !== undefined) {
-    entry.defaultEnabled = opts.defaultEnabled;
+  if (opts.entryDefaultEnabled !== undefined) {
+    entry.defaultEnabled = opts.entryDefaultEnabled;
   }
 
   const manifest = {
@@ -795,7 +798,7 @@ const DFEN_DECLARATION_SITES = [
   {
     label: "marketplace entry declares defaultEnabled false",
     tmpPrefix: "install-dfen-entry-",
-    seedKnob: { defaultEnabled: false },
+    seedKnob: { entryDefaultEnabled: false },
   },
   {
     // The entry stays silent, so the manifest declaration is the one the
