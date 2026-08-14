@@ -1586,3 +1586,38 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     assert.equal(cloneCall.auth.host, "github.com");
   });
 });
+
+test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the GitLab provider's auth bundle attached to the same clone call", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+
+    // Unlike the gitlab.example.com adds above (MURL-01, PROV-02), gitlab.com
+    // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
+    // findProviderForHost/buildAuthForHost path (no mock auth registry) must
+    // attach its auth bundle to the SAME clone call that carries the
+    // `.git`-suffixed wire URL.
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.com/team/mp",
+      gitOps,
+      credentialOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    // MURL-01: ensureGitSuffix restores the `.git` suffix on the wire URL.
+    assert.equal(cloneCall.url, "https://gitlab.com/team/mp.git");
+    // GAUTH-02: gitlab.com is provider-registered -- the clone carries the
+    // GitLab auth bundle, not the no-provider authless path.
+    assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");
+    assert.equal(cloneCall.auth.host, "gitlab.com");
+  });
+});

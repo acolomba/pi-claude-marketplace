@@ -245,6 +245,62 @@ void test("PROV-02: a git-source install on a no-provider host threads NO auth b
   });
 });
 
+void test("GAUTH-02 / MURL-01: a git-source install on gitlab.com threads the GitLab provider's auth bundle onto the same `.git`-suffixed clone call", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
+    try {
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gl",
+        source: { source: "url", url: "https://gitlab.com/o/r", sha: GIT_SOURCE_SHA },
+        fixtureRepoDir,
+      });
+
+      // Unlike the gitlab.example.com no-provider installs above (PROV-02),
+      // gitlab.com is claimed by GITLAB_PROVIDER -- the real
+      // findProviderForHost/buildAuthForHost path (no mock auth registry)
+      // must attach its bundle to the SAME clone call that carries the
+      // `.git`-suffixed wire URL (MURL-01).
+      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { seam, captured } = capturingSeam(seamWith(gitOps));
+      const { credOps: credentialOps } = makeMockCredentialOps();
+      const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
+      const { ctx, pi } = makeCtx();
+
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gl",
+        cloneCacheSeam: seam,
+        credentialOps,
+        deviceFlowHttp,
+      });
+
+      assert.equal(captured.count, 1, "the clone probe ran once");
+      assert.ok(captured.auth !== undefined, "gitlab.com must build an auth bundle");
+      assert.equal(captured.auth.host, "gitlab.com", "the bundle is keyed on the provider host");
+
+      assert.equal(gitState.cloneCalls.length, 1);
+      const cloneCall = gitState.cloneCalls[0];
+      assert.ok(cloneCall);
+      assert.equal(cloneCall.url, "https://gitlab.com/o/r.git");
+      assert.equal(
+        cloneCall.auth?.host,
+        "gitlab.com",
+        "the recorded clone call itself carries the gitlab.com auth bundle",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 void test("D-79-02: two installs sharing one authMemo on the same provider host run the Device Flow exactly once", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-memo-"));
