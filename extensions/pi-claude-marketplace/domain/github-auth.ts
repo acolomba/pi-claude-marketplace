@@ -143,6 +143,36 @@ export type DeviceFlowResult =
   | { ok: true; cred: GitCredentials; authAttempted: true }
   | { ok: false; reason: string; authAttempted: true };
 
+/**
+ * Extract a `(<error> -- <error_description>)` suffix from a non-2xx
+ * device-code response body, mirroring the `${r.error}${detail}` shape
+ * `runPollLoop` uses for poll-error responses. No credential has been
+ * issued yet at this point in the flow (this is the pre-token device-code
+ * request), so the body's `error` / `error_description` fields are safe to
+ * surface -- AUTH-09; verified by
+ * tests/architecture/no-credential-leak.test.ts, which scans this file for
+ * token interpolation and stays green because these fields never carry
+ * access_token/cred.* material. Returns "" when the body isn't parseable
+ * JSON or carries no `error` field, so the caller falls back to the bare
+ * HTTP status.
+ */
+async function describeDeviceCodeErrorBody(res: Response): Promise<string> {
+  let data: Record<string, unknown>;
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+
+  const { error: errorRaw, error_description: errorDescRaw } = data;
+  if (typeof errorRaw !== "string") {
+    return "";
+  }
+
+  const detail = typeof errorDescRaw === "string" ? ` -- ${errorDescRaw}` : "";
+  return ` (${errorRaw}${detail})`;
+}
+
 async function requestCodeImpl(
   deviceCodeUrl: string,
   clientId: string,
@@ -158,10 +188,12 @@ async function requestCodeImpl(
     body,
   });
   if (!res.ok) {
-    // AUTH-09: ONLY the status code is interpolated, never the response
-    // body (defense in depth -- the body shouldn't contain credentials at
-    // this point but the discipline is uniform across the file).
-    throw new Error(`Device code request failed: HTTP ${res.status}`);
+    // AUTH-09: the provider's error/error_description fields are folded in
+    // via describeDeviceCodeErrorBody (safe -- see its doc comment); no
+    // other part of the response body is ever interpolated.
+    throw new Error(
+      `Device code request failed: HTTP ${res.status}${await describeDeviceCodeErrorBody(res)}`,
+    );
   }
 
   const data = (await res.json()) as DeviceCodeResponse;

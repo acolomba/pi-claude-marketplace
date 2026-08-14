@@ -503,22 +503,87 @@ test("initiateDeviceFlow: AbortSignal cancels poll loop mid-sleep (opts.signal p
   }
 });
 
-test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws on HTTP error status (lines 162-167)", async () => {
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: throws with bare HTTP status when the body has no `error` field (lines 162-167)", async () => {
   // requestCodeImpl is the real implementation behind DEFAULT_DEVICE_FLOW_HTTP.
   // Covering it requires intercepting globalThis.fetch. We temporarily replace
   // fetch with a stub that returns a non-ok response, then restore it.
   //
-  // AUTH-09: the throw message includes only the status code, never the body.
+  // No credential exists yet at this point in the flow (pre-token
+  // device-code request), so the body's error/error_description fields are
+  // safe to fold into the message (see the dedicated enriched-body test
+  // below); this fixture carries no `error` field, so the message falls
+  // back to the bare HTTP status.
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-    return Promise.resolve(new Response(JSON.stringify({ error: "ignored" }), { status: 401 }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ message: "not an oauth error" }), { status: 401 }),
+    );
   };
 
   try {
     await assert.rejects(
       () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
-      /Device code request failed: HTTP 401/,
-      "requestCodeImpl must throw with HTTP status on non-ok response",
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.equal(err.message, "Device code request failed: HTTP 401");
+        return true;
+      },
+      "requestCodeImpl must throw with the bare HTTP status when the body has no `error` field",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: folds error/error_description into the message on a non-2xx response (WR-04)", async () => {
+  // A misconfigured OAuth Application (wrong scope, Device Flow disabled,
+  // client_id typo) returns a 4xx with `error`/`error_description` fields
+  // that previously never reached the thrown message -- only the bare HTTP
+  // status did.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          error: "unauthorized_client",
+          error_description: "Device Flow is not enabled for this OAuth Application",
+        }),
+        { status: 400 },
+      ),
+    );
+  };
+
+  try {
+    await assert.rejects(
+      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /HTTP 400/);
+        assert.match(err.message, /unauthorized_client/);
+        assert.match(err.message, /Device Flow is not enabled for this OAuth Application/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("DEFAULT_DEVICE_FLOW_HTTP.requestCode: falls back to bare HTTP status when the error body isn't parseable JSON", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (): Promise<Response> => {
+    return Promise.resolve(new Response("not json at all", { status: 500 }));
+  };
+
+  try {
+    await assert.rejects(
+      () => DEFAULT_DEVICE_FLOW_HTTP.requestCode("test-client-id", "repo"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.equal(err.message, "Device code request failed: HTTP 500");
+        return true;
+      },
+      "requestCodeImpl must fall back to the bare HTTP status on an unparseable body",
     );
   } finally {
     globalThis.fetch = originalFetch;

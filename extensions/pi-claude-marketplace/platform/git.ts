@@ -3,6 +3,9 @@ import * as fs from "node:fs";
 import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+
 import type { CredentialOps } from "./git-credential.ts";
 
 /**
@@ -393,11 +396,22 @@ export interface BuildAuthCallbacksOpts {
  *   next invocation re-enters via onAuth, which falls through to
  *   `onAuthRequired` on the (now-empty) fill miss.
  * - CP-10 (no raw exception escape): both callbacks wrap their bodies in
- *   try/catch and convert any thrown error into `{ cancel: true }`. Error
- *   messages from CredentialOps and onAuthRequired are intentionally NOT
- *   interpolated into return values, log lines, or notify calls -- a
- *   credential could be interpolated into an upstream Error, so dropping
- *   the message on the floor is the AUTH-09 default.
+ *   try/catch and convert any thrown error into `{ cancel: true }` -- the
+ *   value isomorphic-git receives is unchanged. Error messages from
+ *   CredentialOps and onAuthRequired are intentionally NOT interpolated into
+ *   RETURN VALUES or notify calls -- a credential could be interpolated into
+ *   an upstream Error, so surfacing it to the user or to isomorphic-git
+ *   would violate AUTH-09. The failure reason IS routed through
+ *   `hookDebugLog` before the `{ cancel: true }` fallback so the specific
+ *   cause (which OAuth provider error, which host) is diagnosable rather
+ *   than discarded outright: `onAuthRequired`'s `result.reason` (from
+ *   `domain/github-auth.ts::DeviceFlowResult`) is covered by the
+ *   `tests/architecture/no-credential-leak.test.ts` AUTH-09 gate, and a
+ *   caught exception's message is covered by `platform/git-credential.ts`'s
+ *   own docstring discipline (CredentialOps Error messages reference only
+ *   the subcommand name + timeout-ms/exit code) -- `hookDebugLog` writing to
+ *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1` (never to the
+ *   return value or a user-visible notify) keeps this within AUTH-09.
  *
  * @see REQUIREMENTS.md::AUTH-01 (private repo auth via Device Flow)
  * @see REQUIREMENTS.md::AUTH-02 (silent keychain reuse on subsequent ops)
@@ -426,13 +440,20 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
         return result.cred;
       }
 
+      // Capture the specific failure reason for diagnosis (AUTH-09-safe per
+      // the no-credential-leak gate on DeviceFlowResult.reason) before
+      // falling back to the generic { cancel: true } isomorphic-git sees.
+      hookDebugLog(`onAuth: Device Flow failed for ${opts.host}: ${result.reason}`, "auth");
       return { cancel: true };
-    } catch {
+    } catch (err) {
       // CP-10: catch ANY thrown error from fill / onAuthRequired and turn
-      // it into a cancel. The Error message is dropped on the floor --
-      // a credential could legitimately appear inside an upstream Error
-      // (subprocess output, Device Flow HTTP error), so interpolating it
-      // into a log line or rethrown error would violate AUTH-09.
+      // it into a cancel; isomorphic-git never sees the raw error. The
+      // caught message is still routed through hookDebugLog rather than
+      // dropped -- platform/git-credential.ts's own docstring pins that
+      // CredentialOps Error messages reference only the subcommand name +
+      // timeout-ms/exit code, never a credential field, so this stays
+      // AUTH-09-safe.
+      hookDebugLog(`onAuth threw for ${opts.host}: ${errorMessage(err)}`, "auth");
       return { cancel: true };
     }
   }
