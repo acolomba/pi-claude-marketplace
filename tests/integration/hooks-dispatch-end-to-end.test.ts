@@ -361,3 +361,63 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     );
   });
 });
+
+test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async (t) => {
+  _resetForTest();
+  t.after(() => {
+    _resetForTest();
+    _resetExecutorForTest();
+  });
+
+  await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+    // USER scope owns the SessionStart-declaring plugin, so there IS an
+    // entry that must still dispatch once the hydrate blows up.
+    const userExtensionRoot = path.join(agentDir, "pi-claude-marketplace");
+    const userHooksDir = path.join(userExtensionRoot, "hooks", "learning-output-style");
+    await mkdir(userHooksDir, { recursive: true });
+    await saveState(userExtensionRoot, buildUserScopeStateWithHooksPlugin());
+    await writeFile(path.join(userHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
+
+    const executorCalls: Array<{ pluginId: string; claudeEvent: string }> = [];
+    _setExecutorForTest((entry: RoutingEntry) => {
+      executorCalls.push({ pluginId: entry.pluginId, claudeEvent: entry.claudeEvent });
+      return Promise.resolve({ kind: "noop" });
+    });
+
+    const { pi, registrations } = makeMockPi();
+    await registerHooksBridge(pi, {
+      ctx: { cwd: projectCwd } as unknown as ExtensionContext,
+      cwd: projectCwd,
+    });
+
+    const sessionStartReg = registrations.find((r) => r.event === "session_start");
+    assert.ok(sessionStartReg, "bridge must register session_start handler");
+
+    // Fire session_start with a ctx carrying NO `cwd`. The lazy hydrate
+    // calls `locationsFor("project", ctx.cwd)`, whose `path.join(cwd, ".pi")`
+    // rejects a non-string with ERR_INVALID_ARG_TYPE. That throw escapes
+    // `hydrateProjectScopeForCwd` -- its own try/catch wraps only the
+    // `loadState` call, not the `locationsFor` above it -- so it lands in
+    // the handler's catch and routes through the OBS-01 debug seam.
+    //
+    // This ctx shape is not hypothetical: it is what the bridge was called
+    // with before the lazy hydrate existed, so the catch is what keeps a Pi
+    // build that omits `cwd` from degrading a broken hydrate into a dead
+    // SessionStart.
+    const ctxWithoutCwd = {} as unknown as ExtensionContext;
+
+    // Awaited bare rather than through assert.doesNotReject: a regression
+    // here should surface the real ERR_INVALID_ARG_TYPE stack, not a
+    // generic "got rejection" message.
+    await sessionStartReg.handler({ type: "session_start", reason: "startup" }, ctxWithoutCwd);
+
+    // The contract the catch exists to hold: dispatch proceeds anyway.
+    assert.equal(
+      executorCalls.length,
+      1,
+      `executor must still be invoked for the user-scope SessionStart entry after the hydrate throws; observed ${executorCalls.length} invocations`,
+    );
+    assert.equal(executorCalls[0]!.pluginId, "learning-output-style");
+    assert.equal(executorCalls[0]!.claudeEvent, "SessionStart");
+  });
+});
