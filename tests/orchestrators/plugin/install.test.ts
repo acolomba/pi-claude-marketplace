@@ -146,6 +146,18 @@ async function seedPathMarketplaceWithPlugin(opts: {
    */
   pluginJsonVersion?: string | null;
   /**
+   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE entry (distinct from
+   * `pluginJsonDefaultEnabled`, which stamps the plugin's OWN plugin.json).
+   * Absent -> the entry is written exactly as it is without this knob.
+   */
+  defaultEnabled?: boolean;
+  /**
+   * DFEN-01: stamp `defaultEnabled` on the plugin's own
+   * `.claude-plugin/plugin.json`, leaving the marketplace entry silent.
+   * Absent -> plugin.json is written exactly as it is without this knob.
+   */
+  pluginJsonDefaultEnabled?: boolean;
+  /**
    * D-64-06: declare unsupported component kinds in the plugin's own
    * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
    * structural defect (force-degradable). E.g.
@@ -204,6 +216,10 @@ async function seedPathMarketplaceWithPlugin(opts: {
   // `unsupported` (force-degradable) arm without a structural defect.
   if (opts.experimental !== undefined) {
     pluginManifest.experimental = opts.experimental;
+  }
+
+  if (opts.pluginJsonDefaultEnabled !== undefined) {
+    pluginManifest.defaultEnabled = opts.pluginJsonDefaultEnabled;
   }
 
   await writeFile(
@@ -270,6 +286,10 @@ async function seedPathMarketplaceWithPlugin(opts: {
 
   if (opts.declareDependencies === true) {
     entry.dependencies = { "some-other-plugin": "*" };
+  }
+
+  if (opts.defaultEnabled !== undefined) {
+    entry.defaultEnabled = opts.defaultEnabled;
   }
 
   const manifest = {
@@ -748,6 +768,96 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.version, "1.2.3");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DFEN-01 -- a declared `defaultEnabled` is read, not acted on
+//
+// The resolver resolves the declared value and exposes it to the install path,
+// which does not consult it: an install is recorded `enabled: true` and its
+// artifacts are materialized whatever the plugin declares. These two cases pin
+// that contract from both declaration sites. They assert the recorded resources
+// as well as the flag, so "installed enabled" cannot be confused with "recorded
+// but not materialized" -- those are separate outcomes, and a change that
+// conflated them would otherwise pass on the flag alone.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("DFEN-01: marketplace entry declares defaultEnabled false -> installs enabled with artifacts materialized", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen-entry-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        defaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, true);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("DFEN-01: plugin.json declares defaultEnabled false with a silent entry -> installs enabled with artifacts materialized", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen-manifest-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        // The entry stays silent, so the manifest declaration is the one the
+        // resolver's precedence rule falls through to.
+        pluginJsonDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const errs = notifications.filter((n) => n.severity === "error");
+      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, true);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
