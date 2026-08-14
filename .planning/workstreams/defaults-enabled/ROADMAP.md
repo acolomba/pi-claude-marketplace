@@ -123,12 +123,25 @@ Plans:
   4. The install notification states that the plugin installed disabled and how to enable it, at informational severity — the desired state WAS reached (an install-disabled plugin is the author's declared intent, not a shortfall).
   5. The `installs disabled` token exists as one indivisible closed-set amendment: appended at the tail of `REASONS` (`shared/notify.ts`) with no existing entry reordered or reworded, and given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof would otherwise fail.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 102-01-PLAN.md — the tracer: the four-site `installs disabled` closed-set amendment, the `enableHint` field and its frozen trailer, install's `disabled` render arm, the materialize-then-disable composition inside the existing lock, the write-back patch's first field, the hooks-cache skip, and the end-to-end proof that a `defaultEnabled: false` plugin installs disabled and says so
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 102-02-PLAN.md — the DFEN-05 precedence matrix over all three values of the config entry's `enabled` key in both directions, the D-102-03 proof that the import cascade never opts in, and the D-102-02 ledger-succeeds / cascade-fails characterization
+- [ ] 102-03-PLAN.md — the reconcile path: the absent-key-only stamp through `writePluginConfigEntry`, targeted at the declaring physical file via the previously-unread `PlannedPluginInstall.configSource`, and a cascade row that reports the install as disabled rather than installed
 
 **Notes**:
 
-  - **OPEN QUESTION for `/gsd-discuss-phase` — materialization path for an
-    install-disabled plugin.** The install ledger is a fixed literal 6-phase
+  - **SETTLED at discuss (D-102-01, D-102-02) — materialization path for an
+    install-disabled plugin.** Materialize, then disable: the full six-phase
+    ledger runs and the existing disable cascade follows, composed from
+    `cascadeUnstagePlugin` + `toDisabledRecord`. The original question, kept for
+    the record: the install ledger is a fixed literal 6-phase
     array (`orchestrators/plugin/install.ts:1239`) whose order is a contract
     under D-01 literal-array discipline ("never refactor to a dynamic builder").
     Does a `defaultEnabled: false` install run the five materialization phases
@@ -136,8 +149,12 @@ Plans:
     changes the ledger's shape and its rollback story. Do NOT resolve this at
     execution time.
 
-  - **OPEN QUESTION for `/gsd-discuss-phase` — orchestrated-mode installs.** The
-    config write-back is deliberately skipped in orchestrated mode
+  - **SETTLED at discuss (D-102-03, D-102-04) — orchestrated-mode installs.**
+    `import` and `reconcile` are NOT one case: `import` never applies
+    `defaultEnabled` (everything it installs carried an explicit `enabled: true`),
+    while `reconcile` applies it and stamps `enabled: false` into the declaring
+    entry, but only when the key is absent. The original question, kept for the
+    record: the config write-back is deliberately skipped in orchestrated mode
     (`orchestrators/plugin/install.ts:1409`), because reconcile derives desired
     state FROM the config and writing back would clobber a per-machine override.
     A cascade install (import, reconcile) of a `defaultEnabled: false` plugin
@@ -247,7 +264,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
-| 102. Reason token, install write-through and notification | defaults-enabled | 0/? | Not started | - |
+| 102. Reason token, install write-through and notification | defaults-enabled | 0/3 | Planned | - |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
