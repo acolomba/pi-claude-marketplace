@@ -740,6 +740,55 @@ substitution -- the layer that runs BEFORE pi-mcp-adapter sees the value),
 `literalEnv` field would be written), `docs/env-vars.md` ("MCP runtime env
 inheritance" and the MCP env column of the overview matrix).
 
+## HKDIR-01: factory-time `_shared` mkdir is gated cross-scope, not per-scope
+
+Surfaced 2026-08-14 while reviewing PR #127 (project-scope SessionStart
+hooks never dispatching). The PR fixes the dispatch defect and its own
+mkdir gate is correct; this item is the adjacent pre-existing one it
+leaves in place.
+
+**The defect.** `registerHooksBridge` walks both scopes and, per scope,
+conditionally creates that scope's `_shared` data dir so a `SessionStart`
+hook can rely on `CLAUDE_ENV_FILE`'s directory existing
+(`bridges/hooks/event-router.ts`, the `for (const { loc } of hydrated)`
+loop). The gate reads:
+
+```ts
+if ((routingTable.get("SessionStart") ?? []).length > 0) {
+  await ensureSharedDataDir(loc);
+}
+```
+
+`routingTable` is a single cross-scope map. So the presence of ANY
+`SessionStart` entry, in EITHER scope, satisfies the gate for BOTH
+iterations. A user-scope-only hooks plugin therefore provokes a project
+`_shared` mkdir as well -- at `locationsFor("project", opts.cwd)`, where
+`opts.cwd` is the factory's `homedir()`. In production that lands a
+`~/.pi/pi-claude-marketplace/data/_shared` tree nobody asked for; run the
+factory with any other cwd and it lands there instead. Verified by probe:
+booting the bridge with only a user-scope `SessionStart` plugin creates
+`.pi/` under the boot cwd.
+
+**Why it is only cosmetic today.** The directory is empty, `mkdir` is
+recursive and idempotent, and `assertPathInside` still contains the write,
+so nothing escapes containment and nothing breaks. It is a WR-05
+("no files on a clean reconcile") violation in spirit rather than a
+functional bug -- which is also why it survived this long.
+
+**Fix shape.** One line, matching what PR #127 already does on the
+session_start path:
+
+```ts
+if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === loc.scope)) {
+```
+
+Worth a regression test in the shape of `HOOK-E2E-03`, which pins the same
+invariant for the lazy-hydrate path: boot with a user-scope-only
+`SessionStart` plugin, assert the OTHER scope's root stays empty.
+
+Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
+`ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
