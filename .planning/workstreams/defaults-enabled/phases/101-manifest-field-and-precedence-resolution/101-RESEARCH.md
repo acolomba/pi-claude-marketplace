@@ -1158,9 +1158,13 @@ No new secret, no new external input channel, no new trust boundary.
 | A4 | The upstream contract (default `true`, entry wins, v2.1.154+) is as recorded in CONTEXT.md/REQUIREMENTS.md | State of the Art | Low. It was verified against the official docs on 2026-08-14 by the discuss session; I did not re-fetch it this session. It only corroborates decisions that are already locked. |
 | A5 | `tests/domain/resolver.types.test.ts` is the right home for the DFEN-03 type-level proof | Test conventions | Low. CONTEXT.md grants test-placement discretion; that file's `declare const` design makes it the only zero-cost option. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should this phase add any assertion to `tests/architecture/`?**
+Both questions carry an explicit recommendation below, and the plans act on both:
+plan 101-01/101-02 add no architecture gate, and plan 101-03 Task 3 adds the
+`info` characterization test.
+
+1. **RESOLVED: Should this phase add any assertion to `tests/architecture/`?**
    - What we know: no existing architecture gate trips, and none pins the
      resolver arm key sets.
    - What's unclear: whether the milestone wants a *new* enumeration gate pinning
@@ -1170,7 +1174,7 @@ No new secret, no new external input channel, no new trust boundary.
      adding derived or duplicated pins. If the milestone later wants one, it
      belongs with the persistence work, not here.
 
-2. **Does the `info` surface need to stop rendering something?**
+2. **RESOLVED: Does the `info` surface need to stop rendering something?**
    - What we know: `info` reads `description` straight off the raw parsed entry
      `[VERIFIED: extensions/pi-claude-marketplace/domain/manifest.ts:48-49,
      "`info.ts` reads `parsed.description`"]`, and the loader returns the raw

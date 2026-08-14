@@ -2,19 +2,20 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-status: Roadmap complete
-stopped_at: Roadmap written; awaiting user approval, then Phase 101 discuss
-last_updated: "2026-08-14T12:05:00.000Z"
+current_phase: 101
+current_phase_name: manifest-field-and-precedence-resolution
+current_plan: N/A
+status: Ready to execute
+stopped_at: Phase 101 planned — 3 plans in 2 waves, plan-checker passed
+last_updated: "2026-08-14T14:25:23.712Z"
 last_activity: 2026-08-14
-last_activity_desc: Roadmap created — 5 phases (101-105), 15/15 requirements mapped
+last_activity_desc: Phase 101 planned — 3 plans in 2 waves, 13/13 decisions covered
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
-current_phase: 101
-current_phase_name: manifest-field-and-precedence-resolution
 ---
 
 # Project State
@@ -36,10 +37,10 @@ re-enables it behind the user's back. Roadmap complete: 5 phases (101-105),
 
 ## Current Position
 
-Phase: 101 — Manifest field and precedence resolution (not started)
-Plan: —
-Status: Roadmap complete, awaiting approval
-Last activity: 2026-08-14 — Roadmap created for milestone defaults-enabled
+Phase: 101 — Manifest field and precedence resolution (planned, not executed)
+Plan: 3 plans in 2 waves — 101-01 (wave 1), 101-02 + 101-03 (wave 2, parallel)
+Status: Ready to execute
+Last activity: 2026-08-14 — Phase 101 planned; plan-checker passed with no blockers
 
 ## Progress
 
@@ -48,7 +49,7 @@ Last activity: 2026-08-14 — Roadmap created for milestone defaults-enabled
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Not started |
+| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Planned (0/3 plans) |
 | 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Not started |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
@@ -81,6 +82,7 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
    `defaultEnabled: false` install run the five materialization phases and then
    drop the artifacts, or skip them and run only the state phase? This changes
    the ledger's shape and its rollback story.
+
 2. **Orchestrated-mode installs.** The config write-back is deliberately
    skipped in orchestrated mode (`orchestrators/plugin/install.ts:1409`)
    because reconcile derives desired state FROM the config. A cascade install

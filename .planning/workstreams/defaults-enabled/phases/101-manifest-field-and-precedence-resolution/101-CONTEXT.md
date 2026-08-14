@@ -24,69 +24,72 @@ resolved value; acting on it is Phase 102.
 
 ### Where the resolved value hangs on the resolver output
 
-- The resolved value lands in `MATERIALIZABLE_FIELDS`
+- **D-101-01:** The resolved value lands in `MATERIALIZABLE_FIELDS`
   (`domain/resolver.ts`), so it appears on the `installable` and
   `partially-available` arms by construction and is absent from `unavailable`.
   The `unavailable` arm stays the minimal structural-defect arm per D-64-05: a
   plugin that cannot be installed at all has no meaningful install-time
   enablement answer.
-- The field is **always present** and non-optional (`Type.Boolean()`), not
-  `Type.Optional`. The "absent at both sites means `true`" default is applied
-  once, at resolution. This is precisely what DFEN-03 buys — an optional field
-  would push the default back onto every consumer, which is the outcome the
-  requirement exists to prevent.
-- The field is named `defaultEnabled`, matching the manifest field name, so no
-  mental translation is needed between the declaration and the resolved value.
-- Both `resolveStrict` and `resolveLoose` resolve it, identically.
+- **D-101-02:** The field is **always present** and non-optional
+  (`Type.Boolean()`), not `Type.Optional`. The "absent at both sites means
+  `true`" default is applied once, at resolution. This is precisely what DFEN-03
+  buys — an optional field would push the default back onto every consumer,
+  which is the outcome the requirement exists to prevent.
+  — **Reversibility:** costly — `MATERIALIZABLE_FIELDS` is a shared shape
+  constructed at 17 sites, so removing the field later is a coordinated edit.
+- **D-101-03:** The field is named `defaultEnabled`, matching the manifest field
+  name, so no mental translation is needed between the declaration and the
+  resolved value.
+- **D-101-04:** Both `resolveStrict` and `resolveLoose` resolve it, identically.
   `resolveLoose` already reads `plugin.json` through `preflightStages`, so
-  making the value mode-dependent would hand Phase 104 an inconsistency it would
-  then have to explain at the read surfaces.
+  making the value mode-dependent would hand the read-surface phase an
+  inconsistency it would then have to explain.
 
 ### Precedence semantics
 
-- The precedence rule lives in **one private helper** in `domain/resolver.ts`,
-  called from the shared `PartialResolution` build path that both resolution
-  modes already pass through. Not exported from `domain/components/plugin.ts`
-  (that module is schema-only), and not inlined at the arm constructors (that
-  would be the per-consumer re-derivation DFEN-03 forbids).
-- "Not declared" is tested with `=== undefined`, per the explicit instruction in
-  the `domain/components/plugin.ts` file header: TypeBox `Type.Optional`
-  produces `T | undefined` in `Static<>`, not `T?`, so `=== undefined` is
-  correct and `in` is not.
-- The entry wins over the manifest **in both directions**, not only the
-  false-wins direction. Entry `true` + manifest `false` resolves `true`. This is
-  the asymmetry a reader is most likely to guess wrong, so it gets its own
+- **D-101-05:** The precedence rule lives in **one private helper** in
+  `domain/resolver.ts`, called from the shared resolution path that both modes
+  already pass through. Not exported from `domain/components/plugin.ts` (that
+  module is schema-only), and not inlined at the arm constructors (that would be
+  the per-consumer re-derivation DFEN-03 forbids).
+- **D-101-06:** "Not declared" is tested with `=== undefined`, per the explicit
+  instruction in the `domain/components/plugin.ts` file header: TypeBox
+  `Type.Optional` produces `T | undefined` in `Static<>`, not `T?`, so
+  `=== undefined` is correct and `in` is not.
+- **D-101-07:** The entry wins over the manifest **in both directions**, not only
+  the false-wins direction. Entry `true` + manifest `false` resolves `true`. This
+  is the asymmetry a reader is most likely to guess wrong, so it gets its own
   pinned test rather than riding along on the false-wins case.
-- A manifest-only `defaultEnabled`, with the entry silent, is **not** a
-  loose-mode declaration conflict. `defaultEnabled` is metadata, in the same
-  class as `description` and `version`; the loose-mode conflict rule
-  (MM-6/MM-7) applies only to component declarations and `mcpServers`.
-  Declaring the field in `plugin.json` alone must never push a plugin to
-  `unavailable`.
-- A null/unreadable manifest falls back to the entry value, and then to `true` —
-  the same path as an absent declaration.
+- **D-101-08:** A manifest-only `defaultEnabled`, with the entry silent, is
+  **not** a loose-mode declaration conflict. `defaultEnabled` is metadata, in the
+  same class as `description` and `version`; the loose-mode conflict rule
+  (MM-6/MM-7) applies only to component declarations and `mcpServers`. Declaring
+  the field in `plugin.json` alone must never push a plugin to `unavailable`.
+- **D-101-09:** A null/unreadable manifest falls back to the entry value, and
+  then to `true` — the same path as an absent declaration.
 
 ### Validation and the no-op guarantee
 
-- A non-boolean `defaultEnabled` fails as a plain TypeBox schema violation with
-  no bespoke error class and no coercion. In a marketplace entry that is
-  `InvalidMarketplaceManifestError` raised at manifest load
+- **D-101-10:** A non-boolean `defaultEnabled` fails as a plain TypeBox schema
+  violation with no bespoke error class and no coercion. In a marketplace entry
+  that is `InvalidMarketplaceManifestError` raised at manifest load
   (`domain/manifest.ts`, `MARKETPLACE_VALIDATOR.Check`); in `plugin.json` it is
   the existing `readManifest` validation-failure path, which resolves
   `unavailable` with the existing reason string.
-- The blast radius is deliberately unchanged: because `PLUGIN_ENTRY_SCHEMA` is
-  validated as part of `MARKETPLACE_SCHEMA`, one malformed `defaultEnabled`
-  invalidates the whole `marketplace.json`, exactly as a non-string `version`
-  does today. DFEN-01 asks for "the same way any other schema violation does",
-  so no per-plugin skip is introduced.
-- Criterion 5 (nothing observable changes) is proven **in this phase** by
-  characterization tests: a plugin declaring `defaultEnabled: false` still
-  resolves `installable` and still installs *enabled* at Phase 101. The full
-  six-surface byte-identical sweep remains Phase 105's job (DFEN-08); this is
-  the narrow proof that the schema and resolver edits alone changed nothing.
-- The D-09 lenient unknown-key tolerance is pinned with a test that a plugin
-  declaring an unrelated unknown key still resolves — a cheap regression guard
-  on the schema edit.
+- **D-101-11:** The blast radius is deliberately unchanged: because
+  `PLUGIN_ENTRY_SCHEMA` is validated as part of `MARKETPLACE_SCHEMA`, one
+  malformed `defaultEnabled` invalidates the whole `marketplace.json`, exactly as
+  a non-string `version` does today. DFEN-01 asks for "the same way any other
+  schema violation does", so no per-plugin skip is introduced.
+- **D-101-12:** Criterion 5 (nothing observable changes) is proven **in this
+  phase** by characterization tests: a plugin declaring `defaultEnabled: false`
+  still resolves `installable` and still installs *enabled* here. The full
+  six-surface byte-identical sweep remains DFEN-08's job in the closing phase;
+  this is the narrow proof that the schema and resolver edits alone changed
+  nothing.
+- **D-101-13:** The D-09 lenient unknown-key tolerance is pinned with a test that
+  a plugin declaring an unrelated unknown key still resolves — a cheap regression
+  guard on the schema edit.
 
 ### Claude's Discretion
 

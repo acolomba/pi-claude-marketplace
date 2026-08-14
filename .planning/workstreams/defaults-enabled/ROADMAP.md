@@ -34,10 +34,13 @@ single phase):
 
 - `npm run check` — typecheck + ESLint + Prettier + tests — stays green at
   every phase boundary (NFR-6).
+
 - No phase introduces a network call on a read path (NFR-5). `list`, `info`,
   `uninstall` and `marketplace remove` stay offline.
+
 - No state schema migration. `defaultEnabled` is read at install time and lands
   in the existing `enabled` flag and config entry; no new persisted field.
+
 - These are CLI/backend phases. The `ui_safety_gate` keyword scan matches this
   project's domain vocabulary ("component", "view", "form") as a known false
   positive — pass `--skip-ui` to `/gsd-plan-phase` for every phase here.
@@ -86,8 +89,12 @@ state is that same shape.
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 101-01-PLAN.md — the vertical slice: schema field, non-optional resolver output field, the single precedence helper threaded through the shared resolution path, the 16 fixture repairs the compile fan-out forces, and the compile-time proof that the value is exposed to the install path and absent from the `unavailable` arm
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 101-02-PLAN.md — the precedence matrix in both directions and both resolution modes, the agreement and fallback cases, and the two resolution-time validation guards
 - [ ] 101-03-PLAN.md — schema accept/reject on both compiled validators, the whole-manifest rejection with its contrast to per-plugin containment, and the no-observable-change characterization across install and `info`
 
@@ -98,6 +105,7 @@ Plans:
     resolver's discriminated output and which arms carry it. A plugin resolving
     `unavailable` cannot be installed at all, so whether the value is exposed on
     that arm is a design question for the plan, not a requirement.
+
   - Upstream contract (verified 2026-08-14 against
     code.claude.com/docs/en/plugins-reference): default is `true`; Claude Code
     v2.1.154+ honors it, earlier versions ignore it and enable on install.
@@ -127,6 +135,7 @@ Plans:
     and then drop the artifacts, or skip them and run only the state phase? This
     changes the ledger's shape and its rollback story. Do NOT resolve this at
     execution time.
+
   - **OPEN QUESTION for `/gsd-discuss-phase` — orchestrated-mode installs.** The
     config write-back is deliberately skipped in orchestrated mode
     (`orchestrators/plugin/install.ts:1409`), because reconcile derives desired
@@ -136,8 +145,10 @@ Plans:
     `enabled` absent. Decide whether that pre-existing entry counts as the user's
     explicit setting (DFEN-05 wins, plugin enables) or as no setting at all
     (DFEN-04 applies). Do NOT resolve this at execution time.
+
   - The write-back seam is `persistence/config-write-back.ts::writePluginConfigEntry`,
     the sole sanctioned writer per SPLIT-02, with entry-level patch semantics.
+
   - Reason-token discipline (D-09 / OUT-08): membership and order are
     catalog-stable. New tokens append at the tail; existing entries never
     reorder. The last such amendment was `{unsupported component}` (D-90-05,
@@ -167,6 +178,7 @@ Plans:
     leaving its config entry `{}` would take the recorded-and-declared-enabled
     path and re-enable it at the next reload. Phase 102's write-through is what
     makes this stable; this phase proves it at the planner.
+
   - Whether the DFEN-07 guarantee needs new code or is already structural
     (update/reinstall have no reason to read the manifest's `defaultEnabled`) is
     a characterization question for the plan. If it is already true, pin it as a
@@ -194,6 +206,7 @@ Plans:
     durable facts about the record; `{installs disabled}` is a claim about an
     action not yet taken, so it belongs on not-installed rows only. Confirm the
     exact arm set at discuss.
+
   - Where a warm clone already exists, `plugin.json` IS readable fs-only with no
     network (the Phase 80 warm-cache resolution path). Whether to read it there —
     and accept that the same plugin renders differently warm vs cold — is a
@@ -219,11 +232,13 @@ Plans:
   - House precedent for this shape: v1.18 Phase 98 and v1.17 Phase 94 both
     landed the regression sweep and the contract reconcile last, after the
     behavior phases, so the docs describe shipped behavior instead of intent.
+
   - The v1.18 architecture test already holds the structural clauses of the
     no-expansion promise (four closed sets by enumeration equality, seven glyph
     code points with an eighth-glyph tripwire, the record's key set, the
     schema-version union, the network clause). Criterion 4 is that test
     continuing to pass with exactly one intended enumeration delta.
+
   - DFEN-V2-01 (honoring the dependency-requirement override) stays out of
     scope and blocked on PDEP-01; DOC-02 is what makes that visible to a reader.
 
