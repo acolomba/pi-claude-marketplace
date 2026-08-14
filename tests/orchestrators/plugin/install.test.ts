@@ -1070,6 +1070,144 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// DFEN-05 -- an explicit `enabled` in the user's config wins over the plugin
+// author's `defaultEnabled`, in either direction, and is never rewritten.
+//
+// The gate is a THREE-valued read of one key: `true`, `false`, and ABSENT. Only
+// the absent value is the manifest's to answer, which is why the question is
+// `entry.enabled !== undefined` rather than `isDeclaredEnabled(entry)` -- the
+// two agree on `true` and on `false` and disagree exactly on absent. A matrix
+// that exercised only the two present values would therefore pass while the
+// gate asked the wrong question, so all three are covered below.
+//
+// Every case asserts the config entry as a WHOLE OBJECT. The threat DFEN-05
+// closes is a plugin release silently moving a value the user typed; an
+// assertion on the flag alone would miss a write that added or removed some
+// other key in the same entry, which is the same trust problem one field over.
+// ───────────────────────────────────────────────────────────────────────────
+
+const DFEN_PRECEDENCE_CASES = [
+  {
+    label: "an explicit `enabled: true` beats a manifest declaring defaultEnabled false",
+    tmpPrefix: "install-dfen05-true-wins-",
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+  },
+  {
+    // The mirror of the case above, and the direction that matters most: the
+    // manifest says `true` and the user said `false`. The install verb still
+    // materializes -- running `install` IS the user asking for the install --
+    // so the contract asserted here is the CONFIG one DFEN-05 actually states:
+    // the entry the user wrote comes back byte-for-byte. The record landing
+    // `enabled: true` under an `enabled: false` declaration is the ordinary
+    // install-then-reconcile relationship, not something this behavior invents.
+    label:
+      "an explicit `enabled: false` is not rewritten by a manifest declaring defaultEnabled true",
+    tmpPrefix: "install-dfen05-false-kept-",
+    seededEntry: { enabled: false },
+    manifestDefaultEnabled: true,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: false },
+  },
+  {
+    // The only case the manifest gets to answer, and the one that separates
+    // `entry.enabled !== undefined` from `isDeclaredEnabled(entry)`: a bare
+    // `{}` reads as ENABLED under the second predicate, which would suppress
+    // the declaration entirely. Its sibling directly above shares the fixture
+    // apart from the seeded key and expects the opposite outcome -- do not
+    // reconcile the two toward each other.
+    label: "a hand-authored entry with no `enabled` key is the one the manifest answers",
+    tmpPrefix: "install-dfen05-absent-",
+    seededEntry: {},
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: false,
+    expectArtifacts: false,
+    expectEntryAfter: { enabled: false },
+  },
+  {
+    // The trivially-enabled control: both sides agree on `true`, so a gate that
+    // was simply inverted would still have to fail somewhere, and this is where.
+    label:
+      "an explicit `enabled: true` under a manifest declaring defaultEnabled true is an ordinary install",
+    tmpPrefix: "install-dfen05-both-true-",
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: true,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+  },
+] as const;
+
+for (const precedence of DFEN_PRECEDENCE_CASES) {
+  test(`DFEN-05: ${precedence.label}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), precedence.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          entryDefaultEnabled: precedence.manifestDefaultEnabled,
+          skills: [{ sourceName: "tool" }],
+        });
+
+        const { loadConfig, saveConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        // The entry pre-exists, as it does for a user who hand-authored
+        // `claude-plugins.json` before running the install.
+        await saveConfig(
+          locations.configJsonPath,
+          { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.seededEntry } } },
+          locations.scopeRoot,
+        );
+
+        const { ctx, pi, notifications } = makeCtx();
+        await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          applyDefaultEnabled: true,
+        });
+
+        const errs = notifications.filter((n) => n.severity === "error");
+        assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+
+        const after = await loadState(locations.extensionRoot);
+        const record = after.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        assert.equal(record.enabled, precedence.expectRecordEnabled);
+
+        const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+        if (precedence.expectArtifacts) {
+          assert.ok((await stat(skillDir)).isDirectory(), "the staged skill must be on disk");
+        } else {
+          await assert.rejects(stat(skillDir), "the staged skill directory must be gone");
+        }
+
+        // The whole entry, not just the flag: a write that added, changed or
+        // removed any other key would make the user's own file untrustworthy.
+        const cfg = await loadConfig(locations.configJsonPath);
+        assert.equal(cfg.status, "valid");
+        if (cfg.status === "valid") {
+          assert.deepEqual(cfg.config.plugins?.["hello@mp"], precedence.expectEntryAfter);
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // T-102-01 -- a plugin the user's configuration says is disabled must not
 // execute code in the session that installed it.
 //
