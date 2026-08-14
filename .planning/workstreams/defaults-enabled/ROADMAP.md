@@ -123,12 +123,12 @@ Plans:
   4. The install notification states that the plugin installed disabled and how to enable it, at informational severity — the desired state WAS reached (an install-disabled plugin is the author's declared intent, not a shortfall).
   5. The `installs disabled` token exists as one indivisible closed-set amendment: appended at the tail of `REASONS` (`shared/notify.ts`) with no existing entry reordered or reworded, and given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof would otherwise fail.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 102-01-PLAN.md — the tracer: the four-site `installs disabled` closed-set amendment, the `enableHint` field and its frozen trailer, install's `disabled` render arm, the materialize-then-disable composition inside the existing lock, the write-back patch's first field, the hooks-cache skip, and the end-to-end proof that a `defaultEnabled: false` plugin installs disabled and says so
+- [x] 102-01-PLAN.md — the tracer: the four-site `installs disabled` closed-set amendment, the `enableHint` field and its frozen trailer, install's `disabled` render arm, the materialize-then-disable composition inside the existing lock, the write-back patch's first field, the hooks-cache skip, and the end-to-end proof that a `defaultEnabled: false` plugin installs disabled and says so
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -264,7 +264,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
-| 102. Reason token, install write-through and notification | defaults-enabled | 0/3 | Planned | - |
+| 102. Reason token, install write-through and notification | defaults-enabled | 1/3 | In Progress|  |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
