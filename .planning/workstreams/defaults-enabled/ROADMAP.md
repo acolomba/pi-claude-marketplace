@@ -19,7 +19,7 @@ version-numbered because concurrent workstreams cannot share a global version
 sequence (`url-source` and `force-install` are the prior precedents). Decimal
 phases (101.1, 102.1) are urgent insertions only, marked `INSERTED`.
 
-- [ ] **Phase 101: Manifest field and precedence resolution** — `defaultEnabled` becomes an optional boolean on both declaration sites through the shared `PLUGIN_METADATA_FIELDS` group, and the marketplace-entry-wins precedence rule is evaluated once, in the resolver, rather than re-derived by each consumer. No observable behavior changes in this phase. (DFEN-01, DFEN-02, DFEN-03)
+- [x] **Phase 101: Manifest field and precedence resolution** — `defaultEnabled` becomes an optional boolean on both declaration sites through the shared `PLUGIN_METADATA_FIELDS` group, and the marketplace-entry-wins precedence rule is evaluated once, in the resolver, rather than re-derived by each consumer. No observable behavior changes in this phase. (DFEN-01, DFEN-02, DFEN-03) (completed 2026-08-14)
 
 - [ ] **Phase 102: Reason token, install write-through and notification** — the milestone's substantive phase. Installing a plugin that resolves `defaultEnabled: false` records it disabled AND writes `enabled: false` through to that scope's `claude-plugins.json` entry — the first field the install write-back's plugin patch has ever carried — so the disabled state lives where reconcile already looks for it. An `enabled` value already in the entry wins in both directions. The `installs disabled` token lands as one indivisible closed-set amendment, and the install notification says what happened at informational severity. (OUT-01, DFEN-04, DFEN-05, OUT-04)
 
@@ -246,7 +246,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | In Progress|  |
+| 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
 | 102. Reason token, install write-through and notification | defaults-enabled | 0/? | Not started | - |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |

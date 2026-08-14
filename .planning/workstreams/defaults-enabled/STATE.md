@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-current_phase: 101
-current_phase_name: Manifest field and precedence resolution
-current_plan: 3
-status: ready_for_verification
-stopped_at: Completed 101-03-PLAN.md
-last_updated: "2026-08-14T15:22:42.360Z"
+current_phase: 102
+current_phase_name: Reason token, install write-through and notification
+current_plan: N/A
+status: Ready to discuss
+stopped_at: Phase 101 complete — verified, reviewed, secured, validated
+last_updated: "2026-08-14T16:16:50.350Z"
 last_activity: 2026-08-14
-last_activity_desc: Plan 101-03 executed — the defaultEnabled schema matrix and the no-observable-change characterization
+last_activity_desc: Phase 101 complete — 3/3 plans, verification passed 5/5, 6 review warnings fixed
 progress:
   total_phases: 5
   completed_phases: 1
@@ -30,26 +30,28 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 101 — Manifest field and precedence resolution. The
-milestone goal is that a plugin author can ship a plugin that installs disabled
-(`defaultEnabled: false`), and nothing later re-enables it behind the user's
-back. Roadmap complete: 5 phases (101-105), 15/15 requirements mapped.
+**Current focus:** Phase 102 — Reason token, install write-through and
+notification. The milestone goal is that a plugin author can ship a plugin that
+installs disabled (`defaultEnabled: false`), and nothing later re-enables it
+behind the user's back. Phase 101 landed the schema field and the single
+precedence evaluation; Phase 102 is the milestone's substantive phase, where
+the resolved value first changes what a user observes.
 
 ## Current Position
 
-Phase: 101 (Manifest field and precedence resolution) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute — 101-02 complete, 101-03 remains in wave 2
-Last activity: 2026-08-14 — Plan 101-02 executed; the precedence truth table and the two resolution-time validation guards landed
+Phase: 102 — Reason token, install write-through and notification
+Plan: — (not started)
+Status: Ready to discuss
+Last activity: 2026-08-14 — Phase 101 complete, transitioned to Phase 102
 
 ## Progress
 
-**Phases Complete:** 0/5
-**Current Plan:** 2
+**Phases Complete:** 1/5
+**Current Plan:** Not started
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | In progress (1/3 plans) |
+| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Complete (3/3 plans) |
 | 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Not started |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
@@ -95,9 +97,11 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 
 **Last session:** 2026-08-14T15:22:34.587Z
 
-**Stopped At:** Completed 101-03-PLAN.md
+**Stopped At:** Phase 101 complete — verified passed, code review remediated,
+threats closed, validation approved.
 **Resume File:** None
-**Next Action:** `/gsd-verify-phase 101` — all three plans are executed.
+**Next Action:** `/gsd-discuss-phase 102` — the two milestone open decisions
+below must be settled there, not by an executor.
 
 ## Performance Metrics
 
@@ -118,9 +122,11 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 - [Phase 101]: The `defaultEnabled` precedence truth table lives in ONE delimited
   section per resolution mode. Plan 101-01's end-to-end case was relocated into
   it rather than a cell being duplicated, so a reader meets every cell at once.
+
 - [Phase 101]: Mode parity is asserted by spelling the expected literal out in
   the loose-mode suite, not by cross-calling `resolveStrict` from it — a
   divergence then reads directly in the failure output.
+
 - [Phase 101]: A test asserting the opposite containment outcome to a sibling
   test in the same file names that sibling and says why the two differ, so a
   later reader does not "fix" one toward the other.
