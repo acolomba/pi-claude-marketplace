@@ -818,6 +818,23 @@ test("DFEN-01: marketplace entry declares defaultEnabled false -> installs enabl
       assert.ok(record !== undefined);
       assert.equal(record.enabled, true);
       assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+
+      // The state record is only half the contract. The standalone install also
+      // writes the plugin back to `claude-plugins.json`, and that patch is where
+      // `enabled: false` would land first -- `state.json` could stay
+      // `enabled: true` while the config gained the key, and the assertions
+      // above would not notice. Pin the patch empty (D-04 consume-time default).
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(
+          cfg.config.plugins?.["hello@mp"],
+          {},
+          "the resolved defaultEnabled must not reach the config write-back",
+        );
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -858,6 +875,23 @@ test("DFEN-01: plugin.json declares defaultEnabled false with a silent entry -> 
       assert.ok(record !== undefined);
       assert.equal(record.enabled, true);
       assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+
+      // The state record is only half the contract. The standalone install also
+      // writes the plugin back to `claude-plugins.json`, and that patch is where
+      // `enabled: false` would land first -- `state.json` could stay
+      // `enabled: true` while the config gained the key, and the assertions
+      // above would not notice. Pin the patch empty (D-04 consume-time default).
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(
+          cfg.config.plugins?.["hello@mp"],
+          {},
+          "the resolved defaultEnabled must not reach the config write-back",
+        );
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
