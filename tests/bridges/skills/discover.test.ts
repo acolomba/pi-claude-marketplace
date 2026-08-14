@@ -34,6 +34,7 @@ function makeResolved(
       agents: [],
     },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 
@@ -186,6 +187,7 @@ test("D-07 discoverPluginSkills iterates multi-element componentPaths.skills (no
       notes: [],
       componentPaths: { skills: [a, b], commands: [], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
 
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
@@ -221,6 +223,7 @@ test("D-07 discoverPluginSkills first-wins dedup across array elements (collisio
       notes: [],
       componentPaths: { skills: [a, b], commands: [], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
 
     const { discovered, warnings } = await discoverPluginSkills({ pluginName: "acme", resolved });
@@ -250,6 +253,7 @@ test("discoverPluginSkills treats a declared path that is itself a skill dir as 
       notes: [],
       componentPaths: { skills: [skillDir], commands: [], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
 
     const { discovered, warnings } = await discoverPluginSkills({
@@ -290,6 +294,7 @@ test("discoverPluginSkills keeps first-wins dedup when one entry is a self skill
       notes: [],
       componentPaths: { skills: [direct, container], commands: [], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
 
     const { discovered, warnings } = await discoverPluginSkills({

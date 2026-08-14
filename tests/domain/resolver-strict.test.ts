@@ -148,6 +148,17 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
+// DFEN-02 / DFEN-03: the entry-declared value survives the whole resolution
+// path -- schema acceptance, the precedence helper, and the materializable arm
+// -- and declaring it false does NOT make the plugin non-installable.
+test("DFEN-02 entry declares defaultEnabled false with no plugin.json -> installable carrying false", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
 // HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
 // `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
 // rejected with "contains hooks" -- the resolver only owns convention-file

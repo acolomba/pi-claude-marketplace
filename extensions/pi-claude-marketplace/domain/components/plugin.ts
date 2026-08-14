@@ -18,6 +18,11 @@ import { MCP_SERVERS_SCHEMA } from "./mcp.ts";
 const PLUGIN_METADATA_FIELDS = {
   description: Type.Optional(Type.String()),
   version: Type.Optional(Type.String()),
+  // DFEN-01: declared install-time enablement, accepted on BOTH declaration
+  // sites because this bag is spread into the entry and the manifest schema.
+  // Optional here (absence is a legal declaration); the resolver turns absence
+  // into the `true` default exactly once (DFEN-03).
+  defaultEnabled: Type.Optional(Type.Boolean()),
 };
 
 const SUPPORTED_COMPONENT_PATH_FIELDS = {

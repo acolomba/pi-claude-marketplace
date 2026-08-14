@@ -106,6 +106,7 @@ describe("integration: materialization gate", () => {
         // D-07: componentPaths.* are `readonly string[]`.
         componentPaths: { skills: [], commands: [], agents: ["agents"] },
         mcpServers: {},
+        defaultEnabled: true,
       };
 
       const prep = await prepareStagePluginAgents({

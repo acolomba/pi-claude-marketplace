@@ -29,6 +29,7 @@ function makeResolved(
       agents: [],
     },
     mcpServers: {},
+    defaultEnabled: true,
   };
 }
 
@@ -220,6 +221,7 @@ test("D-07 discoverPluginCommands iterates multi-element componentPaths.commands
       notes: [],
       componentPaths: { skills: [], commands: [a, b], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
     const { discovered: out, warnings } = await discoverPluginCommands({
       pluginName: "acme",
@@ -256,6 +258,7 @@ test("D-07 discoverPluginCommands first-wins dedup across array elements (collis
       notes: [],
       componentPaths: { skills: [], commands: [a, b], agents: [] },
       mcpServers: {},
+      defaultEnabled: true,
     };
     const { discovered: out, warnings } = await discoverPluginCommands({
       pluginName: "acme",

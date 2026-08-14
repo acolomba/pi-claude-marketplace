@@ -184,6 +184,12 @@ const MATERIALIZABLE_FIELDS = {
   // unsupportable. Threaded for the `info` enumeration (D-71-05). Absent when
   // no hooks.json exists, the parse failed structurally, or nothing dropped.
   droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
+  // DFEN-02 / DFEN-03: the resolved install-time enablement. NON-optional,
+  // unlike the three fields above -- they are optional because absence is
+  // meaningful, whereas this one always has an answer once the entry and the
+  // manifest have been read. Keeping it required is what stops every consumer
+  // from re-deriving the rule behind a `?? true` fallback.
+  defaultEnabled: Type.Boolean(),
 } as const;
 
 const ResolvedPluginInstallableSchema = Type.Object({
@@ -432,6 +438,7 @@ function materializableFields(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): Omit<ResolvedPluginInstallable, "state"> {
   return {
     name,
@@ -444,6 +451,7 @@ function materializableFields(
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
+    defaultEnabled,
   };
 }
 
@@ -451,8 +459,12 @@ function installable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): ResolvedPluginInstallable {
-  return { state: "installable", ...materializableFields(name, pluginRoot, partial) };
+  return {
+    state: "installable",
+    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+  };
 }
 
 // D-64-06: the partially-available arm. Identical payload to `installable`
@@ -461,8 +473,12 @@ function partiallyAvailable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
+  defaultEnabled: boolean,
 ): ResolvedPluginPartiallyAvailable {
-  return { state: "partially-available", ...materializableFields(name, pluginRoot, partial) };
+  return {
+    state: "partially-available",
+    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+  };
 }
 
 function nestedExperimentalValue(
@@ -603,6 +619,40 @@ async function readManifest(
 }
 
 /**
+ * DFEN-02: decide the declared install-time enablement. The marketplace ENTRY
+ * value wins over the `plugin.json` value in BOTH directions -- an entry `true`
+ * beats a manifest `false` just as an entry `false` beats a manifest `true`.
+ * Absent at both sites (including a plugin with no `plugin.json` at all, where
+ * `manifest` is null) is `true`.
+ *
+ * DFEN-03: this is the only evaluation of the rule. Callers read the resolved
+ * boolean off the materializable arm and never re-derive it.
+ *
+ * Both `typeof` narrows are defense-in-depth, not validation: the entry has
+ * already passed PLUGIN_ENTRY_VALIDATOR and the manifest PLUGIN_MANIFEST_VALIDATOR,
+ * so only `boolean | undefined` can arrive. They are value tests rather than
+ * key-presence tests because an explicitly-`undefined` property satisfies
+ * `Type.Optional` and must fall through to the next source, and because the
+ * manifest side is typed `unknown` and needs the narrow to type-check at all.
+ * A non-boolean smuggled past a validator degrades to the default; there is
+ * deliberately no error path here.
+ */
+function resolveDefaultEnabled(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+): boolean {
+  if (typeof entry.defaultEnabled === "boolean") {
+    return entry.defaultEnabled;
+  }
+
+  if (typeof manifest?.defaultEnabled === "boolean") {
+    return manifest.defaultEnabled;
+  }
+
+  return true;
+}
+
+/**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
  * - `path`: resolve under `marketplaceRoot` and run the NFR-10 escape check
@@ -706,6 +756,9 @@ async function preflightStages(
       pluginRoot: string;
       manifest: Record<string, unknown> | null;
       partial: PartialResolution;
+      // DFEN-03: resolved here, in the one stage both resolution modes enter
+      // first, so the evaluation order is mode-independent by construction.
+      defaultEnabled: boolean;
     }
   | { kind: "unavailable"; result: ResolvedPluginUnavailable }
 > {
@@ -759,7 +812,13 @@ async function preflightStages(
     };
   }
 
-  return { kind: "ok", pluginRoot, manifest: manifestResult.manifest, partial };
+  return {
+    kind: "ok",
+    pluginRoot,
+    manifest: manifestResult.manifest,
+    partial,
+    defaultEnabled: resolveDefaultEnabled(entry, manifestResult.manifest),
+  };
 }
 
 /**
@@ -1350,7 +1409,7 @@ export async function resolveStrict(
     return pre.result;
   }
 
-  const { pluginRoot, manifest, partial } = pre;
+  const { pluginRoot, manifest, partial, defaultEnabled } = pre;
   // D-64-07: `dirty` is the STRUCTURAL accumulator (component-path /
   // mcp / hooks defects). The unsupported-component signal lives
   // separately in `partial.unsupported` -- see the decision below.
@@ -1393,7 +1452,7 @@ export async function resolveStrict(
     partial.notes.push(`declares dependencies that must be installed manually`);
   }
 
-  return decideResolution(entry.name, pluginRoot, partial, dirty);
+  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
 }
 
 /**
@@ -1407,16 +1466,17 @@ function decideResolution(
   pluginRoot: string,
   partial: PartialResolution,
   structuralDirty: boolean,
+  defaultEnabled: boolean,
 ): ResolvedPlugin {
   if (structuralDirty) {
     return unavailable(name, partial.notes);
   }
 
   if (partial.unsupported.length > 0) {
-    return partiallyAvailable(name, pluginRoot, partial);
+    return partiallyAvailable(name, pluginRoot, partial, defaultEnabled);
   }
 
-  return installable(name, pluginRoot, partial);
+  return installable(name, pluginRoot, partial, defaultEnabled);
 }
 
 /**
@@ -1432,7 +1492,7 @@ export async function resolveLoose(
     return pre.result;
   }
 
-  const { pluginRoot, manifest, partial } = pre;
+  const { pluginRoot, manifest, partial, defaultEnabled } = pre;
   // D-64-07: structural accumulator only (see resolveStrict).
   let dirty = false;
 
@@ -1464,7 +1524,7 @@ export async function resolveLoose(
     partial.notes.push(`declares dependencies that must be installed manually`);
   }
 
-  return decideResolution(entry.name, pluginRoot, partial, dirty);
+  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
 }
 
 /**
