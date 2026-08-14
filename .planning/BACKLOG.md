@@ -789,6 +789,39 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
 
+## HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable
+
+Surfaced 2026-08-14 measuring branch coverage on PR #127. Cosmetic; the
+only cost is a branch that can never go green.
+
+**The defect.** The lazy project hydrate rebuilds the routing tables and
+then reads the bucket back through a nullish fallback
+(`bridges/hooks/event-router.ts`, the `session_start` wrapper):
+
+```ts
+rebuildRoutingTables();
+if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === "project")) {
+```
+
+`rebuildRoutingTables` pre-seeds a bucket for every `BUCKET_A_EVENTS`
+member before it returns, and `SessionStart` is the first of them. So one
+line after that call `routingTable.get("SessionStart")` cannot be
+`undefined`, and the `?? []` arm is dead by construction. Branch coverage
+confirms it: `BRDA` for that line reports `taken=0` on the fallback arm
+across the whole unit + integration suite, while both arms of the `if`
+itself are exercised (`HOOK-E2E-02` true, `HOOK-E2E-03` false).
+
+**Fix shape.** Drop the `??` and read the bucket directly, or keep it and
+accept a permanently-uncovered branch. No test can close this one -- it is
+a code change or nothing.
+
+Note the same `?? []` idiom appears on the factory-side gate quoted in
+HKDIR-01, where it is equally unreachable for the same reason; fix both
+together or neither.
+
+Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
+`domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10

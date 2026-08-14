@@ -13,7 +13,10 @@ created: 2026-08-14
 **Last Activity Description:** Landed PR #127 complete — project-scope SessionStart
 hooks now dispatch on the session that starts them. Added the two review findings the
 contribution was missing, recorded the root cause in the debug knowledge base, and
-filed HKDIR-01 for the adjacent cross-scope mkdir gate.
+filed HKDIR-01 for the adjacent cross-scope mkdir gate. Measured coverage of the new
+code locally (SonarCloud skips on cross-repo PRs), closed the one real gap with
+HOOK-E2E-04 on the OBS-01 swallow, and filed HKNC-01 for the unreachable `?? []`
+branch that no test can close.
 
 ## Progress
 
@@ -40,6 +43,9 @@ Deliberately out of scope:
 - **HKDIR-01.** The factory-time `_shared` mkdir gate tests the whole cross-scope
   routing table rather than the scope it is about to write to. Real, pre-existing,
   cosmetic today. Filed in `.planning/BACKLOG.md`.
+- **HKNC-01.** The `?? []` fallback on the lazy-hydrate bucket read is unreachable —
+  `rebuildRoutingTables` pre-seeds the bucket one line earlier. Removing it would
+  edit the contributor's diff for a cosmetic gain. Filed in `.planning/BACKLOG.md`.
 
 ## Session Continuity
 
