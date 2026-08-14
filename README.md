@@ -212,6 +212,15 @@ Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix.
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
+Add a marketplace from another `https://` git host, such as GitLab.
+
+```text
+/claude:plugin marketplace add https://gitlab.com/my-group/my-marketplace
+```
+
+> [!NOTE]
+> Device Flow authentication also covers `gitlab.com`. Non-GitHub hosts need the full `https://` URL; the `owner/repo` shorthand only resolves to GitHub.
+
 Add a marketplace from the local filesystem. The path can be a directory with `.claude-plugin/marketplace.json`, or a direct path to a `marketplace.json` file.
 
 ```text

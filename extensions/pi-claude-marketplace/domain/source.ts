@@ -415,7 +415,13 @@ function stripUrlDecorations(input: string): { base: string; ref: string | undef
  * convention, and a host that 301-redirects the suffix-less smart-HTTP
  * endpoint makes the transport replay the `POST git-upload-pack` as a bodyless
  * `GET`, which the host then rejects (observed against gitlab.com as
- * `422 Unprocessable Entity`).
+ * `422 Unprocessable Entity`). This mirrors the GitHub `url`-kind clone-URL
+ * builder (`orchestrators/marketplace/add.ts` / `update.ts`), which already
+ * appends `.git` unconditionally, rather than special-casing gitlab.com.
+ * Accepted trade-off: a smart-HTTP host that serves ONLY the un-suffixed path
+ * (unlike GitHub/GitLab/Gitea/Bitbucket, which serve both forms or redirect
+ * one to the other) will now fail to clone via a `url`-kind or
+ * `git-subdir`-kind source where it may have worked before this change.
  *
  * The trailing-slash trim exists because a `git-subdir` source stores its
  * manifest `url` verbatim (`gitSubdirObjectSource`) and is therefore not
