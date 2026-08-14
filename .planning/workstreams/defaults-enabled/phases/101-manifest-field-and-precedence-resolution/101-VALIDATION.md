@@ -3,10 +3,11 @@ phase: 101
 slug: manifest-field-and-precedence-resolution
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-14
+validated: 2026-08-14
 ---
 
 # Phase 101 — Validation Strategy
@@ -45,19 +46,24 @@ created: 2026-08-14
 
 ## Per-Task Verification Map
 
-Task IDs are assigned by the planner; rows below are the requirement-to-test
-contract the plans must satisfy. `validate-phase` reconciles task IDs into this
-table after planning.
+Reconciled against the executed plans. Every task carries at least one
+`<automated>` verify command, so sampling continuity holds with no gap — there
+is no run of even two consecutive tasks without automated verification, let
+alone three.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | DFEN-01 | — | N/A | unit | `node --test "tests/domain/manifest.test.ts"` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DFEN-01 | — | N/A | unit | `node --test "tests/domain/resolver-strict.test.ts"` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DFEN-02 | — | N/A | unit | `node --test "tests/domain/resolver-strict.test.ts"` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DFEN-02 | — | N/A | unit | `node --test "tests/domain/resolver-loose.test.ts"` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DFEN-03 | — | N/A | type-level | `npm run typecheck` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | Criterion 5 | — | N/A | characterization | `node --test "tests/orchestrators/plugin/install.test.ts"` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | NFR-6 no-regression | — | N/A | regression | `node --test "tests/architecture/**/*.test.ts"` | ✅ | ⬜ pending |
+| 101-01-01 | 01 | 1 | DFEN-01, DFEN-02, DFEN-03 | T-101-01 / T-101-03 | Non-boolean rejected by the compiled validator; `typeof` narrow degrades to the `true` default with no error path | tracer | `npm run typecheck` · `node --test "tests/domain/**/*.test.ts"` · `node --test "tests/bridges/**/*.test.ts"` · `npm run lint` | ✅ | ✅ green |
+| 101-01-02 | 01 | 1 | DFEN-03 | — | N/A | type-level | `npm run typecheck` · `npm run lint` | ✅ | ✅ green |
+| 101-02-01 | 02 | 2 | DFEN-01, DFEN-02 | T-101-02 / T-101-03 | Malformed `plugin.json` resolves `unavailable` with the existing note prefix | unit | `node --test tests/domain/resolver-strict.test.ts` · `npm run typecheck` | ✅ | ✅ green |
+| 101-02-02 | 02 | 2 | DFEN-02 | T-101-05 | Loose-mode conflict accumulators stay closed tuples; metadata never becomes conflict material | unit | `node --test tests/domain/resolver-loose.test.ts` · `node --test "tests/domain/**/*.test.ts"` · `npm run typecheck` | ✅ | ✅ green |
+| 101-03-01 | 03 | 2 | DFEN-01 | T-101-01 | One malformed entry rejects the whole `marketplace.json`; no partial trust in a failed file | unit | `node --test tests/domain/manifest.test.ts` · `npm run typecheck` | ✅ | ✅ green |
+| 101-03-02 | 03 | 2 | Criterion 5 | T-101-04 / T-101-06 | Install stays enabled and materialized; the config write-back patch stays empty; seeder knobs strictly additive | characterization | `node --test tests/orchestrators/plugin/install.test.ts` · `npm run typecheck` · `npm run lint` | ✅ | ✅ green |
+| 101-03-03 | 03 | 2 | Criterion 5 | — | N/A | characterization | `node --test tests/orchestrators/plugin/info.test.ts` · `npm run typecheck` | ✅ | ✅ green |
+
+Phase-boundary gate, run in full after the last task and again after code-review
+remediation: `npm run check` → exit 0 (typecheck + lint + format:check + unit +
+integration; 3471 pass / 0 fail / 1 pre-existing skip).
 
 ### Behaviors each row must prove
 
@@ -94,11 +100,11 @@ phase with no user-observable surface, so there is nothing to validate by hand.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — 7/7 tasks
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — no gap at all
+- [x] Wave 0 covers all MISSING references — none were missing; every target test file pre-existed
+- [x] No watch-mode flags — every command is a single-shot `node --test` or `npm run` invocation
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-08-14
