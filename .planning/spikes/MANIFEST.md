@@ -2,6 +2,16 @@
 
 ## Idea
 
+### GitLab plugin-marketplace parity (spikes 008-009)
+
+Upstream Claude Code shipped a plugin-marketplace changelog entry: "bare
+`gitlab.com` repo URLs (including nested subgroups) now clone like
+`github.com` URLs, and clone auth-failure hints name your actual git host."
+Since this repo intentionally tracks upstream's `/plugin` surface for parity,
+the question is what our own source parser (`domain/source.ts`) and git-auth
+registry (`domain/auth-registry.ts`, `orchestrators/auth-host.ts`) already do
+with non-github git hosts, and what a parity fix would cost.
+
 ### Backward-compatibility removal (spikes 001-003)
 
 Now that pi-claude-marketplace has a desired-state configuration file
@@ -33,6 +43,20 @@ completes. Does `@earendil-works/pi-coding-agent`'s extension UI surface
 idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 
 ## Requirements
+
+### GitLab plugin-marketplace parity
+
+- A GitLab (or any other host) `url`-kind source keeps using the existing
+  opaque full-URL identity (`UrlSource.url`) -- no new host-specific type is
+  needed for path/clone purposes, since arbitrary subgroup nesting is just
+  more path segments to a generic URL (Spike 008).
+- Any new "bare host/path" shorthand form reuses the generic `url` kind (or
+  the existing `GitHubSource` for a `github.com/` bare prefix) after
+  prefixing `https://`, not a new discriminated source kind (Spike 008).
+- A GitLab Device Flow auth provider requires a real GitLab OAuth
+  Application registered out-of-band first -- `clientId` is a compile-time
+  literal (D-32-03) that has to come from somewhere; this is a human/infra
+  prerequisite, not something a code change alone can satisfy (Spike 009).
 
 ### Backward-compatibility removal
 
@@ -127,3 +151,5 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 006  | delayed-status-progress             | standard   | Given a `registerCommand` handler awaiting a simulated multi-second clone, when wrapped in a delay(~1s)->show->auto-clear helper over `ctx.ui.setStatus`, then the footer text appears only after the delay, live-updates mid-await, and clears in a `finally` even on error | ✓ VALIDATED         | pi-extension, ui, progress, tui                                          |
 | 007a | progress-modality-widget            | comparison | Given the same delay/auto-clear helper, when mounted via `ctx.ui.setWidget` for a simulated multi-step clone, then observe the ambient, non-blocking feel                                                                                                                    | ✓ VALIDATED (loses) | pi-extension, ui, progress, tui, comparison                              |
 | 007b | progress-modality-bordered-loader   | comparison | Given the same helper, when mounted via `ctx.ui.custom()` + `BorderedLoader` for the same simulated clone, then observe the modal, cancellable feel head-to-head against 007a                                                                                                | ✓ WINNER            | pi-extension, ui, progress, tui, comparison                              |
+| 008  | gitlab-bare-source-parsing          | standard   | Given a bare (schemeless) `gitlab.com/group/.../project` string or a full `https://gitlab.com/...` URL with nested subgroups, when passed through `parsePluginSource`, then determine current classification                                                                | ⚠ VALIDATED (gap)    | source-parsing, gitlab, parity                                           |
+| 009  | git-host-auth-hint-coverage         | standard   | Given a non-github git host clone/auth failure, when the credential/auth-host code emits a diagnostic, then determine whether it already names the actual host across all call sites, and whether Device Flow auth is architecturally pluggable per-host                     | ⚠ VALIDATED (gap)    | auth, git-credential, gitlab, parity                                     |
