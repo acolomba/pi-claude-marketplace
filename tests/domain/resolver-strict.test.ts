@@ -813,6 +813,23 @@ test("DFEN-02 entry declares defaultEnabled false with no plugin.json -> install
   assert.equal(r.defaultEnabled, false);
 });
 
+// D-101-01: the resolved value lives in `MATERIALIZABLE_FIELDS`, so it has to
+// carry on the `partially-available` arm exactly as it does on `installable`.
+// Declaring an unsupported component kind reaches that arm with NO structural
+// defect, which is the shape a `--partial` consumer narrows to -- and it is the
+// only arm whose carried value nothing else asserts, so hardcoding the argument
+// at the `partiallyAvailable()` call site would otherwise go unnoticed.
+test("DFEN-02 partially-available arm carries the entry-resolved defaultEnabled", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(
+    basicEntry({ source: "./local", defaultEnabled: false, themes: "./themes" }),
+    ctx,
+  );
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
 // D-101-10: a non-boolean is an ordinary schema violation caught by
 // PLUGIN_MANIFEST_VALIDATOR inside readManifest -- no bespoke error class, no
 // coercion, and precedence is never consulted. Assert only the note PREFIX:

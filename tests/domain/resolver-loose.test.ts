@@ -196,6 +196,24 @@ test("DFEN-02 loose: manifest-only declaration -> carries the manifest value", a
   assert.equal(r.defaultEnabled, false);
 });
 
+// D-101-01 / D-101-04: the partial arm in loose mode, with the value coming
+// from the manifest fallback rather than the entry -- the strict-mode sibling
+// covers the entry side. `themes` is an unsupported kind, so it degrades the
+// plugin without a structural defect; it is not a component-path kind, so it is
+// not loose-mode conflict material either.
+test("DFEN-02 loose: partially-available arm carries the manifest-resolved defaultEnabled", async () => {
+  const localRoot = ROOT("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const ctx = mockCtx(MP, {
+    [localRoot]: "dir",
+    [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
+  });
+  const r = await resolveLoose(basicEntry({ source: "./local", themes: "./themes" }), ctx);
+  assert.equal(r.state, "partially-available", `notes: ${r.notes.join(" / ")}`);
+  requirePartialInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // MM-7: mcpServers entry-only
 // ──────────────────────────────────────────────────────────────────────────
