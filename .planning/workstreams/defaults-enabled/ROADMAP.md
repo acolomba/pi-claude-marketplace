@@ -123,7 +123,7 @@ Plans:
   4. The install notification states that the plugin installed disabled and how to enable it, at informational severity — the desired state WAS reached (an install-disabled plugin is the author's declared intent, not a shortfall).
   5. The `installs disabled` token exists as one indivisible closed-set amendment: appended at the tail of `REASONS` (`shared/notify.ts`) with no existing entry reordered or reworded, and given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof would otherwise fail.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -132,7 +132,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 102-02-PLAN.md — the DFEN-05 precedence matrix over all three values of the config entry's `enabled` key in both directions, the D-102-03 proof that the import cascade never opts in, and the D-102-02 ledger-succeeds / cascade-fails characterization
+- [x] 102-02-PLAN.md — the DFEN-05 precedence matrix over all three values of the config entry's `enabled` key in both directions, the D-102-03 proof that the import cascade never opts in, and the D-102-02 ledger-succeeds / cascade-fails characterization
 - [ ] 102-03-PLAN.md — the reconcile path: the absent-key-only stamp through `writePluginConfigEntry`, targeted at the declaring physical file via the previously-unread `PlannedPluginInstall.configSource`, and a cascade row that reports the install as disabled rather than installed
 
 **Notes**:
@@ -264,7 +264,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
-| 102. Reason token, install write-through and notification | defaults-enabled | 1/3 | In Progress|  |
+| 102. Reason token, install write-through and notification | defaults-enabled | 2/3 | In Progress|  |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |

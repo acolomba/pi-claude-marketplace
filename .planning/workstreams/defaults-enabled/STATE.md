@@ -4,17 +4,17 @@ milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
 current_phase: 102
 current_phase_name: Reason token, install write-through and notification
-current_plan: 1
+current_plan: 3
 status: executing
-stopped_at: Completed 102-01-PLAN.md
-last_updated: "2026-08-14T19:18:30.386Z"
+stopped_at: Completed 102-02-PLAN.md
+last_updated: "2026-08-14T19:55:45.382Z"
 last_activity: 2026-08-14
-last_activity_desc: Phase 102 planned — 3 plans in 2 waves; D-102-10 settled the OUT-04 remedy carrier
+last_activity_desc: 102-02 executed — the DFEN-05 precedence matrix, the import non-application proof, and the cascade-failure characterization
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 20
 ---
 
@@ -40,21 +40,22 @@ the resolved value first changes what a user observes.
 ## Current Position
 
 Phase: 102 — Reason token, install write-through and notification — EXECUTING
-Plan: 1/3 complete; next is 102-02 (wave 2)
-Status: 102-01 landed — the install-disabled spine is green end to end
-Last activity: 2026-08-14 — 102-01 executed: `installs disabled` joined REASONS,
-install now materializes-then-disables, writes `enabled: false` through, and
-reports it at info severity with the enable hint
+Plan: 2/3 complete; next is 102-03 (wave 2)
+Status: 102-02 landed — the precedence rule and the one failure window are pinned
+Last activity: 2026-08-14 — 102-02 executed: all three values of the config
+entry's `enabled` key asserted against both manifest values, the import cascade
+proven never to opt in, and the ledger-succeeds / cascade-fails window
+characterized. No production file changed.
 
 ## Progress
 
 **Phases Complete:** 1/5
-**Current Plan:** 102-02 (not started)
+**Current Plan:** 102-03 (not started)
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Complete (3/3 plans) |
-| 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Executing (1/3 plans) |
+| 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Executing (2/3 plans) |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
 | 105 | No-op parity sweep and contract documentation | DFEN-08, DOC-01, DOC-02 | Not started |
@@ -103,18 +104,19 @@ No open decisions remain for the milestone.
 
 ## Session Continuity
 
-**Last session:** 2026-08-14T19:18:30.355Z
+**Last session:** 2026-08-14T19:55:38.889Z
 
-**Stopped At:** Completed 102-01-PLAN.md — the phase's wave-1 spine. The closed
-set now holds 39 members, install materializes-then-disables a
-`defaultEnabled: false` plugin, writes `enabled: false` through to the target
-config, and reports it once at info severity with the frozen enable hint.
-`npm run check` is green.
+**Stopped At:** Completed 102-02-PLAN.md — the phase's behavioral half. An
+explicit `enabled` in the user's config is proven to win over the manifest in
+both directions and never to be rewritten, the absent third value is proven to
+be the only one the manifest answers, the import cascade is proven never to opt
+in, and the ledger-succeeds / cascade-fails window is characterized rather than
+papered over. No production file changed. `npm run check` is green.
 **Resume File:** None
-**Next Action:** execute wave 2 — `102-02` (DFEN-05 precedence in both
-directions, the `import` non-application proof, and the D-102-02 cascade-failure
-case) and `102-03` (the reconcile absent-key stamp and the projection that reads
-`landedDisabled`). Discuss and plan are already done — do not re-run them.
+**Next Action:** execute `102-03` — the reconcile absent-key stamp through
+`writePluginConfigEntry`, targeted at the declaring physical file via
+`PlannedPluginInstall.configSource`, and the cascade row that reads
+`landedDisabled`. Discuss and plan are already done — do not re-run them.
 
 **Resume requirement:** run GSD from the worktree
 `/home/acolomba/pi-claude-marketplace/.worktrees/defaults-enabled` (branch
@@ -130,6 +132,7 @@ exist and GSD reports no phases, exiting clean — a false negative.
 | Phase 101 P02 | 15min | 2 tasks | 2 files |
 | Phase 101 P03 | 17min | 3 tasks | 3 files |
 | Phase 102 P01 | 55min | 2 tasks | 9 files |
+| Phase 102 P02 | 40min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -175,3 +178,16 @@ exist and GSD reports no phases, exiting clean — a false negative.
   record rather than throwing. A closure throw discards the mutated snapshot,
   which would leave `state.json` claiming artifacts the cascade already removed
   from disk.
+
+- [Phase 102]: The cascade-failure fault is injected through AG-5 foreign
+  content, not by seeding `agents-index.json` as a directory. The install
+  ledger's own agents phase loads that index BEFORE its noop short-circuit, so
+  the directory trick trips the ledger and turns the case into an install
+  rollback. Foreign content is the right lever because the ledger tolerates a
+  `failed[]` row while the cascade throws on one — succeed on the way in, throw
+  on the way out.
+
+- [Phase 102]: A precedence test over a three-valued key covers all three values
+  explicitly. `entry.enabled !== undefined` and `isDeclaredEnabled(entry)` agree
+  on `true` and on `false`, so a two-valued matrix passes while the gate asks
+  the wrong question.
