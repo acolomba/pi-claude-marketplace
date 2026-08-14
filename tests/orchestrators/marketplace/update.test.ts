@@ -350,6 +350,28 @@ test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentica
   });
 });
 
+test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) on refresh renders {authentication required}, not the lying {network unreachable}", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    // A denied/expired Device Flow (or a poll network error) makes
+    // platform/git.ts's onAuth return `{ cancel: true }`, which
+    // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
+    // 401/403 and NOT a network errno.
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = makeMockGitOps({ fetchThrows: authError });
+
+    await updateMarketplace({ ctx, pi, name: "declined", scope: "project", cwd, gitOps });
+
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /\(failed\) \{authentication required\}/);
+    assert.doesNotMatch(first.message, /\{network unreachable\}/);
+  });
+});
+
 test("UXG-05: github-source refresh whose manifest content CHANGES renders `(updated)` (change detected, source-kind-uniform)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
