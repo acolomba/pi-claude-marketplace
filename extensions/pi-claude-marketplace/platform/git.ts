@@ -461,10 +461,15 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
     try {
       await opts.credentialOps.reject(opts.host, cred);
-    } catch {
+    } catch (err) {
       // CP-10: swallow any reject() throw and still return cancel below.
       // The credential has not been evicted from the keychain, but the
-      // current operation will not retry against this seam regardless.
+      // current operation will not retry against this seam regardless. The
+      // caught message is still routed through hookDebugLog (AUTH-09-safe
+      // per platform/git-credential.ts's own docstring discipline, same as
+      // onAuth's catch-all above) so the failure is diagnosable rather than
+      // discarded outright.
+      hookDebugLog(`onAuthFailure: reject() threw for ${opts.host}: ${errorMessage(err)}`, "auth");
     }
 
     // CP-9: ALWAYS cancel. Returning a fresh credential here would
