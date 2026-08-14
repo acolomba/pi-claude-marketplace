@@ -232,10 +232,18 @@ test("buildAuthCallbacks: reject throws -- onAuthFailure still returns { cancel:
 
   const cred: GitCredentials = { username: "x-access-token", password: "<DF_TOKEN>" };
   const cbs = buildAuthCallbacks({ credentialOps: credOps, host: HOST, onAuthRequired });
-  const result = await cbs.onAuthFailure(REMOTE_URL, cred);
+  const { result, logged } = await withCapturedDebugLog(() => cbs.onAuthFailure(REMOTE_URL, cred));
 
   assert.deepEqual(result, { cancel: true });
   assert.equal(state.rejectCalls.length, 1, "reject was called before throwing");
+
+  const line = logged.find((l) => l.includes(timeoutErr.message));
+  assert.ok(
+    line !== undefined,
+    `expected a hookDebugLog line carrying the reject() error, got: ${JSON.stringify(logged)}`,
+  );
+  assert.ok(line.includes(HOST), `expected the debug line to name the host, got: "${line}"`);
+  assert.ok(line.startsWith("[auth]"), `expected the "auth" tag, got: "${line}"`);
 });
 
 test("buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true } and captures the error via hookDebugLog (CP-10)", async () => {
