@@ -358,49 +358,62 @@ async function seedWarmSubdirMirror(opts: {
 // (a) single-scope installed with resolved components + description.
 // ---------------------------------------------------------------------------
 
+/**
+ * The rendered message shared by the two cases below. The DFEN-01 case's entire
+ * claim is that its output is byte-identical to the plain case, so both read one
+ * literal: two copies would let a renderer change update one of them and retire
+ * the claim without any test failing.
+ */
+const EXPECTED_FOO_INSTALLED_INFO = [
+  "● mp [user] <no autoupdate>",
+  "  ● foo v1.2.3 (installed)",
+  "    Foo plugin",
+  "    agents: a1",
+  "    commands: c1",
+  "    skills: s1",
+].join("\n");
+
+/** The `foo` entry both cases seed; `over` is the only intended difference. */
+function fooInstalledEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    name: "foo",
+    source: "./foo",
+    version: "1.2.3",
+    description: "Foo plugin",
+    skills: "skills",
+    commands: "commands",
+    agents: "agents",
+    ...over,
+  };
+}
+
+function seedFooInstalled(
+  home: string,
+  cwd: string,
+  entryOver: Record<string, unknown> = {},
+): Promise<string> {
+  return seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [fooInstalledEntry(entryOver)] },
+    installed: { foo: { version: "1.2.3" } },
+    installablePluginDirs: ["foo"],
+    componentDirs: { foo: ["skills/s1"] },
+    componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
+  });
+}
+
 test("INFO-02: single-scope installed (path source) renders header + plugin row + description + sorted per-kind components", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
-    const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
-      scope: "user",
-      scopeRoot: userRoot,
-      cwd,
-      mpName: "mp",
-      manifest: {
-        name: "mp",
-        plugins: [
-          {
-            name: "foo",
-            source: "./foo",
-            version: "1.2.3",
-            description: "Foo plugin",
-            skills: "skills",
-            commands: "commands",
-            agents: "agents",
-          },
-        ],
-      },
-      installed: { foo: { version: "1.2.3" } },
-      installablePluginDirs: ["foo"],
-      componentDirs: { foo: ["skills/s1"] },
-      componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
-    });
+    await seedFooInstalled(home, cwd);
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● foo v1.2.3 (installed)",
-        "    Foo plugin",
-        "    agents: a1",
-        "    commands: c1",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
   });
 });
 
@@ -408,52 +421,17 @@ test("DFEN-01: an entry declaring defaultEnabled renders the same info message a
   // `info` reads named fields off the parsed entry, so a declared
   // `defaultEnabled` is invisible to it: same single notification, same
   // `undefined` severity, same bytes as the case above -- no enablement line
-  // and no reason token. The expected message is spelled out rather than
-  // computed from a second `getPluginInfo` call, because two live runs would
-  // agree even if both had regressed.
+  // and no reason token. The expectation is a shared literal rather than a
+  // second live `getPluginInfo` call, because two live runs would agree even if
+  // both had regressed.
   await withHermeticHome(async ({ home, cwd }) => {
-    const userRoot = path.join(home, ".pi", "agent");
-    await seedPathMarketplace({
-      scope: "user",
-      scopeRoot: userRoot,
-      cwd,
-      mpName: "mp",
-      manifest: {
-        name: "mp",
-        plugins: [
-          {
-            name: "foo",
-            source: "./foo",
-            version: "1.2.3",
-            description: "Foo plugin",
-            defaultEnabled: false,
-            skills: "skills",
-            commands: "commands",
-            agents: "agents",
-          },
-        ],
-      },
-      installed: { foo: { version: "1.2.3" } },
-      installablePluginDirs: ["foo"],
-      componentDirs: { foo: ["skills/s1"] },
-      componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
-    });
+    await seedFooInstalled(home, cwd, { defaultEnabled: false });
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● foo v1.2.3 (installed)",
-        "    Foo plugin",
-        "    agents: a1",
-        "    commands: c1",
-        "    skills: s1",
-      ].join("\n"),
-    );
+    assert.equal(notifications[0]!.message, EXPECTED_FOO_INSTALLED_INFO);
   });
 });
 

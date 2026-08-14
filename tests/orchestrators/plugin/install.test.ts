@@ -778,125 +778,91 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
 // DFEN-01 -- a declared `defaultEnabled` is read, not acted on
 //
 // The resolver resolves the declared value and exposes it to the install path,
-// which does not consult it: an install is recorded `enabled: true` and its
-// artifacts are materialized whatever the plugin declares. These two cases pin
-// that contract from both declaration sites. They assert the recorded resources
-// as well as the flag, so "installed enabled" cannot be confused with "recorded
-// but not materialized" -- those are separate outcomes, and a change that
-// conflated them would otherwise pass on the flag alone.
+// which does not consult it: an install is recorded `enabled: true`, its
+// artifacts are materialized, and its `claude-plugins.json` patch stays empty,
+// whatever the plugin declares. The two declaration sites differ only in WHICH
+// seeder knob carries the declaration, so they share one body -- "the two sites
+// behave identically" is then enforced by construction rather than asserted in
+// two copies that can drift apart.
+//
+// The recorded resources are asserted alongside the flag, so "installed enabled"
+// cannot be confused with "recorded but not materialized": those are separate
+// outcomes, and a change that conflated them would otherwise pass on the flag
+// alone.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("DFEN-01: marketplace entry declares defaultEnabled false -> installs enabled with artifacts materialized", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen-entry-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "hello",
-        defaultEnabled: false,
-        skills: [{ sourceName: "tool" }],
-      });
+const DFEN_DECLARATION_SITES = [
+  {
+    label: "marketplace entry declares defaultEnabled false",
+    tmpPrefix: "install-dfen-entry-",
+    seedKnob: { defaultEnabled: false },
+  },
+  {
+    // The entry stays silent, so the manifest declaration is the one the
+    // resolver's precedence rule falls through to.
+    label: "plugin.json declares defaultEnabled false with a silent entry",
+    tmpPrefix: "install-dfen-manifest-",
+    seedKnob: { pluginJsonDefaultEnabled: false },
+  },
+] as const;
 
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-      });
+for (const site of DFEN_DECLARATION_SITES) {
+  test(`DFEN-01: ${site.label} -> installs enabled with artifacts materialized`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), site.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          skills: [{ sourceName: "tool" }],
+          ...site.seedKnob,
+        });
 
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
+        const { ctx, pi, notifications } = makeCtx();
+        await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
 
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces["mp"]?.plugins["hello"];
-      assert.ok(record !== undefined);
-      assert.equal(record.enabled, true);
-      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+        const errs = notifications.filter((n) => n.severity === "error");
+        assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
-      // The state record is only half the contract. The standalone install also
-      // writes the plugin back to `claude-plugins.json`, and that patch is where
-      // `enabled: false` would land first -- `state.json` could stay
-      // `enabled: true` while the config gained the key, and the assertions
-      // above would not notice. Pin the patch empty (D-04 consume-time default).
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const cfg = await loadConfig(locations.configJsonPath);
-      assert.equal(cfg.status, "valid");
-      if (cfg.status === "valid") {
-        assert.deepEqual(
-          cfg.config.plugins?.["hello@mp"],
-          {},
-          "the resolved defaultEnabled must not reach the config write-back",
-        );
+        const after = await loadState(locations.extensionRoot);
+        const record = after.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        assert.equal(record.enabled, true);
+        assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+
+        // The state record is only half the contract. The standalone install
+        // also writes the plugin back to `claude-plugins.json`, and that patch
+        // is where `enabled: false` would land first -- `state.json` could stay
+        // `enabled: true` while the config gained the key, and the assertions
+        // above would not notice. Pin the patch empty (D-04 consume-time
+        // default).
+        const { loadConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const cfg = await loadConfig(locations.configJsonPath);
+        assert.equal(cfg.status, "valid");
+        if (cfg.status === "valid") {
+          assert.deepEqual(
+            cfg.config.plugins?.["hello@mp"],
+            {},
+            "the resolved defaultEnabled must not reach the config write-back",
+          );
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
       }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
+    });
   });
-});
-
-test("DFEN-01: plugin.json declares defaultEnabled false with a silent entry -> installs enabled with artifacts materialized", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen-manifest-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "hello",
-        // The entry stays silent, so the manifest declaration is the one the
-        // resolver's precedence rule falls through to.
-        pluginJsonDefaultEnabled: false,
-        skills: [{ sourceName: "tool" }],
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-      });
-
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
-
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces["mp"]?.plugins["hello"];
-      assert.ok(record !== undefined);
-      assert.equal(record.enabled, true);
-      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
-
-      // The state record is only half the contract. The standalone install also
-      // writes the plugin back to `claude-plugins.json`, and that patch is where
-      // `enabled: false` would land first -- `state.json` could stay
-      // `enabled: true` while the config gained the key, and the assertions
-      // above would not notice. Pin the patch empty (D-04 consume-time default).
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const cfg = await loadConfig(locations.configJsonPath);
-      assert.equal(cfg.status, "valid");
-      if (cfg.status === "valid") {
-        assert.deepEqual(
-          cfg.config.plugins?.["hello@mp"],
-          {},
-          "the resolved defaultEnabled must not reach the config write-back",
-        );
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // PI-9 -- 5-phase order + end-state assertion
