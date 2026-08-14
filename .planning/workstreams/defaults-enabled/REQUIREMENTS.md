@@ -68,31 +68,32 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated at roadmap creation (2026-08-14). Full phase
+definitions: `.planning/workstreams/defaults-enabled/ROADMAP.md`.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DFEN-01 | TBD | Pending |
-| DFEN-02 | TBD | Pending |
-| DFEN-03 | TBD | Pending |
-| DFEN-04 | TBD | Pending |
-| DFEN-05 | TBD | Pending |
-| DFEN-06 | TBD | Pending |
-| DFEN-07 | TBD | Pending |
-| DFEN-08 | TBD | Pending |
-| OUT-01 | TBD | Pending |
-| OUT-02 | TBD | Pending |
-| OUT-03 | TBD | Pending |
-| OUT-04 | TBD | Pending |
-| OUT-05 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
+| DFEN-01 | Phase 101 | Pending |
+| DFEN-02 | Phase 101 | Pending |
+| DFEN-03 | Phase 101 | Pending |
+| DFEN-04 | Phase 102 | Pending |
+| DFEN-05 | Phase 102 | Pending |
+| DFEN-06 | Phase 103 | Pending |
+| DFEN-07 | Phase 103 | Pending |
+| DFEN-08 | Phase 105 | Pending |
+| OUT-01 | Phase 102 | Pending |
+| OUT-02 | Phase 104 | Pending |
+| OUT-03 | Phase 104 | Pending |
+| OUT-04 | Phase 102 | Pending |
+| OUT-05 | Phase 104 | Pending |
+| DOC-01 | Phase 105 | Pending |
+| DOC-02 | Phase 105 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 (roadmap pending)
+- Mapped to phases: 15 (Phases 101-105)
+- Unmapped: 0
 
 ## Open Questions for Discuss-Phase
 
