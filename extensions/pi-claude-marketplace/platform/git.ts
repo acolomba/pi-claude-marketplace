@@ -335,9 +335,11 @@ export interface GitCredentials {
 
 /**
  * Discriminated result returned by an `onAuthRequired`
- * closure. Both arms carry `authAttempted: true` so downstream onAuthFailure
- * logic can detect that an interactive auth attempt has already happened
- * (CP-9 retry-loop guard).
+ * closure. Both arms carry `authAttempted: true` as a reference-only /
+ * future-proofing marker (CP-9): `onAuthFailure(url, cred)` never receives
+ * this value -- it is called with only the credential -- and the current
+ * implementation does not branch on the flag; onAuthFailure always returns
+ * `{ cancel: true }` regardless.
  *
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in platform/git.ts so this module honors the
@@ -402,16 +404,24 @@ export interface BuildAuthCallbacksOpts {
  *   RETURN VALUES or notify calls -- a credential could be interpolated into
  *   an upstream Error, so surfacing it to the user or to isomorphic-git
  *   would violate AUTH-09. The failure reason IS routed through
- *   `hookDebugLog` before the `{ cancel: true }` fallback so the specific
- *   cause (which OAuth provider error, which host) is diagnosable rather
- *   than discarded outright: `onAuthRequired`'s `result.reason` (from
- *   `domain/github-auth.ts::DeviceFlowResult`) is covered by the
- *   `tests/architecture/no-credential-leak.test.ts` AUTH-09 gate, and a
- *   caught exception's message is covered by `platform/git-credential.ts`'s
- *   own docstring discipline (CredentialOps Error messages reference only
- *   the subcommand name + timeout-ms/exit code) -- `hookDebugLog` writing to
- *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1` (never to the
- *   return value or a user-visible notify) keeps this within AUTH-09.
+ *   `hookDebugLog` before the `{ cancel: true }` fallback -- in onAuth (both
+ *   the Device Flow failure path and the catch-all) and in onAuthFailure (a
+ *   caught reject() throw) -- so the specific cause (which OAuth provider
+ *   error, which host) is diagnosable rather than discarded outright:
+ *   `onAuthRequired`'s `result.reason` (from
+ *   `domain/github-auth.ts::DeviceFlowResult`) is built only from fixed
+ *   strings, `err.message` on a network/fetch failure, or the OAuth
+ *   provider's own `error`/`error_description` fields on a PRE-TOKEN
+ *   response -- never from `access_token`/`accessToken`/`cred.*`. A caught
+ *   exception's message is covered by `platform/git-credential.ts`'s own
+ *   docstring discipline (CredentialOps Error messages reference only the
+ *   subcommand name + timeout-ms/exit code). `hookDebugLog` calls in THIS
+ *   file, plus `describeDeviceCodeErrorBody`'s own body and the `reason:`
+ *   field construction in `domain/github-auth.ts`, are all scanned by
+ *   `tests/architecture/no-credential-leak.test.ts` for credential-field
+ *   interpolation (AUTH-09); `hookDebugLog` itself also writes to
+ *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1`, never to the
+ *   return value or a user-visible notify.
  *
  * @see REQUIREMENTS.md::AUTH-01 (private repo auth via Device Flow)
  * @see REQUIREMENTS.md::AUTH-02 (silent keychain reuse on subsequent ops)
@@ -461,10 +471,15 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
     try {
       await opts.credentialOps.reject(opts.host, cred);
-    } catch {
+    } catch (err) {
       // CP-10: swallow any reject() throw and still return cancel below.
       // The credential has not been evicted from the keychain, but the
-      // current operation will not retry against this seam regardless.
+      // current operation will not retry against this seam regardless. The
+      // caught message is still routed through hookDebugLog (AUTH-09-safe
+      // per platform/git-credential.ts's own docstring discipline, same as
+      // onAuth's catch-all above) so the failure is diagnosable rather than
+      // discarded outright.
+      hookDebugLog(`onAuthFailure: reject() threw for ${opts.host}: ${errorMessage(err)}`, "auth");
     }
 
     // CP-9: ALWAYS cancel. Returning a fresh credential here would

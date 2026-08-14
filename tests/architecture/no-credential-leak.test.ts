@@ -46,6 +46,8 @@ const GIT_CREDENTIAL_FILE = "extensions/pi-claude-marketplace/platform/git-crede
 
 const GITHUB_AUTH_FILE = "extensions/pi-claude-marketplace/domain/github-auth.ts";
 
+const GIT_PLATFORM_FILE = "extensions/pi-claude-marketplace/platform/git.ts";
+
 const PROVIDER_FILES: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/domain/auth-registry.ts",
   // buildAuthForHost binds the provider flow + notifyFn per host; a token
@@ -138,6 +140,63 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
     errorOrNotifyWithToken.test(stripped),
     false,
     "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
+  );
+});
+
+test("AUTH-09: describeDeviceCodeErrorBody never references a credential field", async () => {
+  // The gate above scans new Error(...)/notifyFn(...) call sites; it cannot
+  // see through the describeDeviceCodeErrorBody(res) call inside
+  // requestCodeImpl's `new Error(...)` -- a lexical scan of that call site
+  // only ever sees `res.status` and a function-call expression. This test
+  // instead scans the helper's OWN body directly: at this point in the flow
+  // no credential has been issued yet, so describeDeviceCodeErrorBody may
+  // only ever read the provider's `error` / `error_description` fields.
+  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
+  const src = await readFile(absPath, "utf8");
+  const stripped = stripComments(src);
+  const fnMatch = /async function describeDeviceCodeErrorBody\([\s\S]*?\n}\n/.exec(stripped);
+  assert.ok(fnMatch, "describeDeviceCodeErrorBody function body not found for AUTH-09 scan");
+
+  const forbiddenField =
+    /\b(password|access_token|accessToken|cred\.[a-z]+|githubToken|gitToken)\b/i;
+  assert.equal(
+    forbiddenField.test(fnMatch[0]),
+    false,
+    "describeDeviceCodeErrorBody references a credential field (AUTH-09 violation)",
+  );
+});
+
+test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", async () => {
+  // DeviceFlowResult's failure arm is built as a plain object literal
+  // (`{ ok: false, reason: ... }`), not a `new Error(...)`/`notifyFn(...)`
+  // call, so the gate above does not scan it. This test covers that
+  // construction form directly.
+  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
+  const src = await readFile(absPath, "utf8");
+  const stripped = stripComments(src);
+  const reasonFieldWithToken =
+    /reason:\s*(?:[^,}]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^,}]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  assert.equal(
+    reasonFieldWithToken.test(stripped),
+    false,
+    "a reason: field in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
+  );
+});
+
+test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential field", async () => {
+  // buildAuthCallbacks routes onAuth/onAuthFailure failure reasons through
+  // hookDebugLog (see the CP-10 discussion above buildAuthCallbacks). That
+  // call form is not `new Error(...)` or `notifyFn(...)`, so it falls
+  // outside every other gate in this file; this test closes that gap.
+  const absPath = path.join(REPO_ROOT, GIT_PLATFORM_FILE);
+  const src = await readFile(absPath, "utf8");
+  const stripped = stripComments(src);
+  const hookDebugLogWithToken =
+    /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  assert.equal(
+    hookDebugLogWithToken.test(stripped),
+    false,
+    "hookDebugLog in platform/git.ts interpolates a credential field (AUTH-09 violation)",
   );
 });
 
