@@ -50,6 +50,39 @@ test("GITHUB_PROVIDER carries today's exact github.com endpoints, client_id, and
   assert.equal(GITHUB_PROVIDER.scope, "repo");
 });
 
+test("GAUTH-02 GITLAB_PROVIDER carries GitLab's exact endpoints, client_id, and scope", () => {
+  assert.equal(GITLAB_PROVIDER.deviceCodeUrl, "https://gitlab.com/oauth/authorize_device");
+  assert.equal(GITLAB_PROVIDER.tokenUrl, "https://gitlab.com/oauth/token");
+  assert.equal(
+    GITLAB_PROVIDER.clientId,
+    "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
+  );
+  // Least privilege: this project only ever clones read-only. Widening this to
+  // match GitHub's broader `repo` scope would be a regression, not a fix.
+  assert.equal(GITLAB_PROVIDER.scope, "read_repository");
+});
+
+test("GAUTH-02 GITLAB_PROVIDER.credentialFrom maps the token to oauth2 basic auth", () => {
+  assert.deepEqual(GITLAB_PROVIDER.credentialFrom("tok"), {
+    username: "oauth2",
+    password: "tok",
+  });
+});
+
+test("GAUTH-02 GITLAB_PROVIDER.hostMatch accepts only the bare SaaS host", () => {
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.com"), true);
+  // Exact equality, never a suffix match: a suffix match would claim
+  // lookalike hosts and bind a real token to a hostile remote.
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.example.com"), false);
+  assert.equal(GITLAB_PROVIDER.hostMatch("sub.gitlab.com"), false);
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.com:8443"), false);
+});
+
+test("PROV-01 a second descriptor does not disturb first-match ordering", () => {
+  assert.equal(findProviderForHost("github.com"), GITHUB_PROVIDER);
+  assert.equal(findProviderForHost("gitlab.com"), GITLAB_PROVIDER);
+});
+
 test("initiateDeviceFlow drives the engine identically with and without an explicit GITHUB_PROVIDER", async () => {
   const success = {
     kind: "success" as const,
