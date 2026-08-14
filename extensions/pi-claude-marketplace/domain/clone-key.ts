@@ -70,6 +70,11 @@ export function pluginMirrorKey(canonicalUrl: string): string {
  *     so dedup is `.git`-suffix-insensitive. For git-subdir the clone url is
  *     the repo root; the subdir path is resolved later by the resolver
  *     (git-subdir pluginRoot = cloneRoot + path).
+ *
+ * The result is the cache-key IDENTITY, not a wire url: a caller sending it to
+ * the network passes it through `domain/source.ts::ensureGitSuffix` first
+ * (MURL-01). Folding that suffix in here instead would rehash every
+ * `plugin-clones/` directory and cold-miss every warm clone.
  */
 export function canonicalCloneUrl(source: UrlSource | GitSubdirSource | GitHubSource): string {
   return source.kind === "github"
