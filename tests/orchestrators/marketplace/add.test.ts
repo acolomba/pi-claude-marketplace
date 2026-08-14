@@ -1383,6 +1383,69 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
   });
 });
 
+test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    // A denied/expired Device Flow (or a poll network error) makes
+    // platform/git.ts's onAuth return `{ cancel: true }`, which
+    // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
+    // 401/403 and NOT a network errno.
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: authError,
+    });
+
+    // No raw throw past addMarketplace -- the standalone path must route
+    // through notify() (IL-2).
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const note = notifications.find((n) => n.severity === "error");
+    assert.ok(note, "a declined Device Flow must render a notify()-routed error");
+    assert.ok(
+      note.message.includes("(failed) {authentication required}"),
+      `expected authentication-required row, got: ${note.message}`,
+    );
+    assert.equal(note.message.includes("{unparseable}"), false);
+    assert.equal(note.message.includes("{network unreachable}"), false);
+  });
+});
+
+test("GAUTH-02 orchestrated mode -- UserCanceledError returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: authError,
+    });
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.equal(outcome.reason, "authentication required");
+    }
+  });
+});
+
 test("MURL-01 regression: github source is byte-identical -- Device Flow auth still constructed, cloneUrl still reconstructed", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();

@@ -66,6 +66,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -249,38 +250,25 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
   if (err instanceof Error) {
     const code = (err as NodeJS.ErrnoException).code;
 
-    // D-76-08: an isomorphic-git `HttpError` carries a `.code` STRING
-    // ("HttpError"), not an errno, so it would fall through the errno ladder
-    // below to `unparseable` -- falsely implying a corrupted source tree when
-    // the truth is a 401/403 auth challenge from a private/nonexistent repo.
-    // Catch it HERE, above the errno ladder. Duck-typed on the name+status
-    // (D-13: no isomorphic-git import in the orchestrator tier; mirrors the
-    // isGitNotFoundError name-check idiom in shared.ts).
-    const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-    if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-      return "authentication required";
-    }
-
     if (code === "ENOENT" || code === "ENOTDIR") {
       return "source missing";
     }
 
-    // WR-03: a clone network failure (errno-carrying
-    // throw from the github guard's gitOps.clone) is the NFR-5 per-entry
-    // soft-fail the catalog's `soft-fail-mixed` state documents as
-    // `{network unreachable}`. The clone-catch only cleans staging and
-    // rethrows unclassified, so the errno must be recognised HERE --
-    // otherwise the reason falls through to `unparseable`, falsely implying
-    // a corrupted manifest when the user's network is down.
-    if (
-      code === "ENETUNREACH" ||
-      code === "ECONNREFUSED" ||
-      code === "ENOTFOUND" ||
-      code === "ETIMEDOUT" ||
-      code === "ECONNRESET" ||
-      code === "EAI_AGAIN"
-    ) {
-      return "network unreachable";
+    // GAUTH-02: delegate the isomorphic-git `HttpError` 401/403 challenge /
+    // `UserCanceledError` (a declined or failed Device Flow) / network-errno
+    // ladder to the shared classifier (`shared/git-failure-classifiers.ts`)
+    // instead of a hand-rolled copy, so `add` cannot drift out of sync with
+    // `install.ts`/`update.ts` (plugin)/`fetch.ts`, which already delegate to
+    // it. WR-03: a clone network failure (errno-carrying throw from the
+    // github guard's gitOps.clone) is the NFR-5 per-entry soft-fail the
+    // catalog's `soft-fail-mixed` state documents as `{network unreachable}`.
+    // The clone-catch only cleans staging and rethrows unclassified, so the
+    // failure must be recognised HERE -- otherwise the reason falls through
+    // to `unparseable`, falsely implying a corrupted manifest when the
+    // truth is an auth challenge or the user's network being down.
+    const transportReason = classifyGitTransportFailure(err);
+    if (transportReason !== undefined) {
+      return transportReason;
     }
   }
 
