@@ -51,7 +51,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -387,7 +387,8 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     } else if (source.kind === "url") {
-      // MURL-01 / D-76-06: clone source.url verbatim; per-host provider
+      // MURL-01 / D-76-06: source.url is the stored canonical identity; the
+      // clone url is that value through `ensureGitSuffix`. Per-host provider
       // lookup decides the auth bundle (PROV-02/03/04).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
@@ -645,7 +646,7 @@ async function addGitClonedInGuard(args: {
   try {
     await gitOps.clone({
       dir: stagingDir,
-      url: cloneUrl,
+      url: ensureGitSuffix(cloneUrl),
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
       ...(auth !== undefined && { auth }),
     });
@@ -752,8 +753,10 @@ async function addGithubInGuard(args: {
 }
 
 /**
- * MURL-01 / D-76-06: url-source add. Clones `source.url` VERBATIM (no
- * github.com reconstruction). PROV-02/03/04: the host is extracted from the
+ * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
+ * identity form (parse-time `.git`-stripped) and NOT reconstructed against
+ * github.com; the url actually cloned is that value passed through
+ * `ensureGitSuffix`. PROV-02/03/04: the host is extracted from the
  * url and looked up in the provider registry via buildAuthForHost -- a
  * provider-registered host authenticates host-keyed; a no-provider host gets
  * NO bundle (buildAuthForHost returns undefined), so the clone runs authless

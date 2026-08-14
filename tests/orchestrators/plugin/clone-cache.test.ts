@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { githubSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -572,7 +575,7 @@ void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRe
 
   await resolvePluginPin({ source, gitOps });
 
-  assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo" }]);
+  assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo.git" }]);
 });
 
 void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha is set", async () => {
@@ -610,7 +613,7 @@ void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha",
   assert.equal(resolved.pin, TAG, "pin = the ref's resolved sha");
   assert.equal(resolved.ref, "v1.0.0", "ref returned as the fetch hint");
   assert.deepEqual(state.resolveRemoteRefCalls, [
-    { url: "https://example.com/repo", ref: "v1.0.0" },
+    { url: "https://example.com/repo.git", ref: "v1.0.0" },
   ]);
 });
 
@@ -639,6 +642,72 @@ void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the 
   // resolver (git-subdir pluginRoot = cloneRoot + path).
   assert.equal(resolved.cloneUrl, "https://example.com/mono");
   assert.equal(resolved.pin, PIN_40);
+});
+
+void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but returns the canonical suffix-less cloneUrl", async () => {
+  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const source: UrlSource = {
+    kind: "url",
+    raw: "https://gitlab.example.com/o/r",
+    url: "https://gitlab.example.com/o/r",
+  };
+
+  const resolved = await resolvePluginPin({ source, gitOps });
+
+  assert.equal(
+    state.resolveRemoteRefCalls[0]?.url,
+    "https://gitlab.example.com/o/r.git",
+    "the wire url carries the suffix",
+  );
+  assert.equal(
+    resolved.cloneUrl,
+    "https://gitlab.example.com/o/r",
+    "the returned cloneUrl stays the cache-key identity form",
+  );
+});
+
+void test("MURL-01 / PURL-04: resolvePluginPin adds exactly one suffix to an already-suffixed git-subdir url", async () => {
+  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const source: GitSubdirSource = {
+    kind: "git-subdir",
+    raw: "https://example.com/mono.git",
+    url: "https://example.com/mono.git",
+    path: "packages/plugin-a",
+  };
+
+  const resolved = await resolvePluginPin({ source, gitOps });
+
+  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/mono.git");
+  assert.equal(resolved.cloneUrl, "https://example.com/mono.git");
+});
+
+void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and returns the suffix-less canonical one", async () => {
+  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const source = githubSource("owner/repo");
+
+  const resolved = await resolvePluginPin({ source, gitOps });
+
+  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://github.com/owner/repo.git");
+  assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
+});
+
+void test("MURL-01 / PURL-04: materializePluginClone clones the suffixed url but keys the dir off the canonical one", async () => {
+  const locations = await freshLocations();
+  const { gitOps, state } = makeMockGitOps();
+
+  const cloneRoot = await materializePluginClone({
+    locations,
+    cloneUrl: "https://gitlab.example.com/o/r",
+    pin: PIN_40,
+    gitOps,
+  });
+
+  assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/o/r.git");
+  assert.equal(
+    cloneRoot,
+    await locations.pluginCloneDir(pluginCloneKey("https://gitlab.example.com/o/r", PIN_40)),
+    "a dir keyed before the suffix change still hits warm",
+  );
 });
 
 const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
@@ -679,6 +748,24 @@ void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to p
     "no fixed-pin (40-hex) checkout on the mirror create path",
   );
   assert.equal(resolvedSha, MIRROR_HEAD, "resolvedSha comes from resolveRef(HEAD)");
+});
+
+void test("MURL-01 / PURL-04: materializeOrRefreshPluginMirror clones the suffixed url but keys the mirror off the canonical one", async () => {
+  const locations = await freshLocations();
+  const { gitOps, state } = mirrorGitOps();
+
+  const { pluginRoot } = await materializeOrRefreshPluginMirror({
+    locations,
+    cloneUrl: "https://gitlab.example.com/o/r",
+    gitOps,
+  });
+
+  assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/o/r.git");
+  assert.equal(
+    pluginRoot,
+    await locations.pluginCloneDir(pluginMirrorKey("https://gitlab.example.com/o/r")),
+    "a mirror keyed before the suffix change still hits warm",
+  );
 });
 
 void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubClone rather than short-circuiting", async () => {

@@ -1231,7 +1231,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
   });
 });
 
-test("MURL-01: url source clones source.url VERBATIM with NO auth key in the clone options", async () => {
+test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in the clone options", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
@@ -1247,12 +1247,13 @@ test("MURL-01: url source clones source.url VERBATIM with NO auth key in the clo
       gitOps,
     });
 
-    // D-76-06: the clone URL is source.url verbatim -- no github.com
-    // reconstruction, and the parser canonicalized the trailing `.git` off.
+    // D-76-06: the clone URL is source.url -- no github.com reconstruction.
+    // MURL-01: the parser canonicalized the trailing `.git` off for identity
+    // comparison, and `ensureGitSuffix` restores it for the wire.
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
+    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp.git");
     // D-76-07: public-only -- the clone options object carries NO `auth` key.
     assert.equal(Object.hasOwn(cloneCall, "auth"), false);
     assert.equal(cloneCall.auth, undefined);
@@ -1283,7 +1284,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
         singleBranch: state.cloneCalls[0]?.singleBranch,
       },
       {
-        url: "https://gitlab.example.com/team/mp",
+        url: "https://gitlab.example.com/team/mp.git",
         ref: "v1.0",
         singleBranch: true,
       },
@@ -1517,7 +1518,7 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp");
+    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp.git");
     assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
   });
