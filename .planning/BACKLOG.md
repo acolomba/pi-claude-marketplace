@@ -739,6 +739,58 @@ substitution -- the layer that runs BEFORE pi-mcp-adapter sees the value),
 `bridges/mcp/stage.ts` (where the `env` map is composed and where a
 `literalEnv` field would be written), `docs/env-vars.md` ("MCP runtime env
 inheritance" and the MCP env column of the overview matrix).
+## SRCP-01/02: bare host-prefixed source shorthand and git-subdir url expansion
+
+Surfaced by a GitLab-parity spike (2026-08-14, `.planning/spikes/008-gitlab-bare-source-parsing`),
+triggered by an upstream Claude Code changelog entry ("bare gitlab.com repo
+URLs, including nested subgroups, now clone like github.com URLs"). Two
+related gaps in `domain/source.ts`'s `parsePluginSource`:
+
+- SRCP-01: bare host-prefixed strings (no `https://` scheme) are unrecognized
+  for ANY host, including `github.com` itself -- `gitlab.com/group/project`,
+  `gitlab.com/group/subgroup/project`, and `github.com/owner/repo` all fall
+  through to `{kind: "unknown", reason: "non-relative string source ...
+  cannot be classified"}`. Only the already-assumed-GitHub, host-less
+  `owner/repo` shorthand (exactly one slash, D-76-04) is recognized.
+  Full-scheme URLs (`https://gitlab.com/...`) already work today regardless
+  of nested-subgroup depth -- no fix needed there, since the generic `url`
+  source kind treats the whole path as opaque.
+- SRCP-02: the `git-subdir` object source's `url` field is taken as a literal
+  string with no shorthand expansion (`gitSubdirObjectSource`,
+  `domain/source.ts`) -- confirmed against upstream's own git-subdir schema
+  (`https://code.claude.com/docs/en/plugin-marketplaces.md#git-subdirectories`),
+  which documents `url` accepting the bare `owner/repo` GitHub shorthand
+  alongside the separate `path` field. Feeding our parser
+  `{"source": "git-subdir", "url": "owner/repo", "path": "..."}` today stores
+  `"owner/repo"` verbatim as `GitSubdirSource.url`, which is not a valid git
+  remote and would fail at actual clone time.
+
+Direction for later: add a bare-host-prefix recognition branch in
+`parsePluginSource` (allow-listed host table, e.g. `github.com/`,
+`gitlab.com/`) ahead of the `slashCount === 1` owner/repo check, re-prefixing
+with `https://` and re-entering the existing `parseUrlSource`/`parseGitHubUrl`
+logic -- no new `ParsedSource` variant needed. Reuse the same owner/repo
+shorthand expansion for `gitSubdirObjectSource`'s `url` field. Both are
+`domain/source.ts`-only changes; no bridge/orchestrator/NFR-10/NFR-5 impact
+(confirmed by spike 008).
+
+## GAUTH-01: git host auth-failure hint coverage
+
+Surfaced by the same GitLab-parity spike (2026-08-14,
+`.planning/spikes/009-git-host-auth-hint-coverage`), prompted by the same
+upstream changelog line ("...and clone auth-failure hints name your actual
+git host"). The host-named diagnostic `NO_PROVIDER_CAUSE(host)`
+(`orchestrators/auth-host.ts`) exists and is already host-generic, but is
+wired into exactly one of five auth-relevant call sites -- `marketplace
+update`'s url-source refresh path (`orchestrators/marketplace/update.ts:394`).
+`plugin install`, `plugin reinstall`, `plugin fetch`, and `marketplace add`
+all still surface only the bare, host-less `"authentication required"`
+token on a no-provider host. Pure code, no external dependency -- wire the
+same cause line into the other four call sites.
+
+(GAUTH-02, the sibling item from the same spike -- registering a GitLab
+Device Flow auth provider -- has already shipped: quick task 260814-a7m
+added `GITLAB_PROVIDER` to `domain/auth-registry.ts`.)
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.

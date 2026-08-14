@@ -96,6 +96,22 @@ dates alone can resolve an apparent contradiction between two issues.
 Prefer the official reference docs as the authoritative source; treat
 issues/trackers as corroborating signal only.
 
+**Predict before running, for hand-written parsers:** for a character-level
+cascade parser (`domain/source.ts`'s `parsePluginSource`, deliberately
+hand-written per D-06 -- TypeBox is not a fit for that job), read the whole
+function end to end and write down a branch-by-branch prediction for each
+probe input BEFORE running anything, then confirm/refute against that
+prediction. A `grep`-first approach reliably misses branch-order
+interactions in a cascade like this (spike 008).
+
+**Architecture-vs-wiring split:** when a spike question turns out to be "is
+the underlying mechanism generic, or is a specific integration point just
+not wired up yet," say so explicitly and size the two halves separately --
+they are usually different-sized follow-ups. Spike 009: the auth-provider
+lookup mechanism was already fully host-generic (a same-day fix), while the
+host-named hint string was wired into only one of five call sites (a
+separate, still-open follow-up, BACKLOG.md GAUTH-01).
+
 ## Tools & Libraries
 
 No new dependencies introduced. Spikes in this project import directly
