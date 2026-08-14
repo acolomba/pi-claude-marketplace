@@ -739,14 +739,16 @@ substitution -- the layer that runs BEFORE pi-mcp-adapter sees the value),
 `bridges/mcp/stage.ts` (where the `env` map is composed and where a
 `literalEnv` field would be written), `docs/env-vars.md` ("MCP runtime env
 inheritance" and the MCP env column of the overview matrix).
-## SRCP-01/02: bare host-prefixed source shorthand and git-subdir url expansion
+
+## SRCP-01/02: git-subdir url expansion (SRCP-01 withdrawn)
 
 Surfaced by a GitLab-parity spike (2026-08-14, `.planning/spikes/008-gitlab-bare-source-parsing`),
 triggered by an upstream Claude Code changelog entry ("bare gitlab.com repo
 URLs, including nested subgroups, now clone like github.com URLs"). Two
 related gaps in `domain/source.ts`'s `parsePluginSource`:
 
-- SRCP-01: bare host-prefixed strings (no `https://` scheme) are unrecognized
+- SRCP-01 (WITHDRAWN 2026-08-14 -- see the correction below):
+  bare host-prefixed strings (no `https://` scheme) are unrecognized
   for ANY host, including `github.com` itself -- `gitlab.com/group/project`,
   `gitlab.com/group/subgroup/project`, and `github.com/owner/repo` all fall
   through to `{kind: "unknown", reason: "non-relative string source ...
@@ -765,14 +767,41 @@ related gaps in `domain/source.ts`'s `parsePluginSource`:
   `"owner/repo"` verbatim as `GitSubdirSource.url`, which is not a valid git
   remote and would fail at actual clone time.
 
-Direction for later: add a bare-host-prefix recognition branch in
-`parsePluginSource` (allow-listed host table, e.g. `github.com/`,
-`gitlab.com/`) ahead of the `slashCount === 1` owner/repo check, re-prefixing
-with `https://` and re-entering the existing `parseUrlSource`/`parseGitHubUrl`
-logic -- no new `ParsedSource` variant needed. Reuse the same owner/repo
-shorthand expansion for `gitSubdirObjectSource`'s `url` field. Both are
-`domain/source.ts`-only changes; no bridge/orchestrator/NFR-10/NFR-5 impact
-(confirmed by spike 008).
+**SRCP-01 is withdrawn: upstream rejects this form too.** Probed 2026-08-14
+against the installed `claude` CLI v2.1.232 -- the shipped binary, not our
+reimplementation of it. `claude plugin marketplace add
+"gitlab.com/acolomba/pi-cm-test-marketplace"` is rejected outright:
+`not a valid GitHub owner/repo shorthand. For a git repo, use the full
+https:// clone URL from your host...`, and identically so with a `.git`
+suffix appended. The host-less `acolomba/pi-cm-test-marketplace` shorthand
+still routes to GitHub (`git@github.com:acolomba/pi-cm-test-marketplace.git`),
+never to GitLab -- the same already-assumed-GitHub rule we implement as
+D-76-04. Meanwhile `https://gitlab.com/acolomba/nonexistent-repo` and
+`https://gitlab.com/somegroup/somesubgroup/nonexistent-repo` both passed
+source-format validation and reached a real clone attempt.
+
+Read against that behavior, the changelog line this item was filed from ("bare
+`gitlab.com` repo URLs, including nested subgroups, now clone like `github.com`
+URLs") describes the full `https://gitlab.com/...` form getting
+GitHub-URL-equivalent treatment -- nested-subgroup-safe parsing and host-aware
+auth hints -- not a new scheme-less input syntax. Our `{kind: "unknown"}` for
+`gitlab.com/group/project` is therefore agreement with upstream, not a gap
+behind it, and teaching `parsePluginSource` that form would leave us accepting
+input upstream refuses: a parity regression, not a parity fix. The clone
+attempt above also named `gitlab.com` in its auth-failure message, which
+corroborates the other half of the same changelog line -- that half belongs to
+the git-host auth-failure hint item immediately below (spike 009) and is
+unaffected here. Spike 008's other finding stands confirmed: full-scheme GitLab
+URLs, nested subgroups included, already resolve today with no change.
+
+Direction for later, SRCP-02 only: expand a host-less `owner/repo` value in the
+`git-subdir` object source's `url` field to its full GitHub clone URL -- the
+same already-assumed-GitHub rule D-76-04 applies to string sources -- so what
+lands in `GitSubdirSource.url` is a usable git remote. Do not pair it with a
+scheme-less host-prefixed recognition branch in `parsePluginSource`: upstream
+rejects that input form itself, so accepting it would put us ahead of upstream
+rather than level with it. This is a `domain/source.ts`-only change; no
+bridge/orchestrator/NFR-10/NFR-5 impact (confirmed by spike 008).
 
 ## GAUTH-01: git host auth-failure hint coverage
 
