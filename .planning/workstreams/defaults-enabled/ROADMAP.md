@@ -86,7 +86,7 @@ state is that same shape.
   4. The resolved value is readable from the resolver's output by the install path, so precedence is evaluated once rather than per consumer.
   5. Nothing a user can observe changes in this phase: install, list, info, update, reinstall and reconcile produce identical output to today for every plugin, including one that declares `defaultEnabled: false`.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -96,7 +96,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 101-02-PLAN.md — the precedence matrix in both directions and both resolution modes, the agreement and fallback cases, and the two resolution-time validation guards
-- [ ] 101-03-PLAN.md — schema accept/reject on both compiled validators, the whole-manifest rejection with its contrast to per-plugin containment, and the no-observable-change characterization across install and `info`
+- [x] 101-03-PLAN.md — schema accept/reject on both compiled validators, the whole-manifest rejection with its contrast to per-plugin containment, and the no-observable-change characterization across install and `info`
 
 **Notes**:
 
@@ -246,7 +246,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 101. Manifest field and precedence resolution | defaults-enabled | 2/3 | In Progress|  |
+| 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | In Progress|  |
 | 102. Reason token, install write-through and notification | defaults-enabled | 0/? | Not started | - |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |

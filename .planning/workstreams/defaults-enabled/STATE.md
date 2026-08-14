@@ -4,18 +4,18 @@ milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
 current_phase: 101
 current_phase_name: Manifest field and precedence resolution
-current_plan: 2
-status: executing
-stopped_at: Completed 101-02-PLAN.md
-last_updated: "2026-08-14T15:01:30.889Z"
+current_plan: 3
+status: ready_for_verification
+stopped_at: Completed 101-03-PLAN.md
+last_updated: "2026-08-14T15:22:42.360Z"
 last_activity: 2026-08-14
-last_activity_desc: Plan 101-02 executed — the defaultEnabled precedence truth table pinned in both resolution modes
+last_activity_desc: Plan 101-03 executed — the defaultEnabled schema matrix and the no-observable-change characterization
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State
@@ -93,11 +93,11 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 
 ## Session Continuity
 
-**Last session:** 2026-08-14T15:01:30.859Z
+**Last session:** 2026-08-14T15:22:34.587Z
 
-**Stopped At:** Completed 101-02-PLAN.md
+**Stopped At:** Completed 101-03-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 101` to run wave 2.
+**Next Action:** `/gsd-verify-phase 101` — all three plans are executed.
 
 ## Performance Metrics
 
@@ -106,6 +106,7 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 | —    | —        | —     | —     |
 | Phase 101 P01 | 20min | 2 tasks | 13 files |
 | Phase 101 P02 | 15min | 2 tasks | 2 files |
+| Phase 101 P03 | 17min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -120,3 +121,6 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 - [Phase 101]: Mode parity is asserted by spelling the expected literal out in
   the loose-mode suite, not by cross-calling `resolveStrict` from it — a
   divergence then reads directly in the failure output.
+- [Phase 101]: A test asserting the opposite containment outcome to a sibling
+  test in the same file names that sibling and says why the two differ, so a
+  later reader does not "fix" one toward the other.
