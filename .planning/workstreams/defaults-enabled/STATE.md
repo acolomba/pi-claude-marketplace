@@ -6,15 +6,15 @@ current_phase: 101
 current_phase_name: Manifest field and precedence resolution
 current_plan: 2
 status: executing
-stopped_at: Completed 101-01-PLAN.md
-last_updated: "2026-08-14T14:46:33.731Z"
+stopped_at: Completed 101-02-PLAN.md
+last_updated: "2026-08-14T15:01:30.889Z"
 last_activity: 2026-08-14
-last_activity_desc: Plan 101-01 executed — defaultEnabled schema field, precedence helper and resolved arm field
+last_activity_desc: Plan 101-02 executed — the defaultEnabled precedence truth table pinned in both resolution modes
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -38,9 +38,9 @@ back. Roadmap complete: 5 phases (101-105), 15/15 requirements mapped.
 ## Current Position
 
 Phase: 101 (Manifest field and precedence resolution) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 101 — plan 101-01 complete, wave 2 (101-02 + 101-03) next
-Last activity: 2026-08-14 — Plan 101-01 executed; schema field, precedence helper and resolved arm field landed
+Plan: 3 of 3
+Status: Ready to execute — 101-02 complete, 101-03 remains in wave 2
+Last activity: 2026-08-14 — Plan 101-02 executed; the precedence truth table and the two resolution-time validation guards landed
 
 ## Progress
 
@@ -93,12 +93,11 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 
 ## Session Continuity
 
-**Last session:** 2026-08-14T14:46:33.702Z
+**Last session:** 2026-08-14T15:01:30.859Z
 
-**Stopped At:** Completed 101-01-PLAN.md
-`.planning/workstreams/defaults-enabled/ROADMAP.md`; awaiting user approval.
+**Stopped At:** Completed 101-02-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-discuss-phase 101` after approval.
+**Next Action:** `/gsd-execute-phase 101` to run wave 2.
 
 ## Performance Metrics
 
@@ -106,6 +105,7 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
 | Phase 101 P01 | 20min | 2 tasks | 13 files |
+| Phase 101 P02 | 15min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -113,3 +113,10 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
   parameter out of `preflightStages` rather than carried on
   `PartialResolution`, so a forgotten wiring is a compile error instead of a
   silent `true`. Costs four private signature edits in `domain/resolver.ts`.
+
+- [Phase 101]: The `defaultEnabled` precedence truth table lives in ONE delimited
+  section per resolution mode. Plan 101-01's end-to-end case was relocated into
+  it rather than a cell being duplicated, so a reader meets every cell at once.
+- [Phase 101]: Mode parity is asserted by spelling the expected literal out in
+  the loose-mode suite, not by cross-calling `resolveStrict` from it — a
+  divergence then reads directly in the failure output.
