@@ -5,11 +5,11 @@ milestone_name: defaultEnabled Manifest Field
 current_phase: 102
 current_phase_name: Reason token, install write-through and notification
 current_plan: N/A
-status: Ready to discuss
-stopped_at: Phase 101 complete — verified, reviewed, secured, validated
+status: Ready to plan
+stopped_at: Phase 101 complete; Phase 102 discussed — ready to plan
 last_updated: "2026-08-14T16:16:50.350Z"
 last_activity: 2026-08-14
-last_activity_desc: Phase 101 complete — 3/3 plans, verification passed 5/5, 6 review warnings fixed
+last_activity_desc: Phase 102 discussed — 9 decisions recorded; both milestone open questions settled
 progress:
   total_phases: 5
   completed_phases: 1
@@ -41,7 +41,7 @@ the resolved value first changes what a user observes.
 
 Phase: 102 — Reason token, install write-through and notification
 Plan: — (not started)
-Status: Ready to discuss
+Status: Ready to plan — 102-CONTEXT.md written, discuss complete
 Last activity: 2026-08-14 — Phase 101 complete, transitioned to Phase 102
 
 ## Progress
@@ -75,33 +75,46 @@ gate matches this project's domain vocabulary as a known false positive).
 
 ## Open Decisions
 
-Two design questions are deliberately unresolved and carried into Phase 102's
-CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
+Both milestone-level open questions are now **SETTLED** at the Phase 102 discuss
+session (2026-08-14) and recorded as D-102-01..D-102-09 in
+`phases/102-reason-token-install-write-through-and-notification/102-CONTEXT.md`.
+No open decisions remain for the milestone.
 
-1. **Materialization path for an install-disabled plugin.** The install ledger
-   is a fixed literal 6-phase array (`orchestrators/plugin/install.ts:1239`)
-   whose order is a contract under D-01 literal-array discipline. Does a
-   `defaultEnabled: false` install run the five materialization phases and then
-   drop the artifacts, or skip them and run only the state phase? This changes
-   the ledger's shape and its rollback story.
+1. **Materialization path for an install-disabled plugin — SETTLED (D-102-01,
+   D-102-02).** Materialize, then disable: run the full six-phase ledger, then
+   the existing disable cascade. The D-01 literal array and all five
+   materialization phase bodies stay untouched, the terminal state matches
+   `install`+`disable` by construction, and `toDisabledRecord` remains the sole
+   producer of the disabled shape (ENBL-02). A ledger-succeeds/cascade-fails
+   window inherits today's disable failure behavior unchanged.
 
-2. **Orchestrated-mode installs.** The config write-back is deliberately
-   skipped in orchestrated mode (`orchestrators/plugin/install.ts:1409`)
-   because reconcile derives desired state FROM the config. A cascade install
-   (import, reconcile) of a `defaultEnabled: false` plugin therefore has no
-   write-back seam, and its config entry already exists with `enabled` absent.
-   Decide whether that pre-existing entry counts as the user's explicit setting
-   (DFEN-05 wins, plugin enables) or as no setting at all (DFEN-04 applies).
+2. **Orchestrated-mode installs — SETTLED, and split by caller (D-102-03,
+   D-102-04).** `import` and `reconcile` are NOT one case. `import` never
+   applies `defaultEnabled`: `extractEnabledPluginRefs`
+   (`orchestrators/import/refs.ts`) skips `enabled: false` entries outright, so
+   everything it installs carries an explicit `enabled: true` and DFEN-05
+   governs. `reconcile` DOES apply it — a hand-added `"p@mp": {}` declares which
+   plugin, not whether it is enabled — and stamps `enabled: false` into the
+   entry, but ONLY when the key is absent. A pre-existing value is never
+   touched. The stamp is what makes the next `/reload` a fixed point instead of
+   the `acc.enable` re-enable at `orchestrators/reconcile/plan.ts:338`.
 
 ## Session Continuity
 
 **Last session:** 2026-08-14T15:22:34.587Z
 
-**Stopped At:** Phase 101 complete — verified passed, code review remediated,
-threats closed, validation approved.
+**Stopped At:** Phase 101 complete (verified, reviewed, secured, validated) and
+Phase 102 discussed — `102-CONTEXT.md` is written and committed, carrying
+D-102-01..D-102-09. Both milestone open decisions are now SETTLED there; see
+Open Decisions below.
 **Resume File:** None
-**Next Action:** `/gsd-discuss-phase 102` — the two milestone open decisions
-below must be settled there, not by an executor.
+**Next Action:** `/gsd-plan-phase 102 --skip-ui --ws defaults-enabled`. Discuss
+is already done — do not re-run it.
+
+**Resume requirement:** run GSD from the worktree
+`/home/acolomba/pi-claude-marketplace/.worktrees/defaults-enabled` (branch
+`features/defaults-enabled`). From the main checkout the workstream does not
+exist and GSD reports no phases, exiting clean — a false negative.
 
 ## Performance Metrics
 
