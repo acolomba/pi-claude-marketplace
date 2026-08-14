@@ -1393,6 +1393,143 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// D-102-02 / NFR-3 -- the one failure window this composition creates: the
+// ledger succeeded, and the disable cascade then threw.
+//
+// The terminal state is deliberately characterized rather than repaired. An
+// install that reports failure while leaving a recorded, ENABLED, partially
+// unstaged plugin is precisely what an `install` followed by a failed `disable`
+// produces, and the disable verb has the same asymmetry: a cascade that throws
+// never reaches the disabled-record producer, so the record keeps
+// `enabled: true`. Naming that here is what stops a later reader from inventing
+// new failure semantics, a new reason token, or a new rollback composition for
+// a path that already has an answer.
+//
+// What must hold is NFR-3: state.json describes what is still on disk. The
+// bridges that ran cleanly removed their artifacts, so their axes are folded
+// out of the record; the axes whose bridges never ran are retained, because
+// those artifacts are still there.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d10202-cascade-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        // Skills and commands run first in the cascade and drop cleanly, so the
+        // fold has something to subtract. The mcp axis is the one the throw
+        // never reaches, so it has something to retain. The plugin declares NO
+        // agents: the foreign row seeded below must survive the ledger's agents
+        // phase, and a declared agent under the same generated name would
+        // replace the foreign file on the way in and defuse the fault.
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+
+      // The fault: AG-5 foreign content under the agent's target name, with an
+      // agents-index row claiming it. The two paths treat that row differently
+      // -- the install ledger routes it to `failed[]` and proceeds (AS-7),
+      // while the cascade turns a non-empty `failed[]` into a throw -- which is
+      // exactly the asymmetry this case needs: the ledger must succeed and the
+      // cascade must then fail. The agents bridge runs third in the cascade's
+      // skills -> commands -> agents -> hooks -> mcp order, so the two bridges
+      // ahead of it drop cleanly and the two behind it never run.
+      await mkdir(locations.agentsDir, { recursive: true });
+      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
+      await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
+      await writeFile(
+        locations.agentsIndexPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          agents: [
+            {
+              plugin: "hello",
+              marketplace: "mp",
+              sourceAgent: "bot",
+              generatedName: foreignAgentName,
+              sourcePath: "/orig/bot.md",
+              targetPath: foreignAgentPath,
+              sourceHash: "deadbeef",
+              droppedFields: [],
+              droppedTools: [],
+              warnings: [],
+            },
+          ],
+        }),
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.equal(note.severity, "error");
+      assert.match(note.message, /\(failed\)/);
+
+      // The failure is the DISABLE-side one. An install rollback would have
+      // left no record at all, and would surface the rollback vocabulary.
+      assert.ok(
+        !note.message.includes("rollback partial"),
+        `expected a disable-side failure, not an install rollback, got: ${note.message}`,
+      );
+      // ...and it names the bridge that threw, so the case cannot pass on some
+      // other failure that happens to reach the same row.
+      assert.match(note.message, /Failed to remove 1 agent\(s\)/);
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined, "the install itself succeeded, so the record must exist");
+
+      // Never reached the disabled-record producer, so it is still enabled --
+      // the same asymmetry the disable verb has on this path.
+      assert.equal(record.enabled, true);
+
+      // NFR-3: what the record claims is what is on disk. The skills and
+      // commands bridges ran cleanly and removed their artifacts, so those axes
+      // are folded out; mcp never ran, so its inventory stands.
+      assert.deepEqual([...record.resources.skills], []);
+      assert.deepEqual([...record.resources.prompts], []);
+      assert.deepEqual([...record.resources.mcpServers], ["server1"]);
+      await assert.rejects(
+        stat(path.join(locations.skillsTargetDir, "hello-tool")),
+        "the skills bridge ran, so its artifact must be gone",
+      );
+      await assert.rejects(
+        stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
+        "the commands bridge ran, so its artifact must be gone",
+      );
+      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+        mcpServers?: Record<string, unknown>;
+      };
+      assert.ok(
+        "server1" in (mcp.mcpServers ?? {}),
+        "the mcp bridge never ran, so its artifact must still be there",
+      );
+
+      assert.notEqual(record.updatedAt, record.installedAt, "updatedAt must have moved");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // PI-9 -- 5-phase order + end-state assertion
 // ───────────────────────────────────────────────────────────────────────────
 
