@@ -849,13 +849,12 @@ test("DFEN-01 non-boolean defaultEnabled in plugin.json -> unavailable + malform
   );
 });
 
-// D-101-13 / D-09: adding a named optional property to the schema must not have
-// narrowed the lenient unknown-key posture.
-test("DFEN-01 entry declaring an unrelated unknown key -> still resolves", async () => {
-  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
-  const r = await resolveStrict(basicEntry({ source: "./local", zzzInventedKnob: "x" }), ctx);
-  assert.notEqual(r.state, "unavailable", `notes: ${r.notes.join(" / ")}`);
-});
+// D-101-13 / D-09 -- that adding a named optional property did not narrow the
+// lenient unknown-key posture is pinned in `tests/domain/manifest.test.ts`,
+// which runs PLUGIN_ENTRY_VALIDATOR / PLUGIN_MANIFEST_VALIDATOR directly. The
+// resolver never calls either validator on the entry (it reads named fields and
+// casts the rest to `Record<string, unknown>`), so a resolver-level test cannot
+// observe schema leniency and would pass even under `additionalProperties: false`.
 
 // ──────────────────────────────────────────────────────────────────────────
 // MCPR-01..04: string mcpServers references (wrapped .mcp.json, D-01/D-04)
