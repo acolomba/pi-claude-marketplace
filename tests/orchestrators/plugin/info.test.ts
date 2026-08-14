@@ -8,7 +8,9 @@
 // variants.
 //
 // Coverage:
-//   (a) single-scope installed with resolved components + description
+//   (a) single-scope installed with resolved components + description,
+//       plus the DFEN-01 characterization that an entry declaring
+//       `defaultEnabled` renders byte-identically to one that does not
 //   (b) single-scope available with description
 //   (c) single-scope unavailable with `{unsupported hooks}` reason
 //   (d) single-scope external source -> componentsResolved: false marker
@@ -372,6 +374,59 @@ test("INFO-02: single-scope installed (path source) renders header + plugin row 
             source: "./foo",
             version: "1.2.3",
             description: "Foo plugin",
+            skills: "skills",
+            commands: "commands",
+            agents: "agents",
+          },
+        ],
+      },
+      installed: { foo: { version: "1.2.3" } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+      componentFiles: { foo: ["commands/c1.md", "agents/a1.md"] },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● foo v1.2.3 (installed)",
+        "    Foo plugin",
+        "    agents: a1",
+        "    commands: c1",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("DFEN-01: an entry declaring defaultEnabled renders the same info message as one that does not", async () => {
+  // `info` reads named fields off the parsed entry, so a declared
+  // `defaultEnabled` is invisible to it: same single notification, same
+  // `undefined` severity, same bytes as the case above -- no enablement line
+  // and no reason token. The expected message is spelled out rather than
+  // computed from a second `getPluginInfo` call, because two live runs would
+  // agree even if both had regressed.
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            defaultEnabled: false,
             skills: "skills",
             commands: "commands",
             agents: "agents",
