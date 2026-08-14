@@ -1208,6 +1208,83 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// D-102-03 -- a caller that does not opt in installs the plugin ENABLED.
+//
+// The opt-in is an explicit caller option rather than something derived from
+// the config, and it has to be: on the `import` path the config entry does not
+// exist yet when the install runs -- import writes every entry in a post-pass,
+// after all installs return -- so an absent-entry inference would read "the
+// user has stated no opinion" for every imported plugin and install the lot
+// disabled, under declarations that say `enabled: true`.
+//
+// This case pins the orchestrator-level default every non-opting caller
+// inherits. `update` and `reinstall` come through here; the `enable` branch of
+// the enable/disable verb reaches `runInstallLedger` directly and never passes
+// this point at all.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-102-03: an install that does not opt in ignores defaultEnabled and lands enabled", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d10203-optout-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      // The same declaration the opting-in cases install DISABLED from. The
+      // only difference below is the missing `applyDefaultEnabled`.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, true);
+
+      // The artifacts survive: nothing disabled them on the way out.
+      assert.ok(
+        (await stat(path.join(locations.skillsTargetDir, "hello-tool"))).isDirectory(),
+        "the staged skill must be on disk",
+      );
+      assert.ok(
+        (await stat(path.join(locations.promptsTargetDir, "hello:deploy.md"))).isFile(),
+        "the staged command must be on disk",
+      );
+
+      // The ordinary success row, with neither the token nor the remedy.
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.equal(note.severity, undefined);
+      assert.match(note.message, /^ {2}● hello v0\.0\.1 \(installed\)$/m);
+      assert.ok(
+        !note.message.includes("installs disabled"),
+        `a non-opting install must not carry the token, got: ${note.message}`,
+      );
+      assert.ok(
+        !note.message.includes(ENABLE_HINT_TRAILER_BYTES),
+        `a non-opting install must not advertise the enable remedy, got: ${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // T-102-01 -- a plugin the user's configuration says is disabled must not
 // execute code in the session that installed it.
 //

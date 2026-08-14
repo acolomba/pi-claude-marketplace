@@ -896,6 +896,57 @@ test("importClaudeSettings propagates declaresAgents=false+declaresMcp=false (ne
   assert.doesNotMatch(message, /requires pi-mcp/);
 });
 
+test("D-102-03: the import cascade never opts in to applyDefaultEnabled", async () => {
+  const { ctx, pi } = makeCtx();
+  const installed: string[] = [];
+  // What each call actually received, not merely whether one call did: the
+  // assertion has to cover the loop, so the fixture carries two plugins.
+  const optIns: (boolean | undefined)[] = [];
+
+  await importClaudeSettings({
+    ctx,
+    pi,
+    cwd: "/tmp/project",
+    selectedScopes: ["user"],
+    deps: {
+      loadSettings: async () => ({
+        paths: { basePath: "base", localPath: "local" },
+        settings: {
+          enabledPlugins: { "alpha@mp": true, "beta@mp": true },
+          extraKnownMarketplaces: { mp: { directory: "./mp" } },
+        },
+        diagnostics: [],
+      }),
+      loadState: async () => ({ schemaVersion: 1, marketplaces: {} }),
+      addMarketplace: async () => ({ status: "added", name: "mp" }) as const,
+      installPlugin: async (opts) => {
+        installed.push(`${opts.plugin}@${opts.marketplace}`);
+        optIns.push(opts.applyDefaultEnabled);
+        return {
+          status: "installed",
+          resourcesChanged: true,
+          declaresAgents: false,
+          declaresMcp: false,
+        };
+      },
+    },
+  });
+
+  assert.deepEqual(installed, ["alpha@mp", "beta@mp"]);
+  // Every plugin that reaches the cascade got there because the source
+  // settings said `enabled: true` -- the ref extraction drops `enabled: false`
+  // entries outright -- so there is no absent case for a manifest to answer,
+  // and an existing `enabled` value is never overwritten.
+  //
+  // The consequence of opting in here would be a disabled record under an
+  // enabled declaration: the post-pass writes the config entry AFTER the
+  // install returns, so the very next reload would read the declaration as
+  // enabled, find the record disabled, and plan a re-enable -- the same silent
+  // re-enable the install-disabled behavior exists to close, reached from the
+  // other side.
+  assert.deepEqual(optIns, [undefined, undefined]);
+});
+
 test("importClaudeSettings emits the canonical reload-hint trailer on fresh install cascade", async () => {
   const { ctx, pi, notifications } = makeCtx();
 
