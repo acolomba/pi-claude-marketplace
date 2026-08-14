@@ -6,7 +6,11 @@
 //
 // Per D-04: TWO distinct functions, no shared branching.
 //   - resolveStrict (MM-5):   union of entry + manifest + implicit + standalone
-//   - resolveLoose  (MM-6/7): entry-only; manifest/standalone declarations conflict
+//   - resolveLoose  (MM-6/7): entry-only for COMPONENT declarations;
+//                             manifest/standalone declarations conflict.
+//                             D-101-08: METADATA (description, version,
+//                             defaultEnabled) is outside that rule and is never
+//                             conflict material -- see `resolveLoose`'s own doc.
 //
 // Type.Union([...]) takes NO `discriminator` option in TypeBox 1.x.
 // Literal-tagged variants ARE the discriminator -- TypeScript narrowing
@@ -627,6 +631,13 @@ async function readManifest(
  *
  * DFEN-03: this is the only evaluation of the rule. Callers read the resolved
  * boolean off the materializable arm and never re-derive it.
+ *
+ * D-101-08: it runs from the shared `preflightStages`, so BOTH modes read
+ * `plugin.json` for it. That is deliberate and is the one place loose mode
+ * honors a manifest declaration a silent entry did not mirror: MM-6 / MM-7
+ * conflict semantics govern component declarations and `mcpServers`, not
+ * metadata. A manifest-only `defaultEnabled` must never push a plugin to
+ * `unavailable`.
  *
  * Both `typeof` narrows are defense-in-depth, not validation: the entry has
  * already passed PLUGIN_ENTRY_VALIDATOR and the manifest PLUGIN_MANIFEST_VALIDATOR,
@@ -1480,7 +1491,17 @@ function decideResolution(
 }
 
 /**
- * MM-6 / MM-7 loose: entry-only; manifest or standalone declarations conflict.
+ * MM-6 / MM-7 loose: entry-only for COMPONENT declarations -- a manifest or
+ * standalone declaration of a component kind (or of `mcpServers`) with a silent
+ * entry is a conflict and resolves `unavailable`.
+ *
+ * D-101-08: METADATA is outside that rule. `description`, `version` and
+ * `defaultEnabled` are never conflict material, so a manifest-only
+ * `defaultEnabled` with a silent entry is honored here rather than rejected --
+ * it is resolved once in `preflightStages` and reads `plugin.json` in loose mode
+ * exactly as it does in strict mode. The conflict machinery is closed-set by
+ * construction (it iterates SUPPORTED_COMPONENT_PATH_KINDS plus `mcpServers`),
+ * which is what keeps the two classes of field apart.
  */
 export async function resolveLoose(
   entry: PluginEntry,
