@@ -113,6 +113,16 @@ the install is run, and the no-op parity sweep.
   writer per SPLIT-02, with its existing entry-level patch semantics. This phase
   gives the currently-empty plugin patch its first field.
 
+- **D-102-10:** OUT-04's "how to enable it" is delivered as a **boolean hint
+  field** on `PluginDisabledMessage` plus **one byte-frozen trailer literal**,
+  modeled exactly on the existing `partialHint` / `PARTIAL_INSTALL_HINT_TRAILER`
+  precedent (`notify.ts`). Boolean in, fixed literal out — no interpolation, per
+  T-69-01. This upholds D-102-08: the orchestrator decides, the renderer only
+  renders. The token-only alternative (let `{installs disabled}` carry the fact
+  and leave the remedy to the docs) was considered and rejected as an
+  under-delivery of OUT-04's plain reading. This is the only new field in the
+  phase and the only render-layer touch beyond a lifted arm.
+
 ### Claude's Discretion
 
 - How the disabled-install path is threaded through `installPlugin` /
