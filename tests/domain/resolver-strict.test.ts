@@ -148,17 +148,6 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
-// DFEN-02 / DFEN-03: the entry-declared value survives the whole resolution
-// path -- schema acceptance, the precedence helper, and the materializable arm
-// -- and declaring it false does NOT make the plugin non-installable.
-test("DFEN-02 entry declares defaultEnabled false with no plugin.json -> installable carrying false", async () => {
-  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
-  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
-  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
-  requireInstallable(r);
-  assert.equal(r.defaultEnabled, false);
-});
-
 // HOOK-01: hooks moved from UNSUPPORTED to SUPPORTED. A plugin declaring
 // `hooks` at the entry level with NO hooks/hooks.json on disk is no longer
 // rejected with "contains hooks" -- the resolver only owns convention-file
@@ -698,6 +687,157 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
     r.notes.some((n) => n.includes("malformed mcpServers")),
     `notes: ${r.notes.join(" / ")}`,
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// DFEN-01 / DFEN-02: install-time enablement -- the precedence truth table
+//
+// The marketplace entry wins over `plugin.json` in BOTH directions; absent at
+// both declaration sites is `true`. The whole table lives here so a reader
+// meets every cell at once rather than inferring the unstated ones.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("DFEN-02 entry false + manifest true -> installable carrying false (entry wins)", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: true }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-07: the direction a reader is most likely to guess wrong. Nothing about
+// the false-wins case implies this one, so it is pinned separately.
+test("DFEN-02 entry true + manifest false -> installable carrying true (entry wins both ways)", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: true }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// Agreement between the two declaration sites is not a conflict and not a
+// redundancy worth reporting: the resolved value carries, and nothing about the
+// field reaches `notes`. Asserting the value alone would not catch a diagnostic.
+test("DFEN-02 entry false + manifest false -> installable carrying false, no diagnostic", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("defaultEnabled")),
+    `agreement must emit no note, notes: ${r.notes.join(" / ")}`,
+  );
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+test("DFEN-02 entry true + manifest true -> installable carrying true, no diagnostic", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: true }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: true }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  assert.ok(
+    !r.notes.some((n) => n.includes("defaultEnabled")),
+    `agreement must emit no note, notes: ${r.notes.join(" / ")}`,
+  );
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+test("DFEN-02 entry silent + manifest false -> installable carrying false", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: false }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// A `plugin.json` that exists but declares nothing is a DIFFERENT code path from
+// no `plugin.json` at all (the next test): this one reaches the precedence rule
+// with a parsed manifest object, that one with `manifest: null`. Both must
+// answer `true`, so both are pinned.
+test("DFEN-02 entry silent + manifest present but silent -> installable carrying true", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// D-101-09: no `plugin.json` on disk -- `readManifest` reports `manifest: null`
+// as a normal non-failing outcome, and the fallback chain runs to its end.
+test("DFEN-02 entry silent + no plugin.json on disk -> installable carrying true", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, true);
+});
+
+// DFEN-02 / DFEN-03: the entry-declared value survives the whole resolution
+// path -- schema acceptance, the precedence helper, and the materializable arm
+// -- and declaring it false does NOT make the plugin non-installable.
+test("DFEN-02 entry declares defaultEnabled false with no plugin.json -> installable carrying false", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", defaultEnabled: false }), ctx);
+  assert.equal(r.state, "installable", `notes if not installable: ${r.notes.join(" / ")}`);
+  requireInstallable(r);
+  assert.equal(r.defaultEnabled, false);
+});
+
+// D-101-10: a non-boolean is an ordinary schema violation caught by
+// PLUGIN_MANIFEST_VALIDATOR inside readManifest -- no bespoke error class, no
+// coercion, and precedence is never consulted. Assert only the note PREFIX:
+// the trailing detail is validator-generated and would make this brittle.
+test("DFEN-01 non-boolean defaultEnabled in plugin.json -> unavailable + malformed plugin.json", async () => {
+  const ctx = mockCtx(MP, {
+    [ROOT("./local")]: "dir",
+    [path.join(ROOT("./local"), ".claude-plugin", "plugin.json")]: {
+      contents: JSON.stringify({ name: "p1", defaultEnabled: "yes" }),
+    },
+  });
+  const r = await resolveStrict(basicEntry({ source: "./local" }), ctx);
+  assert.equal(r.state, "unavailable");
+  assert.ok(
+    r.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${r.notes.join(" / ")}`,
+  );
+});
+
+// D-101-13 / D-09: adding a named optional property to the schema must not have
+// narrowed the lenient unknown-key posture.
+test("DFEN-01 entry declaring an unrelated unknown key -> still resolves", async () => {
+  const ctx = mockCtx(MP, { [ROOT("./local")]: "dir" });
+  const r = await resolveStrict(basicEntry({ source: "./local", zzzInventedKnob: "x" }), ctx);
+  assert.notEqual(r.state, "unavailable", `notes: ${r.notes.join(" / ")}`);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
