@@ -97,6 +97,44 @@ function buildUserScopeStateWithHooksPlugin(): ExtensionState {
   };
 }
 
+function buildProjectScopeStateWithHooksPlugin(): ExtensionState {
+  return {
+    schemaVersion: 2,
+    marketplaces: {
+      "claude-plugins-official": {
+        name: "claude-plugins-official",
+        scope: "project",
+        source: { kind: "path", raw: "/tmp/test-source" },
+        addedFromCwd: "/tmp",
+        manifestPath: "/tmp/test-source/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/tmp/test-source",
+        plugins: {
+          "project-session-start": {
+            version: "1.0.0",
+            resolvedSource: "/tmp/test-source/plugins/project-session-start",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["hooks"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: ["project-session-start"],
+            },
+            enabled: true,
+            installedAt: "2026-06-17T00:00:00Z",
+            updatedAt: "2026-06-17T00:00:00Z",
+          },
+        },
+      },
+    },
+  };
+}
+
 const HOOKS_JSON_BYTES = JSON.stringify(
   {
     description: "Learning mode hook",
@@ -167,7 +205,9 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // agentDir is seeded) -- this is the exact shape that triggered the
     // cross-scope wipe regression.
     const { pi, registrations } = makeMockPi();
-    const placeholderCtx = {} as unknown as ExtensionContext;
+    // ctx.cwd is read by the session_start handler's lazy project hydrate;
+    // carry the real project cwd so the hydrate resolves the right scope root.
+    const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: projectCwd });
 
     // pi.on("session_start", ...) must have been registered.
@@ -206,5 +246,74 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     );
     assert.equal(executorCalls[0]!.pluginId, "learning-output-style");
     assert.equal(executorCalls[0]!.claudeEvent, "SessionStart");
+  });
+});
+
+test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async (t) => {
+  _resetForTest();
+  t.after(() => {
+    _resetForTest();
+    _resetExecutorForTest();
+  });
+
+  await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+    // Seed PROJECT-scope state.json + hooks.json on disk under the real
+    // project cwd. The factory-time hydrate will NOT see this because
+    // registerHooksBridge is called with a different cwd (agentDir) --
+    // mirroring production, where the factory runs with cwd=homedir()
+    // before the real project cwd is known. This is the bug condition:
+    // project-scope SessionStart hooks are installed on disk but absent
+    // from the routing table at session_start time.
+    const projectExtensionRoot = path.join(projectCwd, ".pi", "pi-claude-marketplace");
+    const projectHooksDir = path.join(projectExtensionRoot, "hooks", "project-session-start");
+    await mkdir(projectHooksDir, { recursive: true });
+    await saveState(projectExtensionRoot, buildProjectScopeStateWithHooksPlugin());
+    await writeFile(path.join(projectHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
+
+    const executorCalls: Array<{ pluginId: string; claudeEvent: string; scope: string }> = [];
+    _setExecutorForTest((entry: RoutingEntry) => {
+      executorCalls.push({
+        pluginId: entry.pluginId,
+        claudeEvent: entry.claudeEvent,
+        scope: entry.scope,
+      });
+      return Promise.resolve({ kind: "noop" });
+    });
+
+    // Boot the bridge with cwd=agentDir (a stand-in for the factory's
+    // homedir() -- NOT the real project). The factory-time project hydrate
+    // reads <agentDir>/.pi/... which is empty, so the SessionStart bucket
+    // is empty at boot.
+    const { pi, registrations } = makeMockPi();
+    const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
+    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: agentDir });
+
+    // Bug condition: no SessionStart entries are dispatchable right after
+    // boot, because the factory could not hydrate project scope against the
+    // real project cwd.
+    const bucketBefore = _routingTableForTest().get("SessionStart") ?? [];
+    assert.equal(
+      bucketBefore.length,
+      0,
+      "SessionStart bucket must be empty at boot when the factory cwd is not the real project (the bug condition)",
+    );
+
+    const sessionStartReg = registrations.find((r) => r.event === "session_start");
+    assert.ok(sessionStartReg, "bridge must register session_start handler");
+
+    // Fire session_start with ctx.cwd = the real project. The handler's
+    // lazy project hydrate reads <projectCwd>/.pi/..., rebuilds the routing
+    // tables, and the SessionStart bucket now carries the project plugin --
+    // so the composite handler dispatches it.
+    await sessionStartReg.handler({ type: "session_start", reason: "startup" }, placeholderCtx);
+
+    assert.equal(
+      executorCalls.length,
+      1,
+      `executor must be invoked for the project-scope SessionStart plugin after the lazy hydrate; observed ${executorCalls.length} invocations`,
+    );
+    assert.equal(executorCalls[0]!.pluginId, "project-session-start");
+    assert.equal(executorCalls[0]!.claudeEvent, "SessionStart");
+    assert.equal(executorCalls[0]!.scope, "project");
   });
 });

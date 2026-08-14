@@ -870,7 +870,46 @@ export async function registerHooksBridge(
     await reapOrphans(loc);
   }
 
-  pi.on("session_start", compositeHandlerFor("SessionStart", capturedEpoch, pi));
+  // SessionStart dispatch with lazy project-scope hydrate. Pi fires
+  // session_start BEFORE resources_discover (pi docs: resources_discover is
+  // "Fired after session_start so extensions can contribute additional
+  // skill, prompt, and theme paths"), so the factory-time
+  // hydrateCacheFromDisk above -- which ran with cwd=homedir() because no
+  // project cwd was available at extension-load time -- could not have
+  // populated project-scope entries, and the deferred project hydrate
+  // wired into resources_discover (index.ts) has not run yet either.
+  // Without this lazy hydrate the SessionStart routing bucket is empty for
+  // project scope at dispatch time, so project-scope SessionStart hooks
+  // never fire -- they only become reachable once resources_discover
+  // rebuilds the tables, by which point the SessionStart event has
+  // already passed.
+  //
+  // Re-run project-scope hydrate against ctx.cwd now, rebuild the routing
+  // tables so the SessionStart bucket picks up the project entries, and
+  // ensure the project _shared data dir exists for CLAUDE_ENV_FILE (the
+  // factory-time ensureSharedDataDir loop used cwd=homedir() so the
+  // project loc pointed at <homedir>/.pi, not the real project). Then
+  // delegate to the composite handler, which re-reads the now-populated
+  // bucket via getRoutingBucket. Hydrate/mkdir failures are swallowed via
+  // the OBS-01 debug seam so a hydrate error never blocks SessionStart
+  // dispatch -- matching the resources_discover deferred-hydrate stance.
+  // The pi.on call count (DISP-01: 11) and locked event-name set (10) are
+  // unchanged: this wraps the existing session_start handler, it does not
+  // add a registration.
+  const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi);
+  pi.on("session_start", async (event, ctx) => {
+    try {
+      await hydrateProjectScopeForCwd(ctx.cwd);
+      rebuildRoutingTables();
+      if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === "project")) {
+        await ensureSharedDataDir(locationsFor("project", ctx.cwd));
+      }
+    } catch (err) {
+      hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
+    }
+
+    return sessionStartHandler(event, ctx);
+  });
   pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch, pi));
   pi.on("session_before_compact", compositeHandlerFor("PreCompact", capturedEpoch, pi));
   pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch, pi));
