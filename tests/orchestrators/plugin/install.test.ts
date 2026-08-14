@@ -778,20 +778,21 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// DFEN-01 -- a declared `defaultEnabled` is read, not acted on
+// DFEN-04 / OUT-04 -- a declared `defaultEnabled: false` install lands disabled
 //
-// The resolver resolves the declared value and exposes it to the install path,
-// which does not consult it: an install is recorded `enabled: true`, its
-// artifacts are materialized, and its `claude-plugins.json` patch stays empty,
-// whatever the plugin declares. The two declaration sites differ only in WHICH
-// seeder knob carries the declaration, so they share one body -- "the two sites
-// behave identically" is then enforced by construction rather than asserted in
-// two copies that can drift apart.
+// The standalone install honors the declaration: the record carries
+// `enabled: false` while KEEPING its inventory (ENBL-18), no artifact survives
+// on disk, `claude-plugins.json` gains the write-through, and the single
+// notification is the info-severity `(disabled) {installs disabled}` row with
+// the enable hint. The two declaration sites differ only in WHICH seeder knob
+// carries the declaration, so they share one body -- "the two sites behave
+// identically" is then enforced by construction rather than asserted in two
+// copies that can drift apart.
 //
-// The recorded resources are asserted alongside the flag, so "installed enabled"
-// cannot be confused with "recorded but not materialized": those are separate
-// outcomes, and a change that conflated them would otherwise pass on the flag
-// alone.
+// The recorded resources are asserted alongside the flag and against the disk,
+// so "recorded disabled with its inventory" cannot be confused with "recorded
+// but never materialized": those are separate outcomes, and a change that
+// conflated them would otherwise pass on the flag alone.
 // ───────────────────────────────────────────────────────────────────────────
 
 const DFEN_DECLARATION_SITES = [
@@ -810,7 +811,7 @@ const DFEN_DECLARATION_SITES = [
 ] as const;
 
 for (const site of DFEN_DECLARATION_SITES) {
-  test(`DFEN-01: ${site.label} -> installs enabled with artifacts materialized`, async () => {
+  test(`DFEN-04 / OUT-04: ${site.label} -> records disabled, drops the artifacts, writes through, and says so`, async () => {
     await withHermeticHome(async () => {
       const cwd = await mkdtemp(path.join(tmpdir(), site.tmpPrefix));
       try {
@@ -821,6 +822,7 @@ for (const site of DFEN_DECLARATION_SITES) {
           marketplaceName: "mp",
           pluginName: "hello",
           skills: [{ sourceName: "tool" }],
+          commands: [{ sourceName: "deploy" }],
           ...site.seedKnob,
         });
 
@@ -832,6 +834,7 @@ for (const site of DFEN_DECLARATION_SITES) {
           cwd,
           marketplace: "mp",
           plugin: "hello",
+          applyDefaultEnabled: true,
         });
 
         const errs = notifications.filter((n) => n.severity === "error");
@@ -840,26 +843,54 @@ for (const site of DFEN_DECLARATION_SITES) {
         const after = await loadState(locations.extensionRoot);
         const record = after.marketplaces["mp"]?.plugins["hello"];
         assert.ok(record !== undefined);
-        assert.equal(record.enabled, true);
-        assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+        assert.equal(record.enabled, false);
 
-        // The state record is only half the contract. The standalone install
-        // also writes the plugin back to `claude-plugins.json`, and that patch
-        // is where `enabled: false` would land first -- `state.json` could stay
-        // `enabled: true` while the config gained the key, and the assertions
-        // above would not notice. Pin the patch empty (D-04 consume-time
-        // default).
+        // ENBL-18: the record keeps its inventory. It describes WHAT the plugin
+        // contains, which stays true while the plugin is disabled; emptiness is
+        // never the disabled marker.
+        assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+        assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
+
+        // ...and nothing the record names is on disk. Asserting the inventory
+        // without this would pass on a state-phase-only implementation that
+        // never materialized, which is a different (and rejected) outcome.
+        await assert.rejects(
+          stat(path.join(locations.skillsTargetDir, "hello-tool")),
+          "the staged skill directory must be gone",
+        );
+        await assert.rejects(
+          stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
+          "the staged command must be gone",
+        );
+
+        // DFEN-04: the state record is only half the contract. Without the
+        // write-through the next reload reads the entry's absent `enabled` as
+        // enabled, finds the record disabled, and plans a re-enable -- the
+        // silent re-enable this behavior exists to close.
         const { loadConfig } =
           await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
         const cfg = await loadConfig(locations.configJsonPath);
         assert.equal(cfg.status, "valid");
         if (cfg.status === "valid") {
-          assert.deepEqual(
-            cfg.config.plugins?.["hello@mp"],
-            {},
-            "the resolved defaultEnabled must not reach the config write-back",
-          );
+          assert.deepEqual(cfg.config.plugins?.["hello@mp"], { enabled: false });
         }
+
+        // OUT-04 / D-102-07: one notification, informational -- the desired
+        // state WAS reached -- naming the state, the author-declared cause and
+        // the remedy, with no filesystem path anywhere in it (T-102-04).
+        assert.equal(notifications.length, 1);
+        const note = notifications[0]!;
+        assert.equal(note.severity, undefined);
+        assert.equal(
+          note.message,
+          "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        );
+        assert.ok(
+          !note.message.includes(cwd),
+          `MUST NOT leak an absolute filesystem path, got: ${note.message}`,
+        );
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }

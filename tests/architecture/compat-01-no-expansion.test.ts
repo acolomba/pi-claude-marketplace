@@ -165,6 +165,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
       "malformed mcp",
       "malformed skill",
       "malformed command",
+      "installs disabled",
     ],
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );

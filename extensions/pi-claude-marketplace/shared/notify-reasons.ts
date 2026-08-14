@@ -4,20 +4,24 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 38-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 39-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 38-entry set.
+ * 39-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
- * no carve-out of its own. `COMPAT-01` pins the membership by enumeration and
- * `notify-closed-set-locks.test.ts` pins the length, so the two sentences above
- * cannot drift from the tuple again without a red test.
+ * no carve-out of its own. OUT-01 / D-102-05 moved it from 38 to 39:
+ * `"installs disabled"` joined as the marker for an install that landed
+ * disabled because the plugin's own `defaultEnabled` declaration said so, and
+ * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
+ * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
+ * length, so the two sentences above cannot drift from the tuple again without
+ * a red test.
  *
  * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
  * idiom. Membership of every literal is checked at compile time against the
@@ -143,6 +147,21 @@ export const FAILURE_REASONS = [
 export type FailureReason = (typeof FAILURE_REASONS)[number];
 
 /**
+ * D-102-06: author-declared install-time state -- a fact the plugin's OWN
+ * manifest declares about HOW it installs, which is neither an idempotent no-op
+ * (the resource already matched the request), nor a failure (the command could
+ * not complete), nor an unsupported component (Pi cannot install the thing).
+ * The desired state IS reached on these rows; what they add is the author's
+ * declaration as the cause.
+ */
+export const DECLARED_STATE_REASONS = [
+  // OUT-01 / DFEN-04: the install completed and left the plugin inert because
+  // the plugin declared `defaultEnabled` false.
+  "installs disabled",
+] as const;
+export type DeclaredStateReason = (typeof DECLARED_STATE_REASONS)[number];
+
+/**
  * WARN-01 / CLASS-01 / D-86-03: a component kind that installs in DEGRADED form
  * when its SOURCE frontmatter cannot be parsed by Pi's own `parseFrontmatter`
  * (skill -> synthesized `disable-model-invocation` block; command -> neutralized
@@ -187,7 +206,7 @@ export function malformedReasonsForKinds(
 }
 
 /**
- * D-09: the shared topic-grouped reasons -- the union of the three groups
+ * D-09: the shared topic-grouped reasons -- the union of the four groups
  * above. Command-private reasons (`duplicate name` / `stale clone` for
  * `marketplace add`, `not found` / `not installed` for `uninstall`,
  * `plugins remain` for `marketplace remove`, `orphan rewake` for `install`)
@@ -195,7 +214,8 @@ export function malformedReasonsForKinds(
  * structural `"not added"` marketplace-absent marker is likewise not a shared
  * topic reason (it is excluded from `ContentReason` in `notify.ts`).
  */
-export type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason;
+export type SharedTopicReason =
+  IdempotentReason | UnsupportedReason | FailureReason | DeclaredStateReason;
 
 /**
  * D-09: the command-private reasons, named here ONLY for the completeness
@@ -214,7 +234,7 @@ type CommandPrivateReason =
   | "orphan rewake";
 
 /**
- * OUT-08 completeness proof: the union of the three shared topic groups + the
+ * OUT-08 completeness proof: the union of the four shared topic groups + the
  * command-private reasons + the structural marker must be EXACTLY the closed
  * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
  * partition is total (no shared literal missing a home, no stray literal that

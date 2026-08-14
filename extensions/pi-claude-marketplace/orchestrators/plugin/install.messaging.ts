@@ -1,4 +1,5 @@
 import {
+  ICON_DISABLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   ICON_PARTIALLY_AVAILABLE,
@@ -9,6 +10,7 @@ import {
   pluginRow,
   renderScopeBracket,
   renderVersion,
+  type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginInstalledMessage,
@@ -38,6 +40,11 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * entity-shape classifier narrows a not-installable error -- an `unavailable`
  * row (structural defect) or, per XSURF-01, a `partially-available` row (the
  * partially-available arm, consistent with `list` / `info`).
+ *
+ * DFEN-04: `disabled` joins for the install that landed disabled because the
+ * plugin's own `defaultEnabled` declaration said so. The install ran to
+ * completion and then unstaged, so the terminal state -- and therefore the row
+ * -- is the one the `disable` verb already renders.
  */
 export const INSTALL_STATUSES = [
   "installed",
@@ -45,6 +52,7 @@ export const INSTALL_STATUSES = [
   "failed",
   "unavailable",
   "partially-available",
+  "disabled",
 ] as const;
 export type InstallStatus = (typeof INSTALL_STATUSES)[number];
 
@@ -59,7 +67,8 @@ export type InstallMsg =
   | PluginPartiallyInstalledMessage
   | PluginFailedMessage
   | PluginUnavailableMessage
-  | PluginPartiallyAvailableMessage;
+  | PluginPartiallyAvailableMessage
+  | PluginDisabledMessage;
 
 /**
  * install's command-private reason. `orphan rewake` surfaces a hook-config bug
@@ -116,6 +125,22 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
       composeReasons(p.reasons, false, false, probe),
     ]),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  // DFEN-04 / OUT-04: the install-disabled arm. Lifted verbatim from the
+  // `disable` verb's own arm so an install that landed disabled and an install
+  // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
+  // soft-dep flags stay hard-coded false, so the row cannot emit a
+  // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
+  // the record retained (ENBL-18). The enable-hint trailer is composed
+  // centrally by the renderer, not here.
+  disabled: (p, probe, mpScope) =>
+    joinTokens([
+      ICON_DISABLED,
+      p.name,
+      renderScopeBracket(p.scope, mpScope),
+      renderVersion(p.version),
+      "(disabled)",
+      composeReasons(p.reasons, false, false, probe),
+    ]),
 };
 
 /**

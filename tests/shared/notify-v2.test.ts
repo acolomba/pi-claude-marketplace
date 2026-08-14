@@ -5016,11 +5016,20 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
   ]);
 });
 
-test("CLASS-01 / D-86-01: REASONS tuple carries 'malformed skill' and 'malformed command' as its last two members", () => {
-  // Byte-stability of the tail append (OUT-08): the two new per-kind tokens sit
+test("CLASS-01 / D-86-01: REASONS tuple carries 'malformed skill' and 'malformed command' immediately after 'malformed mcp'", () => {
+  // Byte-stability of the tail append (OUT-08): the two per-kind tokens sit
   // immediately after `malformed mcp`, and `malformed mcp` keeps its position.
-  const last3 = (REASONS as readonly string[]).slice(-3);
-  assert.deepEqual(last3, ["malformed mcp", "malformed skill", "malformed command"]);
+  // Anchored on `malformed mcp` rather than on the tuple's end, because a LATER
+  // tail append is exactly what OUT-08 sanctions -- an end-anchored slice would
+  // read every such append as a reorder of this triple.
+  const flat = REASONS as readonly string[];
+  const at = flat.indexOf("malformed mcp");
+  assert.notEqual(at, -1, "`malformed mcp` must still be a member");
+  assert.deepEqual(flat.slice(at, at + 3), [
+    "malformed mcp",
+    "malformed skill",
+    "malformed command",
+  ]);
 });
 
 test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` at warning severity", () => {

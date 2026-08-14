@@ -77,7 +77,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 37-entry membership AND order are catalog-stable and MUST NOT change (new
+ * 39-entry membership AND order are catalog-stable and MUST NOT change (new
  * tokens append at the tail; existing entries never reorder). The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
@@ -172,6 +172,15 @@ export const REASONS = [
   // plugin surfacing; a dedicated token rather than a shared bucket so the reason
   // row names the malformed component kind truthfully.
   "malformed command",
+  // OUT-01 / DFEN-04: an install that landed DISABLED because the plugin's OWN
+  // `defaultEnabled` declaration said so. It names the CAUSE of the disabled
+  // state, and only the author-declared cause. Distinct from the `(disabled)`
+  // STATUS token, which names the state and says nothing about who chose it,
+  // and from `already disabled` (the idempotent no-op a `disable` verb reports
+  // over a record that already matched the request). A row whose disabled-ness
+  // the USER chose -- a `disable` verb row, a list / info inventory row, a
+  // reconcile-driven disable -- MUST NOT carry this token.
+  "installs disabled",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
@@ -764,8 +773,9 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
  *
  * ENBL-16 / D-100-07: `reasons` is OPTIONAL here, exactly as on
  * `PluginInstalledMessage`, `PluginUpdatedMessage` and
- * `PluginReinstalledMessage`, and it admits exactly one member --
- * `not in manifest`. The governing rule: render durable facts that constrain
+ * `PluginReinstalledMessage`. It admits `not in manifest` and -- since OUT-01 --
+ * `installs disabled`, the install surface's author-declared cause marker.
+ * The governing rule: render durable facts that constrain
  * what the user can do next; suppress facts about runtime behavior that is
  * currently suspended. Manifest absence is the first kind: `plugin enable`
  * re-runs the install ledger, which resolves from the marketplace manifest, so
@@ -795,6 +805,13 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
+  // OUT-04 / D-102-10: set ONLY by the install surface, and only when the
+  // install landed disabled because the plugin's own `defaultEnabled`
+  // declaration said so. The renderer turns it into a fixed 4-space-indented
+  // trailer naming the `enable` verb -- a boolean in, a frozen literal out, no
+  // interpolation (T-69-01). Every list / info inventory `(disabled)` row and
+  // the `disable` verb's own row omit it and stay byte-frozen.
+  readonly enableHint?: boolean;
 }
 
 /**
@@ -2553,6 +2570,16 @@ const PARTIAL_UPDATE_HINT_TRAILER =
 const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
 
 /**
+ * OUT-04 / D-102-10: the enable-hint trailer literal, rendered below an
+ * install-disabled `(disabled)` row. The install materialized nothing the user
+ * can reach, so the row alone leaves them with a fact and no next step; this
+ * names the real, runnable `enable` verb. Interpolates no plugin / marketplace
+ * / version identifier and no filesystem path (T-69-01), and names no flag that
+ * does not exist. This byte form is FROZEN -- do not change the wording.
+ */
+const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
+
+/**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
  *   - `info`    = the resource reached the desired state (success / steady
  *                 inventory / benign idempotent no-op);
@@ -3843,6 +3870,15 @@ function composePluginLinesWith(
   // this gate stays inert for them.
   if (p.status === "failed" && p.partialHint === true) {
     lines.push(`    ${STALE_GATE_UPDATE_HINT_TRAILER}`);
+  }
+
+  // OUT-04 / D-102-10: the install-disabled row carries a 4-space-indented
+  // trailer naming the `enable` verb. Only the install surface stamps
+  // `enableHint`, so the list / info inventory `(disabled)` rows and the
+  // `disable` verb's own row stay byte-frozen. The byte form is FROZEN and
+  // interpolates nothing (T-69-01).
+  if (p.status === "disabled" && p.enableHint === true) {
+    lines.push(`    ${ENABLE_HINT_TRAILER}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {
