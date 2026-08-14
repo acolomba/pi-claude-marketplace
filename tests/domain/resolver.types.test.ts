@@ -111,6 +111,17 @@ function materializableExcludesUnavailable(): void {
   void bad;
 }
 
+function materializableExposesDefaultEnabled(): boolean {
+  // DFEN-03: readable off the union with no narrowing, which is exactly what
+  // the install path does once it widens `resolved` to MaterializablePlugin.
+  return materializable.defaultEnabled;
+}
+
+function unavailableHasNoDefaultEnabled(): void {
+  // @ts-expect-error -- D-64-05: the arm that cannot be installed carries no install-time enablement answer.
+  void unavail.defaultEnabled;
+}
+
 // Reference the helpers so tsc doesn't flag them as unused (they're not
 // exported -- keeping them tree-shake-safe).
 void consumeInstallable;
@@ -124,6 +135,8 @@ void materializableAdmitsInstallable;
 void materializableAdmitsUnsupported;
 void materializableExposesPluginRoot;
 void materializableExcludesUnavailable;
+void materializableExposesDefaultEnabled;
+void unavailableHasNoDefaultEnabled;
 
 test("NFR-7 type-level test: typecheck (npm run typecheck) is the load-bearing assertion", () => {
   // The actual NFR-7 verification happens at compile time -- if this file
