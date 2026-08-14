@@ -335,9 +335,11 @@ export interface GitCredentials {
 
 /**
  * Discriminated result returned by an `onAuthRequired`
- * closure. Both arms carry `authAttempted: true` so downstream onAuthFailure
- * logic can detect that an interactive auth attempt has already happened
- * (CP-9 retry-loop guard).
+ * closure. Both arms carry `authAttempted: true` as a reference-only /
+ * future-proofing marker (CP-9): `onAuthFailure(url, cred)` never receives
+ * this value -- it is called with only the credential -- and the current
+ * implementation does not branch on the flag; onAuthFailure always returns
+ * `{ cancel: true }` regardless.
  *
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in platform/git.ts so this module honors the
