@@ -25,9 +25,9 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 
 ### Manifest and Precedence
 
-- [ ] **DFEN-01**: `defaultEnabled` is an optional boolean on both the marketplace plugin entry and `plugin.json`, added once to the shared `PLUGIN_METADATA_FIELDS` group so `PLUGIN_ENTRY_SCHEMA` and `PLUGIN_MANIFEST_SCHEMA` both carry it. A non-boolean value fails validation the same way any other schema violation does; an unknown-key tolerance (D-09 lenient) is unchanged.
-- [ ] **DFEN-02**: When both declaration sites carry `defaultEnabled`, the marketplace entry value wins. Absent at both sites resolves to `true`.
-- [ ] **DFEN-03**: The resolver exposes the resolved value to the install path, so the precedence rule is evaluated in one place rather than re-derived per consumer.
+- [x] **DFEN-01**: `defaultEnabled` is an optional boolean on both the marketplace plugin entry and `plugin.json`, added once to the shared `PLUGIN_METADATA_FIELDS` group so `PLUGIN_ENTRY_SCHEMA` and `PLUGIN_MANIFEST_SCHEMA` both carry it. A non-boolean value fails validation the same way any other schema violation does; an unknown-key tolerance (D-09 lenient) is unchanged.
+- [x] **DFEN-02**: When both declaration sites carry `defaultEnabled`, the marketplace entry value wins. Absent at both sites resolves to `true`.
+- [x] **DFEN-03**: The resolver exposes the resolved value to the install path, so the precedence rule is evaluated in one place rather than re-derived per consumer.
 
 ### Install and Persistence
 
@@ -73,9 +73,9 @@ definitions: `.planning/workstreams/defaults-enabled/ROADMAP.md`.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DFEN-01 | Phase 101 | Pending |
-| DFEN-02 | Phase 101 | Pending |
-| DFEN-03 | Phase 101 | Pending |
+| DFEN-01 | Phase 101 | Complete |
+| DFEN-02 | Phase 101 | Complete |
+| DFEN-03 | Phase 101 | Complete |
 | DFEN-04 | Phase 102 | Pending |
 | DFEN-05 | Phase 102 | Pending |
 | DFEN-06 | Phase 103 | Pending |

@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
 current_phase: 101
-current_phase_name: manifest-field-and-precedence-resolution
-current_plan: N/A
-status: Ready to execute
-stopped_at: Phase 101 planned — 3 plans in 2 waves, plan-checker passed
-last_updated: "2026-08-14T14:25:23.712Z"
+current_phase_name: Manifest field and precedence resolution
+current_plan: 2
+status: executing
+stopped_at: Completed 101-01-PLAN.md
+last_updated: "2026-08-14T14:46:33.731Z"
 last_activity: 2026-08-14
-last_activity_desc: Phase 101 planned — 3 plans in 2 waves, 13/13 decisions covered
+last_activity_desc: Plan 101-01 executed — defaultEnabled schema field, precedence helper and resolved arm field
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -30,26 +30,26 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Milestone `defaults-enabled` — a plugin author can ship a
-plugin that installs disabled (`defaultEnabled: false`), and nothing later
-re-enables it behind the user's back. Roadmap complete: 5 phases (101-105),
-15/15 requirements mapped.
+**Current focus:** Phase 101 — Manifest field and precedence resolution. The
+milestone goal is that a plugin author can ship a plugin that installs disabled
+(`defaultEnabled: false`), and nothing later re-enables it behind the user's
+back. Roadmap complete: 5 phases (101-105), 15/15 requirements mapped.
 
 ## Current Position
 
-Phase: 101 — Manifest field and precedence resolution (planned, not executed)
-Plan: 3 plans in 2 waves — 101-01 (wave 1), 101-02 + 101-03 (wave 2, parallel)
-Status: Ready to execute
-Last activity: 2026-08-14 — Phase 101 planned; plan-checker passed with no blockers
+Phase: 101 (Manifest field and precedence resolution) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 101 — plan 101-01 complete, wave 2 (101-02 + 101-03) next
+Last activity: 2026-08-14 — Plan 101-01 executed; schema field, precedence helper and resolved arm field landed
 
 ## Progress
 
 **Phases Complete:** 0/5
-**Current Plan:** N/A
+**Current Plan:** 2
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Planned (0/3 plans) |
+| 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | In progress (1/3 plans) |
 | 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Not started |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
@@ -93,7 +93,9 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 
 ## Session Continuity
 
-**Stopped At:** Roadmap written to
+**Last session:** 2026-08-14T14:46:33.702Z
+
+**Stopped At:** Completed 101-01-PLAN.md
 `.planning/workstreams/defaults-enabled/ROADMAP.md`; awaiting user approval.
 **Resume File:** None
 **Next Action:** `/gsd-discuss-phase 101` after approval.
@@ -103,3 +105,11 @@ CONTEXT for `/gsd-discuss-phase`. Neither may be settled by an executor.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | —    | —        | —     | —     |
+| Phase 101 P01 | 20min | 2 tasks | 13 files |
+
+## Decisions
+
+- [Phase 101]: The resolved `defaultEnabled` is threaded as an explicit
+  parameter out of `preflightStages` rather than carried on
+  `PartialResolution`, so a forgotten wiring is a compile error instead of a
+  silent `true`. Costs four private signature edits in `domain/resolver.ts`.

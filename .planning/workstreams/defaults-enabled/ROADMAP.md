@@ -86,12 +86,12 @@ state is that same shape.
   4. The resolved value is readable from the resolver's output by the install path, so precedence is evaluated once rather than per consumer.
   5. Nothing a user can observe changes in this phase: install, list, info, update, reinstall and reconcile produce identical output to today for every plugin, including one that declares `defaultEnabled: false`.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 101-01-PLAN.md — the vertical slice: schema field, non-optional resolver output field, the single precedence helper threaded through the shared resolution path, the 16 fixture repairs the compile fan-out forces, and the compile-time proof that the value is exposed to the install path and absent from the `unavailable` arm
+- [x] 101-01-PLAN.md — the vertical slice: schema field, non-optional resolver output field, the single precedence helper threaded through the shared resolution path, the 16 fixture repairs the compile fan-out forces, and the compile-time proof that the value is exposed to the install path and absent from the `unavailable` arm
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -246,7 +246,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 101. Manifest field and precedence resolution | defaults-enabled | 0/3 | Planned | - |
+| 101. Manifest field and precedence resolution | defaults-enabled | 1/3 | In Progress|  |
 | 102. Reason token, install write-through and notification | defaults-enabled | 0/? | Not started | - |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
