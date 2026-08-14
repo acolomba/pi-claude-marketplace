@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ensureGitSuffix,
   githubSource,
   parsePluginSource,
   pathSource,
@@ -701,4 +702,42 @@ test("Y1 samePlannedSource: truthy coercion of 'unknown-stored' is a TYPE error 
   // is the type signature itself.
   const result = samePlannedSource(githubSource("acme/tools"), "acme/tools");
   assert.ok(result === "same" || result === "different" || result === "unknown-stored");
+});
+
+test("MURL-01 ensureGitSuffix appends `.git` to a suffix-less url", () => {
+  assert.equal(ensureGitSuffix("https://gitlab.com/o/r"), "https://gitlab.com/o/r.git");
+});
+
+test("MURL-01 ensureGitSuffix is idempotent -- never yields `.git.git`", () => {
+  assert.equal(ensureGitSuffix("https://gitlab.com/o/r.git"), "https://gitlab.com/o/r.git");
+  assert.equal(
+    ensureGitSuffix(ensureGitSuffix("https://gitlab.com/o/r")),
+    "https://gitlab.com/o/r.git",
+  );
+});
+
+test("MURL-01 ensureGitSuffix trims trailing slashes before appending", () => {
+  assert.equal(ensureGitSuffix("https://gitlab.com/o/r/"), "https://gitlab.com/o/r.git");
+  assert.equal(ensureGitSuffix("https://gitlab.com/o/r///"), "https://gitlab.com/o/r.git");
+  assert.equal(ensureGitSuffix("https://gitlab.com/o/r.git/"), "https://gitlab.com/o/r.git");
+});
+
+test("MURL-01 ensureGitSuffix leaves an already-suffixed git-subdir url unchanged", () => {
+  // A git-subdir source stores its manifest url verbatim (no parse-time
+  // canonicalization), so it can reach the network seam already suffixed.
+  const src = parsePluginSource({
+    source: "git-subdir",
+    url: "https://gitlab.com/o/r.git",
+    path: "plugins/p",
+  });
+  assert.equal(src.kind, "git-subdir");
+  assert.equal(src.url, "https://gitlab.com/o/r.git");
+  assert.equal(ensureGitSuffix(src.url), "https://gitlab.com/o/r.git");
+});
+
+test("D-76-01 parse-time `.git` stripping is unchanged by the network-side suffix helper", () => {
+  const parsed = parsePluginSource("https://gitlab.com/o/r.git");
+  assert.equal(parsed.kind, "url");
+  assert.equal(parsed.url, "https://gitlab.com/o/r");
+  assert.equal(sourceLogical(parsed), "https://gitlab.com/o/r");
 });

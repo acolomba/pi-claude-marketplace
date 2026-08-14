@@ -41,8 +41,10 @@ export interface CloneOptions {
   /**
    * Remote URL. Any `https://` git URL is accepted: github sources reconstruct
    * their canonical `https://github.com/<owner>/<repo>.git` form, while url
-   * sources (MURL-01 / D-76-06) pass `source.url` verbatim. Auth is omitted
-   * for public url clones (D-76-07); see `opts.auth` below.
+   * sources (MURL-01 / D-76-06) supply their canonical `source.url` passed
+   * through `domain/source.ts::ensureGitSuffix` -- the stored identity form is
+   * `.git`-stripped, the wire form is not. Auth is omitted for public url
+   * clones (D-76-07); see `opts.auth` below.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
