@@ -402,16 +402,24 @@ export interface BuildAuthCallbacksOpts {
  *   RETURN VALUES or notify calls -- a credential could be interpolated into
  *   an upstream Error, so surfacing it to the user or to isomorphic-git
  *   would violate AUTH-09. The failure reason IS routed through
- *   `hookDebugLog` before the `{ cancel: true }` fallback so the specific
- *   cause (which OAuth provider error, which host) is diagnosable rather
- *   than discarded outright: `onAuthRequired`'s `result.reason` (from
- *   `domain/github-auth.ts::DeviceFlowResult`) is covered by the
- *   `tests/architecture/no-credential-leak.test.ts` AUTH-09 gate, and a
- *   caught exception's message is covered by `platform/git-credential.ts`'s
- *   own docstring discipline (CredentialOps Error messages reference only
- *   the subcommand name + timeout-ms/exit code) -- `hookDebugLog` writing to
- *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1` (never to the
- *   return value or a user-visible notify) keeps this within AUTH-09.
+ *   `hookDebugLog` before the `{ cancel: true }` fallback -- in onAuth (both
+ *   the Device Flow failure path and the catch-all) and in onAuthFailure (a
+ *   caught reject() throw) -- so the specific cause (which OAuth provider
+ *   error, which host) is diagnosable rather than discarded outright:
+ *   `onAuthRequired`'s `result.reason` (from
+ *   `domain/github-auth.ts::DeviceFlowResult`) is built only from fixed
+ *   strings, `err.message` on a network/fetch failure, or the OAuth
+ *   provider's own `error`/`error_description` fields on a PRE-TOKEN
+ *   response -- never from `access_token`/`accessToken`/`cred.*`. A caught
+ *   exception's message is covered by `platform/git-credential.ts`'s own
+ *   docstring discipline (CredentialOps Error messages reference only the
+ *   subcommand name + timeout-ms/exit code). `hookDebugLog` calls in THIS
+ *   file, plus `describeDeviceCodeErrorBody`'s own body and the `reason:`
+ *   field construction in `domain/github-auth.ts`, are all scanned by
+ *   `tests/architecture/no-credential-leak.test.ts` for credential-field
+ *   interpolation (AUTH-09); `hookDebugLog` itself also writes to
+ *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1`, never to the
+ *   return value or a user-visible notify.
  *
  * @see REQUIREMENTS.md::AUTH-01 (private repo auth via Device Flow)
  * @see REQUIREMENTS.md::AUTH-02 (silent keychain reuse on subsequent ops)

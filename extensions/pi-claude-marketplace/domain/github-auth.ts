@@ -149,12 +149,16 @@ export type DeviceFlowResult =
  * `runPollLoop` uses for poll-error responses. No credential has been
  * issued yet at this point in the flow (this is the pre-token device-code
  * request), so the body's `error` / `error_description` fields are safe to
- * surface -- AUTH-09; verified by
- * tests/architecture/no-credential-leak.test.ts, which scans this file for
- * token interpolation and stays green because these fields never carry
- * access_token/cred.* material. Returns "" when the body isn't parseable
- * JSON or carries no `error` field, so the caller falls back to the bare
- * HTTP status.
+ * surface -- AUTH-09. The generic new-Error(...)/notifyFn(...) scan in
+ * tests/architecture/no-credential-leak.test.ts cannot see through the
+ * describeDeviceCodeErrorBody(res) call at requestCodeImpl's `new
+ * Error(...)` site -- a lexical scan only ever sees `res.status` and a
+ * function-call expression there. A dedicated test scans THIS function's
+ * own body directly instead, so a future regression that read
+ * `access_token` / `cred.*` here (rather than `error` / `error_description`)
+ * would still be caught. Returns "" when the body isn't parseable JSON or
+ * carries no `error` field, so the caller falls back to the bare HTTP
+ * status.
  */
 async function describeDeviceCodeErrorBody(res: Response): Promise<string> {
   let data: Record<string, unknown>;
