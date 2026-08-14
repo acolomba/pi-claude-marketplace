@@ -364,6 +364,17 @@ test("DFEN-01 PLUGIN_ENTRY rejects defaultEnabled as string", () => {
   );
 });
 
+// `null` is the likelier authoring mistake than a string -- a template or a
+// codegen step that emits every known key writes `null` for the ones it has no
+// value for. `Type.Optional(Type.Boolean())` admits `undefined` and `boolean`
+// only, so it is rejected exactly like any other wrong type.
+test("DFEN-01 PLUGIN_ENTRY rejects defaultEnabled as null", () => {
+  assert.equal(
+    PLUGIN_ENTRY_VALIDATOR.Check({ name: "p", source: "./local", defaultEnabled: null }),
+    false,
+  );
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PLUGIN_MANIFEST_SCHEMA (standalone plugin.json)
 // ──────────────────────────────────────────────────────────────────────────
@@ -413,6 +424,13 @@ test("PLUGIN_MANIFEST rejects name as number", () => {
 
 test("DFEN-01 PLUGIN_MANIFEST rejects defaultEnabled as string", () => {
   assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: "p", defaultEnabled: "false" }), false);
+});
+
+// The plugin.json side of the null case above. Rejection here downgrades that
+// one plugin to `unavailable` with a `malformed plugin.json` note, rather than
+// invalidating a whole marketplace.json as the entry-side rejection does.
+test("DFEN-01 PLUGIN_MANIFEST rejects defaultEnabled as null", () => {
+  assert.equal(PLUGIN_MANIFEST_VALIDATOR.Check({ name: "p", defaultEnabled: null }), false);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
