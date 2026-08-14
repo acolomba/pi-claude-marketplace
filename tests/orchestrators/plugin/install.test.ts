@@ -899,6 +899,285 @@ for (const site of DFEN_DECLARATION_SITES) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// OUT-04 -- the install-disabled notification's observable contract
+//
+// The block above proves the terminal state. These pin what the user actually
+// reads: how many notifications there are, at what severity, in what token
+// ORDER, with which markers suppressed, and with a remedy that names something
+// runnable and interpolates nothing.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** The frozen D-102-10 trailer, restated here so a wording drift goes red. */
+const ENABLE_HINT_TRAILER_BYTES = "Run enable on this plugin to use its components.";
+
+test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission in subject-first order with no soft-dep marker", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-row-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        // All three artifact-bearing kinds, so the row is asserted against a
+        // record that retained agent AND mcp inventory rather than an empty one.
+        skills: [{ sourceName: "tool" }],
+        commands: [{ sourceName: "deploy" }],
+        agents: [{ sourceName: "bot" }],
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+
+      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
+      // `disabled` render arm ever threaded the real soft-dep flags instead of
+      // hard-coding them false, this fixture is the one that would emit
+      // `{requires pi-subagents, requires pi-mcp}` and fail below.
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // IL-2: one install, one notification.
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      // D-102-07: the desired state WAS reached, so the cascade reduces to info
+      // and `notify()` passes no severity arg at all.
+      assert.equal(note.severity, undefined);
+
+      // Subject-first row grammar, asserted as ONE anchored ordered match so a
+      // reordering of glyph / name / version / status / reasons cannot pass by
+      // satisfying a set of independent substring checks.
+      assert.match(note.message, /^ {2}◍ hello v1\.0\.0 \(disabled\) \{installs disabled\}$/m);
+
+      // The record kept `agents` and `mcpServers`, and the row still carries no
+      // companion marker: those markers state a runtime concern that is
+      // suspended while the plugin is disabled.
+      const after = await loadState(locations.extensionRoot);
+      const record = after.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record !== undefined);
+      assert.equal(record.enabled, false);
+      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.mcpServers], ["server1"]);
+      assert.ok(
+        !note.message.includes("requires pi-"),
+        `a disabled row must carry no soft-dep marker, got: ${note.message}`,
+      );
+
+      // T-102-04: plugin / marketplace / version tokens only.
+      assert.ok(
+        !note.message.includes(cwd),
+        `MUST NOT leak an absolute filesystem path, got: ${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer under the row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-hint-"));
+    try {
+      // Deliberately distinctive names: a two-letter marketplace such as `mp`
+      // is a substring of the trailer's own prose, so the non-interpolation
+      // assertions below would fail for a reason that has nothing to do with
+      // interpolation.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "acme-registry",
+        pluginName: "widget",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "acme-registry",
+        plugin: "widget",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const lines = (notifications[0]?.message ?? "").split("\n");
+      const rowAt = lines.findIndex((l) => l.includes("(disabled)"));
+      assert.notEqual(rowAt, -1, "the disabled row must be present");
+
+      // Its own line, directly below the row, indented 4 spaces.
+      const trailer = lines[rowAt + 1];
+      assert.equal(trailer, `    ${ENABLE_HINT_TRAILER_BYTES}`);
+
+      // T-69-01: the remedy names a runnable verb and nothing else. A trailer
+      // that interpolated the ref would drift from the catalog byte form and
+      // would have to be re-frozen per plugin.
+      assert.ok(!trailer.includes("widget"), "the trailer must not name the plugin");
+      assert.ok(!trailer.includes("acme-registry"), "the trailer must not name the marketplace");
+      assert.ok(!trailer.includes("1.0.0"), "the trailer must not name the version");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint trailer", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-nohint-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      // Without this the gate would be satisfiable by an unconditional append.
+      assert.ok(
+        !(notifications[0]?.message ?? "").includes(ENABLE_HINT_TRAILER_BYTES),
+        `a clean install must not advertise the enable remedy, got: ${notifications[0]?.message ?? ""}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// T-102-01 -- a plugin the user's configuration says is disabled must not
+// execute code in the session that installed it.
+//
+// The post-save hooks parsed-config cache add predates any notion of an install
+// landing disabled: its gate asks "does this plugin declare hooks", not "is this
+// plugin live". Left ungated it would register routing entries for a plugin that
+// just had its on-disk hooks.json removed, and nothing short of the next hydrate
+// would clear them.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
+  const { _resetForTest, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        entryDefaultEnabled: false,
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+
+      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hooky",
+        applyDefaultEnabled: true,
+      });
+
+      const summary = notifications.map((n) => n.message).join("\n");
+      assert.ok(summary.includes("(disabled)"), `expected a disabled row; got: ${summary}`);
+
+      // No routing entry: dispatch cannot reach this plugin.
+      assert.deepEqual([...getRoutingBucket("PreToolUse")], []);
+      // ...and the staged config the routing table is rebuilt from is gone too,
+      // so even a rebuild from disk could not resurrect it.
+      await assert.rejects(
+        stat(path.join(locations.hooksDir, "hooky", "hooks.json")),
+        "the staged hooks.json must be gone",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
+  const { _resetForTest, getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
+    try {
+      _resetForTest();
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+
+      // The contrast case: identical fixture, no `defaultEnabled` declaration.
+      // Without it the assertion above could pass because the cache was never
+      // populated for ANY install.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hooky",
+        applyDefaultEnabled: true,
+      });
+
+      const bucket = getRoutingBucket("PreToolUse");
+      assert.equal(bucket.length, 1);
+      assert.equal(bucket[0]?.pluginId, "hooky");
+      assert.ok((await stat(path.join(locations.hooksDir, "hooky", "hooks.json"))).isFile());
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // PI-9 -- 5-phase order + end-state assertion
 // ───────────────────────────────────────────────────────────────────────────
 
