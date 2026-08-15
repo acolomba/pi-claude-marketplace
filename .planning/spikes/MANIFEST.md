@@ -227,6 +227,18 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   (`--coverage <coverage-final.json>`, Istanbul format) wired in -- this
   project emits `lcov`, so that's a real conversion cost, not a flag
   (Spike 014).
+- `fallow security`'s 131 candidates on this codebase are 96%
+  path-traversal, traced to the project's own already-hardened
+  `path-safety.ts`/`locations.ts` chokepoints -- the pattern-matcher sees
+  "non-literal `path.join()` argument" without knowing that IS the safety
+  check. All 5 non-path-traversal candidates checked in depth were also
+  false positives, 3 of them defended in code visible right next to the
+  flagged line (regex-escaping in `vars.ts` and `convert.ts`, a
+  hardcoded-provider-registry URL in `github-auth.ts`'s SSRF flags).
+  SonarCloud's zero-open-hotspot state stands -- nothing here is new signal
+  for this codebase. Low value as a gate here specifically because this
+  codebase already documents its own safety invariants in comments; would
+  likely be higher-value on a less-documented codebase (Spike 015).
 
 ## Spikes
 
@@ -247,6 +259,6 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 012  | fallow-boundary-fidelity            | standard   | Given the 9-zone `no-restricted-paths` config plus custom grep-gate architecture tests, when the same rules are expressed in `.fallowrc.json`, then determine match, gap, or noise                                                                                            | ✓ VALIDATED          | fallow, static-analysis, boundaries, tooling                             |
 | 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | ✓ VALIDATED          | fallow, static-analysis, duplication, tooling                            |
 | 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | ✓ VALIDATED          | fallow, static-analysis, complexity, tooling                             |
-| 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | PENDING              | fallow, static-analysis, security, tooling                               |
+| 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | ⚠ VALIDATED (gap)    | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | PENDING              | fallow, static-analysis, autofix, tooling                                |
 | 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | PENDING              | fallow, static-analysis, ci, tooling                                     |
