@@ -107,9 +107,20 @@ in `package.json`.
 fallow dead-code --boundary-violations --circular-deps --re-export-cycles --fail-on-issues --format human
 ```
 
-`npm run check` green end to end with the combined gate and 019a applied.
 Runtime cost is nil: the cycle analysis is the same graph walk the boundary
 check already performs, and the measured gate time did not move off ~0.3s.
+
+> **Correction (2026-08-15, from the implementation run `cee12150`).** This
+> section used to open "`npm run check` green end to end with the combined
+> gate and 019a applied." The gate half is right and shipped verbatim -- it
+> was additionally confirmed **non-vacuous**, exiting non-zero with
+> `8 circular dependencies` against the parent commit. The check half is
+> wrong: `full-candidate.diff` swaps module specifiers in place, so it
+> leaves 5 `import-x/order` errors and cannot have passed `npm run check`.
+> The diff also never creates `routing-state.ts`, so it does not apply as a
+> standalone change. See
+> `.claude/skills/spike-findings-pi-claude-marketplace/references/hooks-cycle-removal.md`,
+> section "Corrections to the spike record."
 
 **Hard sequencing constraint.** This gate change is only safe when 019a
 ships with it. Against current `main`, adding `--circular-deps` fails on

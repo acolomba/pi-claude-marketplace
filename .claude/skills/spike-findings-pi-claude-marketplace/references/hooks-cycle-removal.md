@@ -1,13 +1,32 @@
 # Hooks Circular-Dependency Removal
 
 Implementation blueprint for removing the 8-cycle `bridges/hooks/` knot and
-closing the local circular-dependency gate. Nothing has landed in
-`extensions/` yet: the spikes reverted their source changes and left an
-appliable diff behind.
+closing the local circular-dependency gate.
 
-**Status: proven, not shipped.** `sources/020-hooks-cycle-gate-closure/full-candidate.diff`
-applies cleanly against the post-fallow-adoption tree and carries the whole
-change.
+**Status: SHIPPED** in `cee12150` on `features/hooks-cycle-removal`. Cycles
+went 8 -> 0, `npm run check` is green, and zero test files were touched. The
+sections below are kept as the record of how it was done; the corrections
+marked below are the places where the pre-implementation blueprint was wrong
+and the shipping run found out.
+
+`sources/020-hooks-cycle-gate-closure/full-candidate.diff` still applies
+cleanly (`git apply --check` exits 0), but it does **not** carry the whole
+change, and it is **not** lint-clean. Two corrections, both found only by
+running the thing:
+
+- **The diff does not create `routing-state.ts`.** It touches the 6 knot
+  files plus `package.json`, and all five repointed imports assume
+  `./routing-state.ts` already resolves. Apply it first and typecheck fails
+  on 5 unresolved specifiers. Create the leaf module first --
+  `sources/019-a-hooks-cycle-leaf-extraction/routing-state.ts` is the
+  working source.
+- **The diff breaks `import-x/order` in all five importers.** It swaps
+  module specifiers in place, and `routing-state` sorts *after* the
+  `event-router` it replaces (after `exec-result.ts`, `exec-timer.ts` and
+  `if-field/index.ts`). ESLint fails with 5 `import-x/order` errors.
+  `npx eslint --fix` on those five files settles it -- purely mechanical
+  line moves, no specifier or symbol changes. This is why the spike record's
+  "npm run check green" claim did not reproduce; see Corrections below.
 
 ## Requirements
 
@@ -103,14 +122,34 @@ one-directional now, and a one-directional edge cannot cycle.
 
 Spike 018 kept `event-router.ts` re-exporting the moved names, which is
 what let it validate portability without touching a single importer or
-test. 019a dropped the re-export. Either ships:
+test. Two shapes are available:
 
 - **Keep it:** `event-router.ts` stays the public face of the hooks bridge;
   consumers outside the knot need no change.
 - **Drop it:** every consumer names the leaf directly. Noisier at call
   sites, no indirection.
 
-019a's measured diff (6 files, +38/-96) is the drop-it version.
+**Correction.** This section used to claim "019a's measured diff is the
+drop-it version." That is wrong, and it matters. `full-candidate.diff`
+appends a re-export block to `event-router.ts`:
+
+```ts
+export {
+  appendPendingSessionStartContext,
+  currentEpoch,
+  getRoutingBucket,
+  type PendingSessionStartContext,
+  type RoutingEntry,
+};
+```
+
+So 019a is a **hybrid, and the hybrid is the point**: only the five
+knot-internal importers are repointed, which is what severs the cycles,
+while the external surface stays on `event-router.ts`. That is precisely
+why zero test files needed editing -- a claim this same document reported
+as a measured result while also describing the change as "drop-it," which
+is self-contradictory, since drop-it means every consumer names the leaf
+directly. Shipped as the hybrid.
 
 ### 5. Close the gate in the same change
 
@@ -174,6 +213,20 @@ The gate lives entirely in `package.json`'s `fallow` script.
   precisely because a throw there must never escape (NFR-2).
 - **Do not add `--circular-deps` to the gate on its own.** It fails on the
   8 inherited cycles immediately.
+- **Do not apply the candidate diff and assume the tree is clean.** It
+  leaves 5 `import-x/order` errors (see the header) and it strands **eight
+  doc-comment blocks** in `event-router.ts` -- it deletes declarations but
+  keeps the comments that documented them, including the section banners
+  `// Types` and `// Routing-table reader (consumed by dispatch.ts)` that
+  end up with nothing under them. Nothing in `npm run check` catches a
+  dangling block comment; typecheck, lint and Prettier are all happy with
+  a comment describing something that no longer exists. Read the deleted
+  hunks and account for every comment they orphan.
+- **Do not let the moved fields lose their spec anchors.** The spike's
+  `routing-state.ts` has bare interface fields, so moving the state as
+  shipped by the spike would destroy the D-60-01 / D-60-04 / MATCH-03 /
+  D-61-02 doc anchors that `.claude/rules/typescript-comments.md` calls
+  for. Carry the field comments across with the declarations.
 - **Do not trust a probe result without confirming the probe landed.** This
   series produced two false results from probes that never modified the
   tree: a mangled regex that left imports in place and reported "8 cycles,
@@ -192,14 +245,62 @@ The gate lives entirely in `package.json`'s `fallow` script.
   and `tests/architecture/hooks-exec.test.ts`. `npm run check` is the real
   gate for this refactor; the hooks-only suite is not sufficient.
 - `event-router.ts` is 999 lines and holds 45 in-file references to the 4
-  state cells. The move touched all of them and typecheck caught the only
-  two defects (two orphaned type imports), so the refactor's failure mode
-  is compile-time throughout.
-- Measured result: cycles 8 -> 0, `npm run check` green, zero test files
-  modified, total diff 7 files / +39 / -97 including the gate flag.
+  state cells. The move touched all of them, and for the *code* the failure
+  mode is compile-time throughout -- typecheck caught the only two defects
+  (two orphaned type imports).
+
+  The blueprint used to stop there and conclude "compile-time throughout,"
+  which is the sentence that made the change feel safer than it was. It is
+  true of declarations and false of everything around them: the orphaned
+  doc comments, the stranded section banners and the `import-x/order`
+  breakage are all invisible to typecheck, and one of the three is
+  invisible to the whole of `npm run check`. Compile-time safety covers
+  what the compiler models, which is not the same as what a reviewer reads.
+- Measured result **as shipped** (`cee12150`): cycles 8 -> 0, `npm run check`
+  green, zero test files modified, total diff **10 files / +318 / -193**
+  including the gate flags.
+
+  The pre-implementation figure recorded here was "7 files / +39 / -97,"
+  which counted only the candidate diff. It omitted the 239-line
+  `routing-state.ts` the diff never creates, the doc comments carried across
+  with the moved declarations, and the `ARCHITECTURE.md` / `BACKLOG.md`
+  updates. Treat a spike's diffstat as the cost of the *edit it captured*,
+  not the cost of the change.
+- The gate was verified **non-vacuous**, not merely green: the identical
+  flag set run against the parent commit reports `8 circular dependencies`
+  and exits non-zero, while the post-change tree exits 0. A gate that has
+  never been seen to fail has not been tested.
 - `ARCHITECTURE.md` documents the knot by name and cites it as the reason
   `import-x/no-cycle` stops at `orchestrators/`. Removing the knot makes
-  that passage stale -- update it in the same change.
+  that passage stale -- update it in the same change. Done in `cee12150`.
+  Whether the ESLint glob should now widen past `orchestrators/` is left
+  open as `BACKLOG.md` FLOW-03; it was deliberately not decided here.
+
+## Corrections to the spike record
+
+Four claims in the 018/019a/020 record did not survive implementation. They
+are listed together because they share one cause, which is the useful part.
+
+| Claim | Where | Reality |
+|-------|-------|---------|
+| `npm run check` green | 019a README, 020 README, MANIFEST, SKILL.md | The captured diffs leave 5 `import-x/order` errors. A green check was recorded for a tree that could not have been green. |
+| "carries the whole change" | this file | The diff never creates `routing-state.ts`; applied alone it fails typecheck on 5 unresolved specifiers. |
+| "019a is the drop-it version" | this file, §4 | The diff appends a re-export block. 019a is the hybrid, and the hybrid is why zero tests changed. |
+| 7 files / +39 / -97 | this file | 10 files / +318 / -193 as shipped. |
+
+The common cause is that **all four are properties of the captured diff
+being read as properties of the change.** A spike's `git diff` records the
+edit the spike made; it does not record the file the spike hand-created
+before editing, the lint pass it never ran, or the docs a real change has
+to carry. Spike 019a genuinely did reach 0 cycles with no test edits -- the
+architectural finding is sound and shipped intact. What was unreliable was
+every number and gate-status attached to it.
+
+The existing "do not trust a probe result without confirming the probe
+landed" entry under What to Avoid caught probes that *never ran*. This is
+the adjacent failure: probes that ran, produced a real result, and had a
+verification status attached that was never separately established. Record
+the command output, not the conclusion you expect from it.
 
 ## Origin
 

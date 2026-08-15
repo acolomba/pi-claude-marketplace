@@ -70,6 +70,21 @@ directory (`*.diff` plus any new file) so the finding survives the revert.
 Spikes 018-020 all followed this, and 020's `full-candidate.diff` is
 directly appliable if the work is ever picked up.
 
+**A captured diff is not the change, and its verification status is not
+inherited.** When 018-020 were implemented, four recorded claims failed:
+"npm run check green" (the in-place specifier swaps break `import-x/order`,
+so the captured tree could not have passed), "carries the whole change" (the
+diff never creates the leaf module its own imports need), the diffstat (7
+files/+39/-97 captured versus 10 files/+318/-193 shipped), and the
+keep-vs-drop characterisation of its own re-export block. A `git diff`
+records the edit the spike made -- not the file it hand-created first, not
+the lint pass it never ran, not the docs a real change must carry. So:
+re-run the full gate against the diff *as applied to a clean tree* before
+recording a green status, and state a diffstat as the cost of the captured
+edit rather than of the change. This is the sibling of "verify the probe
+changed the tree": there the probe never ran, here it ran and had a
+verification status attached that was never separately established.
+
 **Measure graph shape before building machinery.** Spike 019b answered
 "would dependency inversion break the cycles" by severing the three
 relevant import statements and running the cycle check -- a deliberately

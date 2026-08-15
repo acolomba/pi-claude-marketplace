@@ -22,6 +22,22 @@
 - Do not reach for `rules.<name>` severity to control the gate.
   `--fail-on-issues` exits 1 on warn-severity findings too; the flag, not
   the severity, decides what the gate sees (Spike 020).
+- A captured spike diff is not the change. 019a's and 020's diffs swap
+  module specifiers in place, which breaks `import-x/order` because
+  `routing-state` sorts after the `event-router` it replaces, and neither
+  diff creates the leaf module its own imports depend on. Run `eslint --fix`
+  on the repointed importers and create the leaf first (implementation run,
+  `cee12150`).
+- Verify a new gate is non-vacuous, not merely green. The combined fallow
+  gate was confirmed to exit non-zero with `8 circular dependencies` against
+  the pre-change commit before its exit-0 on the fixed tree was believed
+  (implementation run, `cee12150`).
+
+**Shipped:** 018/019a/020 landed as `cee12150` on
+`features/hooks-cycle-removal` -- cycles 8 -> 0, `npm run check` green, zero
+test files touched. The green-check status recorded in the 019a and 020
+rows below was **not** reproducible as captured; see each README's
+Correction note and the blueprint's "Corrections to the spike record."
 
 ### GitLab plugin-marketplace parity (spikes 008-009)
 

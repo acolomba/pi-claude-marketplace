@@ -240,11 +240,16 @@
 ### Key Findings
 
 - The `bridges/hooks/` cycle knot comes out for **five one-line import
-  swaps**, taking cycles 8 -> 0 with a green `npm run check` and zero test
-  files modified. `ARCHITECTURE.md` accepts the knot, Spike 011 recommended
-  accepting it, and `BACKLOG.md` FLOW-02 judged untangling it "out of
-  proportion to the gap." That judgment was wrong, and this series is the
-  measurement that says so.
+  swaps**, taking cycles 8 -> 0 with zero test files modified.
+  `ARCHITECTURE.md` accepts the knot, Spike 011 recommended accepting it,
+  and `BACKLOG.md` FLOW-02 judged untangling it "out of proportion to the
+  gap." That judgment was wrong, and this series is the measurement that
+  says so. Shipped as `cee12150`.
+
+  This bullet used to read "...with a green `npm run check`." The swaps do
+  need an `eslint --fix` pass for `import-x/order`, because `routing-state`
+  sorts after the `event-router` it replaces -- five mechanical line moves,
+  but the spike record's green-check claim was not reproducible as captured.
 - The knot was never about orchestration. `event-router.ts` owned both the
   shared state and the handler wiring; moving the state down to a leaf turns
   the bidirectional edges one-directional, and the hub keeps importing

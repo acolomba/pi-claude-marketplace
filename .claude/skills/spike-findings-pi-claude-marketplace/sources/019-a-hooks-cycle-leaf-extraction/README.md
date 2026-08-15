@@ -35,6 +35,16 @@ npm run check
 
 Zero circular dependencies, down from 8. Full check green.
 
+> **Correction (2026-08-15, from the implementation run `cee12150`).** The
+> cycle result held exactly as recorded: 8 -> 0, zero test files touched.
+> The "full check green" half did not. `leaf-extraction.diff` swaps each
+> module specifier in place, and `routing-state` sorts *after* the
+> `event-router` it replaces, so the captured tree carries 5
+> `import-x/order` errors and `npm run check` could not have passed on it.
+> `npx eslint --fix` on the five importers settles it. See
+> `.claude/skills/spike-findings-pi-claude-marketplace/references/hooks-cycle-removal.md`,
+> section "Corrections to the spike record."
+
 ## Investigation Trail
 
 **First measurement was wrong, and nearly became a finding.** The initial
@@ -91,11 +101,15 @@ own the state *and* its pure accessors, not the state alone.
 
 **Verdict: WINNER.**
 
-- Circular dependencies: **8 -> 0**
+- Circular dependencies: **8 -> 0** (confirmed on implementation)
 - `npm run typecheck` clean
-- `npm run check` green end to end
-- Zero test files modified
-- Total diff: 6 files, 38 insertions, 96 deletions
+- ~~`npm run check` green end to end~~ -- **not reproducible**, see the
+  Correction above; the captured diff carries 5 `import-x/order` errors
+- Zero test files modified (confirmed on implementation)
+- Total diff: 6 files, 38 insertions, 96 deletions -- this is the cost of
+  the captured *edit*, not of the change; shipping it came to 10 files,
+  +318/-193, because the diff does not create `routing-state.ts` and does
+  not carry the doc updates
 
 The importer-side cost is five one-line module-specifier swaps. The
 hub-side cost is Spike 018's already-validated state move plus relocating
