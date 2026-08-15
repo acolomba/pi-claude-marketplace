@@ -1069,6 +1069,64 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
   });
 });
 
+test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradations the enable it advertises would inherit", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-degraded-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p1",
+        pluginVersion: "1.0.0",
+        pluginJsonVersion: "1.0.0",
+        entryDefaultEnabled: false,
+        // One skill whose frontmatter cannot be parsed (installed in degraded,
+        // synthesized form) and two experimental kinds the resolver drops. Both
+        // facts are durable and both constrain what the advertised `enable`
+        // will produce -- unlike the soft-dep markers, whose runtime concern is
+        // suspended while the plugin is disabled.
+        skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\n" }],
+        experimental: { themes: "./themes", monitors: "./monitors.json" },
+      });
+
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: (): unknown[] => [] });
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "p1",
+        partial: true,
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      // WARN-01: a degrade this ledger run produced is a shortfall, and landing
+      // disabled does not undo it.
+      assert.equal(note.severity, "warning");
+      assert.match(
+        note.message,
+        /^ {2}◍ p1 v1\.0\.0 \(disabled\) \{installs disabled, malformed skill, unsupported component\}$/m,
+        `expected the cause first and both degradation facts after it; got:\n${note.message}`,
+      );
+      // ENBL-15 / D-100-06: the suppressed half stays suppressed.
+      assert.ok(
+        !note.message.includes("requires pi-"),
+        `a disabled row must carry no soft-dep marker, got: ${note.message}`,
+      );
+      assert.ok(
+        note.message.includes(`    ${ENABLE_HINT_TRAILER_BYTES}`),
+        `expected the enable-hint trailer; got:\n${note.message}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // DFEN-05 -- an explicit `enabled` in the user's config wins over the plugin
 // author's `defaultEnabled`, in either direction, and is never rewritten.

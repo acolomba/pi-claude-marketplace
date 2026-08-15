@@ -2151,9 +2151,19 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // (mirrors orphan rewake's one-row-per-plugin). The free-text parse-error
     // detail rode postCommitWarnings above (orchestrated only). Reasons share
     // the brace block with any companion soft-dep markers per MSG-GR-4.
-    reasons.push(
-      ...malformedReasonsForKinds(installCtx.frontmatterDegradations.map((d) => d.kind)),
+    const malformedReasons = malformedReasonsForKinds(
+      installCtx.frontmatterDegradations.map((d) => d.kind),
     );
+    reasons.push(...malformedReasons);
+
+    // FSTAT-07 / D-66-04: the dropped-component kinds, hoisted so the success
+    // row and the DFEN-04 disabled row read the same list. A dropped kind is a
+    // durable fact about what the plugin will materialize, so both rows owe it
+    // to the user; only the row's own status decides which of them is rendered.
+    const droppedKindReasons =
+      installCtx.resolved.state === "partially-available"
+        ? narrowUnsupportedKinds(installCtx.resolved.unsupported)
+        : [];
 
     // FSTAT-07 / D-66-04: when the live resolved state is `partially-available`, the
     // install was partially completed with one or more components dropped -- the
@@ -2199,7 +2209,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
             name: plugin,
             dependencies,
             version: installCtx.version,
-            reasons: [...reasons, ...narrowUnsupportedKinds(installCtx.resolved.unsupported)],
+            reasons: [...reasons, ...droppedKindReasons],
             severity: successSeverity,
             needsReload: true,
           }
@@ -2217,7 +2227,22 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // OUT-04: the install-disabled row. D-102-07 stamps `info` -- the desired
     // state WAS reached, because an install-disabled plugin is the author's
     // declared intent, not a shortfall; severity is the desired-state axis, not
-    // a something-is-unusual axis. `needsReload: false`: nothing net entered or
+    // a something-is-unusual axis. WARN-01 raises it to `warning` on a
+    // frontmatter degrade for the same reason the success row does: a
+    // synthesized skill or a neutralized command is a shortfall this ledger run
+    // just produced, and the disabled status does not undo it.
+    //
+    // The reasons brace carries the durable facts alongside the cause, per the
+    // governing rule quoted on `PluginDisabledMessage`: render facts that
+    // constrain what the user can do next, suppress facts about runtime
+    // behavior that is suspended. A dropped component kind and a malformed
+    // component are both durable and both constrain the very `enable` this row
+    // advertises -- it will produce a degraded install. Only the soft-dep
+    // markers belong in the suppressed half, and the `disabled` render arm
+    // hard-codes those false (ENBL-15 / D-100-06). In standalone mode
+    // `postCommitWarnings` are dropped by D-19-01, so this row is the only
+    // surface those facts have.
+    // `needsReload: false`: nothing net entered or
     // left Pi's resource view inside the command, since the ledger staged and
     // the cascade unstaged before the process returned. D-102-10's `enableHint`
     // adds the frozen trailer naming the remedy. Row-level `scope` is OMITTED
@@ -2228,8 +2253,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       status: "disabled",
       name: plugin,
       version: installCtx.version,
-      reasons: ["installs disabled"],
-      severity: "info",
+      // The author-declared cause leads: it is why the row exists at all.
+      reasons: ["installs disabled", ...malformedReasons, ...droppedKindReasons],
+      severity: installCtx.frontmatterDegradations.length > 0 ? "warning" : "info",
       needsReload: false,
       enableHint: true,
     };
