@@ -231,3 +231,45 @@ None.
 - All six deleted files confirmed absent; all four retained files confirmed present.
 - Commit `1d4f478b` exists on `features/fallow-static-analysis-spike`.
 - `git status --porcelain` shows only the untracked planning directory.
+
+## Amendment: fallow pinned as a devDependency
+
+Everything above describes the `npx --yes fallow` approach the plan
+specified. After review, the no-new-dependency constraint was lifted:
+fallow is now a pinned devDependency. The constraint came from the spike
+series' own "spikes introduce no new dependencies" convention, and the
+adoption blueprint explicitly flagged it as revisitable at real adoption
+time.
+
+What changed:
+
+- `package.json` gains `"fallow": "^3.16.0"` in `devDependencies`. The
+  caret allows patches but blocks a major, which was the actual risk
+  behind T-h7g-01.
+- Both npm scripts drop the `npx --yes` prefix and call the binary
+  directly; npm puts `node_modules/.bin` on PATH.
+- The CI step becomes
+  `npm run fallow:audit -- --changed-since "origin/<base>"`, so the
+  invocation lives in one place instead of being duplicated in YAML.
+
+**T-h7g-01 is resolved rather than accepted.** The threat was an
+unpinned `npx --yes` fetching and executing a future fallow major on a
+CI runner. A lockfile-pinned devDependency removes it.
+
+Dependency weight: 32 lockfile entries, insertions only, no version
+bumps to existing packages. That covers `fallow`, `detect-libc`, the 8
+`@fallow-cli/*` platform binaries, and the optional `fallow-type-aware`
+companion with its own nested `typescript` (19 further platform
+variants). All 8 platform binaries are recorded in the lockfile, so
+`npm ci` on the ubuntu CI runner resolves `@fallow-cli/linux-x64-gnu`
+even though the lockfile was generated on darwin-arm64 -- this was
+verified explicitly, since a missing platform entry would break CI and
+nothing else would have caught it.
+
+`fallow-type-aware` is unused by either script (no `--type-aware` flag
+is passed) but arrives as an optional dependency of `fallow`. It is
+dev-only and does not reach the published package.
+
+`.planning/codebase/STACK.md` gains a fallow entry under Build/Dev, so
+the document that was just corrected for two stale packages does not go
+stale again on the same commit series.

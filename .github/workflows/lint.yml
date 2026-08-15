@@ -63,4 +63,4 @@ jobs:
 
       - name: Run fallow audit
         run: >-
-          npx --yes fallow audit --changed-since "origin/${{ github.event.pull_request.base.ref || 'main' }}" --format human
+          npm run fallow:audit -- --changed-since "origin/${{ github.event.pull_request.base.ref || 'main' }}"

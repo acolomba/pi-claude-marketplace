@@ -38,6 +38,7 @@
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines, includes custom architecture-boundary gates)
 - `prettier` `^3.8.3` for formatting
+- `fallow` `^3.16.0` - whole-graph static analysis (`.fallowrc.json`), covering the reachability questions ESLint cannot answer: unused files, circular dependencies, and architecture-zone boundaries. Its 12-zone `boundaries` block is finer-grained than the ESLint `no-restricted-paths` gate and is the only thing enforcing that cross-bridge imports are forbidden. `npm run fallow` is the local gate; `npm run fallow:audit` gates PRs on newly-introduced findings only. Complements rather than replaces the ESLint gate -- fallow's checks are reachability-scoped, ESLint's are glob-based and reachability-blind
 - `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, markdownlint, yamlfmt, gitlint, mdformat, prettier alongside the JS/TS checks
 
 ## Key Dependencies
