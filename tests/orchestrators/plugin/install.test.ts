@@ -196,6 +196,15 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * orchestrators run their parsed-config-cache mutation path.
    */
   hooksJson?: object;
+  /**
+   * DFEN-08: additional entries seeded into the SAME marketplace manifest
+   * beside `pluginName`, each with its own plugin tree carrying one skill.
+   * Only the enablement declaration varies between them, which is what lets a
+   * parity fixture install several plugins whose sole difference is the
+   * declaration and compare the resulting rows inside one run. Absent -> the
+   * manifest carries `pluginName` alone, exactly as before.
+   */
+  siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
   const scope = opts.scope ?? "project";
@@ -295,9 +304,33 @@ async function seedPathMarketplaceWithPlugin(opts: {
     entry.defaultEnabled = opts.entryDefaultEnabled;
   }
 
+  // DFEN-08: sibling entries share the manifest, the marketplace record and the
+  // scope, so the only thing that can differ between their installs is the
+  // declaration under test.
+  const siblingEntries: Record<string, unknown>[] = [];
+  for (const sibling of opts.siblingPlugins ?? []) {
+    const siblingRoot = path.join(marketplaceRoot, "plugins", sibling.name);
+    await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(siblingRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
+    );
+    const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
+    await mkdir(siblingSkillDir, { recursive: true });
+    await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
+    siblingEntries.push({
+      name: sibling.name,
+      source: `./plugins/${sibling.name}`,
+      ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
+      ...(sibling.entryDefaultEnabled !== undefined && {
+        defaultEnabled: sibling.entryDefaultEnabled,
+      }),
+    });
+  }
+
   const manifest = {
     name: marketplaceName,
-    plugins: [entry],
+    plugins: [entry, ...siblingEntries],
   };
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
@@ -1467,6 +1500,156 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
     });
   });
 }
+
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, and what they are owed is that NOTHING moved for them. The triple
+ * is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. `alpha`, declaring FALSE, is the third arm -- a precedence
+ * fixture over a three-valued key that covers two of its values passes while
+ * asking the wrong question -- and it doubles as the CONTROL proving these
+ * installs reached the path that reads the declaration at all.
+ *
+ * This is the arm the DFEN-05 cases above do NOT cover. Every one of them seeds
+ * an explicit `enabled` value, so each exercises the precedence rule and none
+ * ever reaches the silent-user arm, which is the only arm the declaration can
+ * answer. `install` is also the one verb that legitimately reads the field, so
+ * it is where a parity regression is most likely.
+ *
+ * A standalone install emits ONE notification per call, so the three rows arrive
+ * in three bodies rather than one cascade. The rows are still compared against
+ * EACH OTHER with the plugin name normalized out, because a drift that two
+ * independently-correct literals would both stay green through is exactly what
+ * a parity claim has to catch.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical install rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "alpha",
+        // No entry version: every plugin tree the seeder writes stamps the same
+        // `plugin.json` version, which is tier 1 of the version ladder, so all
+        // three rows carry the same version and the declaration stays the only
+        // difference between them.
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+        siblingPlugins: [
+          { name: "beta", entryDefaultEnabled: true },
+          // No knob at all: the conditional spread writes NO `defaultEnabled`
+          // key on this entry, which is the arm every plugin that never heard
+          // of the field lands on.
+          { name: "gamma" },
+        ],
+      });
+
+      // The user states nothing anywhere -- neither configuration file is
+      // seeded -- because a stated value short-circuits the install's own gate
+      // and would collapse the three arms onto one outcome.
+      const install = async (plugin: string): Promise<NotifyRecord[]> => {
+        const run = makeCtx();
+        await installPlugin({
+          ctx: run.ctx,
+          pi: run.pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin,
+          applyDefaultEnabled: true,
+        });
+        assert.deepEqual(
+          run.notifications.filter((n) => n.severity === "error"),
+          [],
+        );
+        return run.notifications;
+      };
+
+      const alphaNotifications = await install("alpha");
+      const betaNotifications = await install("beta");
+      const gammaNotifications = await install("gamma");
+
+      // Whole-body rather than a substring match: the literal pins the header,
+      // the row, the reload trailer and the absence of one.
+      assert.equal(alphaNotifications.length, 1);
+      assert.equal(
+        alphaNotifications[0]?.message,
+        "● mp [project]\n" +
+          "  ◍ alpha v0.0.1 (disabled) {installs disabled}\n" +
+          "    Run enable on this plugin to use its components.",
+      );
+
+      assert.equal(betaNotifications.length, 1);
+      assert.equal(
+        betaNotifications[0]?.message,
+        "● mp [project]\n  ● beta v0.0.1 (installed)\n\n/reload to pick up changes",
+      );
+      assert.equal(gammaNotifications.length, 1);
+      assert.equal(
+        gammaNotifications[0]?.message,
+        "● mp [project]\n  ● gamma v0.0.1 (installed)\n\n/reload to pick up changes",
+      );
+      // Severity is part of the row's observable form: an install that landed
+      // as its author declared is the desired state reached, not a shortfall.
+      assert.equal(alphaNotifications[0]?.severity, undefined);
+      assert.equal(betaNotifications[0]?.severity, undefined);
+      assert.equal(gammaNotifications[0]?.severity, undefined);
+
+      // The parity claim itself, stated apart from the whole-body literals.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes these
+      // literals the pre-`defaultEnabled` row form as well.
+      const rowFor = (notifications: NotifyRecord[], name: string): string =>
+        (notifications[0]?.message ?? "")
+          .split("\n")
+          .find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor(betaNotifications, "beta");
+      const gammaRow = rowFor(gammaNotifications, "gamma");
+      assert.equal(betaRow, "  ● beta v0.0.1 (installed)");
+      assert.equal(gammaRow, "  ● gamma v0.0.1 (installed)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true install row and the silent install row must COINCIDE",
+      );
+
+      // The records the rows report on. `alpha` is the control: without it a
+      // fixture whose declarations never reached the install would satisfy
+      // every assertion above.
+      const after = await loadState(locations.extensionRoot);
+      const plugins = after.marketplaces["mp"]?.plugins ?? {};
+      assert.equal(
+        plugins["alpha"]?.enabled,
+        false,
+        "control: the declared-false arm proves the declaration was read at all",
+      );
+      assert.equal(plugins["beta"]?.enabled, true, "DFEN-08: a declared-true entry moves nothing");
+      assert.equal(plugins["gamma"]?.enabled, true, "DFEN-08: a silent entry moves nothing");
+
+      // And the configuration entries the write-through authored. Only the
+      // declaring arm gains a key; the other two are left bare, which is what
+      // the reload convergence loop reads as enabled (D-04).
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(cfg.config.plugins?.["alpha@mp"], { enabled: false });
+        assert.deepEqual(cfg.config.plugins?.["beta@mp"], {});
+        assert.deepEqual(cfg.config.plugins?.["gamma@mp"], {});
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // D-103-16 / DFEN-06 / CFG-02 -- the install stamp follows the DECLARATION.
