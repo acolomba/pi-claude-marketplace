@@ -37,7 +37,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-14 - Completed quick task 260814-hdc: Fix GitLab (and any non-GitHub url-kind) clone .git-suffix bug
+Last activity: 2026-08-15 - Completed quick task 260815-h7g: Adopt fallow static analysis as a linting gate
 
 ## Milestone Summary
 
@@ -75,6 +75,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260814-a7m | Add GitLab OAuth Device Flow authentication support (GAUTH-02) | 2026-08-14 | 52f78f56 | [260814-a7m-add-gitlab-oauth-device-flow-authenticat](./quick/260814-a7m-add-gitlab-oauth-device-flow-authenticat/) |
 | 260814-fqf | Withdraw SRCP-01 backlog item -- upstream rejects bare GitLab shorthand too | 2026-08-14 | 7bbefc4a | [260814-fqf-correct-backlog-md-item-srcp-01-based-on](./quick/260814-fqf-correct-backlog-md-item-srcp-01-based-on/) |
 | 260814-hdc | Fix GitLab (and any non-GitHub url-kind) clone .git-suffix bug | 2026-08-14 | 82aa35cb | [260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non](./quick/260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non/) |
+| 260815-h7g | Adopt fallow static analysis as a linting gate | 2026-08-15 | 1d4f478b | [260815-h7g-adopt-fallow-static-analysis-as-a-lintin](./quick/260815-h7g-adopt-fallow-static-analysis-as-a-lintin/) |
 
 ## Decisions
 
