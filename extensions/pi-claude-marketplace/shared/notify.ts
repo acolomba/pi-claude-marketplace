@@ -817,15 +817,28 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
 /**
  * `(available)` -- list-surface row for installable, not-yet-installed
  * plugins. NO `scope` (SNM-11 carve-out: MSG-PL-6 omits `[<scope>]`
- * brackets on available rows); no `reasons`; no `dependencies`. PL-4:
+ * brackets on available rows); no `dependencies`. PL-4:
  * optional `description` rendered as a second 4-space-indented line,
  * truncated at column 66.
+ *
+ * OUT-02 / D-104-03: `reasons` is OPTIONAL here, exactly as on
+ * `PluginInstalledMessage`, `PluginUpdatedMessage`, `PluginReinstalledMessage`
+ * and `PluginDisabledMessage`. It admits exactly ONE member: `installs
+ * disabled`, the author-declared install-time-state token. This row describes a
+ * NOT-INSTALLED candidate, so the token states what an install WOULD do rather
+ * than what one did, and it is stamped from the marketplace ENTRY alone
+ * (D-104-01). Which reasons a surface stamps is an ORCHESTRATOR decision
+ * (D-95-01) -- the render path holds no allowlist, which is what makes this an
+ * addition rather than a widening of the render contract. Absent `reasons`
+ * renders the legacy brace-less row byte-for-byte: `composeReasons` returns `""`
+ * for an undefined list and `joinTokens` collapses the empty slot.
  */
 export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**

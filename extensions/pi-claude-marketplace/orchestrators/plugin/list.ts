@@ -54,7 +54,11 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict, type ResolveContext } from "../../domain/resolver.ts";
+import {
+  entryDeclaresInstallDisabled,
+  resolveStrict,
+  type ResolveContext,
+} from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
@@ -642,6 +646,28 @@ async function availableRowMessage(
   const descriptionField: { readonly description?: string } =
     manifestEntry.description === undefined ? {} : { description: manifestEntry.description };
 
+  // OUT-02 / D-104-01: the claim is sourced from the marketplace ENTRY alone.
+  // The plugin's own manifest is never consulted here -- it is unreadable on a
+  // cold clone, so reading it would make the same plugin render differently warm
+  // and cold, and closing that gap the other way would need a fetch this surface
+  // may not make (OUT-05).
+  //
+  // D-104-03: the token rides NOT-INSTALLED candidate rows, and only those whose
+  // install would actually happen. Both `unavailable` arms are permanently
+  // excluded: nothing installs there, so the token would state what an install
+  // does about an install that cannot occur, and those rows' braces already
+  // carry why. Every installed-record row is untouched by construction -- they
+  // are built elsewhere and never see this field.
+  //
+  // INV-01: same conditional-spread idiom as `notInManifestField` above. Under
+  // `exactOptionalPropertyTypes` an optional field is added by spreading a
+  // conditionally empty object, never by `reasons: cond ? [...] : undefined`.
+  // `NonNullable` because the indexed access on an optional property yields
+  // `| undefined`, which the target rejects.
+  const installsDisabledField: {
+    readonly reasons?: NonNullable<PluginAvailableMessage["reasons"]>;
+  } = entryDeclaresInstallDisabled(manifestEntry) ? { reasons: ["installs disabled"] } : {};
+
   // RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
   // fs-only clone/mirror presence. A cold clone (`not-cached`) is `(remote)` --
   // a valid install target with no local tree to resolve. A warm clone
@@ -708,6 +734,7 @@ async function availableRowMessage(
             name: manifestEntry.name,
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
+            ...installsDisabledField,
           },
           bucket,
         };

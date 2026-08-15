@@ -111,6 +111,11 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       p.reasons,
       probe,
     ),
+  // OUT-02 / D-104-03: the arm threads the row's own `reasons`, and the
+  // orchestrator stamps at most `installs disabled` there -- the not-installed
+  // candidate row's statement about what an install WOULD do. Both soft-dep
+  // flags stay hard-coded false: the SNM-11 no-scope-bracket carve-out family
+  // never emits soft-dependency markers.
   available: (p, probe, mpScope) =>
     joinTokens([
       ICON_AVAILABLE,
@@ -119,7 +124,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
       "(available)",
-      composeReasons(undefined, false, false, probe),
+      composeReasons(p.reasons, false, false, probe),
     ]),
   unavailable: (p, probe, mpScope) =>
     joinTokens([

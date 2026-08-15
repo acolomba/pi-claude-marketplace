@@ -510,6 +510,48 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
   });
 });
 
+test("OUT-02 / D-104-01: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` row; a declared-true entry and a silent entry stay bare", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false },
+          { name: "beta", source: "./beta", version: "1.0.0", defaultEnabled: true },
+          { name: "gamma", source: "./gamma", version: "1.0.0" },
+        ],
+      },
+      installablePluginDirs: ["alpha", "beta", "gamma"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Byte-equal over the whole body, so the three rows prove two facts on one
+    // run. `alpha`'s ENTRY declares that installing it would leave it disabled,
+    // so its row carries the brace -- read offline, with no clone materialized
+    // (D-104-01 / OUT-05). `beta` declares the opposite and `gamma` says nothing
+    // at all; both render exactly the bytes they rendered before the token
+    // existed, which is the no-op parity every plugin that does not use the
+    // field is owed.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ○ alpha v1.0.0 (available) {installs disabled}",
+        "  ○ beta v1.0.0 (available)",
+        "  ○ gamma v1.0.0 (available)",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
 test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available` alone EXCLUDES the cold git source; `--available --remote` includes both", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

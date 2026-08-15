@@ -623,6 +623,42 @@ async function readManifest(
 }
 
 /**
+ * OUT-02 / OUT-03 / D-104-01: the read surfaces' answer to "would installing
+ * this leave it disabled". `list` and `info` source the claim from the
+ * marketplace ENTRY and nothing else -- never from the plugin's own
+ * `plugin.json`, not even where a warm clone makes it readable with no network
+ * at all. The entry is the one source readable for EVERY plugin regardless of
+ * clone state, which is what lets an unfetched `(remote)` row carry the claim,
+ * and it is what makes the same plugin render identically warm and cold. Where
+ * the entry is silent, the surfaces DECLINE to claim; that is the answer, not a
+ * gap. OUT-05: closing the gap the other way would require a fetch these
+ * surfaces may not make.
+ *
+ * The strict comparison against the `false` literal IS the rule, not a
+ * shorthand for it. `!entry.defaultEnabled` is true for an ABSENT field and
+ * would claim on every silent entry; `entry.defaultEnabled !== true` is true
+ * for a non-boolean, which D-104-01 rules silent. Only the strict comparison
+ * says "a literal `false`, and nothing else, is a declaration".
+ *
+ * A non-boolean smuggled past PLUGIN_ENTRY_VALIDATOR therefore degrades to
+ * SILENT, with deliberately no error path -- the mirror of the degradation
+ * `resolveDefaultEnabled` below applies at its own `typeof` narrows.
+ *
+ * D-104-01: this is a SEPARATE function rather than an exported
+ * `resolveDefaultEnabled` called with a null manifest. The one-parameter
+ * signature is the containment mechanism: there is no second parameter a later
+ * caller could feed a plugin manifest through, so no call site can reopen the
+ * warm/cold asymmetry. An exported two-source function invites exactly that.
+ *
+ * The name leads with the SOURCE rather than taking an `is*` prefix because the
+ * source is the load-bearing fact: a reader at the call site needs to know WHICH
+ * declaration was consulted, not merely that a boolean came back.
+ */
+export function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
+  return entry.defaultEnabled === false;
+}
+
+/**
  * DFEN-02: decide the declared install-time enablement. The marketplace ENTRY
  * value wins over the `plugin.json` value in BOTH directions -- an entry `true`
  * beats a manifest `false` just as an entry `false` beats a manifest `true`.
