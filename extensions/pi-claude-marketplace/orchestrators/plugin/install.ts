@@ -156,7 +156,7 @@ import {
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
-  selectConfigWriteTarget,
+  selectDeclaringConfigWriteTarget,
   synthesizeAdoptedMarketplaceSource,
   type LedgerDegradationSignals,
 } from "./shared.ts";
@@ -363,6 +363,14 @@ export interface InstallPluginOptions {
    * of `claude-plugins.json`. The base file is NEVER touched on the
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
+   *
+   * D-103-16: the flag is not the sole determinant of the write target. It
+   * answers which file the caller WANTS written, and it still wins outright.
+   * When it is absent the target follows the file the plugin's declaration
+   * already lives in, and only a key declared in neither file lands in the base
+   * file -- the rule `selectDeclaringConfigWriteTarget` states, shared with
+   * `enable` and `disable` so the three verbs that author an enablement
+   * declaration cannot disagree about where one lives.
    *
    * Two callers set it. The edge handler passes the user's `--local` flag.
    * The reconcile apply loop derives it from
@@ -1543,15 +1551,32 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // every site.
   const disabledInstall: { landed: boolean; cascadeError?: Error } = { landed: false };
 
-  // WB-01: target-path selection happens ONCE before the lock so the
-  // orchestrator NEVER falls back to the base file on ENOENT. The base
-  // file is NEVER touched on the --local path; loadConfig's `absent` arm
-  // yields an empty starting shape that saveConfig writes back to the
-  // local path. UAT-05: the sibling path is the scope's OTHER physical
-  // file, read fresh inside the lock for the merged-view membership test
-  // ONLY -- never written, never serialized back.
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
-  const configBasename = path.basename(targetConfigPath);
+  // WB-01: target-path selection happens ONCE, and both write arms below read
+  // that one decision, so they cannot drift onto different files. The
+  // orchestrator NEVER falls back to the base file on ENOENT: the base file is
+  // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
+  // empty starting shape that saveConfig writes back to the local path. UAT-05:
+  // the sibling path is the scope's OTHER physical file, read fresh inside the
+  // lock for the merged-view membership test ONLY -- never written, never
+  // serialized back.
+  //
+  // D-103-16: the selection now happens INSIDE the lock, because absent the
+  // flag it READS the local config to find where the declaration lives. A
+  // typed `--local` still targets the local file unconditionally; with no flag
+  // the target follows the DECLARATION, and only a key declared in neither file
+  // falls through to the base file (the shape of every fresh install). CFG-02
+  // replaces a same-keyed base entry WHOLESALE, so a stamp written to the base
+  // file under a local declaration moves no merged value: the install reports
+  // success, the merged view the reconcile planner reads is unchanged, and
+  // every reload from then on plans an enable for a plugin that declared
+  // itself off.
+  //
+  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
+  // that row renders after the lock closes, so the basename escapes the closure
+  // through this `let`. It starts at the base file -- the value the no-flag,
+  // no-declaration arm yields -- so the pre-assignment value is never wrong and
+  // the type stays definite.
+  let configBasename = path.basename(locations.configJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
   try {
@@ -1565,6 +1590,31 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
     await withLockedStateTransaction(locations, async (tx) => {
+      // D-103-16: ONE selection, made before anything reads a config path, so
+      // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
+      // address the same physical file. It runs inside the lock because it
+      // READS the local config -- the WB-01 discipline that sibling reads
+      // happen fresh under the lock the write also holds.
+      //
+      // `targetIsLocal` comes back from the selector rather than being
+      // re-derived here: `readDeclaredEnabled` picks the effective ENTRY by
+      // physical-file IDENTITY before it reads that entry's `enabled` field, so
+      // labelling the selected file with the caller's flag instead of with its
+      // own identity swaps which of `current` and the sibling is treated as the
+      // local file. Under a local declaration and no flag that inversion reads
+      // the base file's bare entry as the effective one, reports `enabled`
+      // absent, fires the landed-disabled verdict against the user's explicit
+      // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
+      // violation). The selector computed the locality; asking it is exact
+      // where any second derivation is a chance to disagree.
+      const { targetConfigPath, siblingConfigPath, targetIsLocal } =
+        await selectDeclaringConfigWriteTarget({
+          locations,
+          local: opts.local,
+          key: `${plugin}@${marketplace}`,
+        });
+      configBasename = path.basename(targetConfigPath);
+
       const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
@@ -1611,7 +1661,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       const declaredEnabled = await readDeclaredEnabled({
         current,
         siblingConfigPath,
-        targetIsLocal: opts.local === true,
+        targetIsLocal,
         key: `${plugin}@${marketplace}`,
       });
       disabledInstall.landed =

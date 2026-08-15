@@ -1143,10 +1143,12 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
 // assertion on the flag alone would miss a write that added or removed some
 // other key in the same entry, which is the same trust problem one field over.
 //
-// `seedLocal` puts the declaration in `claude-plugins.local.json` while the
-// install still targets the base file. CFG-02 makes that entry the effective
-// one regardless of where the write lands, so the gate has to read both files;
-// `expectSiblingEntryAfter` then pins what the untargeted file holds afterwards.
+// `seedLocal` puts the declaration in `claude-plugins.local.json`. CFG-02 makes
+// that entry the effective one whatever the write target is, so the gate has to
+// read both files; D-103-16 then aims the write at the file the declaration
+// lives in, so the local-declared rows write the LOCAL file.
+// `expectSiblingEntryAfter` / `expectSiblingKeyAbsent` pin what the untargeted
+// file holds afterwards.
 // ───────────────────────────────────────────────────────────────────────────
 
 interface DfenPrecedenceCase {
@@ -1162,6 +1164,13 @@ interface DfenPrecedenceCase {
   readonly expectEntryAfter: Record<string, unknown>;
   /** The whole entry the OTHER physical file holds after the install, when asserted. */
   readonly expectSiblingEntryAfter?: Record<string, unknown>;
+  /**
+   * D-103-16: the OTHER physical file holds NO entry for the key. Distinct from
+   * `expectSiblingEntryAfter: {}` -- which asserts the file exists and carries a
+   * fieldless entry -- because a file the install never targets may not exist at
+   * all, and `loadConfig` answers `absent` rather than `valid` for it.
+   */
+  readonly expectSiblingKeyAbsent?: boolean;
 }
 
 const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
@@ -1219,13 +1228,13 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectEntryAfter: { enabled: true },
   },
   {
-    // CFG-02: the declaration lives in the LOCAL file and the install targets
-    // the BASE file. A local entry replaces the same-keyed base entry
-    // wholesale, so the user HAS stated an opinion and the manifest never gets
-    // to answer -- reading the write target alone reports the key absent,
-    // installs the plugin disabled against that opinion, and stamps an
-    // `enabled: false` the user never typed into the base file.
-    label: "an `enabled: true` in the local file wins on an install that targets the base file",
+    // CFG-02: the declaration lives in the LOCAL file. A local entry replaces
+    // the same-keyed base entry wholesale, so the user HAS stated an opinion
+    // and the manifest never gets to answer -- reading only one file would
+    // report the key absent, install the plugin disabled against that opinion,
+    // and stamp an `enabled: false` the user never typed.
+    label:
+      "CFG-02 / D-103-16: an `enabled: true` in the local file wins, and the stamp follows it there",
     tmpPrefix: "install-dfen05-local-true-wins-",
     seedLocal: true,
     seededEntry: { enabled: true },
@@ -1233,9 +1242,13 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
-    // The write-back still addresses the base file, and it carries no
-    // `enabled` key: the install landed ENABLED, so there is nothing to stamp.
-    expectSiblingEntryAfter: {},
+    // D-103-16: the write-back addresses the file the declaration LIVES in, so
+    // it goes to the local file and the base file gains nothing -- it is never
+    // created here at all. CR-02's adopted marketplace declaration rides that
+    // same target in one atomic save rather than being split across the two
+    // files; the adoption arm only fires when the marketplace is declared in
+    // neither file, so there is no base-file declaration for it to contradict.
+    expectSiblingKeyAbsent: true,
   },
 ];
 
@@ -1312,12 +1325,190 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
             );
           }
         }
+
+        // The untargeted file may legitimately not exist -- asserting
+        // `status === "valid"` on it would fail against correct behavior.
+        if (precedence.expectSiblingKeyAbsent === true) {
+          const siblingCfg = await loadConfig(siblingPath);
+          const siblingPlugins =
+            siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
+          assert.equal(siblingPlugins?.["hello@mp"], undefined);
+        }
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }
     });
   });
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-103-16 / DFEN-06 / CFG-02 -- the install stamp follows the DECLARATION.
+//
+// A user hand-writes `"hello@mp": {}` into `claude-plugins.local.json` and runs
+// the install with no flag. The read half was already correct: the merged view
+// says `enabled` is absent, so a plugin declaring `defaultEnabled: false` lands
+// disabled. Aiming the WRITE by the flag instead put the `enabled: false` stamp
+// in the base file, where CFG-02's wholesale per-key replacement shadows it --
+// the merged entry still reads `enabled` absent, `isDeclaredEnabled` answers
+// true, and every reload from then on plans an enable for a plugin the author
+// declared off. Unattended, permanent, and reported as success each time.
+//
+// `enable` and `disable` carried the same defect at their own write site and
+// were fixed with the same helper; treat the three as one rule, not as three
+// coincidences. The rule is that a verb AUTHORING an enablement declaration
+// writes where the declaration lives -- said as a rule rather than as a claim
+// about coverage, because `maybeWritePluginConfigBack` still aims by the flag.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL file and moves the merged view", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-stamp-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig, isDeclaredEnabled } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+
+      // The declaration lives ONLY in the local file, and it is bare: the user
+      // named the plugin without stating an opinion about enablement, which is
+      // the one shape the manifest's `defaultEnabled` gets to answer.
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+      assert.deepEqual(
+        notifications.filter((n) => n.severity === "error"),
+        [],
+      );
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+
+      // The stamp landed in the declaring file, as a whole entry.
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], { enabled: false });
+      }
+
+      // The base file gained nothing -- and was never created, so the `absent`
+      // arm is the correct outcome rather than a `valid` file with no key.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
+      assert.equal(basePlugins?.["hello@mp"], undefined);
+
+      // The load-bearing assertion. "The local file gained the key" would also
+      // hold if the stamp went to the base file and something else wrote the
+      // local one; only the MERGED read distinguishes a correct stamp from one
+      // CFG-02 shadows, and the merged view is the planner's only input.
+      const { merged } = await loadMergedScopeConfig(locations);
+      const mergedEntry = merged.plugins["hello@mp"];
+      assert.ok(mergedEntry !== undefined);
+      assert.equal(mergedEntry.source, "local");
+      assert.equal(mergedEntry.entry.enabled, false);
+      assert.equal(isDeclaredEnabled(mergedEntry.entry), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install plans nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-reload-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { applyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+
+      const install = makeCtx();
+      await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+      const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+
+      // What this half proves that the stamp half cannot: a write can land in
+      // the right FILE and still leave the loop open, because whether the
+      // planner sees it depends on the MERGED view rather than on the file. The
+      // planner is the only witness that settles it -- so run a real reload and
+      // then read the plan directly.
+      const reload = makeCtx();
+      await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepEqual(planReconcile(merged, after, "project"), emptyReconcilePlan("project"));
+
+      // The base file is not asserted absent here: a reload materializes a base
+      // config from recorded state when none exists, and its plugin entry is
+      // FIELDLESS. The local entry keeps replacing it wholesale (CFG-02), which
+      // is why the merged view above does not move -- pinned rather than
+      // glossed, so a future change that writes a FIELD there fails a test
+      // instead of silently reversing the user.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
+      const baseEntry = basePlugins?.["hello@mp"];
+      assert.ok(baseEntry === undefined || Object.keys(baseEntry).length === 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // D-102-03 -- a caller that does not opt in installs the plugin ENABLED.
