@@ -131,3 +131,92 @@
   this project has no background autoupdate daemon to begin with.
 - The ~1s delay-before-show interval traces to Nielsen Norman Group's
   classic response-time threshold, not an arbitrary guess.
+
+## Session: 2026-08-14 (GitLab plugin-marketplace parity)
+
+**Date:** 2026-08-14
+**Spikes processed:** 2
+**Feature areas:** GitLab plugin-marketplace parity
+**Skill output:** `./.claude/skills/spike-findings-pi-claude-marketplace/`
+
+### Processed Spikes
+
+| #   | Name                         | Type     | Verdict              | Feature Area |
+| --- | ----------------------------- | -------- | --------------------- | ------------- |
+| 008 | gitlab-bare-source-parsing   | standard | ⚠ VALIDATED (gap)     | GitLab parity |
+| 009 | git-host-auth-hint-coverage  | standard | ⚠ VALIDATED (gap)     | GitLab parity |
+
+### Key Findings
+
+- Full-scheme GitLab URLs (`https://gitlab.com/...`), at any subgroup
+  depth, already parsed correctly with zero code changes -- the generic
+  `url` source kind treats the whole path as one opaque string.
+- The gap spike 008 initially confirmed (bare, schemeless host-prefixed
+  URLs unrecognized for any host) turned out to be parity, not a bug:
+  probing the real, installed `claude` CLI v2.1.232 directly showed
+  upstream rejects the same bare form too. `BACKLOG.md`'s SRCP-01 is
+  marked WITHDRAWN as a direct result -- a clean example of verifying an
+  external product claim against the primary source (the shipped binary)
+  rather than trusting a changelog line's first reading.
+- The git-auth architecture (`hostFromCloneUrl` -> `findProviderForHost`
+  -> `buildAuthForHost`) was already fully host-generic before GitLab was
+  added -- zero `kind === "github"` gating anywhere on the auth path.
+  Adding `GITLAB_PROVIDER` was "append a descriptor," not an architecture
+  change, and shipped same-day.
+- GitLab Device Flow auth (GAUTH-02) landed in production via PR #128 the
+  same day these spikes ran -- this feature area is retrospective, not a
+  forward build plan.
+- Two real, smaller gaps remain open: SRCP-02 (the `git-subdir` source's
+  `url` field doesn't expand the bare `owner/repo` GitHub shorthand
+  upstream's own docs say it should accept) and GAUTH-01 (the host-named
+  auth-failure hint is wired into 1 of 5 relevant call sites).
+
+## Session: 2026-08-15 (Fallow codebase-intelligence adoption)
+
+**Date:** 2026-08-15
+**Spikes processed:** 8
+**Feature areas:** Fallow codebase-intelligence adoption
+**Skill output:** `./.claude/skills/spike-findings-pi-claude-marketplace/`
+
+### Processed Spikes
+
+| #   | Name                          | Type     | Verdict            | Feature Area    |
+| --- | ------------------------------ | -------- | -------------------- | ---------------- |
+| 010 | fallow-dead-code-signal        | standard | ⚠ VALIDATED (gap)   | Fallow adoption |
+| 011 | fallow-circular-deps           | standard | ✓ VALIDATED         | Fallow adoption |
+| 012 | fallow-boundary-fidelity       | standard | ✓ VALIDATED         | Fallow adoption |
+| 013 | fallow-duplication-detection   | standard | ✓ VALIDATED         | Fallow adoption |
+| 014 | fallow-complexity-health       | standard | ✓ VALIDATED         | Fallow adoption |
+| 015 | fallow-security-candidates     | standard | ⚠ VALIDATED (gap)   | Fallow adoption |
+| 016 | fallow-fix-autofix-safety      | standard | ⚠ VALIDATED (gap)   | Fallow adoption |
+| 017 | fallow-ci-overhead             | standard | ✓ VALIDATED         | Fallow adoption |
+
+### Key Findings
+
+- Zero-config `fallow` is close to a no-op on this codebase: it can't see
+  `package.json`'s custom `pi.extensions` entry point, so it autopromotes
+  ~443 of 446 files to their own entry, and `fallow recommend`'s own
+  proposed config points at a nonexistent `src/index.ts`. Real signal
+  needed a hand-authored `entry` config.
+- With that config, real, previously-unknown findings emerged that
+  nothing in this project's ESLint/SonarCloud stack currently catches:
+  7 orphaned barrel/dead files (`domain/index.ts` and siblings), one
+  fully orphaned messaging module, 3 stale devDependencies that
+  contradict this repo's own `STACK.md`, and a verbatim 4-file
+  duplicate clone across `*.messaging.ts` siblings that mirrors an
+  already-Sonar-excluded pattern one directory over.
+- Fallow's architecture-boundary config matched this project's ESLint
+  `no-restricted-paths` gate exactly at the same granularity, and a
+  finer-grained variant caught a real enforcement gap: "cross-bridge
+  imports forbidden" is claimed in an ESLint message string but nothing
+  actually checks it today.
+- Two real landmines if adopted carelessly: `fallow security`'s 131
+  candidates on this codebase were 100% false positives on manual
+  verification (mostly the project's own already-hardened path-safety
+  layer), and `fallow fix --dry-run` proposed deleting at least 39 of
+  172 exports that are test-injection seams the test suite actively
+  imports -- running it unattended would break `node --test`.
+- Performance is a non-issue: every command measured completed in 1-3
+  seconds, negligible against this project's ~3m11s `npm run check`, and
+  `fallow audit`'s new-vs-inherited attribution correctly excludes
+  pre-existing findings from a PR's gate verdict.
