@@ -211,6 +211,22 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   marks as deliberately different behavior -- every "extract shared
   function" suggestion needs a human read of surrounding comments before
   acting (Spike 013).
+- `fallow health`'s top complexity findings exactly match the 8 functions
+  this project already knows are highly complex and has documented,
+  ESLint-suppressed (`eslint-disable-next-line sonarjs/cognitive-complexity`)
+  reasons for keeping that way (e.g. `installPlugin` at cognitive 49,
+  "audited flow matching PI-1..15"). Not a gap -- Fallow just has no
+  awareness of ESLint's suppression comments, so any adoption needs its own
+  `fallow-ignore-next-line` suppression pass for those 8 or CI reports them
+  as new forever. What IS new: this project's ESLint config has no
+  cyclomatic-complexity rule at all, so cyclomatic complexity, function
+  unit-size (434 functions over 60 lines), and file-level maintainability
+  are entirely uncovered today. `--coverage-gaps` is a much weaker claim
+  than it sounds (static test-reachability, not runtime line coverage) and
+  CRAP/file-risk scores need real coverage data
+  (`--coverage <coverage-final.json>`, Istanbul format) wired in -- this
+  project emits `lcov`, so that's a real conversion cost, not a flag
+  (Spike 014).
 
 ## Spikes
 
@@ -230,7 +246,7 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 011  | fallow-circular-deps                | standard   | Given `import-x/no-cycle` (orchestrators-only) and the accepted `bridges/hooks/` cycle knot, when `npx fallow` checks the whole graph, then determine coverage beyond the narrower existing rule and whether the known knot can be accepted                                  | ✓ VALIDATED          | fallow, static-analysis, circular-deps, tooling                          |
 | 012  | fallow-boundary-fidelity            | standard   | Given the 9-zone `no-restricted-paths` config plus custom grep-gate architecture tests, when the same rules are expressed in `.fallowrc.json`, then determine match, gap, or noise                                                                                            | ✓ VALIDATED          | fallow, static-analysis, boundaries, tooling                             |
 | 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | ✓ VALIDATED          | fallow, static-analysis, duplication, tooling                            |
-| 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | PENDING              | fallow, static-analysis, complexity, tooling                             |
+| 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | ✓ VALIDATED          | fallow, static-analysis, complexity, tooling                             |
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | PENDING              | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | PENDING              | fallow, static-analysis, autofix, tooling                                |
 | 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | PENDING              | fallow, static-analysis, ci, tooling                                     |
