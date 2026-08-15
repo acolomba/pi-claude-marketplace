@@ -30,6 +30,21 @@ pipeline -- upstream in Claude Code itself, or in this repo's own
 `plugin.json`/`marketplace.json` handling -- or is it purely an informational
 declaration the user must act on manually?
 
+### Fallow codebase-intelligence adoption (spikes 010-017)
+
+pi-claude-marketplace already enforces architecture boundaries, cycle-freedom,
+complexity, and duplication through a hand-built stack: a 9-zone
+`import-x/no-restricted-paths` config, custom grep-gate architecture tests
+(`no-orchestrator-network`, `no-credential-leak`, `no-shell-out`, `notify-*`
+coverage), `sonarjs/cognitive-complexity`, and SonarCloud (CPD, coverage,
+quality gate). Fallow (`fallow-rs/fallow`, MIT, free static layer) claims to
+cover the same ground plus whole-graph dead-code detection this repo has no
+tooling for today. The question: explore every free Fallow capability against
+the real codebase -- including ones that overlap existing tooling -- to
+determine per-capability signal quality, false-positive risk from this
+project's Pi-extension entry-point patterns, and whether adoption (as a
+manual audit tool, a pre-commit gate, or a CI gate) is worth the cost.
+
 ### Progress messages for long-running operations (spikes 006-007)
 
 Long-running foreground operations -- cloning a marketplace, installing or
@@ -139,6 +154,29 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   `ctx.ui.setStatus`/`setWidget` degrade to a silent no-op outside TUI mode
   by design and need no such guard.
 
+### Fallow codebase-intelligence adoption
+
+- Zero-config Fallow is close to a no-op on this repo -- `dead-code`'s
+  fallback entry-point heuristic autopromotes ~443 of 446 files to their
+  own entry point because it doesn't recognize `pi.extensions` in
+  `package.json` as the real entry. Any adoption MUST ship an explicit
+  `.fallowrc.json` with `entry:
+  ["extensions/pi-claude-marketplace/index.ts"]` -- `fallow recommend`'s
+  own generated default (`src/index.ts`) is wrong for this project and
+  would silently mislead an agent that accepts it uncritically (Spike 010).
+- `production: true` dead-code findings correctly distinguish
+  "unreachable from production" from "reachable only via tests," but this
+  project's `^_`-prefixed test-injection-seam convention
+  (`_setSpawnForTest` and siblings) is invisible to that distinction --
+  every such export shows as "unused" and needs a manual filter pass before
+  any finding is treated as safe to delete (Spike 010).
+- Whole-file, zero-importer dead code (unused barrels like
+  `domain/index.ts`, orphaned modules like
+  `orchestrators/marketplace/info.messaging.ts`) is Fallow's strongest,
+  cleanest signal on this codebase -- every such finding in Spike 010 was a
+  confirmed true positive, and it's a gap none of the existing tooling
+  (ESLint's file-local `no-unused-vars`, SonarCloud) fills (Spike 010).
+
 ## Spikes
 
 | #    | Name                                | Type       | Validates                                                                                                                                                                                                                                                                    | Verdict             | Tags                                                                     |
@@ -153,3 +191,11 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 007b | progress-modality-bordered-loader   | comparison | Given the same helper, when mounted via `ctx.ui.custom()` + `BorderedLoader` for the same simulated clone, then observe the modal, cancellable feel head-to-head against 007a                                                                                                | ✓ WINNER            | pi-extension, ui, progress, tui, comparison                              |
 | 008  | gitlab-bare-source-parsing          | standard   | Given a bare (schemeless) `gitlab.com/group/.../project` string or a full `https://gitlab.com/...` URL with nested subgroups, when passed through `parsePluginSource`, then determine current classification                                                                | ⚠ VALIDATED (gap)    | source-parsing, gitlab, parity                                           |
 | 009  | git-host-auth-hint-coverage         | standard   | Given a non-github git host clone/auth failure, when the credential/auth-host code emits a diagnostic, then determine whether it already names the actual host across all call sites, and whether Device Flow auth is architecturally pluggable per-host                     | ⚠ VALIDATED (gap)    | auth, git-credential, gitlab, parity                                     |
+| 010  | fallow-dead-code-signal             | standard   | Given the real repo's Pi-extension entry points and barrels, when `npx fallow dead-code` runs, then determine signal-to-noise: real dead code vs. false positives from invisible entry points                                                                                | ⚠ VALIDATED (gap)    | fallow, static-analysis, dead-code, tooling                              |
+| 011  | fallow-circular-deps                | standard   | Given `import-x/no-cycle` (orchestrators-only) and the accepted `bridges/hooks/` cycle knot, when `npx fallow` checks the whole graph, then determine coverage beyond the narrower existing rule and whether the known knot can be accepted                                  | PENDING              | fallow, static-analysis, circular-deps, tooling                          |
+| 012  | fallow-boundary-fidelity            | standard   | Given the 9-zone `no-restricted-paths` config plus custom grep-gate architecture tests, when the same rules are expressed in `.fallowrc.json`, then determine match, gap, or noise                                                                                            | PENDING              | fallow, static-analysis, boundaries, tooling                             |
+| 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | PENDING              | fallow, static-analysis, duplication, tooling                            |
+| 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | PENDING              | fallow, static-analysis, complexity, tooling                             |
+| 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | PENDING              | fallow, static-analysis, security, tooling                               |
+| 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | PENDING              | fallow, static-analysis, autofix, tooling                                |
+| 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | PENDING              | fallow, static-analysis, ci, tooling                                     |
