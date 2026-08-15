@@ -153,7 +153,7 @@ The table below holds ONE row per member of the 19-member `PLUGIN_STATUSES` tupl
 | `(will uninstall)`       | ○    | Plugin row -- `/claude:plugin pending` pending-tense uninstall; the pre-transition analog of the realized `(uninstalled)` row.                                                                                                                                                                                                                                                                                             |
 | `(will enable)`          | ●    | Plugin row -- `/claude:plugin pending` pending-tense enable; applies on next reload.                                                                                                                                                                                                                                                                                                                                       |
 | `(will disable)`         | ◍    | Plugin row -- `/claude:plugin pending` pending-tense disable.                                                                                                                                                                                                                                                                                                                                                              |
-| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces and the `/claude:plugin disable` fresh-cascade row when the state record carries the explicit `enabled: false` marker.                                                                                                                                                                                                                                                        |
+| `(disabled)`             | ◍    | Plugin row -- list / info inventory surfaces, the `/claude:plugin disable` fresh-cascade row, and the install surfaces (`/claude:plugin install` and the load-time reconcile cascade) when the plugin's own `defaultEnabled: false` declaration made the install land disabled; the install surfaces carry `{installs disabled}` and the enable-hint trailer, the others render bare.                                      |
 
 Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple; the `autoupdate enabled` / `autoupdate disabled` statuses render the marker-as-outcome forms `<autoupdate>` / `<no autoupdate>` per UXG-04 rather than parenthesised tokens):
 
@@ -524,6 +524,32 @@ A plugin operation needs attention.
 ```
 
 A `--partial` install that succeeds with one or more components dropped (the resolver's `partially-available` arm) renders the `(partially-installed)` row with the dedicated `◉` glyph. The partially-available arm still stages the SUPPORTED components, so a `(partially-installed)` success row carries `dependencies` exactly like a clean `(installed)` row (WR-03). With the `agents` companion extension unloaded the soft-dep marker fires inside the SAME brace as the dropped-component reason -- `composeReasons` appends the `{requires pi-...}` markers AFTER the typed `reasons[]` (MSG-GR-4), so the dropped-component token leads: `{lsp, requires pi-subagents}`. partially-installed is a realized transition, so the reload-hint fires (the caller stamps `needsReload: true`). SEV-01: the unloaded `agents` companion is a silent degradation independent of the dropped components, so the success row stamps `warning` and the cascade carries the `needs attention` summary line (the per-row bytes are unchanged from the info partially-installed form). The direct `--partial` opt-in itself stays benign info -- the warning here is the missing companion, not the partial install.
+
+### Install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
+
+<!-- catalog-state: install-disabled -->
+
+```text
+● official [user]
+  ◍ helper v1.0.0 (disabled) {installs disabled}
+    Run enable on this plugin to use its components.
+```
+
+The plugin's own manifest entry declares `defaultEnabled: false` and the user's config states no opinion, so the ledger ran whole and the disable half then unstaged everything it staged. The `◍` row names the author-declared cause through the closed-set `{installs disabled}` token and carries the frozen enable-hint trailer, which interpolates nothing (T-69-01). Severity `info` -- the desired state WAS reached, because an install-disabled plugin is the author's declared intent, not a shortfall. No reload hint: nothing net entered or left Pi's resource view inside the command.
+
+### Install that lands disabled over a degraded ledger run (WARN-01 / FSTAT-07)
+
+<!-- catalog-state: install-disabled-degraded -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ◍ helper v1.0.0 (disabled) {installs disabled, malformed skill, unsupported component}
+    Run enable on this plugin to use its components.
+```
+
+The same row over a `--partial` install whose skill frontmatter could not be parsed. The cause leads and the durable degradation facts follow it in the same brace: both constrain what the `enable` this row advertises would produce, so suppressing them would leave the user with no surface for them at all (standalone mode drops `postCommitWarnings` per D-19-01). The frontmatter degrade is a shortfall this ledger run just produced, so the row stamps `warning` and the cascade carries the summary line. The soft-dep markers stay suppressed whatever the record retained (ENBL-15 / D-100-06) -- that concern is suspended while the plugin is disabled.
 
 ### Failure -- unsupported features in manifest (partially-available)
 
@@ -2066,6 +2092,20 @@ The load-time reconcile re-enabled a config-declared-enabled disabled record, an
 ```text
 ● local-mp [user]
   ● hello v1.0.0 (installed) {requires pi-subagents}
+
+Reconcile: 1 success
+```
+
+### Load-time install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
+
+The load-time counterpart of the standalone install-disabled row: the user hand-added a bare `"hello@mp": {}` entry, reloaded, and the plugin's own `defaultEnabled: false` declaration made the install land disabled. This is the COMMON way a plugin arrives inert, and nobody is watching a command run when it happens, so the row carries the same closed-set cause token and the same frozen enable-hint trailer the standalone row carries -- without them it would be indistinguishable from a disable the user asked for. The reload stamp is the one deliberate difference: this row shares the realized-transition arm every other reconcile disable uses, whereas the standalone row stamps `false` because nothing net entered or left Pi's resource view inside that command. The trailing tally counts the row as one success.
+
+<!-- catalog-state: reconcile-install-disabled -->
+
+```text
+● local-mp [user]
+  ◍ hello v1.0.0 (disabled) {installs disabled}
+    Run enable on this plugin to use its components.
 
 Reconcile: 1 success
 ```

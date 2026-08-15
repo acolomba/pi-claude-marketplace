@@ -1062,6 +1062,60 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // DFEN-04 / OUT-01 / OUT-04: the install ran whole and then unstaged
+    // because the plugin's own `defaultEnabled` said so. The `◍` row names the
+    // author-declared cause and carries the frozen enable-hint trailer; no
+    // reload hint, because nothing net entered or left Pi's resource view.
+    "install-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["installs disabled"],
+                enableHint: true,
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WARN-01 / FSTAT-07: the same row over a degraded ledger run. The durable
+    // facts ride the same brace after the cause, and the frontmatter degrade
+    // raises the row to warning (so the cascade carries its summary line).
+    "install-disabled-degraded": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["installs disabled", "malformed skill", "unsupported component"],
+                enableHint: true,
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // SEV-02 / D-69-03 / XSURF-01: partially-available install failure -- the row
     // renders the resolver-state-driven `(partially-available)` token (consistent with
     // list / info), carries the `--partial` hint trailer, and renders at error
@@ -4614,6 +4668,36 @@ const FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: ["agents"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // DFEN-04 / OUT-01 / OUT-04: the load-time counterpart of the standalone
+    // install-disabled row. Same cause token and same remedy trailer; the
+    // reload stamp differs (`true` here) because this row shares the arm every
+    // other reconcile disable uses.
+    "reconcile-install-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["installs disabled"],
+                enableHint: true,
                 severity: "info",
                 needsReload: true,
               },
