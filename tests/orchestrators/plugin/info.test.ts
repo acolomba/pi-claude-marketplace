@@ -3519,6 +3519,68 @@ test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `de
   });
 });
 
+test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/warmdecl";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      // The ENTRY says nothing about the install-time default.
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "warmdecl", source: cloneUrl, version: "1.0.0" }],
+      },
+    });
+    // The warm clone's OWN manifest declares what the entry does not, and the
+    // components make the mirror resolve installable rather than empty -- so the
+    // row this produces is a real `(available)` row whose declaration was
+    // available for the reading and was not read.
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "warmdecl", defaultEnabled: false },
+      componentDirs: ["skills/warm-skill"],
+      componentFiles: ["commands/warm-cmd.md"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
+    // Three things this pins, in the order they matter (OUT-05 / D-104-01):
+    //
+    // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
+    //    asserted so the absence of the brace is proven alongside the component
+    //    lines and everything else staying put.
+    //
+    // 2. The marketplace entry is the ONLY source these surfaces read, because
+    //    it is readable for every plugin regardless of clone state. That is what
+    //    lets an unfetched row carry the claim at all, and it is what makes one
+    //    plugin render identically warm and cold.
+    //
+    // 3. What this test is FOR: it fails the moment either read surface starts
+    //    honoring the clone's own declaration. Such a change would LOOK like a
+    //    bug fix -- it would make these surfaces agree with what the install
+    //    path reads -- and it is not one. It reintroduces the warm/cold
+    //    asymmetry, and the only remedy for that asymmetry is a fetch the
+    //    network-free requirement forbids. DOC-02 owns the written-up
+    //    divergence; the full argument lives there.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ warmdecl v1.0.0 (available)",
+        "    commands: warm-cmd",
+        "    skills: warm-skill",
+      ].join("\n"),
+    );
+  });
+});
+
 test("OUT-03 / D-104-03: a `(partially-available)` row appends `installs disabled` at the tail of the degrade token it already carries", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

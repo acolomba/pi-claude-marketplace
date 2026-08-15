@@ -468,14 +468,23 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
  * minimal installable plugin, so the presence probe resolves `materialized` and
  * `resolveStrict` validates the on-disk tree. Uses a canonical url (no `.git`)
  * so the staged mirror key matches the parse-time canonical url the probe hashes.
+ *
+ * `pluginJson` defaults to the minimal installable manifest every caller wanted
+ * before it existed. It is a parameter because one caller needs to stage a warm
+ * clone whose OWN manifest makes a declaration the marketplace entry does not,
+ * in order to prove the read surfaces ignore that second declaration site.
  */
-async function stageWarmMirror(cwd: string, canonicalUrl: string): Promise<void> {
+async function stageWarmMirror(
+  cwd: string,
+  canonicalUrl: string,
+  pluginJson: Record<string, unknown> = { name: "warm-plugin" },
+): Promise<void> {
   const locations = locationsFor("user", cwd);
   const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
   await mkdir(path.join(mirrorDir, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(mirrorDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "warm-plugin" }),
+    JSON.stringify(pluginJson),
   );
   await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
   await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
@@ -866,6 +875,51 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
       await listPlugins({ ctx: c3, pi: p3, cwd, scope: "user", available: true });
       assert.match(n3[0]!.message, /○ warm-plugin v1\.0\.0 \(available\)/, n3[0]!.message);
     }
+  });
+});
+
+test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const canonicalUrl = "https://example.com/warmdecl";
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // The ENTRY says nothing about the install-time default.
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "warmdecl", source: canonicalUrl, version: "1.0.0" }],
+      },
+    });
+    // The warm clone's OWN manifest declares what the entry does not. It is
+    // readable here, fs-only, with no fetch -- which is exactly what makes
+    // ignoring it a decision rather than an inability.
+    await stageWarmMirror(cwd, canonicalUrl, { name: "warmdecl", defaultEnabled: false });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Three things this pins, in the order they matter (OUT-05 / D-104-01):
+    //
+    // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
+    //    asserted so the absence of the brace is proven alongside everything
+    //    else on the row staying put.
+    //
+    // 2. The marketplace entry is the ONLY source these surfaces read, because
+    //    it is readable for every plugin regardless of clone state. That is what
+    //    lets an unfetched row carry the claim at all, and it is what makes one
+    //    plugin render identically warm and cold.
+    //
+    // 3. What this test is FOR: it fails the moment either read surface starts
+    //    honoring the clone's own declaration. Such a change would LOOK like a
+    //    bug fix -- it would make these surfaces agree with what the install
+    //    path reads -- and it is not one. It reintroduces the warm/cold
+    //    asymmetry, and the only remedy for that asymmetry is a fetch the
+    //    network-free requirement forbids. DOC-02 owns the written-up
+    //    divergence; the full argument lives there.
+    assert.equal(out, ["● mp1 [user]", "  ○ warmdecl v1.0.0 (available)"].join("\n"), out);
   });
 });
 
