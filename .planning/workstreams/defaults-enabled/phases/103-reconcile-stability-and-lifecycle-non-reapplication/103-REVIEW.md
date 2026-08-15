@@ -21,7 +21,50 @@ findings:
   warning: 5
   info: 0
   total: 6
-status: issues_found
+status: fixed
+fixed:
+  - id: CR-01
+    commit: e6b03b08
+    note: >-
+      both halves. The selector returns a discriminated `unreadable` arm that
+      TypeScript forces both callers to handle, and the adoption gate now
+      receives `sibling: ScopeConfig | undefined` where `undefined` means
+      unreadable, never "declares nothing"
+  - id: WR-01
+    commit: e6b03b08
+    note: same root as CR-01
+  - id: WR-02
+    commit: e6b03b08
+    note: the inaccurate lock claim in the helper's doc comment
+  - id: WR-03
+    commit: 810c2785
+    note: >-
+      `selectConfigWriteTarget` kept but no longer exported; it is still used
+      internally by the declaring-file selector
+  - id: WR-04
+    commit: e6b03b08
+    note: >-
+      the selector now returns both files' parses, so each config is read once
+      per operation; `readDeclaredEnabled` and `synthesizeAdoptedMarketplaceSource`
+      became synchronous as a result
+  - id: WR-05
+    commit: a05fce3c
+    note: the stale reconcile comment invalidated by the reinstall change
+intended_behavior_changes:
+  - >-
+    A flagless verb over an unreadable `claude-plugins.local.json` now aborts
+    with `(failed) {invalid manifest}` naming that file, where it previously
+    proceeded. This removes an inconsistency rather than adding a restriction:
+    `applyReconcile` already treats an invalid `claude-plugins.local.json` as a
+    hard block for the whole scope and renders the same row, so the standalone
+    verbs were the outlier, guessing around a file the load-time path refuses to
+    guess around.
+  - >-
+    An unreadable sibling config now SKIPS the marketplace adoption write
+    instead of coercing the file to empty and synthesizing an entry. Skipping is
+    safe because the reconcile pass refuses to plan at all for a scope with
+    either file invalid, so no dangling declaration can be acted on before the
+    user repairs it.
 ---
 
 # Phase 103: Code Review Report
