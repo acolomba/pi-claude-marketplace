@@ -112,8 +112,51 @@ lookup mechanism was already fully host-generic (a same-day fix), while the
 host-named hint string was wired into only one of five call sites (a
 separate, still-open follow-up, BACKLOG.md GAUTH-01).
 
+**External CLI-tool spikes run against the real repo root, never a
+fixture:** for "would we benefit from tool X" questions (spikes 010-017,
+`fallow`), install nothing into `package.json` -- run via `npx <tool>`
+with `-r`/`--root` and `-c`/`--config` pointing at the actual project, and
+write outputs into the spike directory (`-o <path>`, or a shell `>`
+redirect when a subcommand's `-o` flag turns out not to work -- spike 016
+found `fallow fix --dry-run --format json -o <path>` silently wrote a
+0-byte file while every other subcommand's `-o` worked correctly). The
+real codebase is the fixture; a synthetic one only proves the tool works
+on toy input, not on this project's actual entry points, naming
+conventions, and known-accepted exceptions.
+
+**Verify a detection mechanism's negative case, not just its positive
+one, by planting a deliberate temporary violation and reverting with `git
+checkout --`:** a clean run alone doesn't prove a detector works -- it
+might be silently misconfigured or scoped narrower than intended. Spike
+012 (`fallow` boundary config): a first attempt at planting a violation in
+a *new, unreferenced* file produced a false "no issues" because the
+checker only examines the entry-point-reachable subgraph; only planting
+the same violation inside an already-reachable file proved the config
+actually worked. Always revert with `git checkout -- <file>` immediately
+after the check, before moving to the next probe.
+
+**A tool's zero-config defaults will silently miss whatever the project's
+own conventions changed:** before trusting any finding from a newly
+adopted static-analysis tool, check its default entry-point/reachability
+model, dependency assumptions (e.g. `node_modules` presence), and naming
+conventions against what the project actually does. Spike 010: zero-config
+`fallow` couldn't see this project's `pi.extensions` custom entry point and
+fell back to autopromoting nearly every file to its own entry, making
+dead-code detection close to a no-op until an explicit `entry` config was
+authored by hand. Spike 016: applying the same tool's autofix suggestions
+unattended would have deleted dozens of `_*ForTest`/`__test_*` test-seam
+exports the tool has no way to recognize as intentional. This generalizes
+the existing "audit method" pattern above (verify by reading the call
+graph, not by trusting a claim) to third-party tool output specifically,
+not just internal legacy-code audits.
+
 ## Tools & Libraries
 
 No new dependencies introduced. Spikes in this project import directly
 from `extensions/pi-claude-marketplace/` using the same relative-path,
 `.ts`-extension import style as `tests/`.
+
+**External CLI tools evaluated via spike are run through `npx`, never
+added as a `package.json` dependency** -- even a favorable verdict (spikes
+010-017, `fallow` v3.16.0) doesn't warrant adding the tool until a real
+adoption decision is made outside the spike process.
