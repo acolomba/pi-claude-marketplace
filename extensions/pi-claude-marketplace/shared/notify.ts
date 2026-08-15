@@ -856,18 +856,33 @@ export interface PluginAvailableMessage extends MessageBase {
  * `(remote)` -- list/info-surface row for a not-installed git-source plugin
  * whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03).
  * Replaces the manifest-only `(available)` over-claim for unfetched git
- * sources. Modeled on `PluginAvailableMessage`: bare row -- NO `scope`
- * (SNM-11 carve-out family, joining `available | partially-available |
- * unavailable`); NO `reasons` (the REASONS closed set does not grow for this
- * row -- parity with `available`); NO `dependencies`. Uses the dedicated
- * `ICON_REMOTE` (`◌`) glyph. PL-4: optional `description` rendered as a second
- * 4-space-indented line, truncated at column 66.
+ * sources. Modeled on `PluginAvailableMessage`: NO `scope` (SNM-11 carve-out
+ * family, joining `available | partially-available | unavailable`); NO
+ * `dependencies`. Uses the dedicated `ICON_REMOTE` (`◌`) glyph. PL-4: optional
+ * `description` rendered as a second 4-space-indented line, truncated at
+ * column 66.
+ *
+ * OUT-02 / OUT-05 / D-104-06: `reasons` is OPTIONAL here, which NARROWS
+ * D-80-03's bare-row rule rather than reversing it. What the row still refuses
+ * is every probe-derived reason and every soft-dependency marker: there is no
+ * materialized tree to derive either from, so a row that carried one would be
+ * claiming more than it can substantiate. What it now admits is exactly ONE
+ * entry-derived member, `installs disabled` -- the author-declared
+ * install-time-state token, sourced from the marketplace ENTRY alone
+ * (D-104-01). That token needs no tree at all, which is what lets an UNFETCHED
+ * row say what an install would do. The closed REASONS set does not grow: the
+ * token already exists (D-104-02), so parity with `available` survives the
+ * narrowing. Which reasons a surface stamps is an ORCHESTRATOR decision
+ * (D-95-01) -- the render path holds no allowlist. Absent `reasons` renders the
+ * legacy brace-less row byte-for-byte: `composeReasons` returns `""` for an
+ * undefined list and `joinTokens` collapses the empty slot.
  */
 export interface PluginRemoteMessage extends MessageBase {
   readonly status: "remote";
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2370,8 +2385,13 @@ function renderPluginRow(
       // not materialized locally. Clones the `available` arm, swapping the
       // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
       // carve-out: `remote` has NO `scope?` field, so the scope bracket is
-      // omitted. Bare row -- NO reasons brace (D-80-03), so the
-      // `composeReasons` line is dropped.
+      // omitted. D-80-03 as narrowed by D-104-06: the row refuses probe- and
+      // soft-dep-derived reasons and admits only the entry-derived `installs
+      // disabled` token.
+      // D-104-06: no producer that renders through THIS arm ever stamps
+      // `reasons` on a remote row, so dropping the `composeReasons` line here is
+      // correct by construction rather than an oversight. The list surface's own
+      // arm, whose producer does stamp, composes it.
       return joinTokens([
         ICON_REMOTE,
         p.name,

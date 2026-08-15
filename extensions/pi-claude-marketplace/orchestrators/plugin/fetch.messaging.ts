@@ -105,6 +105,8 @@ const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
   // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
   // NO reasons brace (D-80-03), so the `composeReasons` line is dropped.
+  // D-104-06: this surface's producer never stamps `reasons` on a remote row, so
+  // dropping the field here is correct by construction rather than an oversight.
   remote: (p, _probe, mpScope) =>
     joinTokens([
       ICON_REMOTE,

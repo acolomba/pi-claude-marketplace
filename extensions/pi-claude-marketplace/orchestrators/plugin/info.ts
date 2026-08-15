@@ -41,6 +41,7 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
+  entryDeclaresInstallDisabled,
   resolveStrict,
   type GitPluginRootResult,
   type ResolveContext,
@@ -900,7 +901,12 @@ async function buildBlock(
     locations,
     ...(fetchCtx !== undefined && { fetchCtx }),
   });
-  return wrapBlock(marketplace, scope, marketplaceDetails, row);
+  return wrapBlock(
+    marketplace,
+    scope,
+    marketplaceDetails,
+    applyInstallDisabledRowShape(row, entry),
+  );
 }
 
 /**
@@ -996,6 +1002,95 @@ function applyDisabledRowShape(
     status: "disabled",
     reasons: (row.reasons ?? []).filter((reason) => DISABLED_ROW_REASONS.has(reason)),
   };
+}
+
+/**
+ * OUT-03 / D-104-03 / D-104-05: which info statuses admit the author-declared
+ * install-time claim.
+ *
+ * A TOTAL map rather than a membership set, and the totality is the whole
+ * point. A `ReadonlySet` of three statuses is a runtime test: a ninth info
+ * status added to `PluginInfoRow` later would inherit "does not carry the
+ * token" silently, and no build step would say so. Keyed by the closed status
+ * union and pinned with `as const satisfies`, a new status instead fails to
+ * compile HERE -- the same missing-arm-is-a-compile-error discipline the render
+ * maps already hold this surface to. `DISABLED_ROW_REASONS` above is not a
+ * counter-example: its members are drawn from the large reason-token tuple,
+ * where a total map would enumerate dozens of irrelevant keys, while an
+ * eight-member status union is precisely the case this idiom exists for.
+ *
+ * The five `false` keys fall into two groups.
+ *
+ * `unavailable` is the structural exclusion. Nothing will install at all, so
+ * the claim would describe an install that cannot happen, and that row's brace
+ * already carries the blocker.
+ *
+ * `installed`, `partially-installed` and `disabled` describe an installation
+ * RECORD, and `failed` describes a block that could not be built at all. The
+ * token is a claim about a FUTURE install; on a record the action is already
+ * taken, so the row reports durable facts about what exists rather than a
+ * prediction about what an install would do. A `disabled` record is the sharp
+ * case: its disabled-ness is a recorded fact, not the same statement as "an
+ * install of this would land disabled", and reporting both would say one thing
+ * twice in two tenses.
+ */
+const INSTALL_DISABLED_ROW_STATUSES = {
+  available: true,
+  remote: true,
+  "partially-available": true,
+  unavailable: false,
+  installed: false,
+  "partially-installed": false,
+  disabled: false,
+  failed: false,
+} as const satisfies Record<PluginInfoRow["status"], boolean>;
+
+/**
+ * OUT-03 / D-104-01 / D-104-04 / D-104-05: stamp the author-declared
+ * install-time claim onto a not-installed candidate row.
+ *
+ * The marketplace ENTRY is the only source. The plugin's own manifest is never
+ * consulted, not even where a warm clone makes it readable with no network at
+ * all: reading it would make the same plugin render differently warm and cold,
+ * and the only way to close that gap the other way is a fetch OUT-05 forbids.
+ * Where the entry is silent the surface DECLINES to claim, which is the answer
+ * rather than a gap.
+ *
+ * D-104-05: applied at the single not-installed CONSUMER, never at the
+ * producers. The not-installed path has eight return sites across five builder
+ * functions, three of which never receive the entry at all -- so threading a
+ * flag would cost five signature edits, would still miss any sixth builder
+ * added later, and would give no compile-time guarantee that it had not. One
+ * consumer is the only form that cannot miss an arm. This is the sibling shape
+ * of `applyDisabledRowShape`, applied at the same function's other arms.
+ *
+ * D-104-04: a row already reporting a read failure still gets the token, and
+ * that is deliberate rather than an accident of applying one function to every
+ * arm. The failure names why the tree could not be read; the token names what
+ * an install would do. The two are independent, so a degraded row states both.
+ * Suppressing the combination would mean gating on the row already having
+ * reasons, which would ALSO suppress the token on the clean
+ * `partially-available` row and contradict D-104-03.
+ *
+ * OUT-05: the token appends at the TAIL, which is observable -- `composeReasons`
+ * joins in array order with no per-row sort -- and matches how the sibling list
+ * surface composes the same pair, so one plugin reads the same on both surfaces.
+ *
+ * `reasons` is set unconditionally rather than through a conditional spread.
+ * `composeReasons` returns the empty string for an absent list and for an empty
+ * one alike, so the two render byte-identically; `applyDisabledRowShape` above
+ * has shipped on exactly that basis. No defensive machinery is needed for a
+ * byte difference that does not exist.
+ */
+function applyInstallDisabledRowShape(
+  row: PluginInfoRow,
+  entry: MarketplaceManifest["plugins"][number],
+): PluginInfoRow {
+  if (!entryDeclaresInstallDisabled(entry) || !INSTALL_DISABLED_ROW_STATUSES[row.status]) {
+    return row;
+  }
+
+  return { ...row, reasons: [...(row.reasons ?? []), "installs disabled"] };
 }
 
 /**

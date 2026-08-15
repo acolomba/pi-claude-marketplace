@@ -178,16 +178,25 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. Clones the `available` arm, swapping the glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
-  // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
-  // NO reasons brace (D-80-03), so the `composeReasons` line is dropped. Body
-  // lifted verbatim from the central `renderPluginRow` remote arm.
-  remote: (p, _probe, mpScope) =>
+  // `remote` has NO `scope?` field, so the scope bracket is omitted. Body
+  // lifted from the central `renderPluginRow` remote arm; the composer line is
+  // this surface's own addition.
+  //
+  // OUT-02 / OUT-05 / D-104-06: D-80-03's bare-row rule NARROWS here rather than
+  // reversing. The row still carries no probe-derived reason and no
+  // soft-dependency marker -- there is no materialized tree to derive either
+  // from, which is why both soft-dep flags stay hard-coded false. It admits
+  // exactly one entry-derived token, `installs disabled`, which needs no tree at
+  // all because the marketplace entry is readable with no clone (D-104-01). That
+  // is what lets an unfetched row state what an install would do.
+  remote: (p, probe, mpScope) =>
     joinTokens([
       ICON_REMOTE,
       p.name,
       renderScopeBracket(undefined, mpScope),
       renderVersion(p.version),
       "(remote)",
+      composeReasons(p.reasons, false, false, probe),
     ]),
 };
 

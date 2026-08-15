@@ -686,12 +686,21 @@ async function availableRowMessage(
       const probe = makePresenceProbe(locations);
       const presence = await probe(parsedSource);
       if (presence.kind === "not-cached") {
+        // OUT-02 / OUT-05 / D-104-06: the cold row is the one that carries the
+        // phase's argument. Nothing is materialized here -- no clone, no
+        // manifest, no tree to resolve -- and the row can still say what an
+        // install would do, because the claim comes from the marketplace entry
+        // the cached `marketplace.json` already holds. A user browsing a
+        // marketplace they have never fetched from is furthest from having run
+        // the install, so a silent row would put the warning only where it is
+        // least needed.
         return {
           message: {
             status: "remote",
             name: manifestEntry.name,
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
+            ...installsDisabledField,
           },
           bucket: "remote",
         };
@@ -742,11 +751,24 @@ async function availableRowMessage(
         // D-64-02 / RSTATE-05: per-kind unsupported markers derive from the
         // typed `unsupported[]` component-kind list via the shared render
         // helper.
+        //
+        // OUT-02 / D-104-03: this arm's `reasons` is REQUIRED and already
+        // populated, so the author-declared token composes into the existing
+        // array instead of spreading `installsDisabledField`. The TAIL position
+        // is deliberate and observable: `composeReasons` joins in array order
+        // and there is no per-row sort, so the degrade tokens lead and the
+        // author-declared cause follows. An entry that does not declare yields
+        // the untouched array.
         return {
           message: {
             status: "partially-available",
             name: manifestEntry.name,
-            reasons: narrowUnsupportedKinds(resolved.unsupported),
+            reasons: [
+              ...narrowUnsupportedKinds(resolved.unsupported),
+              ...(entryDeclaresInstallDisabled(manifestEntry)
+                ? (["installs disabled"] as const)
+                : []),
+            ],
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
           },
@@ -755,6 +777,12 @@ async function availableRowMessage(
         };
       case "unavailable":
         // The structural `unavailable` arm's reasons stay on the `notes` path.
+        //
+        // D-104-03: this arm is PERMANENTLY excluded from the author-declared
+        // `installs disabled` token, and so is the probe-failure catch below.
+        // Nothing will install at all from either path, so the token would
+        // describe an install that cannot happen; the row's brace already
+        // carries the blocker, which is the one thing a user reads this row for.
         return {
           message: {
             status: "unavailable",
