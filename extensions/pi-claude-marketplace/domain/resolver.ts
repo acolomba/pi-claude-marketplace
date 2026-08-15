@@ -623,16 +623,21 @@ async function readManifest(
 }
 
 /**
- * OUT-02 / OUT-03 / D-104-01: the read surfaces' answer to "would installing
- * this leave it disabled". `list` and `info` source the claim from the
- * marketplace ENTRY and nothing else -- never from the plugin's own
- * `plugin.json`, not even where a warm clone makes it readable with no network
- * at all. The entry is the one source readable for EVERY plugin regardless of
- * clone state, which is what lets an unfetched `(remote)` row carry the claim,
- * and it is what makes the same plugin render identically warm and cold. Where
- * the entry is silent, the surfaces DECLINE to claim; that is the answer, not a
- * gap. OUT-05: closing the gap the other way would require a fetch these
- * surfaces may not make.
+ * OUT-02 / OUT-03 / D-104-01: the MANIFEST-side half of the read surfaces'
+ * answer to "would installing this leave it disabled". The other half is the
+ * user's own config declaration, which outranks this one -- `rowClaimsInstallDisabled`
+ * below composes the two and is what the surfaces actually call. This is the
+ * canonical home of the entry-only argument; call sites cite it rather than
+ * restate it.
+ *
+ * `list` and `info` source their manifest-side answer from the marketplace
+ * ENTRY and nothing else -- never from the plugin's own `plugin.json`, not even
+ * where a warm clone makes it readable with no network at all. The entry is the
+ * one source readable for EVERY plugin regardless of clone state, which is what
+ * lets an unfetched `(remote)` row carry the claim, and it is what makes the
+ * same plugin render identically warm and cold. Where the entry is silent, the
+ * surfaces DECLINE to claim; that is the answer, not a gap. OUT-05: closing the
+ * gap the other way would require a fetch these surfaces may not make.
  *
  * The strict comparison against the `false` literal IS the rule, not a
  * shorthand for it. `!entry.defaultEnabled` is true for an ABSENT field and

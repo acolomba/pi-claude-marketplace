@@ -837,12 +837,15 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
  * and `PluginDisabledMessage`. It admits exactly ONE member: `installs
  * disabled`, the author-declared install-time-state token. This row describes a
  * NOT-INSTALLED candidate, so the token states what an install WOULD do rather
- * than what one did, and it is stamped from the marketplace ENTRY alone
- * (D-104-01). Which reasons a surface stamps is an ORCHESTRATOR decision
- * (D-95-01) -- the render path holds no allowlist, which is what makes this an
- * addition rather than a widening of the render contract. Absent `reasons`
- * renders the legacy brace-less row byte-for-byte: `composeReasons` returns `""`
- * for an undefined list and `joinTokens` collapses the empty slot.
+ * than what one did; `domain/resolver.ts::rowClaimsInstallDisabled` owns which
+ * declarations decide that. Which reasons a surface stamps is an ORCHESTRATOR
+ * decision (D-95-01) -- the render path holds no allowlist, which is what makes
+ * this an addition rather than a widening of the render contract. Absent
+ * `reasons` renders the legacy brace-less row byte-for-byte: `composeReasons`
+ * returns `""` for an undefined list and `joinTokens` collapses the empty slot.
+ *
+ * `PluginRemoteMessage` below admits the same member on the same terms and
+ * cites this block rather than restating them.
  */
 export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
@@ -866,16 +869,12 @@ export interface PluginAvailableMessage extends MessageBase {
  * D-80-03's bare-row rule rather than reversing it. What the row still refuses
  * is every probe-derived reason and every soft-dependency marker: there is no
  * materialized tree to derive either from, so a row that carried one would be
- * claiming more than it can substantiate. What it now admits is exactly ONE
- * entry-derived member, `installs disabled` -- the author-declared
- * install-time-state token, sourced from the marketplace ENTRY alone
- * (D-104-01). That token needs no tree at all, which is what lets an UNFETCHED
- * row say what an install would do. The closed REASONS set does not grow: the
- * token already exists (D-104-02), so parity with `available` survives the
- * narrowing. Which reasons a surface stamps is an ORCHESTRATOR decision
- * (D-95-01) -- the render path holds no allowlist. Absent `reasons` renders the
- * legacy brace-less row byte-for-byte: `composeReasons` returns `""` for an
- * undefined list and `joinTokens` collapses the empty slot.
+ * claiming more than it can substantiate. What it now admits is the single
+ * `installs disabled` member `PluginAvailableMessage` admits, on exactly the
+ * terms stated there. That token is derived from declarations rather than from
+ * a tree, which is what lets an UNFETCHED row say what an install would do.
+ * The closed REASONS set does not grow: the token already exists (D-104-02),
+ * so parity with `available` survives the narrowing.
  */
 export interface PluginRemoteMessage extends MessageBase {
   readonly status: "remote";

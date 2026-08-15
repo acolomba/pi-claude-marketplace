@@ -974,10 +974,10 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
     //    asserted so the absence of the brace is proven alongside everything
     //    else on the row staying put.
     //
-    // 2. The marketplace entry is the ONLY source these surfaces read, because
-    //    it is readable for every plugin regardless of clone state. That is what
-    //    lets an unfetched row carry the claim at all, and it is what makes one
-    //    plugin render identically warm and cold.
+    // 2. The marketplace entry is the only MANIFEST-side source these surfaces
+    //    read -- `domain/resolver.ts::entryDeclaresInstallDisabled` carries the
+    //    argument for why, and `rowClaimsInstallDisabled` beside it carries the
+    //    other half of the rule (the user's config opinion is weighed first).
     //
     // 3. What this test is FOR: it fails the moment either read surface starts
     //    honoring the clone's own declaration. Such a change would LOOK like a
