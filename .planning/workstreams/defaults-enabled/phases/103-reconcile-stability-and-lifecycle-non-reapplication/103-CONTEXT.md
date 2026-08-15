@@ -166,6 +166,29 @@ sentence and criterion 4, so neither is a deferral candidate.
   write-target selection. Plan it as its own task with its own regression test
   so it can be reviewed and reverted independently of the rest of the phase.
 
+- **D-103-16: `install`'s standalone write-back must use the same declaring-file
+  selection as D-103-13.** Planning found a THIRD instance of the write-target
+  defect, and this one falsifies criterion 1 outright. Phase 102's review fixed
+  the cross-file READ (`readDeclaredEnabled`,
+  `orchestrators/plugin/install.ts:1442`), but the WRITE half of the same
+  asymmetry survived: the standalone batched patch at `:1699` goes to
+  `targetConfigPath`, still derived from `opts.local` alone at `:1553`.
+
+  The consequence is not a cosmetic mis-file. A user who hand-writes
+  `"foo@mp": {}` into `claude-plugins.local.json` and runs
+  `/claude:plugin install foo@mp` with no flag gets: the read correct (the
+  merged view says `enabled` absent, so the plugin lands disabled), the stamp
+  written into the BASE file, CFG-02 shadowing that stamp wholesale, the merged
+  entry still reading `enabled` absent, `isDeclaredEnabled` answering true, and
+  `orchestrators/reconcile/plan.ts:338` pushing an enable on EVERY reload —
+  forever. That is the milestone's central hazard, live, through the standalone
+  install door, and it is success criterion 1 of this phase being false.
+
+  It is in scope for the same reason D-103-12 and D-103-13 are: the phase's own
+  criteria name it. The fix is one call site once D-103-13's declaring-file
+  helper exists, so it belongs in a wave-2 plan that depends on D-103-13 rather
+  than in a new production seam of its own.
+
 ### Resolving the research's remaining open questions
 
 - **D-103-14: D-103-03 amends the existing matrix row, it does not add a new

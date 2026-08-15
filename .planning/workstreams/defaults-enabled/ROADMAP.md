@@ -183,7 +183,23 @@ Plans:
   3. `update` and `reinstall` on an already-installed plugin never consult `defaultEnabled`, so a plugin release that changes the field does not flip a user who already installed.
   4. The converse holds: a user who ran `enable` on a `defaultEnabled: false` plugin stays enabled across reload, update and reinstall — their explicit choice survives, matching the upstream "an existing setting persists across update and reinstall" rule.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 103-01-PLAN.md — the DFEN-06 fixed point at both seams: the planner cell with its counter-case, and three real `applyReconcile` passes for a base-declared and a locally-declared plugin, each ending in a `planReconcile` call over state and config re-read from disk
+- [ ] 103-02-PLAN.md — DFEN-07 pinned for `update`: a source gate asserting the two lifecycle verbs name neither `defaultEnabled` nor `applyDefaultEnabled`, and a mid-flight manifest flip whose version bump proves the flip was seen
+- [ ] 103-03-PLAN.md — the D-103-12 fix: `reinstall` gains the disabled-record short-circuit `update` already has, so a repair no longer re-enables what the user turned off, plus the truthful row on both surfaces and the reinstall manifest flip
+- [ ] 103-04-PLAN.md — the D-103-13 fix: `enable`/`disable` select their config write target from where the declaration lives rather than from the `--local` flag, plus criterion 4's converse chain end to end for both declaration sites
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 103-06-PLAN.md — the D-103-16 fix: the standalone `install`'s stamp follows the declaration through the same helper, closing the third call site of one defect, with the reload half proving the loop is closed rather than relocated
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 103-05-PLAN.md — the DFEN-08 argument written into the precedence pin plus its missing convergence half, the `ROADMAP.md` criterion-3 reword (D-103-02), and the NFR-6 phase-boundary gate
 
 **Notes**:
 
