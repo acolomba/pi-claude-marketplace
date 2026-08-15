@@ -36,6 +36,8 @@ import {
   applyReconcile,
   surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -43,6 +45,9 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
 
+import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { PluginConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import type { MergedConfigEntry } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface MockCtx {
@@ -1996,6 +2001,127 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
       rec,
       "the second pass must not rewrite the state record",
     );
+  });
+});
+
+/**
+ * Drive three `applyReconcile` passes over a seeded install-disabled scope and
+ * finish at the planner, over the bytes the install actually wrote.
+ *
+ * `declaringConfigPath` is the PHYSICAL file the plugin is declared in, which
+ * is the file the stamp targets and therefore the one whose bytes must not
+ * move again after the first pass.
+ *
+ * Every silence claim here sits behind pass 1's rendered row, because silence
+ * is also what a fixture that never reached the orchestrator produces, and what
+ * a scope that hit the pristine-scope short-circuit produces.
+ *
+ * Returns the capstone's plan and the merged entry the planner read, so a
+ * caller can add the assertions only its declaration site can make.
+ */
+async function assertInstallDisabledReloadFixedPoint(opts: {
+  cwd: string;
+  extensionRoot: string;
+  declaringConfigPath: string;
+}): Promise<{ plan: ReconcilePlan; effective: MergedConfigEntry<PluginConfigEntry> }> {
+  const first = makeCtx();
+  await applyReconcile({
+    ctx: first as unknown as ExtensionContext,
+    pi: STUB_PI,
+    cwd: opts.cwd,
+    scope: "project",
+  });
+
+  // The anchor for everything below.
+  assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
+  const firstArgs = first.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.match(
+    firstArgs[0],
+    /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
+    `expected the full install-disabled row on pass 1; got:\n${firstArgs[0]}`,
+  );
+
+  const declaredAfterFirst = await readFile(opts.declaringConfigPath, "utf8");
+  const recordAfterFirst = (await loadState(opts.extensionRoot)).marketplaces.mp!.plugins.foo!;
+  assert.equal(recordAfterFirst.enabled, false, "the install must land disabled");
+
+  // Two further passes rather than one: a second pass proves only that the
+  // first was not special (D-103-05).
+  for (const pass of [2, 3]) {
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd: opts.cwd,
+      scope: "project",
+    });
+    assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+    assert.equal(
+      await readFile(opts.declaringConfigPath, "utf8"),
+      declaredAfterFirst,
+      `pass ${pass} must leave the declaring config byte-identical`,
+    );
+    assert.deepEqual(
+      (await loadState(opts.extensionRoot)).marketplaces.mp!.plugins.foo,
+      recordAfterFirst,
+      `pass ${pass} must not move the state record`,
+    );
+  }
+
+  // The capstone, and only after the LAST pass. `applyReconcile` returns void,
+  // so there is no plan and no state to capture -- a `loadState` hoisted above
+  // the passes would put the planner's verdict over PRE-install state. The read
+  // order mirrors the one the apply path itself makes.
+  const state = await loadState(opts.extensionRoot);
+  const merged = await loadMergedScopeConfig(locationsFor("project", opts.cwd));
+  const plan = planReconcile(merged.merged, state, "project");
+  assert.deepEqual(
+    plan,
+    emptyReconcilePlan("project"),
+    "D-103-06: the plugin must be absent from all seven action buckets",
+  );
+  assert.ok(
+    !plan.pluginsToEnable.some((p) => p.plugin === "foo" && p.marketplace === "mp"),
+    "foo@mp must not appear in the enable bucket",
+  );
+  assert.ok(
+    !plan.pluginsToDisable.some((p) => p.plugin === "foo" && p.marketplace === "mp"),
+    "foo@mp must not appear in the disable bucket",
+  );
+
+  // Without this the empty plan would also be consistent with a merged view in
+  // which the key is absent for some unrelated reason, and the capstone would
+  // be proving the planner quiet over nothing.
+  const effective = merged.merged.plugins["foo@mp"]!;
+  assert.equal(
+    effective.entry.enabled,
+    false,
+    "the merged entry the planner read must itself say enabled:false",
+  );
+
+  return { plan, effective };
+}
+
+test("DFEN-06 / D-103-04 / D-103-05 / D-103-06: three reloads over a base-declared install-disabled plugin render nothing after the first, move nothing, and leave the planner with nothing to plan", async () => {
+  // The case directly above stops at the apply seam on purpose: it proves no
+  // NET MUTATION on one extra pass, which an apply path that planned an enable
+  // and then failed silently would satisfy just as well. This one goes past it
+  // -- a third pass, nothing rendered, and the PLAN itself empty over state and
+  // config re-read from disk rather than over a hand-built twin of them.
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+
+    const { effective } = await assertInstallDisabledReloadFixedPoint({
+      cwd,
+      extensionRoot,
+      declaringConfigPath: basePath,
+    });
+
+    assert.equal(effective.source, "base", "the base declaration must win the merged view");
   });
 });
 
