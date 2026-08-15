@@ -504,9 +504,55 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), no
-    // reason brace (D-80-03).
+    // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), and no
+    // PROBE- or SOFT-DEP-derived reason brace (D-80-03 as narrowed by
+    // D-104-06). This fixture's entry declares nothing, so there is no
+    // entry-derived token either, and the row is bare on both counts.
     assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
+  });
+});
+
+test("OUT-02 / OUT-05 / D-104-06: a COLD git-source entry declaring `defaultEnabled: false` carries `{installs disabled}` on its `(remote)` row; a silent cold entry stays bare", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "delta",
+            source: "https://example.com/delta.git",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+          { name: "epsilon", source: "https://example.com/epsilon.git", version: "1.0.0" },
+        ],
+      },
+      // No mirror staged for either source: both rows are COLD.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The load-bearing fact is that NO tree exists for either row -- no clone,
+    // no mirror, no plugin manifest to read -- so `delta`'s claim can only have
+    // come from the marketplace ENTRY the cached manifest holds (D-104-01).
+    // That is what makes the claim reachable on the row of a marketplace the
+    // user has never fetched from. `epsilon` is the parity half: a silent entry
+    // renders the bare row byte-for-byte, exactly as the assertion above pins.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ◌ delta v1.0.0 (remote) {installs disabled}",
+        "  ◌ epsilon v1.0.0 (remote)",
+      ].join("\n"),
+      out,
+    );
   });
 });
 
@@ -549,6 +595,125 @@ test("OUT-02 / D-104-01: an entry declaring `defaultEnabled: false` puts `{insta
       ].join("\n"),
       out,
     );
+  });
+});
+
+test("OUT-02 / D-104-03: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // `lspServers` + an on-disk dir resolves `partially-available`, so the
+          // row already carries a degrade token before the entry's declaration
+          // is considered.
+          {
+            name: "zeta",
+            source: "./zeta",
+            version: "1.0.0",
+            lspServers: { ls: {} },
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installablePluginDirs: ["zeta"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The ORDER is asserted deliberately, not incidentally: `composeReasons`
+    // joins the array in order and there is no per-row sort, so the tail
+    // position of the author-declared token is observable output. Reversing the
+    // two tokens in the expected value below fails this test, which is the
+    // point -- a later reordering would be a silent behavior change.
+    assert.equal(
+      out,
+      ["● mp1 [user]", "  ⊖ zeta v1.0.0 (partially-available) {lsp, installs disabled}"].join("\n"),
+      out,
+    );
+  });
+});
+
+test("D-104-03: NEITHER `(unavailable)` path acquires the token -- not the structural resolver arm, not the probe-failure catch -- though both entries declare `defaultEnabled: false`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          // A "/" in the name passes the manifest validator but makes
+          // `resolveStrict` THROW, so this row comes out of the probe-failure
+          // catch rather than the resolver's structural arm.
+          {
+            name: "bad/name",
+            source: "./badname",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+          // No on-disk dir seeded, so this row comes out of the resolver's
+          // structural `unavailable` arm.
+          { name: "gone", source: "./gone", version: "1.0.0", defaultEnabled: false },
+        ],
+      },
+      // No installablePluginDirs: neither entry resolves.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // Byte-equal rather than a non-match, so absence is proven together with
+    // everything else on both rows staying put. The exclusion is deliberate:
+    // nothing will install at all from either path, so the token would state
+    // what an install does about an install that cannot happen, and each row's
+    // brace already carries the blocker the user came to read.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ⊘ bad/name v1.0.0 (unavailable) {unreadable}",
+        "  ⊘ gone v1.0.0 (unavailable) {unsupported source}",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
+test("OUT-02 / D-104-03 / D-95-02: an INSTALLED plugin's row never acquires the token, though its entry declares `defaultEnabled: false`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false }],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha"],
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The durable-versus-transient rule (D-95-02): the token is a claim about an
+    // action NOT YET TAKEN, and a steady-state inventory row states durable
+    // facts about an existing record. Once the plugin is installed the row's
+    // subject is the record, and what an install would have done is no longer
+    // news. This holds because the installed-row builder was never taught the
+    // token -- there is no runtime guard to relax.
+    assert.equal(out, ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"), out);
   });
 });
 
