@@ -6,16 +6,16 @@ current_phase: 102
 current_phase_name: Reason token, install write-through and notification
 current_plan: 3
 status: executing
-stopped_at: Completed 102-03-PLAN.md
-last_updated: "2026-08-15T02:10:00.000Z"
-last_activity: 2026-08-14
-last_activity_desc: 102-03 executed — the reconcile absent-key stamp into the declaring config file and the truthful (disabled) cascade row
+stopped_at: Phase 102 verified — passed with one accepted override
+last_updated: "2026-08-15T03:35:00.000Z"
+last_activity: 2026-08-15
+last_activity_desc: Phase 102 reviewed, fixed and verified — six code-review findings closed, 5/5 success criteria met
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
   completed_plans: 6
-  percent: 20
+  percent: 40
 ---
 
 # Project State
@@ -39,24 +39,23 @@ the resolved value first changes what a user observes.
 
 ## Current Position
 
-Phase: 102 — Reason token, install write-through and notification — EXECUTING
-Plan: 3/3 complete; the phase's plans are done and verification is next
-Status: 102-03 landed — the milestone's central loop is closed end to end
-Last activity: 2026-08-14 — 102-03 executed: a reconcile-driven install of a
-`defaultEnabled: false` plugin records it disabled, stamps `enabled: false` into
-the physical file the declaration lives in (selected from
-`PlannedPluginInstall.configSource`), and reports a `(disabled)` cascade row
-instead of an `(installed)` one. `npm run check` green.
+Phase: 102 — Reason token, install write-through and notification — VERIFIED
+Plan: 3/3 complete, code review closed, verification passed
+Status: 5/5 success criteria met with one accepted override; ready to advance
+Last activity: 2026-08-15 — the code review found two blockers and four
+warnings, all six were fixed with regression tests that fail without their fix,
+and the verifier then confirmed every success criterion against the current tree
+rather than against the plan summaries. `npm run check` green.
 
 ## Progress
 
-**Phases Complete:** 1/5
+**Phases Complete:** 2/5
 **Current Plan:** 102-03 (complete)
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Complete (3/3 plans) |
-| 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Plans complete (3/3), pending verification |
+| 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Complete (3/3 plans), verified |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
 | 105 | No-op parity sweep and contract documentation | DFEN-08, DOC-01, DOC-02 | Not started |
@@ -79,10 +78,56 @@ gate matches this project's domain vocabulary as a known false positive).
 
 ## Open Decisions
 
-Both milestone-level open questions are now **SETTLED** at the Phase 102 discuss
-session (2026-08-14) and recorded as D-102-01..D-102-09 in
+**OPEN — carried into Phase 103 by an accepted override at the Phase 102
+verification gate (2026-08-15). Phase 103's discuss session MUST take this up.**
+
+**The `install` verb honors an explicit config `enabled` only when it says
+`true`.** Success criterion 3 of Phase 102 reads "an `enabled` value already
+present in the config entry wins over `defaultEnabled` … in either direction",
+and only one direction binds the standalone `/claude:plugin install`:
+
+| Config entry | Manifest | `install` result |
+|---|---|---|
+| `enabled: true` | `defaultEnabled: false` | installs enabled — config wins |
+| `enabled: false` | `defaultEnabled: true` | installs ENABLED, artifacts live |
+
+DFEN-05's normative text — the entry is never overwritten — holds in both
+directions and across both physical files, so the requirement itself is met and
+the phase passed. What does not hold is the criterion's illustrative gloss: in
+row 2 the plugin materializes and runs until the next `/reload`, which then
+plans a disable (`orchestrators/reconcile/plan.ts:318-322`) and converges. The
+reconcile surface satisfies the gloss outright. The current behavior was a
+deliberate call — "running `install` IS the user asking for the install",
+documented at `tests/orchestrators/plugin/install.test.ts:1178-1184` — and is
+not a regression: `install` never read the config `enabled` key before Phase 102.
+
+The question for Phase 103: should the install-disabled verdict widen from
+`declaredEnabled === undefined` to also fire on `declaredEnabled === false`?
+Doing so makes the criterion true as written and removes the window in which a
+deliberately-disabled plugin runs, but it broadens the `install` verb beyond
+`defaultEnabled` — it would then honor a config-disabled entry for ANY plugin,
+whether or not its manifest declares the field. The user accepted the current
+contract for 102 and deferred the decision here rather than closing it.
+
+Two smaller items surfaced by the same gate, both outside every Phase 102
+success criterion, both backlog-grade rather than blocking:
+
+- **Standalone retry after a failed disable cascade.** The record is saved, so
+  an immediate re-run of `install` hits the PI-15 `already-installed` gate and
+  the only escape named to the user is `uninstall`. A `/reload` does converge,
+  because the config now declares `enabled: false`
+  (`orchestrators/plugin/install.ts:1638-1653`).
+- **Criterion 2's agents/MCP arm is proven by composition, not directly.** The
+  tests assert skills, commands and hooks are gone from disk; agents and MCP
+  rest on `cascadeUnstagePlugin` covering all five kinds. One `stat` on
+  `locations.agentsDir` and one read of `mcpJsonPath` in the existing
+  `install-out04-row-` fixture would make it direct.
+
+---
+
+The two milestone-level questions raised before Phase 102 are **SETTLED** and
+recorded as D-102-01..D-102-10 in
 `phases/102-reason-token-install-write-through-and-notification/102-CONTEXT.md`.
-No open decisions remain for the milestone.
 
 1. **Materialization path for an install-disabled plugin — SETTLED (D-102-01,
    D-102-02).** Materialize, then disable: run the full six-phase ledger, then
@@ -105,21 +150,23 @@ No open decisions remain for the milestone.
 
 ## Session Continuity
 
-**Last session:** 2026-08-15T02:10:00.000Z
+**Last session:** 2026-08-15T03:35:00.000Z
 
-**Stopped At:** Completed 102-03-PLAN.md — the last plan of phase 102. The
-reconcile stamp goes through `writePluginConfigEntry` inside the lock the
-install already holds, fires only on the landed-disabled verdict (which already
-carries the caller's opt-in and an absent `enabled` key), and addresses the
-declaring physical file via `PlannedPluginInstall.configSource` — its first
-reader anywhere in the tree. The cascade reuses the existing `plugin-disabled`
-outcome kind, so the gated projection arm was not forked. `npm run check` is
-green.
+**Stopped At:** Phase 102 closed. Three plans executed, then a code review found
+two blockers and four warnings and all six were fixed with regression tests that
+fail without their fix. The blockers were a precedence gate that read only one
+physical config file (so an explicit `enabled` in the sibling file was
+overridden and then contradicted) and a failure window that saved a record with
+no matching config declaration (a permanent unconverged state on the reconcile
+path). Verification then confirmed 5/5 success criteria against the tree itself
+rather than against the plan summaries, with one accepted override recorded
+above. `npm run check` is green.
 **Resume File:** None
-**Next Action:** verify phase 102 (`/gsd-verify-work` or the phase's verification
-step). All three plans are executed and summarized; no plan work remains. Phase
-103 (DFEN-06 / DFEN-07) then asserts that the planner produces an empty plan
-over the state this phase writes — deliberately left unasserted in 102-03.
+**Next Action:** discuss, plan and execute phase 103 (DFEN-06 / DFEN-07) —
+reconcile stability and lifecycle non-reapplication. It asserts that the planner
+produces an empty plan over the state phase 102 writes, deliberately left
+unasserted in 102-03. Its discuss session must also take up the open decision
+recorded above.
 
 **Resume requirement:** run GSD from the worktree
 `/home/acolomba/pi-claude-marketplace/.worktrees/defaults-enabled` (branch
