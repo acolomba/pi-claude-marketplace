@@ -230,7 +230,22 @@ Plans:
   4. When the marketplace entry is silent and the value could only come from a `plugin.json` inside an unmaterialized clone, neither surface claims `{installs disabled}` and neither fetches in order to read it. Declining to claim is the correct answer, not a gap.
   5. An installed plugin's row is unaffected — `{installs disabled}` is a statement about a future install, so it never appears on an installed, disabled, partially-installed or degraded row.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 104-01-PLAN.md — the tracer: the one-parameter entry-only domain predicate, the first optional `reasons` field, the `available` render arm and its stamp, one end-to-end byte assertion carrying its own no-op-parity pair, the two corrected charter comments, the predicate's unit contract, and the network gate's new target
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 104-02-PLAN.md — the list expansion: the second optional `reasons` field, the `remote` render arm, the cold-clone and partially-available stamps with the tail-append order pinned, the two by-construction comments on the arms that keep dropping the field, and both `(unavailable)` negatives
+- [ ] 104-03-PLAN.md — the info surface: one post-hoc composer at the single not-installed consumer gated by a total status map, four positive rows including the degraded combined form, and four negative rows each driven by an input that declares
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 104-04-PLAN.md — the negative guarantees: two offline guards that observe the effect rather than the fixture, the warm-clone declining case on both surfaces (the phase's tripwire against closing the entry-only divergence), and the render-map live-field guard for the two new optional fields
+- [ ] 104-05-PLAN.md — the contract surface: three catalog block/fixture pairs under the byte-equality runner, and the four sentence corrections that stop two documents asserting the bare-row rule this phase narrowed
 
 **Notes**:
 
@@ -282,7 +297,7 @@ Plans:
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
 | 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
-| 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
+| 104. Pre-install read surfaces | defaults-enabled | 0/5 | Planned     | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
 
 ## Requirement Coverage
