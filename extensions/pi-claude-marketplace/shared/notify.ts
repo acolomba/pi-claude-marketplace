@@ -185,8 +185,8 @@ export const REASONS = [
   // -- a row describing a record that already EXISTS, whose disabled-ness the
   // USER chose: a `disable` verb row, a steady-state list / info inventory row,
   // a reconcile-driven disable -- MUST NOT carry it. A NOT-INSTALLED CANDIDATE
-  // row on the `list` / `info` read surfaces DOES carry it (D-104-03), stating
-  // what an install WOULD do to a record that does not exist yet.
+  // row on the `list` / `info` read surfaces DOES carry it (OUT-02 / OUT-03),
+  // stating what an install WOULD do to a record that does not exist yet.
   //
   // The durable-versus-transient rule is what separates them (D-95-01 /
   // D-95-02): a steady-state inventory row states durable facts about a record,
@@ -832,7 +832,7 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
  * optional `description` rendered as a second 4-space-indented line,
  * truncated at column 66.
  *
- * OUT-02 / D-104-03: `reasons` is OPTIONAL here, exactly as on
+ * OUT-02: `reasons` is OPTIONAL here, exactly as on
  * `PluginInstalledMessage`, `PluginUpdatedMessage`, `PluginReinstalledMessage`
  * and `PluginDisabledMessage`. It admits exactly ONE member: `installs
  * disabled`, the author-declared install-time-state token. This row describes a
@@ -865,7 +865,7 @@ export interface PluginAvailableMessage extends MessageBase {
  * `description` rendered as a second 4-space-indented line, truncated at
  * column 66.
  *
- * OUT-02 / OUT-05 / D-104-06: `reasons` is OPTIONAL here, which NARROWS
+ * OUT-02 / OUT-05 / RSTA-01: `reasons` is OPTIONAL here, which NARROWS
  * D-80-03's bare-row rule rather than reversing it. What the row still refuses
  * is every probe-derived reason and every soft-dependency marker: there is no
  * materialized tree to derive either from, so a row that carried one would be
@@ -873,7 +873,7 @@ export interface PluginAvailableMessage extends MessageBase {
  * `installs disabled` member `PluginAvailableMessage` admits, on exactly the
  * terms stated there. That token is derived from declarations rather than from
  * a tree, which is what lets an UNFETCHED row say what an install would do.
- * The closed REASONS set does not grow: the token already exists (D-104-02),
+ * The closed REASONS set does not grow: the token already exists (OUT-01),
  * so parity with `available` survives the narrowing.
  */
 export interface PluginRemoteMessage extends MessageBase {
@@ -2384,10 +2384,10 @@ function renderPluginRow(
       // not materialized locally. Clones the `available` arm, swapping the
       // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
       // carve-out: `remote` has NO `scope?` field, so the scope bracket is
-      // omitted. D-80-03 as narrowed by D-104-06: the row refuses probe- and
+      // omitted. D-80-03 as narrowed by OUT-05: the row refuses probe- and
       // soft-dep-derived reasons and admits only the entry-derived `installs
       // disabled` token.
-      // D-104-06: no producer that renders through THIS arm ever stamps
+      // OUT-05 / RSTA-01: no producer that renders through THIS arm ever stamps
       // `reasons` on a remote row, so dropping the `composeReasons` line here is
       // correct by construction rather than an oversight. The list surface's own
       // arm, whose producer does stamp, composes it.

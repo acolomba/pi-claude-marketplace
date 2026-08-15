@@ -153,7 +153,7 @@ export type FailureReason = (typeof FAILURE_REASONS)[number];
  * not complete), nor an unsupported component (Pi cannot install the thing).
  * What these rows add is the author's DECLARATION as the cause.
  *
- * OUT-02 / OUT-03 / D-104-03: a declaration is equally reportable before the
+ * OUT-02 / OUT-03: a declaration is equally reportable before the
  * action and after it, so the group spans two tenses. On an install row the
  * desired state IS reached and the declaration explains why the result is
  * inert. On a not-installed candidate row nothing has happened yet and the

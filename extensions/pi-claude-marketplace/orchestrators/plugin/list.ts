@@ -659,7 +659,7 @@ async function availableRowMessage(
   // function for the precedence and for why the plugin's own manifest is never
   // consulted.
   //
-  // D-104-03: the token rides NOT-INSTALLED candidate rows, and only those whose
+  // OUT-02: the token rides NOT-INSTALLED candidate rows, and only those whose
   // install would actually happen. Both `unavailable` arms are permanently
   // excluded: nothing installs there, so the token would state what an install
   // does about an install that cannot occur, and those rows' braces already
@@ -699,7 +699,7 @@ async function availableRowMessage(
       const probe = makePresenceProbe(locations);
       const presence = await probe(parsedSource);
       if (presence.kind === "not-cached") {
-        // OUT-02 / OUT-05 / D-104-06: the cold row is the hardest case for the
+        // OUT-02 / OUT-05 / RSTA-01: the cold row is the hardest case for the
         // entry-only rule, and the one that justifies it. Nothing is
         // materialized here -- no clone, no manifest, no tree to resolve -- and
         // the row can still say what an install would do, because the claim
@@ -765,7 +765,7 @@ async function availableRowMessage(
         // typed `unsupported[]` component-kind list via the shared render
         // helper.
         //
-        // OUT-02 / D-104-03: this arm's `reasons` is REQUIRED and already
+        // OUT-02: this arm's `reasons` is REQUIRED and already
         // populated, so the author-declared token composes into the existing
         // array instead of spreading `installsDisabledField`. The TAIL position
         // is deliberate and observable: `composeReasons` joins in array order
@@ -789,7 +789,7 @@ async function availableRowMessage(
       case "unavailable":
         // The structural `unavailable` arm's reasons stay on the `notes` path.
         //
-        // D-104-03: this arm is PERMANENTLY excluded from the author-declared
+        // OUT-02: this arm is PERMANENTLY excluded from the author-declared
         // `installs disabled` token, and so is the probe-failure catch below.
         // Nothing will install at all from either path, so the token would
         // describe an install that cannot happen; the row's brace already

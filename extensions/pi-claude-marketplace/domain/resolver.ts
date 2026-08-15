@@ -623,12 +623,13 @@ async function readManifest(
 }
 
 /**
- * OUT-02 / OUT-03 / D-104-01: the MANIFEST-side half of the read surfaces'
+ * OUT-02 / OUT-03 / OUT-05 / DOC-02: the MANIFEST-side half of the read surfaces'
  * answer to "would installing this leave it disabled". The other half is the
  * user's own config declaration, which outranks this one -- `rowClaimsInstallDisabled`
  * below composes the two and is what the surfaces actually call. This is the
  * canonical home of the entry-only argument; call sites cite it rather than
- * restate it.
+ * restate it. `docs/plugin-enablement.md` is the durable home of the full
+ * argument, including the precedence table this half belongs to.
  *
  * `list` and `info` source their manifest-side answer from the marketplace
  * ENTRY and nothing else -- never from the plugin's own `plugin.json`, not even
@@ -642,14 +643,14 @@ async function readManifest(
  * The strict comparison against the `false` literal IS the rule, not a
  * shorthand for it. `!entry.defaultEnabled` is true for an ABSENT field and
  * would claim on every silent entry; `entry.defaultEnabled !== true` is true
- * for a non-boolean, which D-104-01 rules silent. Only the strict comparison
+ * for a non-boolean, which OUT-05 / DOC-02 rules silent. Only the strict comparison
  * says "a literal `false`, and nothing else, is a declaration".
  *
  * A non-boolean smuggled past PLUGIN_ENTRY_VALIDATOR therefore degrades to
  * SILENT, with deliberately no error path -- the mirror of the degradation
  * `resolveDefaultEnabled` below applies at its own `typeof` narrows.
  *
- * D-104-01: this is a SEPARATE function rather than an exported
+ * OUT-05 / DOC-02: this is a SEPARATE function rather than an exported
  * `resolveDefaultEnabled` called with a null manifest. The one-parameter
  * signature is the containment mechanism: there is no second parameter a later
  * caller could feed a plugin manifest through, so no call site can reopen the

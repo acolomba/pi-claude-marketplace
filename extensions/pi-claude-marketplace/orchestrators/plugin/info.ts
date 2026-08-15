@@ -1012,7 +1012,7 @@ function applyDisabledRowShape(
 }
 
 /**
- * OUT-03 / D-104-03 / D-104-05: which info statuses admit the author-declared
+ * OUT-03: which info statuses admit the author-declared
  * install-time claim.
  *
  * A TOTAL map rather than a membership set, and the totality is the whole
@@ -1053,7 +1053,7 @@ const INSTALL_DISABLED_ROW_STATUSES = {
 } as const satisfies Record<PluginInfoRow["status"], boolean>;
 
 /**
- * OUT-03 / D-104-01 / D-104-04 / D-104-05: stamp the author-declared
+ * OUT-03 / OUT-05 / DOC-02: stamp the author-declared
  * install-time claim onto a not-installed candidate row.
  *
  * DFEN-04: both inputs of the claim -- the user's config opinion
@@ -1063,7 +1063,7 @@ const INSTALL_DISABLED_ROW_STATUSES = {
  * plugin's own manifest is never consulted. What is decided HERE is only which
  * ROW SHAPES may carry the answer.
  *
- * D-104-05: applied at the single not-installed CONSUMER, never at the
+ * OUT-03: applied at the single not-installed CONSUMER, never at the
  * producers. The not-installed path has eight return sites across five builder
  * functions, three of which never receive the entry at all -- so threading a
  * flag would cost five signature edits, would still miss any sixth builder
@@ -1071,13 +1071,13 @@ const INSTALL_DISABLED_ROW_STATUSES = {
  * consumer is the only form that cannot miss an arm. This is the sibling shape
  * of `applyDisabledRowShape`, applied at the same function's other arms.
  *
- * D-104-04: a row already reporting a read failure still gets the token, and
+ * OUT-03: a row already reporting a read failure still gets the token, and
  * that is deliberate rather than an accident of applying one function to every
  * arm. The failure names why the tree could not be read; the token names what
  * an install would do. The two are independent, so a degraded row states both.
  * Suppressing the combination would mean gating on the row already having
  * reasons, which would ALSO suppress the token on the clean
- * `partially-available` row and contradict D-104-03.
+ * `partially-available` row and contradict OUT-03.
  *
  * OUT-05: the token appends at the TAIL, which is observable -- `composeReasons`
  * joins in array order with no per-row sort -- and matches how the sibling list

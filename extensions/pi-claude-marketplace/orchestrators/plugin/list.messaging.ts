@@ -111,7 +111,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       p.reasons,
       probe,
     ),
-  // OUT-02 / D-104-03: the arm threads the row's own `reasons`, and the
+  // OUT-02: the arm threads the row's own `reasons`, and the
   // orchestrator stamps at most `installs disabled` there -- the not-installed
   // candidate row's statement about what an install WOULD do. Both soft-dep
   // flags stay hard-coded false: the SNM-11 no-scope-bracket carve-out family
@@ -182,13 +182,13 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // lifted from the central `renderPluginRow` remote arm; the composer line is
   // this surface's own addition.
   //
-  // OUT-02 / OUT-05 / D-104-06: D-80-03's bare-row rule NARROWS here rather than
+  // OUT-02 / OUT-05 / RSTA-01: D-80-03's bare-row rule NARROWS here rather than
   // reversing. The row still carries no probe-derived reason and no
   // soft-dependency marker -- there is no materialized tree to derive either
   // from, which is why both soft-dep flags stay hard-coded false. It admits
   // exactly one entry-derived token, `installs disabled`, which needs no tree at
-  // all because the marketplace entry is readable with no clone (D-104-01). That
-  // is what lets an unfetched row state what an install would do.
+  // all because the marketplace entry is readable with no clone (OUT-05 /
+  // DOC-02). That is what lets an unfetched row state what an install would do.
   remote: (p, probe, mpScope) =>
     joinTokens([
       ICON_REMOTE,
