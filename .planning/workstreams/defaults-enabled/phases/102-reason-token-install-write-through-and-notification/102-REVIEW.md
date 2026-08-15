@@ -21,7 +21,32 @@ findings:
   warning: 4
   info: 2
   total: 8
-status: issues_found
+status: fixed
+fixed:
+  - id: CR-01
+    commit: f7b25a11
+    note: >-
+      precedence read now spans both physical config files; the merged ENTRY is
+      selected before its `enabled` field is read, because CFG-02 replaces the
+      entry wholesale
+  - id: CR-02
+    commit: 9549f43e
+    note: >-
+      the early `tx.save(); return;` was removed so the failure path falls
+      through to the existing per-mode write arms; no fourth writer added
+  - id: WR-01
+    commit: f1555f05
+  - id: WR-04
+    commit: f1555f05
+  - id: WR-02
+    commit: 0ad20290
+  - id: WR-03
+    commit: ee536f1e
+skipped:
+  - id: IN-01
+    note: resolved by WR-02 — the row composition is now shared, not dead
+  - id: IN-02
+    note: existing house style; four render arms left as they are
 ---
 
 # Phase 102: Code Review Report
