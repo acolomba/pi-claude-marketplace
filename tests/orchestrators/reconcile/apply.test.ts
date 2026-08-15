@@ -1356,43 +1356,52 @@ test("S10 / PR #51: writeMarketplaceConfigEntry's `as MarketplaceConfigEntry` ca
 async function seedRealPathMarketplace(opts: {
   parentDir: string;
   marketplaceName: string;
-  pluginName: string;
-  version: string;
-  /**
-   * DFEN-04: stamp `defaultEnabled` onto the MARKETPLACE ENTRY when supplied.
-   * The entry is the side that WINS the precedence rule over the plugin's own
-   * `plugin.json`, so a fixture that declares it here cannot resolve through
-   * the fallback and pass for the wrong reason. Absent writes the entry
-   * exactly as it was before, leaving every pre-existing caller unaffected.
-   */
-  entryDefaultEnabled?: boolean;
+  /** Map of plugin name -> { version, entryDefaultEnabled? }. */
+  manifestPlugins: Record<
+    string,
+    {
+      version: string;
+      /**
+       * DFEN-04: stamp `defaultEnabled` onto the MARKETPLACE ENTRY when
+       * supplied. The entry is the side that WINS the precedence rule over the
+       * plugin's own `plugin.json`, so a fixture that declares it here cannot
+       * resolve through the fallback and pass for the wrong reason. Absent
+       * writes NO such key on the entry at all, which is the arm every plugin
+       * that never heard of the field lands on.
+       */
+      entryDefaultEnabled?: boolean;
+    }
+  >;
 }): Promise<{ mpRoot: string; manifestPath: string }> {
   const mpRoot = path.join(opts.parentDir, "mp-src-" + opts.marketplaceName);
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
-  const pluginRoot = path.join(mpRoot, "plugins", opts.pluginName);
-  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: opts.pluginName, version: opts.version }),
-  );
-  const skillDir = path.join(pluginRoot, "skills", "s1");
-  await mkdir(skillDir, { recursive: true });
-  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+
+  for (const [pluginName, spec] of Object.entries(opts.manifestPlugins)) {
+    const pluginRoot = path.join(mpRoot, "plugins", pluginName);
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: pluginName, version: spec.version }),
+    );
+
+    const skillDir = path.join(pluginRoot, "skills", "s1");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+  }
+
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: opts.marketplaceName,
-      plugins: [
-        {
-          name: opts.pluginName,
-          source: `./plugins/${opts.pluginName}`,
-          version: opts.version,
-          ...(opts.entryDefaultEnabled !== undefined && {
-            defaultEnabled: opts.entryDefaultEnabled,
-          }),
-        },
-      ],
+      plugins: Object.entries(opts.manifestPlugins).map(([pluginName, spec]) => ({
+        name: pluginName,
+        source: `./plugins/${pluginName}`,
+        version: spec.version,
+        ...(spec.entryDefaultEnabled !== undefined && {
+          defaultEnabled: spec.entryDefaultEnabled,
+        }),
+      })),
     }),
   );
   return { mpRoot, manifestPath };
@@ -1416,8 +1425,7 @@ test("T1 / PR #51: load-time ENABLE through applyReconcile -- disabled record + 
     const { mpRoot, manifestPath } = await seedRealPathMarketplace({
       parentDir: home,
       marketplaceName: "mp",
-      pluginName: "foo",
-      version: "1.2.3",
+      manifestPlugins: { foo: { version: "1.2.3" } },
     });
 
     // Base config: declared enabled (an absent `enabled` field defaults to
@@ -1560,8 +1568,7 @@ test("T3 / PR #51: direct pluginsToUninstall bucket through applyReconcile -- ma
     const { mpRoot, manifestPath } = await seedRealPathMarketplace({
       parentDir: home,
       marketplaceName: "mp",
-      pluginName: "foo",
-      version: "1.2.3",
+      manifestPlugins: { foo: { version: "1.2.3" } },
     });
 
     // Config: marketplace STAYS declared; the plugin entry is DELETED.
@@ -1854,9 +1861,7 @@ async function seedDefaultDisabledInstallScope(opts: {
   const { mpRoot, manifestPath } = await seedRealPathMarketplace({
     parentDir: opts.home,
     marketplaceName: "mp",
-    pluginName: "foo",
-    version: "1.2.3",
-    entryDefaultEnabled: false,
+    manifestPlugins: { foo: { version: "1.2.3", entryDefaultEnabled: false } },
   });
 
   const basePath = path.join(projectScopeRoot, "claude-plugins.json");
