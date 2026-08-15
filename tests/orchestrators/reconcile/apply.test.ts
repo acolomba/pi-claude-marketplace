@@ -37,6 +37,8 @@ import {
   surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { fixtureMarketplaceDir, makeMockGitOps } from "../../helpers/git-mock.ts";
@@ -1278,6 +1280,14 @@ async function seedRealPathMarketplace(opts: {
   marketplaceName: string;
   pluginName: string;
   version: string;
+  /**
+   * DFEN-04: stamp `defaultEnabled` onto the MARKETPLACE ENTRY when supplied.
+   * The entry is the side that WINS the precedence rule over the plugin's own
+   * `plugin.json`, so a fixture that declares it here cannot resolve through
+   * the fallback and pass for the wrong reason. Absent writes the entry
+   * exactly as it was before, leaving every pre-existing caller unaffected.
+   */
+  entryDefaultEnabled?: boolean;
 }): Promise<{ mpRoot: string; manifestPath: string }> {
   const mpRoot = path.join(opts.parentDir, "mp-src-" + opts.marketplaceName);
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
@@ -1300,6 +1310,9 @@ async function seedRealPathMarketplace(opts: {
           name: opts.pluginName,
           source: `./plugins/${opts.pluginName}`,
           version: opts.version,
+          ...(opts.entryDefaultEnabled !== undefined && {
+            defaultEnabled: opts.entryDefaultEnabled,
+          }),
         },
       ],
     }),
@@ -1720,4 +1733,281 @@ test("Y7 / PR #51: index.ts last-ditch error notify uses errorMessage(err) so no
     !indexSrc.includes("(err as Error).message"),
     "Y7: index.ts must NOT retain the pre-fix `(err as Error).message` cast",
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DFEN-04 / DFEN-05 -- the reconcile-driven install of a plugin whose own
+// declaration says `defaultEnabled: false`.
+//
+// The cases below pin three things the stamp must get right: that it fires at
+// all (so the state lands where the planner reads desired enablement from),
+// that it addresses the PHYSICAL file the declaration lives in, and that it
+// never rewrites a value the user wrote.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Seed a project scope in which `foo@mp` is DECLARED but not recorded, so the
+ * planner classifies it into the install bucket, and whose marketplace entry
+ * declares `defaultEnabled: false`.
+ *
+ * The marketplace itself IS recorded, pointing at a real on-disk path clone
+ * outside the scope dir, so the install resolves and materializes with no
+ * network (NFR-5).
+ */
+async function seedDefaultDisabledInstallScope(opts: {
+  cwd: string;
+  home: string;
+  base: Record<string, object>;
+  local?: Record<string, object>;
+}): Promise<{ basePath: string; localPath: string; extensionRoot: string }> {
+  const projectScopeRoot = path.join(opts.cwd, ".pi");
+  const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+  await mkdir(extensionRoot, { recursive: true });
+
+  const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+    parentDir: opts.home,
+    marketplaceName: "mp",
+    pluginName: "foo",
+    version: "1.2.3",
+    entryDefaultEnabled: false,
+  });
+
+  const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+  await writeFile(
+    basePath,
+    JSON.stringify(
+      { schemaVersion: 1, marketplaces: { mp: { source: mpRoot } }, plugins: opts.base },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const localPath = path.join(projectScopeRoot, "claude-plugins.local.json");
+  if (opts.local !== undefined) {
+    await writeFile(
+      localPath,
+      JSON.stringify({ schemaVersion: 1, plugins: opts.local }, null, 2),
+      "utf8",
+    );
+  }
+
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+            addedFromCwd: opts.cwd,
+            manifestPath,
+            marketplaceRoot: mpRoot,
+            plugins: {},
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  return { basePath, localPath, extensionRoot };
+}
+
+test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defaultEnabled:false installs disabled AND gains enabled:false in claude-plugins.json; a second pass writes nothing new", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The record exists and is disabled, with its inventory retained: ENBL-18
+    // keeps `resources.*` populated across a disable, so the record still
+    // names what the plugin WOULD materialize once enabled.
+    const persisted = await loadState(extensionRoot);
+    const rec = persisted.marketplaces.mp!.plugins.foo!;
+    assert.equal(rec.enabled, false, "the install must land disabled");
+    assert.ok(
+      rec.resources.skills.length > 0,
+      "ENBL-18: the disabled record must retain its skill inventory",
+    );
+
+    // Nothing the plugin declares is on disk -- the ledger ran whole and then
+    // unstaged.
+    const locations = locationsFor("project", cwd);
+    assert.equal(
+      await pathExists(path.join(locations.skillsTargetDir, "foo-s1")),
+      false,
+      "a disabled install must leave no staged skill behind",
+    );
+
+    // The stamp, read from the PHYSICAL base file. The whole entry is asserted
+    // rather than just the key, so a write that added a second field fails.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["foo@mp"],
+      { enabled: false },
+      "DFEN-04: the declaring base entry must gain enabled:false and nothing else",
+    );
+
+    // The sibling physical file is not conjured into existence by a stamp
+    // that belongs in the base file.
+    assert.equal(
+      await pathExists(localPath),
+      false,
+      "a base-declared stamp must NOT create claude-plugins.local.json",
+    );
+
+    // The cascade says what it did: a (disabled) row, never an (installed) one
+    // over a record that is disabled.
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(disabled)"),
+      `expected a (disabled) row for foo; got:\n${args[0]}`,
+    );
+    assert.ok(
+      !args[0].includes("(installed)"),
+      `an install that landed disabled must NOT render (installed); got:\n${args[0]}`,
+    );
+
+    // Fixed point AT THIS SEAM: a second pass writes neither the config nor
+    // the record. Whether the planner plans an action at all is a separate
+    // question (DFEN-06) with its own coverage -- asserting it here would
+    // pre-empt it, so this checks only what this seam can observe.
+    const baseAfterFirst = await readFile(basePath, "utf8");
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseAfterFirst,
+      "the second pass must not rewrite the config entry",
+    );
+    assert.deepEqual(
+      (await loadState(extensionRoot)).marketplaces.mp!.plugins.foo,
+      rec,
+      "the second pass must not rewrite the state record",
+    );
+  });
+});
+
+test("DFEN-04 / D-102-04: a locally-declared bare entry stamps claude-plugins.local.json, leaves the base file byte-identical, and the MERGED view reads enabled:false", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: {},
+      local: { "foo@mp": {} },
+    });
+    const baseBefore = await readFile(basePath, "utf8");
+
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.marketplaces.mp!.plugins.foo!.enabled, false);
+
+    // The stamp followed the declaration into the local file.
+    const local = JSON.parse(await readFile(localPath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(local.plugins["foo@mp"], { enabled: false });
+
+    // WR-09: the base file is the reconcile's input and stays untouched.
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "a locally-declared stamp must NOT rewrite the base config",
+    );
+
+    // The case above asserts the physical file because a base declaration and
+    // the merged view agree by construction. Here they can DISAGREE: CFG-02
+    // replaces the whole entry per key, so a stamp written into the base file
+    // would leave the merged view still reading `enabled` absent -- and an
+    // assertion that only asked "did some file gain the key" would pass over
+    // exactly that defect. The merged read is what distinguishes them.
+    const merged = await loadMergedScopeConfig(locationsFor("project", cwd));
+    const effective = merged.merged.plugins["foo@mp"]!;
+    assert.equal(effective.source, "local");
+    assert.equal(
+      effective.entry.enabled,
+      false,
+      "DFEN-04: the effective entry the planner reads must say enabled:false",
+    );
+    assert.equal(isDeclaredEnabled(effective.entry), false);
+  });
+});
+
+test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the plugin ENABLED and is left exactly as the user wrote it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": { enabled: true } },
+    });
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The user's explicit word beats the plugin's declared default, in this
+    // direction as well as the other.
+    const persisted = await loadState(extensionRoot);
+    assert.equal(persisted.marketplaces.mp!.plugins.foo!.enabled, true);
+    const locations = locationsFor("project", cwd);
+    assert.equal(
+      await pathExists(path.join(locations.skillsTargetDir, "foo-s1")),
+      true,
+      "an entry declaring enabled:true must materialize the plugin's artifacts",
+    );
+
+    // The entry is left as pre-seeded -- the stamp answers the ABSENT key only.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(base.plugins["foo@mp"], { enabled: true });
+
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      args[0].includes("foo") && args[0].includes("(installed)"),
+      `expected the ordinary (installed) row for foo; got:\n${args[0]}`,
+    );
+  });
 });
