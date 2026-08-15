@@ -1,0 +1,1112 @@
+{
+  "dry_run": true,
+  "fixes": [
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/github-auth.ts",
+      "line": 310,
+      "name": "DEFAULT_DEVICE_FLOW_HTTP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts",
+      "line": 98,
+      "name": "planMarketplaceSourcesForRefs"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts",
+      "line": 200,
+      "name": "STOP_FAILURE_ERROR_TYPES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts",
+      "line": 104,
+      "name": "DISPATCHABLE_EVENTS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts",
+      "line": 50,
+      "name": "LIST_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 21,
+      "name": "CLAUDE_MARKETPLACE_MARKER_KEY"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 21,
+      "name": "buildMarker"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 21,
+      "name": "isOwnedBy"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 21,
+      "name": "readMarker"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 20,
+      "name": "MCP_COLLISION_SLOTS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 20,
+      "name": "loadEffectiveServerNames"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 19,
+      "name": "parseMcpServers"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+      "line": 19,
+      "name": "resolvePluginMcpServers"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
+      "line": 71,
+      "name": "assertNoSkillCollisions"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+      "line": 2349,
+      "name": "__test_narrowProbeError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/errors-bridges.ts",
+      "line": 95,
+      "name": "BridgeStagingError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/errors-bridges.ts",
+      "line": 24,
+      "name": "AgentForeignContentError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts",
+      "line": 10,
+      "name": "parseEnabledPluginRef"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
+      "line": 98,
+      "name": "pidTablePath"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
+      "line": 60,
+      "name": "ASYNC_REWAKE_PID_TABLE_VERSION"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
+      "line": 53,
+      "name": "ASYNC_REWAKE_PIDS_FILENAME"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 209,
+      "name": "_awaitLastPidTablePersistForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 199,
+      "name": "_getRegistryForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 194,
+      "name": "_resetOrphanProbesForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 189,
+      "name": "_setOrphanProbesForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 184,
+      "name": "_resetDispatchIdGeneratorForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 179,
+      "name": "_setDispatchIdGeneratorForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 174,
+      "name": "_resetSpawnForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 169,
+      "name": "_setSpawnForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+      "line": 82,
+      "name": "MARKER_ENV"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/agents-index-schema.ts",
+      "line": 48,
+      "name": "AGENTS_INDEX_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/agents-index-schema.ts",
+      "line": 26,
+      "name": "AGENTS_INDEX_ENTRY_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+      "line": 944,
+      "name": "partitionHooks"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+      "line": 290,
+      "name": "ifPredicateMapKey"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+      "line": 252,
+      "name": "HOOKS_VALIDATOR"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+      "line": 244,
+      "name": "HOOKS_CONFIG_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
+      "line": 77,
+      "name": "assertNoCommandCollisions"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/marker.ts",
+      "line": 41,
+      "name": "GENERATED_AGENT_MARKER_LEGACY"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/marker.ts",
+      "line": 25,
+      "name": "GENERATED_AGENT_PREFIX"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/errors.ts",
+      "line": 283,
+      "name": "ConcurrentUninstallError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
+      "line": 146,
+      "name": "hasLoadedPiMcpAdapter"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
+      "line": 133,
+      "name": "hasLoadedPiSubagents"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts",
+      "line": 31,
+      "name": "MCP_COLLISION_SLOTS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/skills/index.ts",
+      "line": 22,
+      "name": "rewriteFrontmatterName"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+      "line": 338,
+      "name": "buildItem"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "line": 2084,
+      "name": "__test_clonePluginRecord"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "line": 2007,
+      "name": "__test_findManualRecoveryError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "line": 1959,
+      "name": "__test_errorWithManualRecovery"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "line": 1035,
+      "name": "__test_outcomeToPluginMessage"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+      "line": 877,
+      "name": "__test_renderReinstallPartitionAndNotify"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/resolver.ts",
+      "line": 1425,
+      "name": "resolveLoose"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/resolver.ts",
+      "line": 354,
+      "name": "UNSUPPORTED_COMPONENT_KINDS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/resolver.ts",
+      "line": 325,
+      "name": "SUPPORTED_COMPONENT_KINDS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/resolver.ts",
+      "line": 219,
+      "name": "ResolvedPluginSchema"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts",
+      "line": 29,
+      "name": "DEPENDENCIES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts",
+      "line": 88,
+      "name": "WRAPPER_STRIP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 994,
+      "name": "_setRoutingBucketForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 983,
+      "name": "_bumpEpochForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 974,
+      "name": "_peekPendingSessionStartContextForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 962,
+      "name": "_resetForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 954,
+      "name": "_parsedConfigCacheForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 945,
+      "name": "_routingTableForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 359,
+      "name": "beforeAgentStartHandlerFor"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+      "line": 217,
+      "name": "addPluginConfigToCache"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts",
+      "line": 17,
+      "name": "STDIN_TRUNCATION_BYTES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+      "line": 1095,
+      "name": "__test_snapshotAfterRefresh"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+      "line": 1086,
+      "name": "__test_outcomeToCascadePluginMessage"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts",
+      "line": 98,
+      "name": "mergeClaudeSettings"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts",
+      "line": 28,
+      "name": "resolveClaudeSettingsPaths"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      "line": 1463,
+      "name": "surfacePostCommitWarnings"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      "line": 1139,
+      "name": "__test_scanForceInstalledBackfills"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      "line": 984,
+      "name": "__test_applyBackfillForScopeIsolated"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      "line": 254,
+      "name": "classifyOrchestratorThrow"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts",
+      "line": 107,
+      "name": "FAILURE_REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts",
+      "line": 91,
+      "name": "UNSUPPORTED_REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify-reasons.ts",
+      "line": 37,
+      "name": "IDEMPOTENT_REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 524,
+      "name": "MARKETPLACE_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 472,
+      "name": "PLUGIN_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 314,
+      "name": "PATTERN_CLASSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 299,
+      "name": "MARKERS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 243,
+      "name": "STATUS_TOKENS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/notify.ts",
+      "line": 90,
+      "name": "REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+      "line": 1418,
+      "name": "__test_availableRowMessage"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+      "line": 1410,
+      "name": "__test_narrowListFailReason"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+      "line": 1409,
+      "name": "__test_narrowProbeError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts",
+      "line": 29,
+      "name": "UNINSTALL_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts",
+      "line": 144,
+      "name": "CATALOG_VERBS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+      "line": 400,
+      "name": "invalidateMarketplaceCache"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+      "line": 250,
+      "name": "getMarketplaceNames"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+      "line": 87,
+      "name": "PLUGIN_INDEX_CACHE_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+      "line": 65,
+      "name": "MARKETPLACE_NAMES_CACHE_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts",
+      "line": 53,
+      "name": "PLUGIN_INFO_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts",
+      "line": 42,
+      "name": "UPDATE_MP_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts",
+      "line": 45,
+      "name": "REMOVE_PRIVATE_REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts",
+      "line": 36,
+      "name": "REMOVE_MP_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts",
+      "line": 27,
+      "name": "readMarker"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts",
+      "line": 88,
+      "name": "PLUGIN_MANIFEST_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts",
+      "line": 72,
+      "name": "resolvePluginMcpServers"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts",
+      "line": 29,
+      "name": "parseMcpServers"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts",
+      "line": 89,
+      "name": "BOOLEAN_FLAGS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
+      "line": 823,
+      "name": "__test_narrowCascadeFailure"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+      "line": 262,
+      "name": "renderPartition"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
+      "line": 34,
+      "name": "REINSTALL_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts",
+      "line": 107,
+      "name": "_resetExecutorForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts",
+      "line": 99,
+      "name": "_setExecutorForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/router.ts",
+      "line": 182,
+      "name": "routeMarketplace"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/router.ts",
+      "line": 107,
+      "name": "MARKETPLACE_USAGE"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/router.ts",
+      "line": 91,
+      "name": "TOP_LEVEL_USAGE"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
+      "line": 52,
+      "name": "deepSubstitute"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts",
+      "line": 32,
+      "name": "UPDATE_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts",
+      "line": 35,
+      "name": "collectBinDirs"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/config-io.ts",
+      "line": 93,
+      "name": "CONFIG_VALIDATOR"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/config-io.ts",
+      "line": 71,
+      "name": "CONFIG_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/config-io.ts",
+      "line": 55,
+      "name": "PLUGIN_CONFIG_ENTRY_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/config-io.ts",
+      "line": 45,
+      "name": "MARKETPLACE_CONFIG_ENTRY_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/shared/markers.ts",
+      "line": 24,
+      "name": "STATE_LOCK_HELD_PREFIX"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts",
+      "line": 77,
+      "name": "PI_TO_CLAUDE_TOOL_NAMES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+      "line": 89,
+      "name": "GITLAB_PROVIDER"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/completions/data.ts",
+      "line": 502,
+      "name": "getPluginToMarketplacesMap"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/completions/data.ts",
+      "line": 241,
+      "name": "getScopeCompletions"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/completions/data.ts",
+      "line": 161,
+      "name": "buildItem"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts",
+      "line": 46,
+      "name": "IMPORT_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts",
+      "line": 39,
+      "name": "FETCH_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
+      "line": 34,
+      "name": "hookConfigPathFor"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+      "line": 2439,
+      "name": "__test_narrowResolverReasons"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+      "line": 2438,
+      "name": "__test_composeInstallFailureMessage"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+      "line": 2437,
+      "name": "__test_classifyInstallFailure"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+      "line": 2436,
+      "name": "__test_classifyEntityShapeError"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+      "line": 1289,
+      "name": "__test_staleGateDropped"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/index.ts",
+      "line": 41,
+      "name": "findOwnershipConflicts"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/index.ts",
+      "line": 41,
+      "name": "partitionByOwner"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
+      "line": 42,
+      "name": "INSTALL_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
+      "line": 159,
+      "name": "projectRowStatus"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+      "line": 70,
+      "name": "WRAPPER_STRIP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+      "line": 70,
+      "name": "bashSubcommandFires"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+      "line": 70,
+      "name": "parseBashSubcommands"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+      "line": 67,
+      "name": "compileBashGlob"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+      "line": 67,
+      "name": "compilePathGlob"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
+      "line": 145,
+      "name": "_resetSpawnForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
+      "line": 140,
+      "name": "_setSpawnForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/platform/git.ts",
+      "line": 429,
+      "name": "buildAuthCallbacks"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/platform/git.ts",
+      "line": 312,
+      "name": "listRemotes"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/platform/git.ts",
+      "line": 304,
+      "name": "listBranches"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts",
+      "line": 58,
+      "name": "DISABLE_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts",
+      "line": 44,
+      "name": "ENABLE_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+      "line": 381,
+      "name": "synthesizeUndeclaredMarketplaceSource"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/state-io.ts",
+      "line": 255,
+      "name": "STATE_VALIDATOR"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/state-io.ts",
+      "line": 240,
+      "name": "STATE_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/persistence/state-io.ts",
+      "line": 84,
+      "name": "PLUGIN_INSTALL_RECORD_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts",
+      "line": 43,
+      "name": "parseFetchTarget"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts",
+      "line": 36,
+      "name": "NOAUTOUPDATE_MP_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts",
+      "line": 28,
+      "name": "AUTOUPDATE_MP_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+      "line": 65,
+      "name": "THINKING_VALUES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+      "line": 54,
+      "name": "TOOL_MAP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+      "line": 44,
+      "name": "MODEL_MAP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+      "line": 23,
+      "name": "generatedAgentName"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts",
+      "line": 40,
+      "name": "ADD_PRIVATE_REASONS"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts",
+      "line": 28,
+      "name": "ADD_MP_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/version.ts",
+      "line": 57,
+      "name": "looksLikeShaVersion"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/version.ts",
+      "line": 44,
+      "name": "SHA_VERSION_RE"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/version.ts",
+      "line": 25,
+      "name": "HASH_WALK_SKIP"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts",
+      "line": 422,
+      "name": "_peekLoopStateForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts",
+      "line": 414,
+      "name": "_peekSettleCacheForTest"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts",
+      "line": 151,
+      "name": "RECONCILE_APPLIED_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts",
+      "line": 68,
+      "name": "PENDING_STATUSES"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/manifest.ts",
+      "line": 40,
+      "name": "MARKETPLACE_VALIDATOR"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/domain/manifest.ts",
+      "line": 26,
+      "name": "MARKETPLACE_SCHEMA"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+      "line": 176,
+      "name": "normalizeBody"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+      "line": 67,
+      "name": "sanitizeProvenanceValue"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+      "line": 48,
+      "name": "emitYamlScalar"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+      "line": 35,
+      "name": "GENERATED_AGENT_MARKER"
+    },
+    {
+      "type": "remove_export",
+      "path": "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts",
+      "line": 62,
+      "name": "parsePositionalsWithFlags"
+    },
+    {
+      "type": "add_ignore_exports",
+      "config_key": "ignoreExports",
+      "file": ".planning/spikes/010-fallow-dead-code-signal/fallowrc-explicit-entry.json",
+      "entries": [
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts",
+          "exports": ["*"]
+        },
+        { "file": "../../../extensions/pi-claude-marketplace/shared/errors.ts", "exports": ["*"] },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts",
+          "exports": ["*"]
+        },
+        {
+          "file": "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts",
+          "exports": ["*"]
+        }
+      ],
+      "proposed_diff": "--- .planning/spikes/010-fallow-dead-code-signal/fallowrc-explicit-entry.json (current)\n+++ .planning/spikes/010-fallow-dead-code-signal/fallowrc-explicit-entry.json (proposed)\n@@ -1,4 +1,70 @@\n {\n   \"entry\": [\"extensions/pi-claude-marketplace/index.ts\"],\n-  \"production\": true\n+  \"production\": true,\n+  \"ignoreExports\": [\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/domain/components/hooks.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/shared/errors.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts\",\n+      \"exports\": [\"*\"]\n+    },\n+    {\n+      \"file\": \"../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts\",\n+      \"exports\": [\"*\"]\n+    }\n+  ]\n }\n",
+      "dry_run": true
+    }
+  ],
+  "total_fixed": 0,
+  "skipped": 0,
+  "skipped_content_changed": 0,
+  "skipped_mixed_line_endings": 0,
+  "skipped_low_confidence_exports": 0
+}

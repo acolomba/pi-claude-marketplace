@@ -239,6 +239,20 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   for this codebase. Low value as a gate here specifically because this
   codebase already documents its own safety invariants in comments; would
   likely be higher-value on a less-documented codebase (Spike 015).
+- `fallow fix --dry-run` is NOT safe to apply unattended on this codebase:
+  at least 39 of 172 proposed export removals (a lower-bound count from
+  naming convention alone) are `_*ForTest`/`__test_*` test-injection seams
+  or other test-only-consumed exports (e.g. `GITLAB_PROVIDER`) the test
+  suite actively imports -- applying the list would break `node --test`
+  immediately. `fix` inherits Spike 010's production-reachability blind
+  spot and turns it into a destructive action, not just a report. It IS
+  appropriately conservative elsewhere: it declined to auto-resolve Spike
+  013's duplicate-export ambiguity, deferring to a config `ignoreExports`
+  suppression instead of guessing, and in this run it never proposed
+  removing whole files or `package.json` dependencies even though both
+  categories had confirmed real findings in Spike 010. Any adoption needs
+  a hand-authored `ignoreExports` allowlist for every test seam BEFORE the
+  first unattended run (Spike 016).
 
 ## Spikes
 
@@ -260,5 +274,5 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | ✓ VALIDATED          | fallow, static-analysis, duplication, tooling                            |
 | 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | ✓ VALIDATED          | fallow, static-analysis, complexity, tooling                             |
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | ⚠ VALIDATED (gap)    | fallow, static-analysis, security, tooling                               |
-| 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | PENDING              | fallow, static-analysis, autofix, tooling                                |
+| 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | ⚠ VALIDATED (gap)    | fallow, static-analysis, autofix, tooling                                |
 | 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | PENDING              | fallow, static-analysis, ci, tooling                                     |
