@@ -5,31 +5,19 @@ import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07 architectural surface guard.
  *
- * Forbidden surface, by file:
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/install.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`.
- *     install.ts itself carries ZERO git surface: a git-source plugin
- *     (url / git-subdir / github) clone is delegated to the `clone-cache.ts`
- *     sibling seam (a gitOps consumer outside this gate's candidate set,
- *     where the git surface legally lives), which install imports by
- *     its own entrypoint name (`materializePluginClone` / `resolvePluginPin`)
- *     and never names `gitOps`. install still reads the cached manifest with no
- *     network sync of its own; the only network touch is the cache-miss clone
- *     inside the seam (NFR-5 amended).
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`
- *     (PL-3 + NFR-5: list is read-only against state + manifest; no network).
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` or reference
- *     `refreshGitHubClone` (PRL-07: reinstall uses cached manifests only).
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (INFO-02 +
- *     NFR-5: info is a read-only seam over the local state + on-disk
- *     marketplace manifests; no network).
- *   - extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts
- *     MUST NOT import `gitOps` / `platform/git` / `DEFAULT_GIT_OPS` (INFO-01 +
- *     NFR-5: marketplace info is read-only against local state +
- *     marketplace.json; no network).
+ * Forbidden surface:
+ *   Every file named in the `FORBIDDEN_TARGETS` array below MUST NOT import
+ *   `gitOps` / `platform/git` / `DEFAULT_GIT_OPS`, nor reference
+ *   `refreshGitHubClone`. That array is the authoritative target list and
+ *   every entry carries its own rationale beside it, so the set is NOT
+ *   restated here -- a hand-maintained second copy of an annotated list only
+ *   drifts out of step with it.
+ *
+ *   What the gate covers, in general terms: the network-free modules. Those
+ *   are the read-only plugin and marketplace orchestrators, the reconcile
+ *   pending/planner/projection family, and one file OUTSIDE the orchestrator
+ *   layer -- the resolver -- whose obligation is inherited from the two read
+ *   surfaces it answers for.
  *
  * Exempt files (do NOT add):
  *   - orchestrators/plugin/update.ts
@@ -51,10 +39,25 @@ import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
  *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
+  // NFR-5 (amended): install.ts carries ZERO git surface of its own. A
+  // git-source (url / git-subdir / github) clone is delegated to the
+  // clone-cache.ts sibling seam -- a gitOps consumer outside this gate's
+  // candidate set, where the git surface legally lives -- which install
+  // imports by entrypoint name (`materializePluginClone` / `resolvePluginPin`)
+  // and never names `gitOps`. install reads the cached manifest with no
+  // network sync of its own; the only network touch is the cache-miss clone
+  // inside the seam.
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+  // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+  // PRL-07: reinstall uses cached manifests only -- which is also why
+  // refreshGitHubClone is one of the gated patterns.
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+  // INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
+  // marketplace manifests; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+  // INFO-01 + NFR-5: marketplace info is read-only against local state +
+  // marketplace.json; no network.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
   // DIFF-01 SC #2: the reconcile pending/planner/projection
   // family is read-only and pure. pending.ts is the user-facing orchestrator;
@@ -98,6 +101,6 @@ test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps 
     FORBIDDEN_TARGETS,
     FORBIDDEN_PATTERNS,
     (offenders) =>
-      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in plugin orchestrator(s):\n  ${offenders.join("\n  ")}\n  (install.ts, list.ts, and reinstall.ts are network-free by contract; only update.ts is permitted to import gitOps via Pattern S-9.)`,
+      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in network-free module(s):\n  ${offenders.join("\n  ")}\n  (every gated target is network-free by contract; among the gated orchestrator candidates, only update.ts is permitted to import gitOps via Pattern S-9.)`,
   );
 });
