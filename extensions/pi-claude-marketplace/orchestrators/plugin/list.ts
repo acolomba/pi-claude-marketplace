@@ -693,14 +693,14 @@ async function availableRowMessage(
       const probe = makePresenceProbe(locations);
       const presence = await probe(parsedSource);
       if (presence.kind === "not-cached") {
-        // OUT-02 / OUT-05 / D-104-06: the cold row is the one that carries the
-        // phase's argument. Nothing is materialized here -- no clone, no
-        // manifest, no tree to resolve -- and the row can still say what an
-        // install would do, because the claim comes from the marketplace entry
-        // the cached `marketplace.json` already holds. A user browsing a
-        // marketplace they have never fetched from is furthest from having run
-        // the install, so a silent row would put the warning only where it is
-        // least needed.
+        // OUT-02 / OUT-05 / D-104-06: the cold row is the hardest case for the
+        // entry-only rule, and the one that justifies it. Nothing is
+        // materialized here -- no clone, no manifest, no tree to resolve -- and
+        // the row can still say what an install would do, because the claim
+        // comes from the marketplace entry the cached `marketplace.json`
+        // already holds. A user browsing a marketplace they have never fetched
+        // from is furthest from having run the install, so a silent row would
+        // put the warning only where it is least needed.
         return {
           message: {
             status: "remote",
