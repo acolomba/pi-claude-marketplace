@@ -72,6 +72,14 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   // candidates, update.ts is the only file allowed the gitOps surface (seam
   // files such as clone-cache.ts sit outside this gate's candidate set).
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
+  // NFR-5 / OUT-05: the resolver now answers a question for `list` and `info`,
+  // two surfaces that are network-free by contract, so the file that answers it
+  // inherits their obligation. It carries no git surface today, which is exactly
+  // why the gate is cheap here -- it is defense in depth, and it is the
+  // STRUCTURAL half of the network-free guarantee. The behavioral half can only
+  // show that no call happened on the paths a test exercises; it can never show
+  // the surface is absent.
+  "extensions/pi-claude-marketplace/domain/resolver.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
