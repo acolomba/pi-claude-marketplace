@@ -253,6 +253,18 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   categories had confirmed real findings in Spike 010. Any adoption needs
   a hand-authored `ignoreExports` allowlist for every test seam BEFORE the
   first unattended run (Spike 016).
+- Wall-clock overhead is not a blocker: full baseline scans (dead-code +
+  dupes + health, ~1.2s), a full security scan (~1.1s), and a PR-gate
+  `fallow audit` run against a real 18-file branch diff (~2.5s) are all
+  negligible next to this project's ~3m11s `npm run check`. `audit`'s
+  new-vs-inherited attribution is real, not just documented: it correctly
+  excluded Spike 010's 3 known-stale devDependencies from this branch's
+  gate verdict as pre-existing (inherited from `main`), so adopting it as
+  a required PR check would not create false-fail noise on unrelated
+  findings. The blocking cost for adoption is entirely upfront
+  configuration and convention-teaching (an `entry` field, a boundary
+  config, an `ignoreExports` allowlist for test seams), not runtime
+  (Spike 017).
 
 ## Spikes
 
@@ -275,4 +287,4 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | ✓ VALIDATED          | fallow, static-analysis, complexity, tooling                             |
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | ⚠ VALIDATED (gap)    | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | ⚠ VALIDATED (gap)    | fallow, static-analysis, autofix, tooling                                |
-| 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | PENDING              | fallow, static-analysis, ci, tooling                                     |
+| 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | ✓ VALIDATED          | fallow, static-analysis, ci, tooling                                     |
