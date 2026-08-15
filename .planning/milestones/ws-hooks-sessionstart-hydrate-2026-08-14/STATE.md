@@ -52,3 +52,7 @@ Deliberately out of scope:
 **Stopped At:** Complete — commits pushed to the contributor's fork; PR #127 carries
 the whole change.
 **Resume File:** `.planning/quick/260814-q4h-land-pr-127-project-scope-sessionstart-h/260814-q4h-SUMMARY.md`
+**Closed:** 2026-08-14 — archived with PR #127 green (CI and Lint pass; SonarCloud
+skips on cross-repo PRs, which is why coverage was answered locally). The workstream
+closes with the squash-merge of #127 into `main`. HKDIR-01 and HKNC-01 stay open in
+`.planning/BACKLOG.md` and do not block that merge.
