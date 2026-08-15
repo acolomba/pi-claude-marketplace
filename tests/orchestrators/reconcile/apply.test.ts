@@ -2225,6 +2225,194 @@ test("DFEN-06 / D-103-07: the three-reload fixed point holds identically for a p
   });
 });
 
+/**
+ * DFEN-08: reconcile is the one surface that legitimately READS the
+ * install-time declaration, so no source-level gate can express its boundary --
+ * only behavior can. `beta` declares the default TRUE, `gamma` declares nothing,
+ * and the two must render the same row as each other AND as the row this
+ * surface produced before the field existed. `alpha`, declaring FALSE, is the
+ * third arm: a precedence fixture over a three-valued key that covers two of
+ * the values passes while asking the wrong question. It is also what keeps the
+ * comparison inside one live run rather than against a captured baseline.
+ *
+ * Four things are held constant, because violating any one silently compares
+ * different code paths rather than the boundary:
+ *
+ * 1. All three are declared in config and absent from recorded state, so all
+ *    three reach the fresh-install bucket rather than the enable / disable /
+ *    no-action paths, which never reach the install at all.
+ * 2. No config entry carries an `enabled` key. An explicit one short-circuits
+ *    the install's own precedence gate, which would make the declaring plugin
+ *    behave like the other two and collapse the comparison.
+ * 3. All three are declared in the SAME physical configuration file, because
+ *    the declaration's location selects the write-back target.
+ * 4. All three share one scope and one marketplace, because scope selects the
+ *    writable-path bundle.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical reconcile rows and gain no configuration key", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const projectScopeRoot = path.join(cwd, ".pi");
+    const extensionRoot = path.join(projectScopeRoot, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+
+    const { mpRoot, manifestPath } = await seedRealPathMarketplace({
+      parentDir: home,
+      marketplaceName: "mp",
+      manifestPlugins: {
+        alpha: { version: "1.2.3", entryDefaultEnabled: false },
+        beta: { version: "1.2.3", entryDefaultEnabled: true },
+        // No knob at all: the helper's conditional spread writes NO
+        // `defaultEnabled` key on this entry.
+        gamma: { version: "1.2.3" },
+      },
+    });
+
+    // Invariants 2, 3 and 4: three bare entries, one physical file, one scope,
+    // one marketplace.
+    const basePath = path.join(projectScopeRoot, "claude-plugins.json");
+    await writeFile(
+      basePath,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpRoot } },
+          plugins: { "alpha@mp": {}, "beta@mp": {}, "gamma@mp": {} },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    // Invariant 1: the marketplace IS recorded (pointing at the real on-disk
+    // clone outside the scope dir, so the installs materialize from cache with
+    // no network per NFR-5), and no plugin is.
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 2,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", raw: mpRoot, absPath: mpRoot },
+              addedFromCwd: cwd,
+              manifestPath,
+              marketplaceRoot: mpRoot,
+              plugins: {},
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const first = makeCtx();
+    await applyReconcile({
+      ctx: first as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The anchor for everything below: silence is also what a fixture that
+    // never reached the orchestrator produces.
+    assert.equal(first.ui.notify.mock.calls.length, 1, "pass 1 must render exactly one cascade");
+    const body = (first.ui.notify.mock.calls[0]!.arguments as [string, string?])[0];
+
+    // Whole-body rather than per-row `includes`: the literal pins the row
+    // ORDER, which a substring check does not constrain. Three of its lines
+    // carry the parity claim -- the declaring row with its remedy line, and the
+    // two installed rows, which on this projection carry NO version slot. The
+    // header line and the tally line are FIXTURE-SHAPE lines, not parity
+    // claims: they follow from the marketplace already being recorded here and
+    // from the count of rows this fixture produces, and they were taken from
+    // the run rather than guessed.
+    assert.equal(
+      body,
+      "● mp [project]\n" +
+        "  ◍ alpha v1.2.3 (disabled) {installs disabled}\n" +
+        "    Run enable on this plugin to use its components.\n" +
+        "  ● beta (installed)\n" +
+        "  ● gamma (installed)\n" +
+        "\n" +
+        "Reconcile: 3 successes",
+    );
+
+    // The parity claim itself, stated apart from the whole-body literal.
+    // Before the field was consumed it was an unknown key under the lenient
+    // manifest tolerance and therefore inert, so a declared-true entry and a
+    // silent entry were LITERALLY the same input -- which is what makes the two
+    // literals below the pre-existing row form as well. Asserting the two
+    // rendered rows against EACH OTHER catches a drift that two
+    // independently-correct literals would both stay green through.
+    const rows = body.split("\n");
+    const rowFor = (name: string): string =>
+      rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+    const betaRow = rowFor("beta");
+    const gammaRow = rowFor("gamma");
+    assert.equal(betaRow, "  ● beta (installed)");
+    assert.equal(gammaRow, "  ● gamma (installed)");
+    assert.equal(
+      betaRow.replaceAll("beta", "<plugin>"),
+      gammaRow.replaceAll("gamma", "<plugin>"),
+      "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+    );
+
+    // Per-ENTRY, never whole-file. The declaring plugin's write-back rewrites
+    // the ENTIRE configuration file, including its trailing-newline convention,
+    // so a whole-file comparison differs even though every non-declaring entry
+    // is byte-identical to what the fixture wrote.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["alpha@mp"],
+      { enabled: false },
+      "DFEN-04: the declaring entry gains enabled:false and nothing else",
+    );
+    assert.deepEqual(
+      base.plugins["beta@mp"],
+      {},
+      "DFEN-08: a declared-true entry gains no configuration key",
+    );
+    assert.deepEqual(
+      base.plugins["gamma@mp"],
+      {},
+      "DFEN-08: a silent entry gains no configuration key",
+    );
+
+    const plugins = (await loadState(extensionRoot)).marketplaces.mp!.plugins;
+    assert.equal(plugins.alpha!.enabled, false, "the declaring install must land disabled");
+    assert.equal(plugins.beta!.enabled, true, "a declared-true entry installs enabled");
+    assert.equal(plugins.gamma!.enabled, true, "a silent entry installs enabled");
+
+    // Two further passes rather than one: a second pass alone proves only that
+    // the first was not special. The silence covers all three plugins -- a
+    // steady state quiet for one arm and not the others is not a fixed point.
+    const baseAfterFirst = await readFile(basePath, "utf8");
+    for (const pass of [2, 3]) {
+      const ctx = makeCtx();
+      await applyReconcile({
+        ctx: ctx as unknown as ExtensionContext,
+        pi: STUB_PI,
+        cwd,
+        scope: "project",
+      });
+      assert.equal(ctx.ui.notify.mock.calls.length, 0, `pass ${pass} must render nothing`);
+      assert.equal(
+        await readFile(basePath, "utf8"),
+        baseAfterFirst,
+        `pass ${pass} must leave the declaring config byte-identical`,
+      );
+    }
+  });
+});
+
 test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the plugin ENABLED and is left exactly as the user wrote it", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
