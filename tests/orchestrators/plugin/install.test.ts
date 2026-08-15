@@ -1084,9 +1084,29 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
 // closes is a plugin release silently moving a value the user typed; an
 // assertion on the flag alone would miss a write that added or removed some
 // other key in the same entry, which is the same trust problem one field over.
+//
+// `seedLocal` puts the declaration in `claude-plugins.local.json` while the
+// install still targets the base file. CFG-02 makes that entry the effective
+// one regardless of where the write lands, so the gate has to read both files;
+// `expectSiblingEntryAfter` then pins what the untargeted file holds afterwards.
 // ───────────────────────────────────────────────────────────────────────────
 
-const DFEN_PRECEDENCE_CASES = [
+interface DfenPrecedenceCase {
+  readonly label: string;
+  readonly tmpPrefix: string;
+  /** Seed the declaration into `claude-plugins.local.json` instead of the base file. */
+  readonly seedLocal?: boolean;
+  readonly seededEntry: Record<string, unknown>;
+  readonly manifestDefaultEnabled: boolean;
+  readonly expectRecordEnabled: boolean;
+  readonly expectArtifacts: boolean;
+  /** The whole entry the SEEDED file holds after the install. */
+  readonly expectEntryAfter: Record<string, unknown>;
+  /** The whole entry the OTHER physical file holds after the install, when asserted. */
+  readonly expectSiblingEntryAfter?: Record<string, unknown>;
+}
+
+const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
   {
     label: "an explicit `enabled: true` beats a manifest declaring defaultEnabled false",
     tmpPrefix: "install-dfen05-true-wins-",
@@ -1140,7 +1160,26 @@ const DFEN_PRECEDENCE_CASES = [
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
   },
-] as const;
+  {
+    // CFG-02: the declaration lives in the LOCAL file and the install targets
+    // the BASE file. A local entry replaces the same-keyed base entry
+    // wholesale, so the user HAS stated an opinion and the manifest never gets
+    // to answer -- reading the write target alone reports the key absent,
+    // installs the plugin disabled against that opinion, and stamps an
+    // `enabled: false` the user never typed into the base file.
+    label: "an `enabled: true` in the local file wins on an install that targets the base file",
+    tmpPrefix: "install-dfen05-local-true-wins-",
+    seedLocal: true,
+    seededEntry: { enabled: true },
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+    // The write-back still addresses the base file, and it carries no
+    // `enabled` key: the install landed ENABLED, so there is nothing to stamp.
+    expectSiblingEntryAfter: {},
+  },
+];
 
 for (const precedence of DFEN_PRECEDENCE_CASES) {
   test(`DFEN-05: ${precedence.label}`, async () => {
@@ -1159,10 +1198,14 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
 
         const { loadConfig, saveConfig } =
           await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const seededPath =
+          precedence.seedLocal === true ? locations.configLocalJsonPath : locations.configJsonPath;
+        const siblingPath =
+          precedence.seedLocal === true ? locations.configJsonPath : locations.configLocalJsonPath;
         // The entry pre-exists, as it does for a user who hand-authored
         // `claude-plugins.json` before running the install.
         await saveConfig(
-          locations.configJsonPath,
+          seededPath,
           { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.seededEntry } } },
           locations.scopeRoot,
         );
@@ -1195,10 +1238,21 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
 
         // The whole entry, not just the flag: a write that added, changed or
         // removed any other key would make the user's own file untrustworthy.
-        const cfg = await loadConfig(locations.configJsonPath);
+        const cfg = await loadConfig(seededPath);
         assert.equal(cfg.status, "valid");
         if (cfg.status === "valid") {
           assert.deepEqual(cfg.config.plugins?.["hello@mp"], precedence.expectEntryAfter);
+        }
+
+        if (precedence.expectSiblingEntryAfter !== undefined) {
+          const siblingCfg = await loadConfig(siblingPath);
+          assert.equal(siblingCfg.status, "valid");
+          if (siblingCfg.status === "valid") {
+            assert.deepEqual(
+              siblingCfg.config.plugins?.["hello@mp"],
+              precedence.expectSiblingEntryAfter,
+            );
+          }
         }
       } finally {
         await rm(cwd, { recursive: true, force: true });

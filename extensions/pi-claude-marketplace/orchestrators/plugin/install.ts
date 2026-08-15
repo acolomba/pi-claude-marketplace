@@ -1432,6 +1432,40 @@ async function disableFreshlyInstalledPlugin(args: {
 }
 
 /**
+ * DFEN-05: the effective `enabled` declaration for one plugin key, read across
+ * BOTH physical config files of the scope.
+ *
+ * CFG-02 / D-01: a `claude-plugins.local.json` entry REPLACES the same-keyed
+ * base entry WHOLESALE and unconditionally. The merge never consults the
+ * caller's `--local` flag -- that flag says which file to WRITE, not which file
+ * the declaration is IN. Reading only the write target therefore reports
+ * `enabled` absent for a locally-declared plugin installed without `--local`,
+ * and the precedence gate then installs it disabled against the user's explicit
+ * word while stamping an `enabled: false` the user never typed into the OTHER
+ * file (the failure `InstallPluginOptions.local`'s own doc comment describes).
+ *
+ * The local file wins by IDENTITY, not by precedence: whichever of the two
+ * paths is `claude-plugins.local.json` answers the key, and the entry is
+ * selected before its `enabled` field is read, because a wholesale replacement
+ * shadows the base entry's `enabled` too. The sibling is read fresh INSIDE the
+ * caller's lock (WB-01) for this test only -- never written, never serialized
+ * back. `absent` / `invalid` sibling arms contribute nothing, mirroring the
+ * D-18 merge fallback.
+ */
+async function readDeclaredEnabled(args: {
+  readonly current: ScopeConfig;
+  readonly siblingConfigPath: string;
+  readonly targetIsLocal: boolean;
+  readonly key: string;
+}): Promise<boolean | undefined> {
+  const siblingCfg = await loadConfig(args.siblingConfigPath);
+  const siblingPlugins = siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
+  const localPlugins = args.targetIsLocal ? args.current.plugins : siblingPlugins;
+  const basePlugins = args.targetIsLocal ? siblingPlugins : args.current.plugins;
+  return (localPlugins?.[args.key] ?? basePlugins?.[args.key])?.enabled;
+}
+
+/**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
  * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
@@ -1557,13 +1591,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       installCtx = result.installCtx;
 
       // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
-      // -- the caller opted in, the user has stated NO opinion in the target
-      // config (an explicit `enabled` wins in either direction and is never
-      // overwritten; `isDeclaredEnabled` answers "is it enabled", which is a
-      // different question), and the plugin's resolved declaration says false.
-      // `defaultEnabled` is a plain boolean on the materializable arms, so
-      // there is no `?? true` fallback to re-derive here.
-      const declaredEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
+      // -- the caller opted in, the user has stated NO opinion in EITHER of the
+      // scope's two physical config files (an explicit `enabled` wins in either
+      // direction and is never overwritten; `isDeclaredEnabled` answers "is it
+      // enabled", which is a different question), and the plugin's resolved
+      // declaration says false. `defaultEnabled` is a plain boolean on the
+      // materializable arms, so there is no `?? true` fallback to re-derive
+      // here. CFG-02: the read spans both files because a local entry replaces
+      // the base entry wholesale whatever the write target is; `current` stays
+      // the TARGET file and steers the write arms below and nothing else.
+      const declaredEnabled = await readDeclaredEnabled({
+        current,
+        siblingConfigPath,
+        targetIsLocal: opts.local === true,
+        key: `${plugin}@${marketplace}`,
+      });
       disabledInstall.landed =
         opts.applyDefaultEnabled === true &&
         declaredEnabled === undefined &&
