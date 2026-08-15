@@ -18,17 +18,14 @@
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/write-file-atomic": "^4.0.3",
-    "@typescript-eslint/rule-tester": "^8.59.4",
     "eslint": "^10.4.0",
     "eslint-plugin-import-x": "^4.16.2",
     "eslint-plugin-sonarjs": "^4.0.3",
     "globals": "^17.6.0",
-    "memfs": "^4.57.2",
     "prettier": "^3.8.3",
     "typebox": "^1.1.38",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.4",
-    "yaml": "^2.9.0"
+    "typescript-eslint": "^8.59.4"
   },
   "engines": {
     "node": ">=20.19.0"
@@ -75,6 +72,8 @@
   },
   "scripts": {
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
+    "fallow": "npx --yes fallow dead-code --boundary-violations --fail-on-issues --format human",
+    "fallow:audit": "npx --yes fallow audit --format human",
     "format": "prettier --write \"**/*.{js,json,ts}\"",
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",
     "lint": "eslint extensions tests eslint.config.js",

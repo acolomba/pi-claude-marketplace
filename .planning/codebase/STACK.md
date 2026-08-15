@@ -8,7 +8,7 @@
 - TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`tests/`)
 
 **Secondary:**
-- YAML - Claude plugin manifests and marketplace metadata parsed via the `yaml` package
+- YAML - agent and skill frontmatter, read and emitted line-by-line by `bridges/agents/frontmatter.ts` and `bridges/skills/frontmatter-degrade.ts` (D-82-02: line-based, no nested mappings), not via a YAML library. Plugin and marketplace manifests are JSON and go through `JSON.parse`
 - Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime
@@ -31,7 +31,7 @@
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,docs,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`
-- `memfs` `^4.57.2` - in-memory filesystem mocking for platform/persistence tests
+- Real temporary directories (`mkdtemp`, plus the `withHermeticHome` helper) for filesystem isolation - no in-memory filesystem layer is used
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`, `integration`, `e2e` reports feeding SonarCloud
 
 **Build/Dev:**
@@ -47,7 +47,6 @@
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
 - `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
-- `yaml` `^2.9.0` - parsing Claude plugin/marketplace YAML manifests
 
 **Infrastructure:**
 - `isomorphic-git/http/node` - the Node HTTP transport paired with `isomorphic-git` for actual network clone/fetch
