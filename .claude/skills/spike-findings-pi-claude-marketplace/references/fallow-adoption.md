@@ -1,16 +1,26 @@
 # Fallow Codebase-Intelligence Adoption
 
 Implementation blueprint for adopting `fallow` (`fallow-rs/fallow`, MIT,
-v3.16.0 at spike time) in this project, if a future build session decides
-to. This is a recipe for *how* to adopt it correctly, not a recommendation
-that adoption already happened -- nothing has been added to `package.json`
-or CI.
+v3.16.0 at spike time) in this project.
+
+**Status: adopted.** Fallow is a pinned devDependency, `.fallowrc.json`
+sits at the repo root, and the gate runs at every point ESLint runs --
+the `npm-fallow` pre-commit hook, `npm run check`, `ci.yml` via that
+check, and the `lint.yml` pre-commit job -- plus a `fallow audit` job on
+pull requests. What follows is the reasoning behind that configuration,
+not a proposal. Sections below that read as forward-looking ("if a
+future session decides to") describe decisions already taken.
 
 ## Requirements
 
-- No new `package.json` dependency -- run via `npx fallow`, matching this
-  project's existing "spikes introduce no new dependencies" convention. A
-  real adoption decision can revisit this; the spike series didn't need it.
+- Fallow is a pinned devDependency (`^3.16.0`), not an `npx --yes`
+  invocation. The spike series ran it through `npx` under the "spikes
+  introduce no new dependencies" convention and recorded the unpinned
+  binary as an accepted risk; the adoption decision reversed that,
+  because an unpinned `npx --yes` would fetch and execute a future
+  fallow major on a CI runner with no review. Pinning also makes the
+  pre-commit hook viable -- under `npx --yes` it would re-resolve the
+  package on every commit.
 - Any config or CI wiring MUST NOT be trusted zero-config -- Fallow's
   defaults are close to a no-op on this codebase (see below) and its own
   `fallow recommend` proposes a config that doesn't fit this project at
@@ -88,6 +98,15 @@ value is turning a fact currently enforced only by prose plus a narrower
 `orchestrators/`-only ESLint rule into something a CI gate can actually
 check: if the known knot ever grows, or a cycle appears anywhere else,
 this catches it immediately.
+
+As adopted, this is covered in CI but not locally. `fallow audit`
+reports `circular_dependencies` and `re_export_cycles` under its default
+`gate: new-only` attribution, so a newly introduced cycle fails a pull
+request while the 8 inherited ones pass. The local `npm run fallow`
+passes `--boundary-violations`, which isolates the run to boundaries and
+therefore never looks at cycles. Gating them locally needs either a
+baseline or an explicit acceptance of the existing knot -- see
+BACKLOG.md FLOW-02.
 
 It does NOT catch D-11's actual highest-value invariant -- a
 one-directional "must not import" ban between the plugin and marketplace

@@ -77,6 +77,63 @@ original carrier. Their uncovered remainder is the same shape the bounded sweep
 worked -- rare-failure and cascade-diagnostic arms. Decide whether they get a
 follow-on bounded sweep or are accepted as-is. Do not decide it by exclusion.
 
+## FLOW-01: unzoned files are boundary-unchecked and nothing says so
+
+Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+`.fallowrc.json`'s `boundaries` block names 12 zones, one per layer plus one
+per bridge kind. Every file under `extensions/pi-claude-marketplace/` matches
+one today, so the gate is complete by accident of the current tree rather than
+by construction. A new top-level directory -- say
+`extensions/pi-claude-marketplace/telemetry/` -- would match no zone, and
+fallow would boundary-check none of it while still reporting a clean run.
+
+`fallow config-schema` exposes `boundaries.coverage`, documented as an
+"Optional policy for files that match no zone." It is currently unset. Setting
+it should turn an unzoned file into a loud failure that says "add a zone,"
+instead of silence that reads as "no violations."
+
+Two things to settle when picking this up. First, the failure has to name the
+unzoned path, or it just moves the confusion. Second, decide whether `tests/`
+and repo-root config files are in or out of the policy's scope -- they match no
+zone either, by design, and a naive policy would flag every one of them.
+
+Verify by creating a throwaway directory outside all 12 zone patterns,
+confirming `npm run fallow` fails on it, then deleting it. A clean run against
+the current tree proves nothing here, because the current tree has no unzoned
+files.
+
+## FLOW-02: circular dependencies are gated in CI but not locally
+
+Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+`npm run fallow` passes `--boundary-violations`, which isolates the run to
+boundary violations. Cycles are computed and discarded. The full report on the
+current tree is `4 files, 190 exports, 93 types, 1 class member, 4 duplicate
+pairs, 8 circular dependencies` -- none of which fails a commit, a
+`npm run check`, or a `ci.yml` run.
+
+CI is better off: `fallow audit` reports `circular_dependencies` and
+`re_export_cycles` under its default `gate: new-only`, so a newly introduced
+cycle fails a pull request while inherited ones pass with attribution. The
+local gate has no equivalent, so a developer can introduce a cycle and see
+green until the pull request opens.
+
+All 8 inherited cycles are the single `bridges/hooks/` knot ARCHITECTURE.md
+already documents by name (`event-router.ts` <-> `dispatch.ts` <->
+`async-rewake/registry.ts`). That knot is why the local gate cannot simply add
+`--circular-deps`: it would fail on day one.
+
+Options, cheapest first: accept the 8 with `fallow-ignore-next-line
+circular-dependency` markers at the knot (the codebase currently has zero
+suppression markers, so this would be the first -- weigh that); adopt a
+baseline if fallow supports one for cycles as it does for `dupes`; or untangle
+the knot, which is a real refactor of the hooks bridge and out of proportion to
+the gap.
+
+Note the asymmetry this leaves today: a green local `npm run check` does not
+imply the pull-request gate will pass.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`

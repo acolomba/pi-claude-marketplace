@@ -45,6 +45,16 @@ determine per-capability signal quality, false-positive risk from this
 project's Pi-extension entry-point patterns, and whether adoption (as a
 manual audit tool, a pre-commit gate, or a CI gate) is worth the cost.
 
+**Answered and adopted** (quick task 260815-h7g, 2026-08-15): all three
+roles, not one. Fallow is a pinned devDependency running at every point
+ESLint runs -- the `npm-fallow` pre-commit hook, `npm run check`, and
+`ci.yml` through that check -- plus a `fallow audit` job on pull
+requests. The dead-code findings were acted on: 6 orphan files and 3
+stale devDependencies removed. Two capabilities were deliberately left
+unwired, `security` (131 candidates, all false positives here) and `fix`
+(would delete load-bearing test seams). Two gaps are filed as
+BACKLOG.md FLOW-01 and FLOW-02.
+
 ### Progress messages for long-running operations (spikes 006-007)
 
 Long-running foreground operations -- cloning a marketplace, installing or
