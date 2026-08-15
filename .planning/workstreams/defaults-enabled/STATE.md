@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-current_phase: 103
-current_phase_name: Reconcile stability and lifecycle non-reapplication
+current_phase: 104
+current_phase_name: Pre-install read surfaces
 current_plan: Not started
 status: planning
-stopped_at: Phase 102 closed and verified; phase 103 not started
-last_updated: "2026-08-15T10:25:52.765Z"
+stopped_at: Phase 103 closed and verified; phase 104 not started
+last_updated: "2026-08-15T15:05:00.000Z"
 last_activity: 2026-08-15
-last_activity_desc: Phase 102 reviewed, fixed and verified — six code-review findings closed, 5/5 success criteria met
+last_activity_desc: Phase 103 closed — six plans, three production fixes for one defect at three call sites, six review findings fixed, 4/4 criteria verified
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 40
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 12
+  percent: 60
 ---
 
 # Project State
@@ -30,33 +30,34 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 103 — Reconcile stability and lifecycle
-non-reapplication. The milestone goal is that a plugin author can ship a plugin
-that installs disabled (`defaultEnabled: false`), and nothing later re-enables it
-behind the user's back. Phase 101 landed the schema field and the single
-precedence evaluation; Phase 102 made the resolved value change what a user
-observes; Phase 103 proves the state Phase 102 writes is a fixed point — that
-the reconcile planner produces an empty plan over it, reload after reload.
+**Current focus:** Phase 104 — Pre-install read surfaces. The milestone goal is
+that a plugin author can ship a plugin that installs disabled
+(`defaultEnabled: false`), and nothing later re-enables it behind the user's
+back. Phase 101 landed the schema field and the single precedence evaluation;
+Phase 102 made the resolved value change what a user observes; Phase 103 proved
+the resulting state is a fixed point and closed the three lifecycle doors that
+could still re-enable a plugin. Phase 104 surfaces the field BEFORE install, so
+a user can see what they are about to get.
 
 ## Current Position
 
-Phase: 103 — Reconcile stability and lifecycle non-reapplication
+Phase: 104 — Pre-install read surfaces
 Plan: none yet — discuss and plan are both still to run
 Status: Ready to discuss
-Last activity: 2026-08-15 — Phase 102 closed: three plans executed, six
-code-review findings fixed, 5/5 success criteria verified with one accepted
-override. Transitioned to Phase 103.
+Last activity: 2026-08-15 — Phase 103 closed: six plans across three waves, six
+code-review findings fixed, 4/4 success criteria verified by mutation with one
+accepted override. Transitioned to Phase 104.
 
 ## Progress
 
-**Phases Complete:** 2/5
+**Phases Complete:** 3/5
 **Current Plan:** Not started
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Complete (3/3 plans) |
 | 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Complete (3/3 plans), verified |
-| 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Not started |
+| 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Complete (6/6 plans), verified |
 | 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
 | 105 | No-op parity sweep and contract documentation | DFEN-08, DOC-01, DOC-02 | Not started |
 
@@ -78,51 +79,53 @@ gate matches this project's domain vocabulary as a known false positive).
 
 ## Open Decisions
 
-**OPEN — carried into Phase 103 by an accepted override at the Phase 102
-verification gate (2026-08-15). Phase 103's discuss session MUST take this up.**
+**No open decisions remain.** The question carried out of Phase 102 — whether
+the install-disabled verdict should widen to fire on an explicit
+`declaredEnabled === false` — was **SETTLED at the Phase 103 discuss session
+(2026-08-15) as D-103-01, D-103-02 and D-103-03**, and the work landed.
 
-**The `install` verb honors an explicit config `enabled` only when it says
-`true`.** Success criterion 3 of Phase 102 reads "an `enabled` value already
-present in the config entry wins over `defaultEnabled` … in either direction",
-and only one direction binds the standalone `/claude:plugin install`:
+It was decided by a constraint rather than by taste: no form of the widening
+leaves DFEN-08 intact. Widening unconditionally changes `install` for plugins
+whose manifest never declares the field; gating the widening on the manifest
+declaring it changes the `defaultEnabled: true` case instead. DFEN-08 requires
+both to stay byte-identical to today. So the verdict stays one-directional, the
+Phase 102 criterion's illustrative gloss was reworded in `ROADMAP.md` to match
+DFEN-05's normative text, and the current behavior is pinned by a regression test
+carrying the DFEN-08 argument in its comment.
 
-| Config entry | Manifest | `install` result |
-|---|---|---|
-| `enabled: true` | `defaultEnabled: false` | installs enabled — config wins |
-| `enabled: false` | `defaultEnabled: true` | installs ENABLED, artifacts live |
+## Backlog Carried Forward
 
-DFEN-05's normative text — the entry is never overwritten — holds in both
-directions and across both physical files, so the requirement itself is met and
-the phase passed. What does not hold is the criterion's illustrative gloss: in
-row 2 the plugin materializes and runs until the next `/reload`, which then
-plans a disable (`orchestrators/reconcile/plan.ts:318-322`) and converges. The
-reconcile surface satisfies the gloss outright. The current behavior was a
-deliberate call — "running `install` IS the user asking for the install",
-documented at `tests/orchestrators/plugin/install.test.ts:1178-1184` — and is
-not a regression: `install` never read the config `enabled` key before Phase 102.
+None of these blocks a phase; all are recorded so a later reader does not
+rediscover them.
 
-The question for Phase 103: should the install-disabled verdict widen from
-`declaredEnabled === undefined` to also fire on `declaredEnabled === false`?
-Doing so makes the criterion true as written and removes the window in which a
-deliberately-disabled plugin runs, but it broadens the `install` verb beyond
-`defaultEnabled` — it would then honor a config-disabled entry for ANY plugin,
-whether or not its manifest declares the field. The user accepted the current
-contract for 102 and deferred the decision here rather than closing it.
+- **A fourth flag-aimed config write remains.** `maybeWritePluginConfigBack`
+  (`orchestrators/plugin/shared.ts`, ~`:965` after the Phase 103 helper was
+  inserted above it) still aims with the caller's `--local` flag rather than
+  with the declaration's location, so a flagless `update` under a local-only
+  declaration writes into the shadowed base file. **Benign and pinned, not
+  broken:** its patch carries no field and it runs only when the key is absent,
+  so the merged view never moves and no enablement can flip. Phase 103 fixed the
+  three sites that could cause harm and left this one deliberately, with an
+  assertion holding its fieldless shape so a future change that starts writing a
+  field there fails a test.
 
-Two smaller items surfaced by the same gate, both outside every Phase 102
-success criterion, both backlog-grade rather than blocking:
+- **Reinstall's new `(skipped) {already disabled}` row has no catalog block.**
+  `docs/output-catalog.md` documents a curated set with a byte-equality runner
+  over what it documents, so an absent block fails nothing. A **DOC-01 candidate
+  for Phase 105**, named here so that phase inherits it.
 
 - **Standalone retry after a failed disable cascade.** The record is saved, so
   an immediate re-run of `install` hits the PI-15 `already-installed` gate and
   the only escape named to the user is `uninstall`. A `/reload` does converge,
   because the config now declares `enabled: false`
-  (`orchestrators/plugin/install.ts:1638-1653`).
+  (`orchestrators/plugin/install.ts`).
 
-- **Criterion 2's agents/MCP arm is proven by composition, not directly.** The
+- **Phase 102's criterion 2 proves its agents/MCP arm by composition.** The
   tests assert skills, commands and hooks are gone from disk; agents and MCP
   rest on `cascadeUnstagePlugin` covering all five kinds. One `stat` on
   `locations.agentsDir` and one read of `mcpJsonPath` in the existing
-  `install-out04-row-` fixture would make it direct.
+  `install-out04-row-` fixture would make it direct. A Phase 105 parity-sweep
+  candidate.
 
 ---
 
@@ -151,23 +154,28 @@ recorded as D-102-01..D-102-10 in
 
 ## Session Continuity
 
-**Last session:** 2026-08-15T03:35:00.000Z
+**Last session:** 2026-08-15T15:05:00.000Z
 
-**Stopped At:** Phase 102 closed. Three plans executed, then a code review found
-two blockers and four warnings and all six were fixed with regression tests that
-fail without their fix. The blockers were a precedence gate that read only one
-physical config file (so an explicit `enabled` in the sibling file was
-overridden and then contradicted) and a failure window that saved a record with
-no matching config declaration (a permanent unconverged state on the reconcile
-path). Verification then confirmed 5/5 success criteria against the tree itself
-rather than against the plan summaries, with one accepted override recorded
-above. `npm run check` is green.
+**Stopped At:** Phase 103 closed. It was scoped as characterization — a scout
+found three of its four criteria already structurally true — and grew twice.
+Research probed the criteria against the real orchestrators instead of reading
+them and found `reinstall` re-materializing a disabled plugin and `enable`
+writing to the wrong physical config file; planning then found the same
+write-target defect a third time, on `install`, where it was a permanent
+re-enable loop on every reload rather than an edge. The three are one defect at
+three call sites: every verb that authors a declaration on the user's behalf
+aimed its write with the caller's `--local` flag instead of with the
+declaration's location. They now share one selector. A code review then found
+that selector treating an unreadable config as one that declares nothing, and
+guessing the shadowed file; all six findings were fixed with regression tests
+that fail without them. 4/4 criteria verified by mutation, one accepted
+override. `npm run check` exits 0.
 **Resume File:** None
-**Next Action:** discuss, plan and execute phase 103 (DFEN-06 / DFEN-07) —
-reconcile stability and lifecycle non-reapplication. It asserts that the planner
-produces an empty plan over the state phase 102 writes, deliberately left
-unasserted in 102-03. Its discuss session must also take up the open decision
-recorded above.
+**Next Action:** discuss, plan and execute phase 104 (OUT-02 / OUT-03 / OUT-05)
+— pre-install read surfaces, so a user can see the declared default before
+installing. No open decision is carried into it; the Backlog Carried Forward
+section above holds four non-blocking items, two of which are Phase 105
+candidates.
 
 **Resume requirement:** run GSD from the worktree
 `/home/acolomba/pi-claude-marketplace/.worktrees/defaults-enabled` (branch
@@ -185,6 +193,12 @@ exist and GSD reports no phases, exiting clean — a false negative.
 | Phase 102 P01 | 55min | 2 tasks | 9 files |
 | Phase 102 P02 | 40min | 3 tasks | 3 files |
 | Phase 102 P03 | 25min | 2 tasks | 4 files |
+| Phase 103 P01 | 15min | 3 tasks | 2 files |
+| Phase 103 P02 | 34min | 2 tasks | 2 files |
+| Phase 103 P03 | 45min | 3 tasks | 3 files |
+| Phase 103 P04 | 45min | 3 tasks | 3 files |
+| Phase 103 P06 | 40min | 3 tasks | 2 files |
+| Phase 103 P05 | 25min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -259,3 +273,32 @@ exist and GSD reports no phases, exiting clean — a false negative.
   `plugin-disabled` outcome kind. Defining a new kind would have forked a
   projection arm gated by `notify-stamp-coverage.test.ts`, for a row the
   existing arm already renders correctly.
+
+- [Phase 103]: A constraint decided the install-widening question that taste
+  could not. DFEN-08 requires `defaultEnabled: true` and an absent
+  `defaultEnabled` to behave byte-identically to today, and no form of the
+  widening survives that — unconditional widening changes plugins whose manifest
+  never declares the field, and gating it on the manifest changes the `true`
+  case instead.
+
+- [Phase 103]: A phase scoped as characterization must still PROBE, not only
+  read. The scout read the code and concluded three of four criteria were
+  already true; research ran them and found two live defects, and planning found
+  a third. All three were in scope by the phase's own goal sentence.
+
+- [Phase 103]: Every verb that authors a config declaration on the user's behalf
+  selects its write target from where the declaration LIVES, never from the
+  caller's `--local` flag. A typed flag still wins; the rule answers only the
+  flagless case. The three sites now share one selector so a fourth authoring
+  verb inherits the rule rather than re-opening the question.
+
+- [Phase 103]: A file that cannot be READ is never treated as a file that
+  declares nothing. The first form of the shared selector folded "absent",
+  "says no" and "unreadable" into one boolean and guessed the shadowed file on
+  the third. Where a file's content determines a write destination, an
+  unreadable file aborts.
+
+- [Phase 103]: The gate for a guarantee that is already structurally true is a
+  source-level grep, not only a behavioral test. `update` and `reinstall` never
+  read `defaultEnabled` today; the gate fails at the token, before a behavior
+  exists to test.

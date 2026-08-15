@@ -33,8 +33,8 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 
 - [x] **DFEN-04**: Installing a plugin that resolves `defaultEnabled: false` records it disabled and writes `enabled: false` into that scope's `claude-plugins.json` plugin entry -- the first field the install write-back's currently-empty plugin patch has ever carried. The plugin's artifacts are not materialized, matching the terminal state of an ordinary disable.
 - [x] **DFEN-05**: An `enabled` value already present in the config entry wins over `defaultEnabled` and is never overwritten, in either direction. This is the analog of Claude's "an existing `enabledPlugins` setting takes precedence and persists".
-- [ ] **DFEN-06**: The state produced by DFEN-04 is reconcile-stable: a `/reload` after installing a `defaultEnabled: false` plugin plans no action for it and does not re-enable it. Verified against the reconcile planner, not only at the install boundary.
-- [ ] **DFEN-07**: `update` and `reinstall` never re-apply `defaultEnabled` to an already-installed plugin, so a plugin release that changes the field does not flip a user's existing choice.
+- [x] **DFEN-06**: The state produced by DFEN-04 is reconcile-stable: a `/reload` after installing a `defaultEnabled: false` plugin plans no action for it and does not re-enable it. Verified against the reconcile planner, not only at the install boundary.
+- [x] **DFEN-07**: `update` and `reinstall` never re-apply `defaultEnabled` to an already-installed plugin, so a plugin release that changes the field does not flip a user's existing choice.
 - [ ] **DFEN-08**: `defaultEnabled: true` and an absent `defaultEnabled` produce byte-identical behavior and output to today, across install, update, reinstall, list, info, and reconcile.
 
 ### Read Surfaces
@@ -78,8 +78,8 @@ definitions: `.planning/workstreams/defaults-enabled/ROADMAP.md`.
 | DFEN-03 | Phase 101 | Complete |
 | DFEN-04 | Phase 102 | Complete |
 | DFEN-05 | Phase 102 | Complete |
-| DFEN-06 | Phase 103 | Pending |
-| DFEN-07 | Phase 103 | Pending |
+| DFEN-06 | Phase 103 | Complete |
+| DFEN-07 | Phase 103 | Complete |
 | DFEN-08 | Phase 105 | Pending |
 | OUT-01 | Phase 102 | Complete |
 | OUT-02 | Phase 104 | Pending |

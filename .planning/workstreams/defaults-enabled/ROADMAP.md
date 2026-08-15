@@ -23,7 +23,7 @@ phases (101.1, 102.1) are urgent insertions only, marked `INSERTED`.
 
 - [x] **Phase 102: Reason token, install write-through and notification** — the milestone's substantive phase. Installing a plugin that resolves `defaultEnabled: false` records it disabled AND writes `enabled: false` through to that scope's `claude-plugins.json` entry — the first field the install write-back's plugin patch has ever carried — so the disabled state lives where reconcile already looks for it. An `enabled` value already in the entry wins in both directions. The `installs disabled` token lands as one indivisible closed-set amendment, and the install notification says what happened at informational severity. (OUT-01, DFEN-04, DFEN-05, OUT-04) (completed 2026-08-15)
 
-- [ ] **Phase 103: Reconcile stability and lifecycle non-reapplication** — closes the silent-re-enable hazard by verifying it against the reconcile planner itself, not at the install boundary: a `/reload` after an install-disabled plugin plans no action for it and never reaches `acc.enable.push(...)`. `update` and `reinstall` never re-read `defaultEnabled` for an already-installed plugin, so a later release that flips the field cannot flip the user. (DFEN-06, DFEN-07)
+- [x] **Phase 103: Reconcile stability and lifecycle non-reapplication** — closes the silent-re-enable hazard by verifying it against the reconcile planner itself, not at the install boundary: a `/reload` after an install-disabled plugin plans no action for it and never reaches `acc.enable.push(...)`. `update` and `reinstall` never re-read `defaultEnabled` for an already-installed plugin, so a later release that flips the field cannot flip the user. (DFEN-06, DFEN-07) (completed 2026-08-15)
 
 - [ ] **Phase 104: Pre-install read surfaces** — `list` and `info` tell a user that a plugin will install disabled BEFORE they commit to the install, and stay network-free doing it. The marketplace entry is always readable from the cached manifest; `plugin.json` is not, without a clone. Where the entry is silent, the surfaces decline to claim rather than fetch. (OUT-02, OUT-03, OUT-05)
 
@@ -188,18 +188,18 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 103-01-PLAN.md — the DFEN-06 fixed point at both seams: the planner cell with its counter-case, and three real `applyReconcile` passes for a base-declared and a locally-declared plugin, each ending in a `planReconcile` call over state and config re-read from disk
-- [ ] 103-02-PLAN.md — DFEN-07 pinned for `update`: a source gate asserting the two lifecycle verbs name neither `defaultEnabled` nor `applyDefaultEnabled`, and a mid-flight manifest flip whose version bump proves the flip was seen
-- [ ] 103-03-PLAN.md — the D-103-12 fix: `reinstall` gains the disabled-record short-circuit `update` already has, so a repair no longer re-enables what the user turned off, plus the truthful row on both surfaces and the reinstall manifest flip
-- [ ] 103-04-PLAN.md — the D-103-13 fix: `enable`/`disable` select their config write target from where the declaration lives rather than from the `--local` flag, plus criterion 4's converse chain end to end for both declaration sites
+- [x] 103-01-PLAN.md — the DFEN-06 fixed point at both seams: the planner cell with its counter-case, and three real `applyReconcile` passes for a base-declared and a locally-declared plugin, each ending in a `planReconcile` call over state and config re-read from disk
+- [x] 103-02-PLAN.md — DFEN-07 pinned for `update`: a source gate asserting the two lifecycle verbs name neither `defaultEnabled` nor `applyDefaultEnabled`, and a mid-flight manifest flip whose version bump proves the flip was seen
+- [x] 103-03-PLAN.md — the D-103-12 fix: `reinstall` gains the disabled-record short-circuit `update` already has, so a repair no longer re-enables what the user turned off, plus the truthful row on both surfaces and the reinstall manifest flip
+- [x] 103-04-PLAN.md — the D-103-13 fix: `enable`/`disable` select their config write target from where the declaration lives rather than from the `--local` flag, plus criterion 4's converse chain end to end for both declaration sites
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 103-06-PLAN.md — the D-103-16 fix: the standalone `install`'s stamp follows the declaration through the same helper, closing the third call site of one defect, with the reload half proving the loop is closed rather than relocated
+- [x] 103-06-PLAN.md — the D-103-16 fix: the standalone `install`'s stamp follows the declaration through the same helper, closing the third call site of one defect, with the reload half proving the loop is closed rather than relocated
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 103-05-PLAN.md — the DFEN-08 argument written into the precedence pin plus its missing convergence half, the `ROADMAP.md` criterion-3 reword (D-103-02), and the NFR-6 phase-boundary gate
+- [x] 103-05-PLAN.md — the DFEN-08 argument written into the precedence pin plus its missing convergence half, the `ROADMAP.md` criterion-3 reword (D-103-02), and the NFR-6 phase-boundary gate
 
 **Notes**:
 
@@ -281,7 +281,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
 | 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
-| 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
+| 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
 
