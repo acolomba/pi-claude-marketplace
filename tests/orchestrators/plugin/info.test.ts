@@ -3479,6 +3479,71 @@ test("OUT-03 / D-104-05: an entry declaring `defaultEnabled: false` puts `{insta
   });
 });
 
+test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      // All three entries declare the SAME thing, so the only variable across
+      // the three renders is what the user's config says about each key.
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "yes", source: "./yes", version: "1.0.0", skills: "skills" },
+          { name: "no", source: "./no", version: "1.0.0", skills: "skills" },
+          { name: "mute", source: "./mute", version: "1.0.0", skills: "skills" },
+        ].map((p) => ({ ...p, defaultEnabled: false })),
+      },
+      installablePluginDirs: ["yes", "no", "mute"],
+      componentDirs: { yes: ["skills/s1"], no: ["skills/s1"], mute: ["skills/s1"] },
+    });
+    // None of the three is INSTALLED -- these are hand-added declarations for
+    // plugins the user has not reloaded into existence yet, which is exactly
+    // the state in which a candidate row is read.
+    const locations = locationsFor("user", cwd);
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        plugins: { "yes@mp": { enabled: true }, "no@mp": { enabled: false } },
+      },
+      locations.scopeRoot,
+    );
+
+    const rowFor = async (plugin: string): Promise<string> => {
+      const { ctx, pi, notifications } = makeCtx();
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin, scope: "user", cwd });
+      assert.equal(notifications.length, 1);
+      return notifications[0]!.message.split("\n")[1]!;
+    };
+
+    // The row states what an install WOULD do, so it must model the same
+    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // shorter one:
+    //
+    // `yes` -- the config says `enabled: true`. `install` reads that FIRST,
+    //   never reaches the entry's default, and the plugin lands ENABLED. A row
+    //   claiming otherwise would predict an outcome the install path does not
+    //   produce, which is the one thing this claim exists not to do.
+    //
+    // `no` -- the config says `enabled: false`. An explicit declaration wins in
+    //   EITHER direction, so the entry's default does not apply here either.
+    //   The bare row is deliberate: the user typed the value, and the token is
+    //   about the manifest's default taking effect, not about the user's own
+    //   declaration being echoed back.
+    //
+    // `mute` -- no config opinion, so the entry answers and the row claims.
+    //   This is the control: it proves the suppression above comes from the
+    //   config read and not from the entry read having broken.
+    assert.equal(await rowFor("yes"), "  ○ yes v1.0.0 (available)");
+    assert.equal(await rowFor("no"), "  ○ no v1.0.0 (available)");
+    assert.equal(await rowFor("mute"), "  ○ mute v1.0.0 (available) {installs disabled}");
+  });
+});
+
 test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `defaultEnabled: false` carries `{installs disabled}` with no tree materialized anywhere", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

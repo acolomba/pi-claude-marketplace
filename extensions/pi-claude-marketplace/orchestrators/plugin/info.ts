@@ -41,8 +41,8 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
-  entryDeclaresInstallDisabled,
   resolveStrict,
+  rowClaimsInstallDisabled,
   type GitPluginRootResult,
   type ResolveContext,
   type ResolvedPluginUnavailable,
@@ -774,6 +774,13 @@ async function buildBlock(
   scope: Scope,
   mpRecord: MarketplaceRecord,
   autoupdate: boolean,
+  /**
+   * DFEN-04: the user's own `enabled` opinion for this
+   * `<plugin>@<marketplace>` key in THIS scope's merged base+local config
+   * view, or `undefined` where the user has stated none. Gates the
+   * install-time claim -- see `applyInstallDisabledRowShape`.
+   */
+  declaredEnabled: boolean | undefined,
   cwd: string,
   fetchCtx?: InfoFetchContext,
 ): Promise<InfoBlock> {
@@ -905,7 +912,7 @@ async function buildBlock(
     marketplace,
     scope,
     marketplaceDetails,
-    applyInstallDisabledRowShape(row, entry),
+    applyInstallDisabledRowShape(row, entry, declaredEnabled),
   );
 }
 
@@ -1049,12 +1056,12 @@ const INSTALL_DISABLED_ROW_STATUSES = {
  * OUT-03 / D-104-01 / D-104-04 / D-104-05: stamp the author-declared
  * install-time claim onto a not-installed candidate row.
  *
- * The marketplace ENTRY is the only source. The plugin's own manifest is never
- * consulted, not even where a warm clone makes it readable with no network at
- * all: reading it would make the same plugin render differently warm and cold,
- * and the only way to close that gap the other way is a fetch OUT-05 forbids.
- * Where the entry is silent the surface DECLINES to claim, which is the answer
- * rather than a gap.
+ * DFEN-04: both inputs of the claim -- the user's config opinion
+ * (`declaredEnabled`) and the marketplace entry -- are weighed by the shared
+ * `rowClaimsInstallDisabled` so this surface and `list` cannot answer the
+ * question differently. Read that function for the precedence and for why the
+ * plugin's own manifest is never consulted. What is decided HERE is only which
+ * ROW SHAPES may carry the answer.
  *
  * D-104-05: applied at the single not-installed CONSUMER, never at the
  * producers. The not-installed path has eight return sites across five builder
@@ -1085,8 +1092,12 @@ const INSTALL_DISABLED_ROW_STATUSES = {
 function applyInstallDisabledRowShape(
   row: PluginInfoRow,
   entry: MarketplaceManifest["plugins"][number],
+  declaredEnabled: boolean | undefined,
 ): PluginInfoRow {
-  if (!entryDeclaresInstallDisabled(entry) || !INSTALL_DISABLED_ROW_STATUSES[row.status]) {
+  if (
+    !rowClaimsInstallDisabled(entry, declaredEnabled) ||
+    !INSTALL_DISABLED_ROW_STATUSES[row.status]
+  ) {
     return row;
   }
 
@@ -2322,7 +2333,17 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
   // not state. Load the merged config alongside state per scope so each
   // (scope, record) tuple carries the per-scope autoupdate truth.
-  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
+  //
+  // DFEN-04 / D-01: the same merged read also answers whether the user has
+  // stated an `enabled` opinion for this plugin under the flat
+  // `<plugin>@<marketplace>` key, which gates the install-time claim on the
+  // candidate rows. No extra I/O -- the load was already happening.
+  const found: {
+    scope: Scope;
+    record: MarketplaceRecord;
+    autoupdate: boolean;
+    declaredEnabled: boolean | undefined;
+  }[] = [];
   for (const scope of scopes) {
     const locations = locationsFor(scope, opts.cwd);
     const state = await loadState(locations.extensionRoot);
@@ -2330,7 +2351,8 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
     if (record !== undefined) {
       const { merged } = await loadMergedScopeConfig(locations);
       const autoupdate = merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false;
-      found.push({ scope, record, autoupdate });
+      const declaredEnabled = merged.plugins[`${opts.plugin}@${opts.marketplace}`]?.entry.enabled;
+      found.push({ scope, record, autoupdate, declaredEnabled });
     }
   }
 
@@ -2372,6 +2394,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
       sole.scope,
       sole.record,
       sole.autoupdate,
+      sole.declaredEnabled,
       opts.cwd,
       fetchCtx,
     );
@@ -2403,6 +2426,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
         f.scope,
         f.record,
         f.autoupdate,
+        f.declaredEnabled,
         opts.cwd,
         fetchCtx,
       ),

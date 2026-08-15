@@ -669,6 +669,73 @@ test("OUT-02 / D-104-01: an entry declaring `defaultEnabled: false` puts `{insta
   });
 });
 
+test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs disabled}` in EITHER direction, because install checks it first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      // All three entries declare the SAME thing, so the only variable across
+      // the rows is what the user's config says about each key.
+      manifest: {
+        name: "mp1",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0", defaultEnabled: false },
+          { name: "beta", source: "./beta", version: "1.0.0", defaultEnabled: false },
+          { name: "gamma", source: "./gamma", version: "1.0.0", defaultEnabled: false },
+        ],
+      },
+      installablePluginDirs: ["alpha", "beta", "gamma"],
+    });
+    // None of the three is INSTALLED -- these are hand-added declarations for
+    // plugins the user has not reloaded into existence yet, which is exactly
+    // the state in which a candidate row is read.
+    const locations = locationsFor("user", cwd);
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        plugins: { "alpha@mp1": { enabled: true }, "beta@mp1": { enabled: false } },
+      },
+      locations.scopeRoot,
+    );
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    // The row states what an install WOULD do, so it must model the same
+    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // shorter one:
+    //
+    // `alpha` -- the config says `enabled: true`. `install` reads that FIRST,
+    //   never reaches the entry's default, and the plugin lands ENABLED. A row
+    //   claiming otherwise would predict an outcome the install path does not
+    //   produce, which is the one thing this claim exists not to do.
+    //
+    // `beta` -- the config says `enabled: false`. An explicit declaration wins
+    //   in EITHER direction, so the entry's default does not apply here either.
+    //   The bare row is deliberate: the user typed the value, and the token is
+    //   about the manifest's default taking effect, not about the user's own
+    //   declaration being echoed back.
+    //
+    // `gamma` -- no config opinion, so the entry answers and the row claims.
+    //   This is the control: it proves the suppression above comes from the
+    //   config read and not from the entry read having broken.
+    assert.equal(
+      out,
+      [
+        "● mp1 [user]",
+        "  ○ alpha v1.0.0 (available)",
+        "  ○ beta v1.0.0 (available)",
+        "  ○ gamma v1.0.0 (available) {installs disabled}",
+      ].join("\n"),
+      out,
+    );
+  });
+});
+
 test("OUT-02 / D-104-03: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

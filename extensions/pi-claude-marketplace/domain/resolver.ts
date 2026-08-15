@@ -659,6 +659,35 @@ export function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
 }
 
 /**
+ * OUT-02 / OUT-03 / DFEN-04 / DFEN-05: the WHOLE rule behind the read surfaces'
+ * `{installs disabled}` claim, in one place because `list` and `info` must not
+ * be able to answer it differently.
+ *
+ * The row predicts an install, so it models the install path's precedence and
+ * not a shorter one. `install` gates the disable on the user having stated NO
+ * `enabled` opinion for the `<plugin>@<marketplace>` key, because an explicit
+ * declaration wins in EITHER direction and is never overwritten
+ * (install.ts::readDeclaredEnabled). Only where the user is silent does the
+ * marketplace entry answer, via `entryDeclaresInstallDisabled` above.
+ *
+ * Dropping the `declaredEnabled` conjunct is the failure this function exists
+ * to prevent: a config saying `enabled: true` over an entry saying
+ * `defaultEnabled: false` installs ENABLED, so a row claiming otherwise states
+ * a falsehood on the one surface built to inform the install decision.
+ *
+ * `declaredEnabled` arrives as a resolved `boolean | undefined` rather than as
+ * a config object, so this stays a pure domain predicate with no persistence
+ * dependency: `undefined` means "the user stated nothing", which is the only
+ * distinction the rule draws.
+ */
+export function rowClaimsInstallDisabled(
+  entry: PluginEntry,
+  declaredEnabled: boolean | undefined,
+): boolean {
+  return declaredEnabled === undefined && entryDeclaresInstallDisabled(entry);
+}
+
+/**
  * DFEN-02: decide the declared install-time enablement. The marketplace ENTRY
  * value wins over the `plugin.json` value in BOTH directions -- an entry `true`
  * beats a manifest `false` just as an entry `false` beats a manifest `true`.

@@ -744,7 +744,14 @@ test("RSTA-01 output-parity: the completion bucketizer emits `remote` for not-fe
     const listLocations = locationsFor("project", cwd);
     const listByName = new Map<string, PluginIndexRow["status"]>();
     for (const entry of manifest.plugins) {
-      const { message } = await __test_availableRowMessage(entry, marketplaceRoot, listLocations);
+      // The fourth argument is the user's config `enabled` opinion; this parity
+      // check is about the status vocabulary, so no opinion is stated.
+      const { message } = await __test_availableRowMessage(
+        entry,
+        marketplaceRoot,
+        listLocations,
+        undefined,
+      );
       listByName.set(entry.name, message.status);
     }
 

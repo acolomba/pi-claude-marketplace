@@ -17,7 +17,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { entryDeclaresInstallDisabled } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import {
+  entryDeclaresInstallDisabled,
+  rowClaimsInstallDisabled,
+} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
@@ -52,4 +55,27 @@ test("OUT-05 / D-104-01: a non-boolean `defaultEnabled` is silent -- a value pas
     defaultEnabled: "false",
   } as unknown as PluginEntry;
   assert.equal(entryDeclaresInstallDisabled(entry), false);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// The two-input rule the read surfaces actually render.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("DFEN-04 / DFEN-05: a declaring entry claims only when the user has stated NO `enabled` opinion", () => {
+  const entry = { name: "alpha", source: "./alpha", defaultEnabled: false } as PluginEntry;
+  // Silent user -> the entry answers.
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), true);
+  // An explicit declaration wins in EITHER direction, so the entry's default
+  // never applies and the row must not predict it. `true` is the case that
+  // makes a one-input rule state a falsehood: `install` reads the declaration
+  // first, and the plugin lands ENABLED.
+  assert.equal(rowClaimsInstallDisabled(entry, true), false);
+  assert.equal(rowClaimsInstallDisabled(entry, false), false);
+});
+
+test("DFEN-04: a silent entry claims nothing whatever the user's config says", () => {
+  const entry = { name: "alpha", source: "./alpha" } as PluginEntry;
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), false);
+  assert.equal(rowClaimsInstallDisabled(entry, true), false);
+  assert.equal(rowClaimsInstallDisabled(entry, false), false);
 });

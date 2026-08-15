@@ -55,12 +55,12 @@
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
-  entryDeclaresInstallDisabled,
   resolveStrict,
+  rowClaimsInstallDisabled,
   type ResolveContext,
 } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
@@ -628,11 +628,17 @@ function narrowProbeError(err: unknown): ListReason {
  * `(unavailable)` row's `reasons` array. The user sees the cause CLASS on
  * the per-row line -- there is NO separate trailing summary notification
  * per D-19-01.
+ *
+ * `declaredEnabled` is the user's own `enabled` opinion for this
+ * `<plugin>@<marketplace>` key, taken from the PLUGIN scope's merged
+ * base+local config view. It gates the install-time claim -- see the
+ * `installsDisabledField` computation below.
  */
 async function availableRowMessage(
   manifestEntry: MarketplaceManifest["plugins"][number],
   marketplaceRoot: string,
   locations: ScopedLocations,
+  declaredEnabled: boolean | undefined,
 ): Promise<{
   message:
     | PluginRemoteMessage
@@ -646,11 +652,11 @@ async function availableRowMessage(
   const descriptionField: { readonly description?: string } =
     manifestEntry.description === undefined ? {} : { description: manifestEntry.description };
 
-  // OUT-02 / D-104-01: the claim is sourced from the marketplace ENTRY alone.
-  // The plugin's own manifest is never consulted here -- it is unreadable on a
-  // cold clone, so reading it would make the same plugin render differently warm
-  // and cold, and closing that gap the other way would need a fetch this surface
-  // may not make (OUT-05).
+  // OUT-02 / DFEN-04: both inputs of the claim -- the user's config opinion and
+  // the marketplace entry -- are weighed by the shared `rowClaimsInstallDisabled`
+  // so this surface and `info` cannot answer the question differently. Read that
+  // function for the precedence and for why the plugin's own manifest is never
+  // consulted.
   //
   // D-104-03: the token rides NOT-INSTALLED candidate rows, and only those whose
   // install would actually happen. Both `unavailable` arms are permanently
@@ -658,7 +664,8 @@ async function availableRowMessage(
   // does about an install that cannot occur, and those rows' braces already
   // carry why. Every installed-record row is untouched by construction -- they
   // are built elsewhere and never see this field.
-  //
+  const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
+
   // INV-01: same conditional-spread idiom as `notInManifestField` above. Under
   // `exactOptionalPropertyTypes` an optional field is added by spreading a
   // conditionally empty object, never by `reasons: cond ? [...] : undefined`.
@@ -666,7 +673,7 @@ async function availableRowMessage(
   // `| undefined`, which the target rejects.
   const installsDisabledField: {
     readonly reasons?: NonNullable<PluginAvailableMessage["reasons"]>;
-  } = entryDeclaresInstallDisabled(manifestEntry) ? { reasons: ["installs disabled"] } : {};
+  } = claimsInstallDisabled ? { reasons: ["installs disabled"] } : {};
 
   // RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
   // fs-only clone/mirror presence. A cold clone (`not-cached`) is `(remote)` --
@@ -757,17 +764,15 @@ async function availableRowMessage(
         // array instead of spreading `installsDisabledField`. The TAIL position
         // is deliberate and observable: `composeReasons` joins in array order
         // and there is no per-row sort, so the degrade tokens lead and the
-        // author-declared cause follows. An entry that does not declare yields
-        // the untouched array.
+        // author-declared cause follows. A row that does not claim yields the
+        // untouched array.
         return {
           message: {
             status: "partially-available",
             name: manifestEntry.name,
             reasons: [
               ...narrowUnsupportedKinds(resolved.unsupported),
-              ...(entryDeclaresInstallDisabled(manifestEntry)
-                ? (["installs disabled"] as const)
-                : []),
+              ...(claimsInstallDisabled ? (["installs disabled"] as const) : []),
             ],
             ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
             ...descriptionField,
@@ -865,10 +870,16 @@ async function availableRowMessage(
  */
 async function enumerateMarketplacePlugins(
   opts: ListPluginsOptions,
+  mpName: string,
   mpRecord: ExtensionState["marketplaces"][string],
   pluginScope: Scope,
   marketplaceScope: Scope,
   scopedManifest: ScopedManifest,
+  /**
+   * DFEN-04: the PLUGIN scope's merged base+local config view. Candidate rows
+   * read the user's `enabled` opinion out of it -- see `availableRowMessage`.
+   */
+  pluginScopeConfig: MergedConfig,
   excludeFromAvailable: ReadonlySet<string> = new Set(),
 ): Promise<ListMsg[]> {
   const rows: ListMsg[] = [];
@@ -914,10 +925,15 @@ async function enumerateMarketplacePlugins(
 
     // RSTA-01 / NFR-5: thread the plugin-scope locations so the git-source
     // presence probe reads the WARM clone/mirror cache fs-only (no network).
+    //
+    // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
+    // and the merged view resolves base-vs-local by the same identity rule
+    // `install` applies (a local entry replaces the base entry wholesale).
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
       mpRecord.marketplaceRoot,
       locationsFor(pluginScope, opts.cwd),
+      pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -1030,10 +1046,21 @@ async function buildMarketplaceMessage(args: {
   mpRecord: ExtensionState["marketplaces"][string];
   /** SPLIT-01 rewire: autoupdate read from MergedConfig at the caller. */
   autoupdate: boolean;
+  /** DFEN-04: `mpScope`'s merged config view -- the enumeration's plugin scope. */
+  scopeConfig: MergedConfig;
   extraPlugins: readonly ListMsg[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
-  const { opts, mpName, mpScope, mpRecord, autoupdate, extraPlugins, excludeFromAvailable } = args;
+  const {
+    opts,
+    mpName,
+    mpScope,
+    mpRecord,
+    autoupdate,
+    scopeConfig,
+    extraPlugins,
+    excludeFromAvailable,
+  } = args;
   // Bind the WHOLE load result once: the same value feeds the failed-header
   // guard below and the enumeration's absence gate (D-95-04).
   const scopedManifest = await loadMarketplaceManifestSoftly(mpRecord);
@@ -1062,10 +1089,12 @@ async function buildMarketplaceMessage(args: {
   // Normal header + enumerated plugins (own scope) + folded extras.
   const ownPlugins = await enumerateMarketplacePlugins(
     opts,
+    mpName,
     mpRecord,
     mpScope,
     mpScope,
     scopedManifest,
+    scopeConfig,
     excludeFromAvailable,
   );
   const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
@@ -1139,6 +1168,7 @@ export async function loadPluginListPayload(
       mpScope: "project",
       mpRecord,
       autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      scopeConfig: projectMerged,
       extraPlugins: [],
     });
     blocks.push(built);
@@ -1177,10 +1207,12 @@ export async function loadPluginListPayload(
       // accordingly.
       const projectSideRows = await enumerateMarketplacePlugins(
         opts,
+        mpName,
         projectMp,
         "project",
         "user",
         projectScopedManifest,
+        projectMerged,
       );
       // RLD-04: `installedRowMessage` emits `status: "installed"` with
       // `needsReload: false` for the steady-state inventory row. The
@@ -1219,6 +1251,7 @@ export async function loadPluginListPayload(
       mpScope: "user",
       mpRecord,
       autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
     });
