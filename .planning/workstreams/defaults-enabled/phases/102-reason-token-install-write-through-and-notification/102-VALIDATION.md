@@ -2,7 +2,7 @@
 phase: 102
 slug: reason-token-install-write-through-and-notification
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-14
@@ -98,3 +98,18 @@ All phase behaviors have automated verification. The rendered notification row i
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-08-14 by the plan-checker gate (Dimension 8 behaviorally compliant; no blockers). `status` stays `draft` until `/gsd-validate-phase` sets `validated`.
+
+## Validation Audit 2026-08-15
+
+Reconciled at milestone close. The per-task map was already complete — every row
+carries a real Task ID and a green automated command — but the file had never been
+promoted out of `draft`, so its `nyquist_compliant` flag was not authoritative.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Evidence: full suite green at the close (3553 tests, 3552 pass, 0 fail, 1
+pre-existing skip); `npm run check` exits 0.

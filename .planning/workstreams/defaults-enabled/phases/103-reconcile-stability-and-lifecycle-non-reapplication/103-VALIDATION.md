@@ -2,7 +2,7 @@
 phase: 103
 slug: reconcile-stability-and-lifecycle-non-reapplication
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-15
@@ -128,3 +128,18 @@ The three production fixes — D-103-12 (`reinstall`), D-103-13 (`enable`/`disab
 **The sweep is not exhaustive, by decision.** `maybeWritePluginConfigBack` (`orchestrators/plugin/shared.ts:815-822`), on the `update` and `reinstall` post-success paths, still aims by the flag and adds a bare `{}` entry to the flag-selected file. Under a local-only declaration a flagless `update` therefore pollutes the base config with a shadowed entry. It breaks no success criterion — the patch carries no field, so the merged view is unchanged and no enable is ever planned — and it is recorded as a backlog candidate in plan `103-05`'s SUMMARY rather than folded into this phase.
 
 **Approval:** pending — Task IDs bound by the planner; the plan-checker gate signs off next. `status` stays `draft` until `/gsd-validate-phase` sets `validated`.
+
+## Validation Audit 2026-08-15
+
+Reconciled at milestone close. The per-task map was already complete — every row
+carries a real Task ID and a green automated command — but the file had never been
+promoted out of `draft`, so its `nyquist_compliant` flag was not authoritative.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Evidence: full suite green at the close (3553 tests, 3552 pass, 0 fail, 1
+pre-existing skip); `npm run check` exits 0.
