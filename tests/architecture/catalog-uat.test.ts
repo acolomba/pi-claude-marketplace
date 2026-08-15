@@ -39,8 +39,12 @@ import path from "node:path";
 import test, { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
-import { notifyUpdateNoOpWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import {
+  notifyUpdateNoOpWithContext,
+  notifyWithContext,
+} from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import {
   notify,
   type NotificationMessage,
@@ -277,6 +281,48 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 // The filter buckets (`--partial` / `--unavailable`) are unchanged; only the
 // rendered token splits.
 // ---------------------------------------------------------------------------
+// OUT-02 / OUT-05 / DFEN-04 / D-104-06: the two list-surface rows whose reason
+// brace is composed by `LIST_RENDER` rather than by the central
+// `renderPluginRow` arms. Declared once each so the fixture's `message` payload
+// and its `emit` override cannot drift apart -- the driver byte-pairs whatever
+// `emit` produces, and a second copy of the rows would let the documented
+// payload and the emitted one diverge silently.
+const AVAILABLE_INSTALLS_DISABLED_ROWS = [
+  {
+    name: "official",
+    scope: "user",
+    details: { autoupdate: true },
+    plugins: [
+      {
+        status: "available",
+        name: "helper",
+        version: "1.0.0",
+        severity: "info",
+        needsReload: false,
+        reasons: ["installs disabled"],
+      },
+    ],
+  },
+] as const;
+
+const REMOTE_INSTALLS_DISABLED_ROWS = [
+  {
+    name: "official",
+    scope: "user",
+    details: { autoupdate: true },
+    plugins: [
+      {
+        status: "remote",
+        name: "git-plugin",
+        version: "1.2.3",
+        severity: "info",
+        needsReload: false,
+        reasons: ["installs disabled"],
+      },
+    ],
+  },
+] as const;
+
 const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin list -- list-surface; mp.status === undefined.
@@ -728,6 +774,34 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // OUT-02 / DFEN-04: list-surface inventory row for a not-installed plugin
+    // whose marketplace ENTRY declares `defaultEnabled: false`. The claim is
+    // entry-derived -- the cached manifest carries it whatever the clone state --
+    // so the `(available)` row names the author's install-time declaration
+    // before the install runs, not after it. The same plugin's post-install row
+    // is the `install-disabled` state on the install surface. Severity `info`;
+    // `needsReload: false`.
+    //
+    // Driven through the list surface's own `CommandContext` via `emit`, for
+    // the same reason the bulk-update no-op states are: the reason brace on a
+    // `(available)` / `(remote)` row is composed by `LIST_RENDER`, while the
+    // central `renderPluginRow` arms omit `composeReasons` by construction --
+    // no producer that renders through THEM stamps `reasons` on those two
+    // statuses (D-104-06). `notifyWithContext` is the seam `listPlugins` itself
+    // calls, so the block below is byte-paired with the real list surface.
+    "available-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
+      emit: (ctx, pi) => {
+        notifyWithContext(
+          ctx as never,
+          pi as never,
+          LIST_CONTEXT,
+          AVAILABLE_INSTALLS_DISABLED_ROWS,
+        );
+      },
+    },
+
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
     // git-source plugin whose clone/mirror is not materialized locally. The
     // `(remote)` closed-set token wears the dedicated `◌` glyph. Bare row --
@@ -777,6 +851,22 @@ const FIXTURES: FixtureMap = {
             ],
           },
         ],
+      },
+    },
+
+    // OUT-02 / OUT-05 / RSTA-01 / D-104-06: the `remote-inventory` row above
+    // whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS
+    // the bare-row rule rather than reversing it: the row still refuses every
+    // probe-derived reason and both soft-dependency markers (no materialized
+    // tree exists to derive either from) and admits exactly one entry-derived
+    // token, which needs no tree at all. Severity `info`; `needsReload: false`.
+    // Driven through the list surface's `CommandContext` via `emit`, for the
+    // reason recorded on the `(available)` state above.
+    "remote-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
+      emit: (ctx, pi) => {
+        notifyWithContext(ctx as never, pi as never, LIST_CONTEXT, REMOTE_INSTALLS_DISABLED_ROWS);
       },
     },
 
@@ -3247,6 +3337,34 @@ const FIXTURES: FixtureMap = {
             commands: ["chat"],
             skills: ["chat-init"],
           },
+        },
+      } satisfies NotificationMessage,
+    },
+
+    // OUT-03 / DFEN-04: the `available-single-scope` row above whose
+    // marketplace ENTRY declares `defaultEnabled: false`. The info surface
+    // states the fact through the reason brace the row already had, so the two
+    // renders differ by that brace alone -- no extra body line, description and
+    // component lines untouched. The claim is entry-derived, so nothing on disk
+    // is read to answer it. Severity `info`; no reload-hint (read-only surface).
+    "available-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "chat-helper",
+          version: "0.5.0",
+          description: "Quick chat helper plugin; experimental.",
+          componentsResolved: true,
+          components: {
+            commands: ["chat"],
+            skills: ["chat-init"],
+          },
+          reasons: ["installs disabled"],
         },
       } satisfies NotificationMessage,
     },

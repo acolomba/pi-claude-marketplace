@@ -368,6 +368,17 @@ This surface builds the row from the installation record alone and reads no sour
 
 A manifest that failed to load backs no absence claim (BOUND-01 / D-95-05). Such a marketplace renders a bare `(failed)` header with no plugin rows. Severity `info`; no reload-hint (inventory row, not a state-changer).
 
+### Available inventory row that would install disabled (OUT-02 / DFEN-04)
+
+<!-- catalog-state: available-installs-disabled -->
+
+```text
+● official [user] <autoupdate>
+  ○ helper v1.0.0 (available) {installs disabled}
+```
+
+A not-installed plugin whose marketplace ENTRY declares `defaultEnabled: false` carries the closed-set `{installs disabled}` token on its `(available)` row, so the reader sees the author's install-time declaration BEFORE running the install rather than after it. The claim is entry-derived: the marketplace entry is readable from the cached `marketplace.json` for every declared plugin whatever its clone state, thus this row reads no source tree and fires no network call to make it. The post-install row for the same plugin is the `install-disabled` state under `## /claude:plugin install <plugin>@<marketplace>`; the two blocks side by side are the whole story of the token for `helper`. Severity `info`; no reload-hint (inventory row) -- and for a different reason than the install row's: there the desired state WAS reached, while here nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
+
 ### Remote inventory row (RSTA-01 / D-80-03)
 
 <!-- catalog-state: remote-inventory -->
@@ -392,6 +403,17 @@ A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose
 Same `remote-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants: 4-space indent, truncated at column 66. Severity `info`; no reload-hint.
 
 Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants (`installed` / `upgradable` / `available` / `unavailable`): 4-space indent, truncated at column 66. The disabled inventory row is steady state, so severity stays `info` and no reload-hint fires.
+
+### Remote inventory row that would install disabled (OUT-02 / OUT-05 / RSTA-01 / D-104-06)
+
+<!-- catalog-state: remote-installs-disabled -->
+
+```text
+● official [user] <autoupdate>
+  ◌ git-plugin v1.2.3 (remote) {installs disabled}
+```
+
+The same not-yet-materialized git-source plugin as the `remote-inventory` row above, whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS that block's bare-row rule rather than reversing it (D-104-06). The row still refuses every probe-derived reason and both soft-dependency markers, because no materialized tree exists to derive either from; it admits exactly one entry-derived token. That token needs no tree at all -- the marketplace entry is readable from the cached `marketplace.json` whatever the clone state -- which is what lets the reader furthest from having fetched anything still see the author's install-time declaration. Severity `info`; no reload-hint (inventory row): nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
 
 ### Partially-installed inventory row (FSTAT-02 / D-66-03)
 
@@ -1720,6 +1742,20 @@ Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `
 ```text
 ● community-mp [user] <no autoupdate>
   ○ chat-helper v0.5.0 (available)
+    Quick chat helper plugin; experimental.
+    commands: chat
+    skills: chat-init
+```
+
+### Success -- available single scope that would install disabled (OUT-03 / DFEN-04)
+
+The same not-installed plugin as the state above, whose marketplace ENTRY declares `defaultEnabled: false`. The `info` surface states the fact through the reason brace its row already had, so this render differs from `available-single-scope` by that brace alone: no extra body line, and the description and per-kind component lines are untouched. The claim is entry-derived: the marketplace entry is readable from the cached `marketplace.json` for every declared plugin whatever its clone state, thus nothing on disk is read to answer it. Severity `info`; no reload-hint (read-only surface): nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
+
+<!-- catalog-state: available-installs-disabled -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ○ chat-helper v0.5.0 (available) {installs disabled}
     Quick chat helper plugin; experimental.
     commands: chat
     skills: chat-init
