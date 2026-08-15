@@ -3316,3 +3316,243 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     assert.match(msg, /components: not resolved/, msg);
   });
 });
+
+// ---------------------------------------------------------------------------
+// OUT-03: the author-declared install-time claim on the info surface.
+//
+// A not-installed row whose marketplace ENTRY declares `defaultEnabled: false`
+// says so in the row's existing reason brace, so a user deciding whether to
+// install learns it before committing. D-104-01: the entry is the only source
+// -- the plugin's own manifest is never read, which is what lets a row with no
+// materialized tree at all carry the claim.
+//
+// Every case below pins the severity as ABSENT. That is not decoration: the
+// token names an AUTHOR'S INTENT rather than a shortfall, so stating it must
+// not move the surface off informational severity.
+// ---------------------------------------------------------------------------
+
+test("OUT-03 / D-104-05: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` info row, and a declared-true entry differs by exactly that brace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "dis",
+            source: "./dis",
+            version: "1.0.0",
+            description: "Candidate plugin.",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+          {
+            name: "ena",
+            source: "./ena",
+            version: "1.0.0",
+            description: "Candidate plugin.",
+            skills: "skills",
+            defaultEnabled: true,
+          },
+        ],
+      },
+      installablePluginDirs: ["dis", "ena"],
+      componentDirs: { dis: ["skills/s1"], ena: ["skills/s1"] },
+    });
+
+    const declaring = makeCtx();
+    await getPluginInfo({
+      ctx: declaring.ctx,
+      pi: declaring.pi,
+      marketplace: "mp",
+      plugin: "dis",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(declaring.notifications.length, 1);
+    assert.equal(declaring.notifications[0]!.severity, undefined);
+    assert.equal(
+      declaring.notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ dis v1.0.0 (available) {installs disabled}",
+        "    Candidate plugin.",
+        "    skills: s1",
+      ].join("\n"),
+    );
+
+    const declaredTrue = makeCtx();
+    await getPluginInfo({
+      ctx: declaredTrue.ctx,
+      pi: declaredTrue.pi,
+      marketplace: "mp",
+      plugin: "ena",
+      scope: "user",
+      cwd,
+    });
+    assert.equal(declaredTrue.notifications.length, 1);
+    assert.equal(declaredTrue.notifications[0]!.severity, undefined);
+    assert.equal(
+      declaredTrue.notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ ena v1.0.0 (available)",
+        "    Candidate plugin.",
+        "    skills: s1",
+      ].join("\n"),
+    );
+
+    // D-104-05: the fact is stated through the brace the row ALREADY has, never
+    // through a new body line. Asserting the two renders line-by-line is what
+    // proves it: same line count, every non-row line identical, and the row
+    // line differing by the brace alone. One fact keeps one grammar here.
+    const declaringLines = declaring.notifications[0]!.message.split("\n");
+    const declaredTrueLines = declaredTrue.notifications[0]!.message.split("\n");
+    assert.equal(declaringLines.length, declaredTrueLines.length);
+    assert.deepEqual(
+      declaringLines.filter((_, i) => i !== 1),
+      declaredTrueLines.filter((_, i) => i !== 1),
+    );
+    assert.equal(
+      declaringLines[1],
+      `${declaredTrueLines[1]!.replace("ena", "dis")} {installs disabled}`,
+    );
+  });
+});
+
+test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `defaultEnabled: false` carries `{installs disabled}` with no tree materialized anywhere", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+    });
+
+    // No mirror is staged, so there is no `plugin.json` on disk to read and no
+    // fetch is made to produce one. The claim can only have come from the
+    // marketplace entry -- which is exactly why the entry is the single source
+    // (D-104-01): it reads the same warm and cold.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03 / D-104-03: a `(partially-available)` row appends `installs disabled` at the tail of the degrade token it already carries", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "lspplug",
+            source: cloneUrl,
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "lspplug", lspServers: { foo: {} } },
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "lspplug", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊖ lspplug v1.0.0 (partially-available) {lsp, installs disabled}",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-05 / D-104-04: a degraded `(remote)` row reporting a read failure carries BOTH facts in one brace, failure first", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0", defaultEnabled: false }],
+      },
+    });
+
+    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
+      code: "ENOTFOUND",
+    });
+    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The two facts are ORTHOGONAL and neither suppresses the other: the
+    // failure says the fetch did not succeed, the token says what an install
+    // would do. The token is entry-derived, so it stays true whether or not the
+    // tree could be read -- and the tail position is observable, since the
+    // brace composer joins in array order with no per-row sort.
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {network unreachable, installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
