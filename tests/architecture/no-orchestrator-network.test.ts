@@ -13,11 +13,18 @@ import { assertNoForbiddenSurface } from "../helpers/source-scan.ts";
  *   restated here -- a hand-maintained second copy of an annotated list only
  *   drifts out of step with it.
  *
- *   What the gate covers, in general terms: the network-free modules. Those
- *   are the read-only plugin and marketplace orchestrators, the reconcile
- *   pending/planner/projection family, and one file OUTSIDE the orchestrator
- *   layer -- the resolver -- whose obligation is inherited from the two read
- *   surfaces it answers for.
+ *   What the gate covers, in general terms: every module that must NAME no git
+ *   surface of its own. That is a narrower claim than "performs no network
+ *   operation", and the membership splits two ways. Most targets are
+ *   network-free by contract -- the read surfaces (`list`, plugin `info`,
+ *   marketplace `info`), the reconcile pending/planner/projection family,
+ *   `reinstall` (cached manifests only), and one file OUTSIDE the orchestrator
+ *   layer, the resolver, whose obligation is inherited from the two read
+ *   surfaces it answers for. The other three are MUTATING verbs that do reach
+ *   git -- `install.ts` and `fetch.ts` materialize a clone on a cache miss, and
+ *   `enable-disable.ts` re-materializes through the install ledger -- and they
+ *   qualify because they reach it ONLY through the `clone-cache.ts` seam, by
+ *   entrypoint name. None of the three is read-only.
  *
  * Exempt files (do NOT add):
  *   - orchestrators/plugin/update.ts
