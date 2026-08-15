@@ -262,6 +262,14 @@ export type InstallPluginOutcome =
       readonly resourcesChanged: boolean;
       readonly declaresAgents: boolean;
       readonly declaresMcp: boolean;
+      /**
+       * The resolved install version, as the standalone rows render it. An
+       * orchestrated caller has no other way to fill the version slot its own
+       * projection carries on every comparable row. Not a
+       * `LedgerDegradationSignals` member, so the COMPAT-01 key-set pin is
+       * undisturbed.
+       */
+      readonly version?: string;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
       /**
@@ -2246,6 +2254,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
   return {
     status: "installed",
+    version: installCtx.version,
     // DFEN-04: the ledger DID stage on the install-disabled path, but the
     // cascade removed every artifact before the command returned, so the net
     // Pi-visible resource delta is zero. `import/execute.ts` consumes this as a

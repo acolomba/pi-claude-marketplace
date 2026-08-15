@@ -623,6 +623,26 @@ async function applyPluginInstalls(
           scope: op.scope,
           marketplace: op.marketplace,
           plugin: op.plugin,
+          // DFEN-04 / OUT-01: name the author-declared cause, exactly as the
+          // standalone row does. This is the surface that needs it MOST -- the
+          // user hand-added a bare entry and reloaded, and without the token a
+          // plugin silently arrives inert under a row indistinguishable from a
+          // disable they asked for.
+          reasons: ["installs disabled"],
+          // OUT-04 / D-102-10: same reason -- an unrequested disable has to name
+          // the remedy. The toggle arm below stamps neither field.
+          enableHint: true,
+          // The version slot every other reconcile `(disabled)` row fills.
+          ...(result.version !== undefined && { version: result.version }),
+          // S2 / PR #51: the post-commit warnings are collected on this path
+          // exactly as on the install path -- none of the collection sites are
+          // gated on the disabled verdict -- so drop them here and a permission
+          // error on `pluginDataDir` or a preserved foreign agent file is
+          // silently discarded, though both are still on disk.
+          ...(result.postCommitWarnings !== undefined &&
+            result.postCommitWarnings.length > 0 && {
+              postCommitWarnings: result.postCommitWarnings,
+            }),
         });
       } else if (result.status === "installed") {
         outcomes.push({
@@ -1500,7 +1520,15 @@ export function surfacePostCommitWarnings(
 ): void {
   const lines: string[] = [];
   for (const o of outcomes) {
-    if (o.kind !== "plugin-installed" || o.postCommitWarnings === undefined) {
+    // Both install-driven arms carry the field: `installPlugin` collects its
+    // post-commit warnings after the state commit and gates none of them on the
+    // DFEN-04 disabled verdict, so an install that landed disabled has the same
+    // hygiene facts to report as one that landed enabled.
+    if (o.kind !== "plugin-installed" && o.kind !== "plugin-disabled") {
+      continue;
+    }
+
+    if (o.postCommitWarnings === undefined) {
       continue;
     }
 

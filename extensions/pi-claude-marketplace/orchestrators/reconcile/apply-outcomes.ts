@@ -193,10 +193,42 @@ export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
   readonly reason: Reason;
 }
 
-/** Plugin disable success outcome. */
+/**
+ * Plugin disable success outcome. Two producers share it: the toggle path (a
+ * user-declared `enabled: false` over a materialized record) and the
+ * install-disabled cascade (DFEN-04 -- the install ran whole and then unstaged
+ * because the plugin's own `defaultEnabled` said so). The three optional fields
+ * below are what tell the two apart on the rendered row; the toggle path omits
+ * all three and stays byte-frozen.
+ */
 export interface PluginDisabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disabled";
   readonly version?: string;
+  /**
+   * DFEN-04 / OUT-01: the author-declared cause, named exactly as the
+   * standalone install-disabled row names it. Without it the unattended row --
+   * the COMMON one, since a hand-added bare entry is how most plugins reach
+   * this path -- renders identically to a user-requested disable and says
+   * nothing about why the plugin arrived inert.
+   */
+  readonly reasons?: readonly ContentReason[];
+  /**
+   * OUT-04 / D-102-10: request the frozen trailer naming the `enable` verb. Set
+   * by the install-disabled cascade for the same reason the standalone install
+   * row sets it -- the user did not ask for a disable, so the row has to name
+   * the remedy. The toggle path omits it: a user who declared `enabled: false`
+   * does not need to be told how to undo it.
+   */
+  readonly enableHint?: true;
+  /**
+   * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`,
+   * propagated exactly as the sibling `plugin-installed` arm propagates them.
+   * `installPlugin` collects these AFTER the state commit and gates none of
+   * them on the disabled verdict, so a permission error on `pluginDataDir` or a
+   * preserved foreign agent file is just as real here -- the data dir and the
+   * foreign file are both still on disk.
+   */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /** Plugin disable failure outcome. */

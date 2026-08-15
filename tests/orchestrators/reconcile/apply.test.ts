@@ -882,6 +882,79 @@ test("WARN-01 / D-86-03 / T-86-03: a degraded plugin-installed outcome carries d
   );
 });
 
+test("DFEN-04 / OUT-01 / OUT-04 / S2: an install-disabled outcome renders its cause, remedy and version, and its post-commit warnings still reach notifyDiagnostic", async () => {
+  // The install-disabled cascade and the toggle path share one outcome kind, so
+  // the three optional fields are what separate the row a user asked for from
+  // the one a bare config entry produced. The post-commit warnings ride the
+  // same outcome: `installPlugin` gates none of its collection sites on the
+  // disabled verdict, so dropping them here discards facts about artifacts that
+  // are still on disk.
+  const { buildReconcileAppliedCascade } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts");
+  const outcome: import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts").PluginDisabledOutcome =
+    {
+      kind: "plugin-disabled",
+      scope: "project",
+      marketplace: "mp-a",
+      plugin: "plugin-a",
+      version: "1.0.0",
+      reasons: ["installs disabled"],
+      enableHint: true,
+      postCommitWarnings: ['Plugin "plugin-a" installed; data dir creation deferred'],
+    };
+
+  const msg = buildReconcileAppliedCascade([outcome]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "disabled");
+  if (row.status === "disabled") {
+    assert.deepEqual([...(row.reasons ?? [])], ["installs disabled"]);
+    assert.equal(row.enableHint, true);
+    assert.equal(row.version, "1.0.0");
+    // The realized-transition stamp is unchanged -- this row shares the arm
+    // every other reconcile disable uses.
+    assert.equal(row.needsReload, true);
+    assert.equal(row.severity, "info");
+  }
+
+  const ctx = makeCtx();
+  surfacePostCommitWarnings(
+    { ctx: ctx as unknown as ExtensionContext } as Parameters<typeof surfacePostCommitWarnings>[0],
+    [outcome],
+  );
+  assert.equal(ctx.ui.notify.mock.calls.length, 1);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  assert.ok(
+    args[0].includes("data dir creation deferred"),
+    `expected the post-commit warning to surface; got:\n${args[0]}`,
+  );
+});
+
+test("DFEN-04: a toggle-path disable renders the byte-frozen bare row", async () => {
+  // The negative half of the case above: the shared outcome kind must not have
+  // turned the cause, the remedy or a reload change into something every
+  // disable now carries.
+  const { buildReconcileAppliedCascade } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts");
+  const msg = buildReconcileAppliedCascade([
+    {
+      kind: "plugin-disabled",
+      scope: "project",
+      marketplace: "mp-a",
+      plugin: "plugin-a",
+      version: "1.0.0",
+    },
+  ]);
+  const row = msg.marketplaces[0]?.plugins[0];
+  assert.ok(row);
+  assert.equal(row.status, "disabled");
+  if (row.status === "disabled") {
+    assert.equal(row.reasons, undefined);
+    assert.equal(row.enableHint, undefined);
+    assert.equal(row.needsReload, true);
+  }
+});
+
 test("S3 / PR #51: read-pass throw on saveConfig (claude-plugins.json EACCES) attributes the failed row to claude-plugins.json basename, not state.json", async () => {
   // Pre-fix `apply.ts:596-603`'s read-pass throw catch always named
   // `state.json` as the failing subject. When the throw originated in
@@ -1883,12 +1956,19 @@ test("DFEN-04 / D-102-04: a base-declared bare entry whose marketplace says defa
     );
 
     // The cascade says what it did: a (disabled) row, never an (installed) one
-    // over a record that is disabled.
+    // over a record that is disabled. OUT-01 / OUT-04: the unattended row names
+    // the author-declared cause and the remedy, or it is indistinguishable from
+    // a disable the user asked for.
     assert.equal(ctx.ui.notify.mock.calls.length, 1);
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.match(
+      args[0],
+      /^ {2}◍ foo v1\.2\.3 \(disabled\) \{installs disabled\}$/m,
+      `expected the full install-disabled row for foo; got:\n${args[0]}`,
+    );
     assert.ok(
-      args[0].includes("foo") && args[0].includes("(disabled)"),
-      `expected a (disabled) row for foo; got:\n${args[0]}`,
+      args[0].includes("    Run enable on this plugin to use its components."),
+      `expected the enable-hint trailer; got:\n${args[0]}`,
     );
     assert.ok(
       !args[0].includes("(installed)"),
