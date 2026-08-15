@@ -3343,6 +3343,174 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
   });
 });
 
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, so what this milestone owes them is that NOTHING moved. The
+ * triple is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. The declaring sibling is present precisely so the
+ * comparison happens inside one live run rather than against a captured
+ * baseline that would rot. `alpha`, declaring FALSE, is the third arm: a
+ * precedence fixture over a three-valued key that covers two of the values
+ * passes while asking the wrong question.
+ *
+ * Every declaration is flipped between the install and the update, and the
+ * version bump rides the SAME rewrite, for the reason the single-plugin case
+ * above states: a manifest the `(mtimeMs, size)` cache declined to re-read
+ * would leave the verb looking at the OLD entry, and every enablement
+ * assertion here would then pass for the wrong reason.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical update rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          alpha: {
+            version: "1.0.0",
+            hasSkill: true,
+            omitPluginJsonVersion: true,
+            entryDefaultEnabled: false,
+          },
+          beta: {
+            version: "1.0.0",
+            hasSkill: true,
+            omitPluginJsonVersion: true,
+            entryDefaultEnabled: true,
+          },
+          // No knob at all: the seeder's conditional spread writes NO
+          // `defaultEnabled` key on this entry, which is the arm every plugin
+          // that never heard of the field lands on.
+          gamma: { version: "1.0.0", hasSkill: true, omitPluginJsonVersion: true },
+        },
+      });
+
+      // Install all three through the production path, each carrying the
+      // install-time opt-in that the real install handler and the reconcile
+      // apply pass both set. The whole point is that it changes nothing for two
+      // of the three.
+      const install = async (plugin: string): Promise<void> => {
+        const seed = makeCtx();
+        await installPlugin({
+          ctx: seed.ctx,
+          pi: seed.pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin,
+          applyDefaultEnabled: true,
+        });
+      };
+
+      await install("alpha");
+      await install("beta");
+      await install("gamma");
+
+      const pluginsNow = async (): Promise<Record<string, PluginRecord>> =>
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {};
+
+      // Precondition: without it the update assertions below can pass over a
+      // fixture that never reached the path under test.
+      const before = await pluginsNow();
+      assert.equal(
+        before["alpha"]?.enabled,
+        false,
+        "precondition: declared false installs disabled",
+      );
+      assert.equal(before["beta"]?.enabled, true, "precondition: declared true installs enabled");
+      assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
+      assert.equal(before["alpha"]?.version, "1.0.0");
+      assert.equal(before["beta"]?.version, "1.0.0");
+      assert.equal(before["gamma"]?.version, "1.0.0");
+
+      // ONE rewrite carrying both halves: the version is the CONTROL that
+      // proves the manifest was genuinely re-read, the declaration is the
+      // subject. Every declaration inverts -- `alpha` to true, `beta` to false,
+      // and `gamma` gains the explicit false it never carried.
+      await rewriteManifest(manifestPath, "mp", {
+        alpha: { version: "2.0.0", entryDefaultEnabled: true },
+        beta: { version: "2.0.0", entryDefaultEnabled: false },
+        gamma: { version: "2.0.0", entryDefaultEnabled: false },
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.equal(notifications.length, 1);
+      // Two benign `updated` rows beside one info-severity skip -> info
+      // (severity unset).
+      assert.equal(notifications[0]?.severity, undefined);
+
+      // Whole-body rather than per-row `includes`: the literal pins the row
+      // ORDER, the tally and the trailer, none of which a substring check
+      // constrains. The tally legitimately reads two where the pre-milestone
+      // tree read three -- `alpha` is skipped, so the fixture's own third arm
+      // moved the count. That is why the parity claim below is about ROWS.
+      const body = notifications[0]?.message ?? "";
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ⊘ alpha (skipped) {already disabled}\n" +
+          "  ● beta v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● gamma v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Plugin update: 2 updated\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+
+      // The parity claim itself, stated apart from the whole-body literal.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes the
+      // two literals below the pre-existing row form as well. Asserting the two
+      // rendered rows against EACH OTHER catches a drift that two
+      // independently-correct literals would both stay green through.
+      const rows = body.split("\n");
+      const rowFor = (name: string): string =>
+        rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor("beta");
+      const gammaRow = rowFor("gamma");
+      assert.equal(betaRow, "  ● beta v1.0.0 → v2.0.0 (updated)");
+      assert.equal(gammaRow, "  ● gamma v1.0.0 → v2.0.0 (updated)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+      );
+
+      const after = await pluginsNow();
+      assert.equal(
+        after["alpha"]?.enabled,
+        false,
+        "DFEN-07: a release flipping the declaration to true cannot re-enable a plugin the install recorded disabled",
+      );
+      assert.equal(after["beta"]?.enabled, true, "DFEN-08: a flipped declaration moves nothing");
+      assert.equal(after["gamma"]?.enabled, true, "DFEN-08: a gained declaration moves nothing");
+      // CONTROL: all three versions moved, so the flipped manifest was genuinely
+      // re-read. A stale manifest cache would have left every record at 1.0.0
+      // and the enablement assertions above would prove nothing.
+      assert.equal(after["alpha"]?.version, "2.0.0");
+      assert.equal(after["beta"]?.version, "2.0.0");
+      assert.equal(after["gamma"]?.version, "2.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── ENBL-09: update vs a DISABLED PARTIAL ──────────────────────────────────
 //
 // WR-04 / D-98-04: the disabled-record short-circuit is reachable BOTH ways.
