@@ -87,6 +87,7 @@ import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-c
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
+  ContentReason,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginFailedMessage,
@@ -669,10 +670,15 @@ async function availableRowMessage(
   // INV-01: same conditional-spread idiom as `notInManifestField` above. Under
   // `exactOptionalPropertyTypes` an optional field is added by spreading a
   // conditionally empty object, never by `reasons: cond ? [...] : undefined`.
-  // `NonNullable` because the indexed access on an optional property yields
-  // `| undefined`, which the target rejects.
+  // The annotation names the DOMAIN reason type rather than either consumer.
+  // This field is spread into an `available` literal AND a `remote` literal,
+  // which declare `reasons` identically today. Indexing into one of them would
+  // tie the holder's own type to that one consumer, so a future narrowing there
+  // would drag the holder with it and report the break at THIS declaration
+  // rather than at the message literal that actually stopped accepting the
+  // token.
   const installsDisabledField: {
-    readonly reasons?: NonNullable<PluginAvailableMessage["reasons"]>;
+    readonly reasons?: readonly ContentReason[];
   } = claimsInstallDisabled ? { reasons: ["installs disabled"] } : {};
 
   // RSTA-01 / RSTA-05 / RSTA-06 / NFR-5: a git-source entry derives from its
