@@ -3630,8 +3630,8 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
     //    bug fix -- it would make these surfaces agree with what the install
     //    path reads -- and it is not one. It reintroduces the warm/cold
     //    asymmetry, and the only remedy for that asymmetry is a fetch the
-    //    network-free requirement forbids. DOC-02 owns the written-up
-    //    divergence; the full argument lives there.
+    //    network-free requirement forbids. D-104-01 / OUT-05 own the rule; do
+    //    not "fix" this toward what install reads.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
