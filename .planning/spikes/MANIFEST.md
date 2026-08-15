@@ -200,6 +200,17 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   invisible to Fallow but caught by ESLint's glob-based, reachability-blind
   rule. Fallow should complement, not replace, the existing ESLint gate
   (Spike 012).
+- `fallow dupes` reproduces SonarCloud's existing CPD signal (independently
+  re-finds duplication in both files behind Sonar's 3-file exclusion list)
+  and surfaces real, verified duplication Sonar's exclusion list doesn't
+  cover -- most notably a verbatim 4-file clone across `*.messaging.ts`
+  sibling files, the same "per-verb parallel file" pattern as the
+  already-excluded `bridges/*/stage.ts` pair. But clone detection is
+  structural/token-based and blind to intent: a flagged `shared/notify.ts`
+  self-duplication turned out to be two blocks a code comment explicitly
+  marks as deliberately different behavior -- every "extract shared
+  function" suggestion needs a human read of surrounding comments before
+  acting (Spike 013).
 
 ## Spikes
 
@@ -218,7 +229,7 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 010  | fallow-dead-code-signal             | standard   | Given the real repo's Pi-extension entry points and barrels, when `npx fallow dead-code` runs, then determine signal-to-noise: real dead code vs. false positives from invisible entry points                                                                                | ⚠ VALIDATED (gap)    | fallow, static-analysis, dead-code, tooling                              |
 | 011  | fallow-circular-deps                | standard   | Given `import-x/no-cycle` (orchestrators-only) and the accepted `bridges/hooks/` cycle knot, when `npx fallow` checks the whole graph, then determine coverage beyond the narrower existing rule and whether the known knot can be accepted                                  | ✓ VALIDATED          | fallow, static-analysis, circular-deps, tooling                          |
 | 012  | fallow-boundary-fidelity            | standard   | Given the 9-zone `no-restricted-paths` config plus custom grep-gate architecture tests, when the same rules are expressed in `.fallowrc.json`, then determine match, gap, or noise                                                                                            | ✓ VALIDATED          | fallow, static-analysis, boundaries, tooling                             |
-| 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | PENDING              | fallow, static-analysis, duplication, tooling                            |
+| 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | ✓ VALIDATED          | fallow, static-analysis, duplication, tooling                            |
 | 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | PENDING              | fallow, static-analysis, complexity, tooling                             |
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | PENDING              | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | PENDING              | fallow, static-analysis, autofix, tooling                                |
