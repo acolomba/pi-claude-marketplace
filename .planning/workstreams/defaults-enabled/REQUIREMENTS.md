@@ -35,7 +35,7 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 - [x] **DFEN-05**: An `enabled` value already present in the config entry wins over `defaultEnabled` and is never overwritten, in either direction. This is the analog of Claude's "an existing `enabledPlugins` setting takes precedence and persists".
 - [x] **DFEN-06**: The state produced by DFEN-04 is reconcile-stable: a `/reload` after installing a `defaultEnabled: false` plugin plans no action for it and does not re-enable it. Verified against the reconcile planner, not only at the install boundary.
 - [x] **DFEN-07**: `update` and `reinstall` never re-apply `defaultEnabled` to an already-installed plugin, so a plugin release that changes the field does not flip a user's existing choice.
-- [ ] **DFEN-08**: `defaultEnabled: true` and an absent `defaultEnabled` produce byte-identical behavior and output to today, across install, update, reinstall, list, info, and reconcile.
+- [x] **DFEN-08**: `defaultEnabled: true` and an absent `defaultEnabled` produce byte-identical behavior and output to today, across install, update, reinstall, list, info, and reconcile.
 
 ### Read Surfaces
 
@@ -47,8 +47,8 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 
 ### Documentation
 
-- [ ] **DOC-01**: `docs/output-catalog.md` is amended for the new token and the surfaces that emit it.
-- [ ] **DOC-02**: The enablement contract is written down in `docs/plugin-enablement.md`, the durable home of two divergences. First, the dependency-requirement override: Claude writes an explicit `true` for a plugin required by another active plugin, at install or enable time, which we cannot do because a plugin's own dependency declarations are schema-accepted opaquely and surfaced in string-shaped form on `info`, but are never resolved, never auto-installed and never consulted for enablement, so no code path can write that value on a plugin's behalf (BACKLOG.md PDEP-01). Second, the entry-only pre-install read rule: `list` and `info` answer the manifest side of `{installs disabled}` from the marketplace entry alone and decline to claim where only the unread `plugin.json` declares (OUT-02 / OUT-05), so source comments citing that rule have a requirement-level anchor that does not archive.
+- [x] **DOC-01**: `docs/output-catalog.md` is amended for the new token and the surfaces that emit it.
+- [x] **DOC-02**: The enablement contract is written down in `docs/plugin-enablement.md`, the durable home of two divergences. First, the dependency-requirement override: Claude writes an explicit `true` for a plugin required by another active plugin, at install or enable time, which we cannot do because a plugin's own dependency declarations are schema-accepted opaquely and surfaced in string-shaped form on `info`, but are never resolved, never auto-installed and never consulted for enablement, so no code path can write that value on a plugin's behalf (BACKLOG.md PDEP-01). Second, the entry-only pre-install read rule: `list` and `info` answer the manifest side of `{installs disabled}` from the marketplace entry alone and decline to claim where only the unread `plugin.json` declares (OUT-02 / OUT-05), so source comments citing that rule have a requirement-level anchor that does not archive.
 
 ## v2 Requirements
 
@@ -80,14 +80,14 @@ definitions: `.planning/workstreams/defaults-enabled/ROADMAP.md`.
 | DFEN-05 | Phase 102 | Complete |
 | DFEN-06 | Phase 103 | Complete |
 | DFEN-07 | Phase 103 | Complete |
-| DFEN-08 | Phase 105 | Pending |
+| DFEN-08 | Phase 105 | Complete |
 | OUT-01 | Phase 102 | Complete |
 | OUT-02 | Phase 104 | Complete |
 | OUT-03 | Phase 104 | Complete |
 | OUT-04 | Phase 102 | Complete |
 | OUT-05 | Phase 104 | Complete |
-| DOC-01 | Phase 105 | Pending |
-| DOC-02 | Phase 105 | Pending |
+| DOC-01 | Phase 105 | Complete |
+| DOC-02 | Phase 105 | Complete |
 
 **Coverage:**
 

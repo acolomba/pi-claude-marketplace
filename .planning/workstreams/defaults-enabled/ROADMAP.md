@@ -27,7 +27,7 @@ phases (101.1, 102.1) are urgent insertions only, marked `INSERTED`.
 
 - [x] **Phase 104: Pre-install read surfaces** — `list` and `info` tell a user that a plugin will install disabled BEFORE they commit to the install, and stay network-free doing it. The marketplace entry is always readable from the cached manifest; `plugin.json` is not, without a clone. Where the entry is silent, the surfaces decline to claim rather than fetch. (OUT-02, OUT-03, OUT-05) (completed 2026-08-15)
 
-- [ ] **Phase 105: No-op parity sweep and contract documentation** — a plugin that says `defaultEnabled: true`, or says nothing, behaves byte-identically to pre-milestone across all six surfaces; the output catalog carries the new token and its emitters; and the dependency-requirement override is documented as a known divergence rather than half-built. (DFEN-08, DOC-01, DOC-02)
+- [x] **Phase 105: No-op parity sweep and contract documentation** — a plugin that says `defaultEnabled: true`, or says nothing, behaves byte-identically to pre-milestone across all six surfaces; the output catalog carries the new token and its emitters; and the dependency-requirement override is documented as a known divergence rather than half-built. (DFEN-08, DOC-01, DOC-02) (completed 2026-08-15)
 
 **Milestone-wide constraints** (apply at every phase boundary, not owned by any
 single phase):
@@ -278,18 +278,18 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 105-01-PLAN.md — the tracer: the DFEN-08 three-plugin triple proven end to end on `update`, with the flip-plus-version-control discipline, plus the evidence that the inherited closed-set gate and the inherited lifecycle source gate are ASSERTED rather than rebuilt
-- [ ] 105-03-PLAN.md — the DOC-02 contract: a new `docs/plugin-enablement.md` owning both divergences and the shipped three-input precedence rule, wired into both README editions, plus the `OUT-02` / `DOC-02` requirement corrections and the matching roadmap criterion reword
-- [ ] 105-05-PLAN.md — the four open review findings: the unfalsifiable network-free probe deleted with its dangling cross-reference repaired, the network gate's stale header and failure message, the restored enumerable clause in the message-shape reference, and the reason holder retyped against the domain reason type
+- [x] 105-01-PLAN.md — the tracer: the DFEN-08 three-plugin triple proven end to end on `update`, with the flip-plus-version-control discipline, plus the evidence that the inherited closed-set gate and the inherited lifecycle source gate are ASSERTED rather than rebuilt
+- [x] 105-03-PLAN.md — the DOC-02 contract: a new `docs/plugin-enablement.md` owning both divergences and the shipped three-input precedence rule, wired into both README editions, plus the `OUT-02` / `DOC-02` requirement corrections and the matching roadmap criterion reword
+- [x] 105-05-PLAN.md — the four open review findings: the unfalsifiable network-free probe deleted with its dangling cross-reference repaired, the network gate's stale header and failure message, the restored enumerable clause in the message-shape reference, and the reason holder retyped against the domain reason type
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 105-02-PLAN.md — the parity expansion: the same triple through the real bulk `reinstall` cascade and through three real `applyReconcile` passes, plus the reconcile fixture helper widened from a scalar plugin to a plugin map with every caller converted
-- [ ] 105-04-PLAN.md — the two DOC-01 catalog gaps: the reinstall cascade's `(skipped) {already disabled}` block with its fixture under the byte-equality runner, and the `(available)` token-table cell that was not updated alongside its sibling
+- [x] 105-02-PLAN.md — the parity expansion: the same triple through the real bulk `reinstall` cascade and through three real `applyReconcile` passes, plus the reconcile fixture helper widened from a scalar plugin to a plugin map with every caller converted
+- [x] 105-04-PLAN.md — the two DOC-01 catalog gaps: the reinstall cascade's `(skipped) {already disabled}` block with its fixture under the byte-equality runner, and the `(available)` token-table cell that was not updated alongside its sibling
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 105-06-PLAN.md — the durable re-anchoring sweep: all 73 citations of the six archiving read-surface decision IDs across 14 files replaced by requirement-level anchors under a fixed one-to-one mapping, comments and titles only
+- [x] 105-06-PLAN.md — the durable re-anchoring sweep: all 73 citations of the six archiving read-surface decision IDs across 14 files replaced by requirement-level anchors under a fixed one-to-one mapping, comments and titles only
 
 **Notes**:
 
@@ -314,7 +314,7 @@ Plans:
 | 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
 | 104. Pre-install read surfaces | defaults-enabled | 5/5 | Complete    | 2026-08-15 |
-| 105. No-op parity sweep and contract documentation | defaults-enabled | 0/6 | Planned | - |
+| 105. No-op parity sweep and contract documentation | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
 
 ## Requirement Coverage
 
