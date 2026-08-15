@@ -2963,7 +2963,7 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest an
   });
 });
 
-test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no plugin-clones dir on disk (no clone, no network)", async () => {
+test("RSTA-01: list renders an uninstalled git-source plugin as a `(remote)` row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
