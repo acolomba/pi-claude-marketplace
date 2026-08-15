@@ -612,9 +612,8 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
     // boolean derived from the try/catch, so a probe that failed for some
     // unrelated reason cannot pass as an absence.
     //
-    // A similar block near the tail of this file has both of those faults. It is
-    // pre-existing and out of scope here, and it is deliberately left as found
-    // -- do not harmonize this probe toward it.
+    // A probe carrying either of those faults is unfalsifiable, so this shape
+    // is written this way deliberately rather than by accident.
     const locations = locationsFor("user", cwd);
     let probeCode: unknown;
     try {
@@ -2976,19 +2975,6 @@ test("RSTA-01 / NFR-5: list renders an uninstalled git plugin (remote) with no p
         plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
       },
     });
-
-    // No plugin-clones/ directory is ever created; a clone (or any network
-    // touch) would have to materialize one. Its absence after the render proves
-    // the surface neither cloned nor fetched.
-    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
-    let clonesExisted = true;
-    try {
-      await readFile(clonesDir);
-    } catch {
-      clonesExisted = false;
-    }
-
-    assert.equal(clonesExisted, false);
 
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
