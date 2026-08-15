@@ -54,13 +54,13 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 
 ### Dependency-Driven Enablement
 
-- **DFEN-V2-01**: Honor Claude's second override -- a plugin required by another active plugin via `dependencies` gets an explicit `enabled: true`, so its own `defaultEnabled: false` no longer applies. Blocked on PDEP-01 (dependency declarations are currently dropped).
+- **DFEN-V2-01**: Honor Claude's second override -- a plugin required by another active plugin via `dependencies` gets an explicit `enabled: true`, so its own `defaultEnabled: false` no longer applies. Blocked on PDEP-01 (dependency declarations are surfaced on `info` but never resolved or consulted for enablement).
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Honoring the dependency-requirement override | No mechanism exists -- plugin `dependencies` are opaque and dropped today (PDEP-01). Documented as a divergence under DOC-02 instead of half-built. |
+| Honoring the dependency-requirement override | No mechanism exists -- plugin `dependencies` are schema-accepted opaquely and surfaced on `info`, but never resolved or consulted for enablement (PDEP-01). Documented as a divergence under DOC-02 instead of half-built. |
 | Teaching `isDeclaredEnabled` the manifest value | Rejected design. Needs manifest access the reconcile planner lacks, lets a manifest edit flip a user's plugin off on reload, and contradicts upstream install-time-only timing. |
 | Fetching a clone so `list` / `info` can read `plugin.json` `defaultEnabled` | Would make a documented network-free read path a network operation, violating NFR-5. OUT-05 declines to claim instead. |
 | A user-facing setting or flag to override `defaultEnabled` at install time | Not in the upstream contract. Editing `claude-plugins.json` or running `enable` already covers it. |
