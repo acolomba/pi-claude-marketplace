@@ -616,6 +616,68 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
   });
 });
 
+test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rather than aiming the write at the shadowed base file", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const statePath = path.join(scopeRoot, "pi-claude-marketplace", "state.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const baseBytes = JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: path.join(home, "mp-src") } },
+      plugins: { "foo@mp": { enabled: false } },
+    });
+    await writeFile(configPath, baseBytes, "utf8");
+    // The local file is the one that DECIDES the destination on a flagless
+    // call, and this one cannot be read (a truncated mid-save write; an EACCES
+    // or a schema violation arrive through the same `invalid` arm). Whether it
+    // declares `foo@mp` is now unknowable -- and the two answers select
+    // different files. Reading `invalid` as "not declared locally" put the flip
+    // in the base file, which a local entry replaces wholesale under CFG-02:
+    // the verb reported success, the merged view never moved, and the next
+    // reload planned the opposite of the command.
+    await writeFile(configLocalPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
+    const statePre = await readFile(statePath, "utf8");
+    const mtimePre = (await stat(statePath)).mtimeMs;
+
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\) \{invalid manifest\}/);
+    // The row names the file that could not be read -- the one the user has to
+    // repair -- not the file the write would have landed in.
+    assert.match(
+      notifications[0]!.message,
+      /claude-plugins\.local\.json/,
+      "the abort must name the unreadable local file",
+    );
+    assert.ok(
+      !notifications[0]!.message.includes(configLocalPath),
+      "absolute path must not be leaked (T-54-02-02)",
+    );
+
+    // Nothing was written anywhere: the base file keeps its bytes and the
+    // no-save abort discipline holds for state.json.
+    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    assert.equal(await readFile(statePath, "utf8"), statePre);
+    assert.equal((await stat(statePath)).mtimeMs, mtimePre);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL-02 / ENBL-18: disable preserves the version pin AND the inventory
 // ──────────────────────────────────────────────────────────────────────────

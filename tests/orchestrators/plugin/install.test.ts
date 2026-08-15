@@ -4547,6 +4547,149 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
   });
 });
 
+test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install rather than aiming the stamp at the shadowed base file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-local-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // The local file is what DECIDES the destination on a flagless call, and
+      // this one cannot be read (a truncated mid-save write; an EACCES or a
+      // schema violation arrive through the same `invalid` arm). Whether it
+      // declares `hello@mp` is unknowable, and the two answers select different
+      // files -- so there is no destination to write to. Reading `invalid` as
+      // "not declared locally" stamped the base file, which a local entry
+      // replaces wholesale under CFG-02: the install reported success while the
+      // merged view the reconcile planner reads never moved.
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(
+        locations.configLocalJsonPath,
+        '{"plugins": {"hello@mp": {"enabled": tru',
+        "utf8",
+      );
+
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytesPre = await readFile(statePath, "utf8");
+      const stateMtimePre = (await stat(statePath)).mtimeMs;
+
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      assert.equal(notifications.length, 1);
+      const note = notifications[0]!;
+      assert.match(note.message, /\{invalid manifest\}/);
+      // The row names the file that could not be read -- the one the user has
+      // to repair -- not the file the stamp would have landed in.
+      assert.match(
+        note.message,
+        /claude-plugins\.local\.json/,
+        "the abort must name the unreadable local file",
+      );
+      assert.ok(
+        !note.message.includes(locations.configLocalJsonPath),
+        `MUST NOT leak the absolute path, got: ${note.message}`,
+      );
+
+      // Nothing was written anywhere: no base file was created, no state
+      // mutation, and the no-save abort discipline holds byte for byte.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"], undefined);
+      assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
+      assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoption write instead of counting as a file that declares nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-unreadable-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      // The declaration lives in the local file, so that file is the target and
+      // the BASE file is the sibling the UAT-05 membership gate consults. The
+      // base file declares the marketplace with `autoupdate: false` -- and is
+      // schema-invalid on an unrelated entry, so the gate cannot read it.
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configLocalJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": {} } },
+        locations.scopeRoot,
+      );
+      const baseBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src", autoupdate: false } },
+        plugins: { "other@mp": { enabled: "no" } },
+      });
+      await writeFile(locations.configJsonPath, baseBytes, "utf8");
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status !== "valid") {
+        return;
+      }
+
+      // The plugin entry still lands in its declaring file -- the install is
+      // correctly targeted and is not what is in doubt.
+      assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      // The load-bearing assertion. Coercing the unreadable sibling to an empty
+      // config made the gate conclude the marketplace was undeclared, and the
+      // synthesized bare `{source}` entry replaces the base entry wholesale
+      // under CFG-02 -- so once the base file is repaired the user's
+      // `autoupdate: false` is gone and the marketplace starts auto-updating,
+      // a network-touching setting flipped with no command and no prompt.
+      assert.equal(
+        localCfg.config.marketplaces?.["mp"],
+        undefined,
+        "an unreadable sibling must not be read as a file that declares nothing",
+      );
+      // The unreadable file was never written to either.
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // UAT-05: merged-view membership gate for the adopted-marketplace declaration
 // ──────────────────────────────────────────────────────────────────────────

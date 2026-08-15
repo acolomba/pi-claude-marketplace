@@ -108,7 +108,6 @@ import {
 } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
   writePluginConfigEntry,
@@ -1463,19 +1462,26 @@ async function disableFreshlyInstalledPlugin(args: {
  * The local file wins by IDENTITY, not by precedence: whichever of the two
  * paths is `claude-plugins.local.json` answers the key, and the entry is
  * selected before its `enabled` field is read, because a wholesale replacement
- * shadows the base entry's `enabled` too. The sibling is read fresh INSIDE the
- * caller's lock (WB-01) for this test only -- never written, never serialized
- * back. `absent` / `invalid` sibling arms contribute nothing, mirroring the
- * D-18 merge fallback.
+ * shadows the base entry's `enabled` too. Both parses arrive from
+ * `selectDeclaringConfigWriteTarget`, read fresh INSIDE the caller's lock
+ * (WB-01) for this test only -- never written, never serialized back.
+ *
+ * An UNREADABLE sibling (`sibling === undefined`) contributes nothing, and on
+ * the flagless path that costs no signal: the selector aborts when the LOCAL
+ * file is unreadable, and when the target IS the local file the key is declared
+ * there by construction, so the base file is never the one that answers.
+ * A typed `--local` over an unreadable BASE file is the sole arm where an
+ * `enabled` value could be missed -- the flag names the destination outright,
+ * so no abort is owed there, and the arm reads exactly as it did before the
+ * sibling parse was threaded.
  */
-async function readDeclaredEnabled(args: {
+function readDeclaredEnabled(args: {
   readonly current: ScopeConfig;
-  readonly siblingConfigPath: string;
+  readonly sibling: ScopeConfig | undefined;
   readonly targetIsLocal: boolean;
   readonly key: string;
-}): Promise<boolean | undefined> {
-  const siblingCfg = await loadConfig(args.siblingConfigPath);
-  const siblingPlugins = siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
+}): boolean | undefined {
+  const siblingPlugins = args.sibling?.plugins;
   const localPlugins = args.targetIsLocal ? args.current.plugins : siblingPlugins;
   const basePlugins = args.targetIsLocal ? siblingPlugins : args.current.plugins;
   return (localPlugins?.[args.key] ?? basePlugins?.[args.key])?.enabled;
@@ -1607,30 +1613,37 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
       // violation). The selector computed the locality; asking it is exact
       // where any second derivation is a chance to disagree.
-      const { targetConfigPath, siblingConfigPath, targetIsLocal } =
-        await selectDeclaringConfigWriteTarget({
-          locations,
-          local: opts.local,
-          key: `${plugin}@${marketplace}`,
-        });
-      configBasename = path.basename(targetConfigPath);
+      const selection = await selectDeclaringConfigWriteTarget({
+        locations,
+        local: opts.local,
+        key: `${plugin}@${marketplace}`,
+      });
 
       const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
       // NO tx.save() -- state.json bytes and mtime are untouched.
-      const cfg = await loadConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
+      //
+      // The arm covers the TARGETED file being unreadable and, on the flagless
+      // path, the local file being unreadable while the base file is fine: the
+      // local file is what DECIDES the destination there, so an unreadable one
+      // leaves the destination unknown. Naming that file in a row the user can
+      // act on beats writing to the file CFG-02 would then shadow.
+      if (selection.kind === "unreadable") {
+        configBasename = path.basename(selection.filePath);
         configInvalid = true;
         return;
       }
 
-      // DFEN-05: the TARGET physical config, read once and shared by the
-      // precedence gate below and the write-back further down. Never a merged
+      // DFEN-05: the TARGET physical config, parsed ONCE by the selector and
+      // shared by the precedence gate below and the write-back further down --
+      // as is the sibling, so one operation reads each file once and no two
+      // decisions can rest on different bytes of the same file. Never a merged
       // view -- `config-write-back.ts` is forbidden from importing
       // `config-merge.ts`, and serializing a merged view back would copy the
       // local file's entries into the base file (SPLIT-02).
-      const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+      const { targetConfigPath, targetIsLocal, current, sibling } = selection;
+      configBasename = path.basename(targetConfigPath);
 
       const result = await runInstallLedger(
         state,
@@ -1658,9 +1671,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // here. CFG-02: the read spans both files because a local entry replaces
       // the base entry wholesale whatever the write target is; `current` stays
       // the TARGET file and steers the write arms below and nothing else.
-      const declaredEnabled = await readDeclaredEnabled({
+      const declaredEnabled = readDeclaredEnabled({
         current,
-        siblingConfigPath,
+        sibling,
         targetIsLocal,
         key: `${plugin}@${marketplace}`,
       });
@@ -1728,12 +1741,14 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // (base ∪ local), not just the target. A `--local` install against a
       // base-declared marketplace must NOT re-declare it in the local file:
       // the bare `{source}` entry would shadow the base entry wholesale
-      // (CFG-02) and silently flip merged `autoupdate`. The sibling file is
-      // read fresh INSIDE the lock and used for the membership test only.
+      // (CFG-02) and silently flip merged `autoupdate`. Both files are read
+      // fresh INSIDE the lock and used for the membership test only, and an
+      // UNREADABLE sibling skips the adoption write rather than counting as a
+      // file that declares nothing.
       if (opts.notifications?.mode !== "orchestrated") {
-        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+        const adoptedSource = synthesizeAdoptedMarketplaceSource({
           current,
-          siblingConfigPath,
+          sibling,
           state,
           marketplace,
         });

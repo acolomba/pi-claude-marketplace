@@ -62,7 +62,6 @@
 import path from "node:path";
 
 import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -97,7 +96,6 @@ import {
 
 import type { InstallFailureCapture } from "./install.ts";
 import type { LedgerDegradationSignals } from "./shared.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -547,19 +545,31 @@ export async function setPluginEnabled(
       // the local config -- the WB-01 discipline that sibling reads happen
       // fresh under the lock the write also holds. UAT-05: the sibling path is
       // the scope's OTHER file, for the merged-view membership test only.
-      const { targetConfigPath, siblingConfigPath } = await selectDeclaringConfigWriteTarget({
+      const selection = await selectDeclaringConfigWriteTarget({
         locations,
         local: opts.local,
         key: `${plugin}@${marketplace}`,
       });
-      configBasename = path.basename(targetConfigPath);
 
       const state = tx.state;
-      const cfg = await loadConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
+      // CFG-03: the arm covers the TARGETED file being unreadable and, on the
+      // flagless path, the local file being unreadable while the base file is
+      // fine -- the local file is what DECIDES the destination there, so an
+      // unreadable one leaves the destination unknown. The row names the file
+      // that could not be read; writing to the file CFG-02 would then shadow
+      // would report a flip that moves no merged value.
+      if (selection.kind === "unreadable") {
+        configBasename = path.basename(selection.filePath);
         outcome = { kind: "invalid-config" };
         return;
       }
+
+      // Both physical files, parsed ONCE by the selector: the target config
+      // steers every write arm below, the sibling serves the UAT-05 membership
+      // gate, and no two decisions in this closure rest on different bytes of
+      // the same file.
+      const { targetConfigPath, current, sibling } = selection;
+      configBasename = path.basename(targetConfigPath);
 
       const mp = state.marketplaces[marketplace];
       const installed = mp?.plugins[plugin];
@@ -584,22 +594,23 @@ export async function setPluginEnabled(
         // untouched -- no tx.save(), mtime stable). A MISSING entry /
         // missing `enabled` field keeps the state-side classification
         // as-is, exactly like the autoupdate analog.
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
         const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
         if (!orchestrated && configEnabled !== undefined && configEnabled !== enable) {
           // UAT-05: membership gate against BOTH physical files (base ∪
           // local) so a --local flip never re-declares a base-declared
-          // marketplace (CFG-02 wholesale shadowing). Sibling read is fresh
-          // inside the lock; membership test only.
+          // marketplace (CFG-02 wholesale shadowing). Both parses are fresh
+          // inside the lock; membership test only. An UNREADABLE sibling
+          // skips the adoption write instead of counting as a file that
+          // declares nothing.
           //
           // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
           // collapses the benign (already-declared) and dangerous
           // (no string `source.raw`) arms. The dangerous arm writes a
           // dangling plugin declaration -- acknowledged trade-off pending
           // a return-type widen in a follow-up PR.
-          const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+          const adoptedSource = synthesizeAdoptedMarketplaceSource({
             current,
-            siblingConfigPath,
+            sibling,
             state,
             marketplace,
           });
@@ -665,10 +676,9 @@ export async function setPluginEnabled(
       // wholesale shadowing). Sibling read is fresh inside the lock;
       // membership test only.
       if (!orchestrated) {
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+        const adoptedSource = synthesizeAdoptedMarketplaceSource({
           current,
-          siblingConfigPath,
+          sibling,
           state,
           marketplace,
         });
