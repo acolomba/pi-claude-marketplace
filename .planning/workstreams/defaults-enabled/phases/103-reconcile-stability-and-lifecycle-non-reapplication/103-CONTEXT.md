@@ -13,13 +13,20 @@ this phase proves the planner then does nothing with it, reload after reload,
 and that the two re-materializing lifecycle verbs never re-consult the manifest
 field.
 
-The phase is overwhelmingly **characterization and regression-pinning**, not new
-mechanism. A scout of the tree before planning established that three of the
-four success criteria are already structurally true (see `<code_context>`). The
-roadmap anticipated this: "If it is already true, pin it as a regression rather
-than inventing a mechanism." Planning should therefore expect a tests-and-gates
-phase with little or no production change, and should treat any proposal that
-adds a mechanism as a signal that something in the scout was wrong.
+The phase is **mostly characterization and regression-pinning, plus two
+production fixes** the research turned up. A scout before planning found three
+of the four success criteria already structurally true (see `<code_context>`),
+and the roadmap anticipated exactly that: "If it is already true, pin it as a
+regression rather than inventing a mechanism." Research then probed the criteria
+against the real orchestrators instead of only reading them, and found two live
+defects — `reinstall` re-enabling a disabled plugin, and `enable` writing to the
+wrong physical config file under a local declaration. Both are recorded as
+D-103-12 and D-103-13 and both are in scope, because the goal sentence names
+`reinstall` and criterion 4 names the surviving `enable`.
+
+So planning should expect: a tests-and-gates phase, plus two narrow, separately
+reviewable production changes. Any OTHER proposed mechanism is a signal that
+something in the scout was wrong and should be re-checked before it is built.
 
 **Out of scope:** DFEN-08's byte-identical parity sweep (Phase 105) and the
 pre-install read surfaces (Phase 104). This phase asserts stability for the
@@ -118,6 +125,61 @@ absent cases.
   would read the `enabled: false` the install stamped, plan a disable, and undo
   the user's explicit choice — which is the same class of silent reversal this
   milestone exists to close, pointed the other way.
+
+### Two defects the research found — the phase is no longer characterization-only
+
+Research probed the four criteria against the real orchestrators rather than
+only reading them, and found two live defects. Both were re-verified against the
+source before being folded in. Both are mandated by the phase's own goal
+sentence and criterion 4, so neither is a deferral candidate.
+
+- **D-103-12: `reinstall` must gain the disabled-record short-circuit that
+  `update` already has.** `updateStateRecord` writes `enabled: true`
+  unconditionally (`orchestrators/plugin/reinstall.ts:1733`) with no
+  `isRecordedButDisabled` branch, where `update` returns
+  `runDisabledRecordRefresh` at `orchestrators/plugin/update.ts:1871`. So
+  `reinstall` on a disabled plugin re-materializes its artifacts, flips the
+  record enabled, and renders `(reinstalled)` over a config that still says
+  `enabled: false`; the next reload converges it back. This does not breach
+  criterion 3 — nothing reads `defaultEnabled` — but it directly breaches the
+  goal sentence's "not a `reinstall`". Mirror `update`'s branch rather than
+  inventing a second shape; `update.ts:1860-1872` is the model, including the
+  ENBL-09 / ENBL-18 split about which fields a disabled refresh may touch.
+
+- **D-103-13: `enable` and `disable` must select their config write target from
+  where the declaration lives, not from the user's `--local` flag.**
+  `setPluginEnabled` calls `selectConfigWriteTarget(locations, opts.local)`
+  (`orchestrators/plugin/enable-disable.ts:520` →
+  `orchestrators/plugin/shared.ts:401-416`), so for a plugin declared only in
+  `claude-plugins.local.json`, an `enable` without `--local` writes
+  `enabled: true` into the BASE file while CFG-02 keeps the local `enabled:
+  false` effective. The next `/reload` plans a disable and silently undoes the
+  user's explicit choice. This is the same defect Phase 102 fixed on the install
+  path; it was never fixed here. Criterion 4 is false for locally-declared
+  plugins until it is.
+
+  **Blast radius, stated deliberately:** this changes the `enable`/`disable`
+  verbs for ALL locally-declared plugins, not only `defaultEnabled` ones. That
+  is a bug fix to a shipped verb, and it is what makes install and enable agree
+  about which file a declaration lives in. It does not threaten DFEN-08, which
+  governs the effect of the manifest field rather than the correctness of
+  write-target selection. Plan it as its own task with its own regression test
+  so it can be reviewed and reverted independently of the rest of the phase.
+
+### Resolving the research's remaining open questions
+
+- **D-103-14: D-103-03 amends the existing matrix row, it does not add a new
+  one.** The precedence case already exists at
+  `tests/orchestrators/plugin/install.test.ts:1185-1193`. What is missing is the
+  DFEN-08 rationale in its comment and the convergence half — that the next
+  reconcile pass drives the record to disabled. Extend that row; a parallel new
+  case would leave two tests asserting the same thing with only one explaining
+  why.
+
+- **D-103-15: the D-103-02 `ROADMAP.md` reword is a task inside this phase's
+  plans**, not a standalone docs commit. It is the documentary half of D-103-01
+  and belongs in the same reviewable unit as the regression test that pins the
+  behavior.
 
 ### Claude's Discretion
 
