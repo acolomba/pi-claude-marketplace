@@ -151,8 +151,14 @@ export type FailureReason = (typeof FAILURE_REASONS)[number];
  * manifest declares about HOW it installs, which is neither an idempotent no-op
  * (the resource already matched the request), nor a failure (the command could
  * not complete), nor an unsupported component (Pi cannot install the thing).
- * The desired state IS reached on these rows; what they add is the author's
- * declaration as the cause.
+ * What these rows add is the author's DECLARATION as the cause.
+ *
+ * OUT-02 / OUT-03 / D-104-03: a declaration is equally reportable before the
+ * action and after it, so the group spans two tenses. On an install row the
+ * desired state IS reached and the declaration explains why the result is
+ * inert. On a not-installed candidate row nothing has happened yet and the
+ * declaration explains what an install would produce. One group, two tenses,
+ * the same cause.
  */
 export const DECLARED_STATE_REASONS = [
   // OUT-01 / DFEN-04: the install completed and left the plugin inert because

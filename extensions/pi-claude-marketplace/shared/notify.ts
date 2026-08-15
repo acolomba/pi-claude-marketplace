@@ -172,14 +172,25 @@ export const REASONS = [
   // plugin surfacing; a dedicated token rather than a shared bucket so the reason
   // row names the malformed component kind truthfully.
   "malformed command",
-  // OUT-01 / DFEN-04: an install that landed DISABLED because the plugin's OWN
-  // `defaultEnabled` declaration said so. It names the CAUSE of the disabled
-  // state, and only the author-declared cause. Distinct from the `(disabled)`
-  // STATUS token, which names the state and says nothing about who chose it,
-  // and from `already disabled` (the idempotent no-op a `disable` verb reports
-  // over a record that already matched the request). A row whose disabled-ness
-  // the USER chose -- a `disable` verb row, a list / info inventory row, a
-  // reconcile-driven disable -- MUST NOT carry this token.
+  // OUT-01 / OUT-02 / OUT-03 / DFEN-04: an install that landed, OR WOULD land,
+  // DISABLED because the plugin's OWN `defaultEnabled` declaration said so. It
+  // names the CAUSE of the disabled state, and only the author-declared cause.
+  // Distinct from the `(disabled)` STATUS token, which names the state and says
+  // nothing about who chose it, and from `already disabled` (the idempotent
+  // no-op a `disable` verb reports over a record that already matched the
+  // request).
+  //
+  // Two row families make two different claims about two different subjects,
+  // and only one of them carries this token. An INSTALLED-RECORD inventory row
+  // -- a row describing a record that already EXISTS, whose disabled-ness the
+  // USER chose: a `disable` verb row, a steady-state list / info inventory row,
+  // a reconcile-driven disable -- MUST NOT carry it. A NOT-INSTALLED CANDIDATE
+  // row on the `list` / `info` read surfaces DOES carry it (D-104-03), stating
+  // what an install WOULD do to a record that does not exist yet.
+  //
+  // The durable-versus-transient rule is what separates them (D-95-01 /
+  // D-95-02): a steady-state inventory row states durable facts about a record,
+  // and a statement about an action not yet taken is not one of those.
   "installs disabled",
 ] as const;
 
