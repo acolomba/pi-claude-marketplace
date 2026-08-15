@@ -1249,9 +1249,13 @@ async function maybeBackfillPlugin(
   });
 
   if (outcome.partition === "skipped") {
-    // Benign concurrent uninstall: the record was removed under us, so there is
-    // no promotion row and nothing to retry -- NOT a failure. The gate may still
-    // close.
+    // Two benign shapes reach here and neither is a failure: the record was
+    // removed under us (concurrent uninstall), or it was disabled under us
+    // between this scan's state SNAPSHOT and reinstall's own fresh read
+    // (ENBL-05 -- reinstall refuses a disabled record). The ENBL-08 filter
+    // above reads the snapshot, so it cannot see a cross-process disable that
+    // lands after it. Either way there is no promotion row and nothing to
+    // retry, so the gate may still close.
     return false;
   }
 
