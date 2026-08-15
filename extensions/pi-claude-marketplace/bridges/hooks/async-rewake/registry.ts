@@ -48,7 +48,6 @@ import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
 import { assertPathInside } from "../../../shared/path-safety.ts";
 import { claudeSessionEnvFor } from "../../../shared/session-env.ts";
-import { currentEpoch, type RoutingEntry } from "../event-router.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
@@ -60,6 +59,7 @@ import { translate as translateSessionStart } from "../payloads/session-start.ts
 import { translate as translateStopFailure } from "../payloads/stop-failure.ts";
 import { translate as translateStop } from "../payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
+import { currentEpoch, type RoutingEntry } from "../routing-state.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 

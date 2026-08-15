@@ -49,9 +49,9 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "./event-adapters.ts";
-import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
+import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./routing-state.ts";
 
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";

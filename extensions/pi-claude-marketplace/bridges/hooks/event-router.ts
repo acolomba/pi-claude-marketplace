@@ -1,7 +1,9 @@
 // bridges/hooks/event-router.ts
 //
 // Hooks-bridge dispatch core: the central routing layer the Pi runtime
-// hands events to. Owns three pieces of module-level state:
+// hands events to. It populates and drives three pieces of shared module
+// state, though the cells themselves live in `routing-state.ts` so the
+// dispatch chain can read them without importing back into this hub:
 //
 //   - `liveEpoch` (D-59-03): incremented on every registerHooksBridge
 //     entry; composite handlers capture the value at registration time and
@@ -34,13 +36,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook-events.ts";
-import {
-  parseHooksConfig,
-  parseMatcher,
-  type HookHandlerEntry,
-  type HooksConfig,
-  type ParsedMatcher,
-} from "../../domain/components/hooks.ts";
+import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
@@ -59,6 +55,20 @@ import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.t
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 import {
+  appendPendingSessionStartContext,
+  bumpEpoch,
+  clearPendingSessionStartContext,
+  currentEpoch,
+  getRoutingBucket,
+  parsedConfigCache,
+  pendingSessionStartContextEntries,
+  resetEpoch,
+  routingTable,
+  type CacheEntry,
+  type PendingSessionStartContext,
+  type RoutingEntry,
+} from "./routing-state.ts";
+import {
   agentEndCacheHandler,
   inputResetHandlerFor,
   resetSettleState,
@@ -72,125 +82,6 @@ import type {
   ExtensionContext,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-
-// ──────────────────────────────────────────────────────────────────────────
-// Types
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * Flattened (event, group, handler) routing slot. The dispatch core walks
- * the per-event bucket and fires `dispatchHookExec(entry, event, ctx)`
- * sequentially against each entry whose matcher fires for the incoming Pi
- * event (DISP-04 sequential awaited fan-out).
- *
- * `rawMatcher` carries the pre-parse string verbatim so dispatch-time
- * filtering against non-tool events (SessionStart filters on
- * `event.reason`) can compare against the originally-declared value without
- * re-parsing.
- *
- * `declarationIndex` is a monotonic counter assigned during rebuild's
- * (event, group, handler) flattening; it preserves intra-plugin source
- * order across the per-plugin bucket merge (DISP-04).
- */
-export interface RoutingEntry {
-  readonly scope: Scope;
-  readonly marketplace: string;
-  readonly pluginId: string;
-  /**
-   * Absolute filesystem path of the plugin source dir, mirroring
-   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Dispatch-exec
-   * exports this as `CLAUDE_PLUGIN_ROOT` so hook handlers using the standard
-   * `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolve to a real path on
-   * disk. Carried on RoutingEntry so dispatch does not have to re-read
-   * state.json on every event. Branded so the type system blocks
-   * unvalidated strings flowing to the subprocess env.
-   */
-  readonly resolvedSource: AbsolutePluginRoot;
-  /**
-   * D-60-01 / D-60-04: the Claude-side bucket this entry was flattened
-   * into. The translator dispatch in `dispatch-exec.ts` keys on this
-   * field to pick `./payloads/<event>.ts` without re-deriving the bucket
-   * from the routing table's outer Map key.
-   */
-  readonly claudeEvent: BucketAEvent;
-  readonly matcher: ParsedMatcher;
-  readonly rawMatcher: string;
-  readonly handlerDecl: HookHandlerEntry;
-  readonly declarationIndex: number;
-  /**
-   * MATCH-03 / D-61-02 always-present-with-sentinel: absent or
-   * malformed `if` resolves to MATCH_ALL_IF so dispatch never observes
-   * undefined. Populated from the side-Map produced by
-   * `parseHooksConfig` at parse time -- never recompiled at flatten
-   * time (mirrors the registration-time-translation stance).
-   */
-  readonly ifPredicate: IfPredicate;
-}
-
-interface CacheEntry {
-  readonly scope: Scope;
-  readonly marketplace: string;
-  readonly pluginId: string;
-  /**
-   * Absolute path of the plugin source dir; flows through to
-   * `RoutingEntry.resolvedSource` so dispatch-exec can export
-   * `CLAUDE_PLUGIN_ROOT` to a real path. Mirrors
-   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Branded
-   * so the type system blocks unvalidated strings.
-   */
-  readonly resolvedSource: AbsolutePluginRoot;
-  readonly config: HooksConfig;
-  /**
-   * MATCH-03: compiled `if`-field predicates keyed on
-   * `${claudeEvent}|${groupIndex}|${handlerIndex}`. Carried alongside
-   * the parsed `config` so `flattenPluginIntoBuckets` can populate
-   * each `RoutingEntry.ifPredicate` field without re-parsing.
-   */
-  readonly ifPredicates: ReadonlyMap<string, IfPredicate>;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Module-state cells (D-59-02 / D-59-03)
-// ──────────────────────────────────────────────────────────────────────────
-
-let liveEpoch = 0;
-
-const parsedConfigCache = new Map<string, CacheEntry>();
-
-const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
-
-/**
- * SessionStart additionalContext capture buffer.
- *
- * Pi splits the upstream Claude Code SessionStart-hook protocol across two
- * surfaces: `session_start` returns void (no slot to thread context
- * through), and `before_agent_start` carries the `systemPrompt` chain Pi
- * uses for extension-supplied context injection. The hooks bridge captures
- * a SessionStart hook's `additionalContext` payload into this buffer at
- * the `event-adapters.ts` mutate arm, then drains it on the next
- * `before_agent_start` event so the model's first agent turn sees the
- * injected text.
- *
- * Concat semantics: multiple SessionStart-bearing plugins fold into the
- * buffer in declaration order. Drain joins with `"\n\n"` separators and
- * clears the buffer (one-shot drain). The buffer also resets on every
- * `registerHooksBridge` entry so `/reload` cannot leak stale context from
- * the prior session.
- *
- * Typed accumulator (not a string bag): each entry carries provenance
- * (scope/marketplace/pluginId) so OBS-01 debug telemetry can attribute
- * leaks back to the contributing plugin without re-deriving from a flat
- * string. Provenance is dropped at drain time -- only the joined text
- * reaches `before_agent_start.systemPrompt`.
- */
-export interface PendingSessionStartContext {
-  readonly context: string;
-  readonly pluginId: string;
-  readonly marketplace: string;
-  readonly scope: Scope;
-}
-
-let pendingSessionStartContext: PendingSessionStartContext[] = [];
 
 // ──────────────────────────────────────────────────────────────────────────
 // Cache key helper (D-59-02 + marketplace inclusion)
@@ -297,41 +188,9 @@ export async function readAndCachePluginHooks(opts: {
   );
 }
 
-/**
- * D-59-03: read-only accessor for the live epoch cell. Used by the
- * dispatch.ts composite handlers (which capture the value at
- * registerHooksBridge time and compare against `currentEpoch()` on every
- * event) and by tests that pin the no-op-on-mismatch contract.
- */
-export function currentEpoch(): number {
-  return liveEpoch;
-}
-
 // ──────────────────────────────────────────────────────────────────────────
 // SessionStart additionalContext bridge
 // ──────────────────────────────────────────────────────────────────────────
-
-/**
- * Append a SessionStart hook's `additionalContext` payload to the pending
- * buffer. Called by `event-adapters.ts::adaptObservationResultForEvent`
- * when a SessionStart hook returns
- * `{hookSpecificOutput: {additionalContext: "..."}}`. The
- * `beforeAgentStartHandlerFor` closure drains the buffer on the next
- * `before_agent_start` event.
- *
- * Idempotent for noop append (empty string): empty strings are silently
- * skipped so a buggy hook returning `additionalContext: ""` does not
- * pollute the join output with a leading blank line. Provenance is still
- * required on the argument shape so the call site always carries
- * attribution -- the skipped-empty arm just discards both.
- */
-export function appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
-  if (entry.context.length === 0) {
-    return;
-  }
-
-  pendingSessionStartContext.push(entry);
-}
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
@@ -367,12 +226,14 @@ export function beforeAgentStartHandlerFor(
       return Promise.resolve(undefined);
     }
 
-    if (pendingSessionStartContext.length === 0) {
+    if (pendingSessionStartContextEntries().length === 0) {
       return Promise.resolve(undefined);
     }
 
-    const buffered = pendingSessionStartContext.map((e) => e.context).join("\n\n");
-    pendingSessionStartContext = [];
+    const buffered = pendingSessionStartContextEntries()
+      .map((e) => e.context)
+      .join("\n\n");
+    clearPendingSessionStartContext();
     return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
   };
 }
@@ -693,20 +554,6 @@ async function tryHydrateOnePlugin(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Routing-table reader (consumed by dispatch.ts)
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * Production-side accessor for a per-event routing bucket. Returns the
- * bucket or an empty array; never undefined. Imported by dispatch.ts so
- * the composite handlers don't reach into the routingTable cell directly
- * (the cell stays module-private).
- */
-export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
-  return routingTable.get(claudeEvent) ?? [];
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 // registerHooksBridge (DISP-01 / DISP-02 / DISP-03)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -821,15 +668,14 @@ export async function registerHooksBridge(
   pi: ExtensionAPI,
   opts: { ctx: ExtensionContext; cwd: string },
 ): Promise<void> {
-  liveEpoch += 1;
-  const capturedEpoch = liveEpoch;
+  const capturedEpoch = bumpEpoch();
 
   // /reload re-enters this factory and must not leak a stale SessionStart
   // additionalContext entry from the prior session into the new buffer.
   // Clearing here makes the invariant explicit: each bridge load starts
   // with an empty pending buffer, which only `adaptObservationResultForEvent`
   // (via `appendPendingSessionStartContext`) can subsequently populate.
-  pendingSessionStartContext = [];
+  clearPendingSessionStartContext();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
@@ -960,10 +806,10 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
  * from a clean baseline. Not part of the public surface.
  */
 export function _resetForTest(): void {
-  liveEpoch = 0;
+  resetEpoch();
   parsedConfigCache.clear();
   routingTable.clear();
-  pendingSessionStartContext = [];
+  clearPendingSessionStartContext();
 }
 
 /**
@@ -972,7 +818,7 @@ export function _resetForTest(): void {
  * does not affect the module state. Not part of the public surface.
  */
 export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingSessionStartContext> {
-  return Array.from(pendingSessionStartContext);
+  return Array.from(pendingSessionStartContextEntries());
 }
 
 /**
@@ -981,8 +827,7 @@ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingS
  * registerHooksBridge factory path. Not part of the public surface.
  */
 export function _bumpEpochForTest(): number {
-  liveEpoch += 1;
-  return liveEpoch;
+  return bumpEpoch();
 }
 
 /**
@@ -997,3 +842,11 @@ export function _setRoutingBucketForTest(
 ): void {
   routingTable.set(claudeEvent, entries);
 }
+
+export {
+  appendPendingSessionStartContext,
+  currentEpoch,
+  getRoutingBucket,
+  type PendingSessionStartContext,
+  type RoutingEntry,
+};

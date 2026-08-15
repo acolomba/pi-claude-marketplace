@@ -103,9 +103,16 @@ confirming `npm run fallow` fails on it, then deleting it. A clean run against
 the current tree proves nothing here, because the current tree has no unzoned
 files.
 
-## FLOW-02: circular dependencies are gated in CI but not locally
+## FLOW-02: circular dependencies are gated in CI but not locally (CLOSED)
 
 Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+**CLOSED 2026-08-15:** `npm run fallow` now runs `--boundary-violations
+--circular-deps --re-export-cycles`, so the local gate and the pull-request
+gate see the same finding classes. The 8 inherited cycles described below are
+gone -- the `bridges/hooks/` knot was untangled by extracting its shared module
+state into the `bridges/hooks/routing-state.ts` leaf, so the gate could adopt
+`--circular-deps` in the same change rather than suppress or baseline it.
 
 `npm run fallow` passes `--boundary-violations`, which isolates the run to
 boundary violations. Cycles are computed and discarded. The full report on the
@@ -133,6 +140,32 @@ the gap.
 
 Note the asymmetry this leaves today: a green local `npm run check` does not
 imply the pull-request gate will pass.
+
+## FLOW-03: should `import-x/no-cycle` widen past `orchestrators/` now?
+
+Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
+
+`import-x/no-cycle` (BLOCK C-2 of `eslint.config.js`) is scoped to
+`extensions/pi-claude-marketplace/orchestrators/**/*.ts`. The stated reason it
+stops there was the `bridges/hooks/` cycle knot, which no longer exists. The
+question the knot was masking is now askable: should the glob cover
+`extensions/pi-claude-marketplace/**` instead?
+
+It is not a free win. `npm run fallow --circular-deps` already covers the whole
+repo, so the ESLint rule would be defense in depth rather than new coverage --
+it buys editor-time feedback and a second opinion on the graph, at the cost of
+a type-aware rule running over the full extension tree. Weigh the lint-time
+cost against that.
+
+`tests/architecture/import-boundaries.test.ts` pins both the current glob and
+the `import-x/extensions` setting the rule depends on (without `.ts` in that
+setting the rule walks a one-node graph and greens on any cycle). Widening the
+glob means updating that test in the same change, and the test is the thing
+that would otherwise let a silently-broken rule pass for a wide tree.
+
+Verify by widening the glob against the current tree and confirming a clean
+`npm run lint`, then planting a two-file cycle outside `orchestrators/` and
+confirming the rule -- not just fallow -- fails on it.
 
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 

@@ -76,8 +76,8 @@ import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
-import type { RoutingEntry } from "./event-router.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { RoutingEntry } from "./routing-state.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 

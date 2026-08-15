@@ -19,8 +19,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
-import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
+import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
 
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";

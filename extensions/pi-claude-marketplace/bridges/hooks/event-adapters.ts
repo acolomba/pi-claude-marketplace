@@ -54,8 +54,8 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-import { appendPendingSessionStartContext } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
+import { appendPendingSessionStartContext } from "./routing-state.ts";
 
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
