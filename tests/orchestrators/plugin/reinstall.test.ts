@@ -4001,6 +4001,160 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
   });
 });
 
+/**
+ * DFEN-08: the overwhelming majority of plugins say nothing about install-time
+ * enablement, so what this milestone owes them is that NOTHING moved. The
+ * triple is what makes that checkable instead of assumed: `beta` declares the
+ * install-time default TRUE, `gamma` declares nothing at all, and the two must
+ * render the same row as each other AND as the row this surface produced before
+ * the field existed. The declaring sibling `alpha` is present precisely so the
+ * comparison happens inside one live run rather than against a captured
+ * baseline that would rot, and because a precedence fixture over a three-valued
+ * key that covers two of the values passes while asking the wrong question.
+ *
+ * No declaration flip is staged here. The flip discipline separates "never
+ * re-read the field" from "re-read it and got the same answer", which is the
+ * lifecycle claim the case below this one already pins for this verb. DFEN-08's
+ * claim is narrower and the triple proves it in one run.
+ */
+test("DFEN-08: a declared-true entry and a silent entry render identical reinstall rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-dfen08-parity-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+
+      // One marketplace built by repeat calls against a shared root:
+      // `mergeManifestEntry` reads the existing manifest and merges, so the
+      // three entries accumulate. Every arm carries the same version and the
+      // same single skill, so the ONLY difference between them is the
+      // declaration. `applyDefaultEnabled` is set on all three because that is
+      // what the real install handler passes -- and the claim is that it
+      // changes nothing for two of the three.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        version: "1.0.0",
+        resources: { skill: "alpha skill" },
+        install: true,
+        entryDefaultEnabled: false,
+        applyDefaultEnabled: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "beta",
+        version: "1.0.0",
+        resources: { skill: "beta skill" },
+        install: true,
+        entryDefaultEnabled: true,
+        applyDefaultEnabled: true,
+      });
+      // No knob at all: the seeder's conditional merge writes NO
+      // `defaultEnabled` key on this entry, which is the arm every plugin that
+      // never heard of the field lands on.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "gamma",
+        version: "1.0.0",
+        resources: { skill: "gamma skill" },
+        install: true,
+        applyDefaultEnabled: true,
+      });
+
+      const pluginsNow = async (): Promise<Record<string, { enabled?: boolean }>> =>
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {};
+
+      // Precondition: without it the cascade assertions below can pass over a
+      // fixture that never reached the path under test.
+      const before = await pluginsNow();
+      assert.equal(
+        before["alpha"]?.enabled,
+        false,
+        "precondition: declared false installs disabled",
+      );
+      assert.equal(before["beta"]?.enabled, true, "precondition: declared true installs enabled");
+      assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["alpha:skipped", "beta:reinstalled", "gamma:reinstalled"],
+      );
+
+      assert.equal(notifications.length, 1);
+      // Two benign `reinstalled` rows beside one info-severity skip -> info
+      // (severity unset).
+      assert.equal(notifications[0]?.severity, undefined);
+
+      // Whole-body rather than per-row `includes`: the literal pins the row
+      // ORDER, the tally and the trailer, none of which a substring check
+      // constrains.
+      //
+      // The tally counts THREE successes over two reinstalled rows and one
+      // skip. That is correct, not a mis-count: OUT-03 / D-04 count operation
+      // rows uniformly by STAMPED severity, and the `already disabled` reason
+      // is idempotent and therefore info (D-01), so it lands in the success
+      // bucket. The catalog documents the identical arithmetic for a different
+      // idempotent skip, where `(skipped) {up-to-date}` is one of the two
+      // successes in `Plugin reinstall: 1 failure, 2 successes`.
+      const body = notifications[0]?.message ?? "";
+      assert.equal(
+        body,
+        "● mp [project]\n" +
+          "  ⊘ alpha (skipped) {already disabled}\n" +
+          "  ● beta v1.0.0 (reinstalled)\n" +
+          "  ● gamma v1.0.0 (reinstalled)\n" +
+          "\n" +
+          "Plugin reinstall: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      );
+
+      // The parity claim itself, stated apart from the whole-body literal.
+      // Before the field was consumed it was an unknown key under the lenient
+      // manifest tolerance and therefore inert, so a declared-true entry and a
+      // silent entry were LITERALLY the same input -- which is what makes the
+      // two literals below the pre-existing row form as well. Asserting the two
+      // rendered rows against EACH OTHER catches a drift that two
+      // independently-correct literals would both stay green through.
+      const rows = body.split("\n");
+      const rowFor = (name: string): string =>
+        rows.find((line) => line.startsWith(`  ● ${name} `)) ?? "";
+
+      const betaRow = rowFor("beta");
+      const gammaRow = rowFor("gamma");
+      assert.equal(betaRow, "  ● beta v1.0.0 (reinstalled)");
+      assert.equal(gammaRow, "  ● gamma v1.0.0 (reinstalled)");
+      assert.equal(
+        betaRow.replaceAll("beta", "<plugin>"),
+        gammaRow.replaceAll("gamma", "<plugin>"),
+        "DFEN-08: the declared-true row and the silent row must COINCIDE, not merely each match a literal",
+      );
+
+      const after = await pluginsNow();
+      assert.equal(
+        after["alpha"]?.enabled,
+        false,
+        "DFEN-07: a reinstall over a disabled record leaves it disabled",
+      );
+      assert.equal(after["beta"]?.enabled, true, "DFEN-08: a declared-true entry moves nothing");
+      assert.equal(after["gamma"]?.enabled, true, "DFEN-08: a silent entry moves nothing");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // Installing and reinstalling against the SAME manifest cannot distinguish
 // "never re-read the declaration" from "re-read it and got the same answer".
 // Only a flip between the two calls separates those.
