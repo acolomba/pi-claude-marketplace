@@ -176,6 +176,14 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   cleanest signal on this codebase -- every such finding in Spike 010 was a
   confirmed true positive, and it's a gap none of the existing tooling
   (ESLint's file-local `no-unused-vars`, SonarCloud) fills (Spike 010).
+- Circular-dependency detection is config-independent (unlike dead-code) --
+  identical results zero-config or with an explicit entry -- and found
+  exactly the single already-documented `bridges/hooks/` cycle knot, no
+  more, no less. Its value is as an automated regression guard on a fact
+  today enforced only by prose plus a narrower orchestrators-only ESLint
+  rule. It does NOT catch the one-directional "must not import" ban that is
+  D-11's actual invariant (a one-way import without a full cycle) -- that
+  needs boundary/zone config, not `--circular-deps` (Spike 011).
 
 ## Spikes
 
@@ -192,7 +200,7 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 008  | gitlab-bare-source-parsing          | standard   | Given a bare (schemeless) `gitlab.com/group/.../project` string or a full `https://gitlab.com/...` URL with nested subgroups, when passed through `parsePluginSource`, then determine current classification                                                                | ⚠ VALIDATED (gap)    | source-parsing, gitlab, parity                                           |
 | 009  | git-host-auth-hint-coverage         | standard   | Given a non-github git host clone/auth failure, when the credential/auth-host code emits a diagnostic, then determine whether it already names the actual host across all call sites, and whether Device Flow auth is architecturally pluggable per-host                     | ⚠ VALIDATED (gap)    | auth, git-credential, gitlab, parity                                     |
 | 010  | fallow-dead-code-signal             | standard   | Given the real repo's Pi-extension entry points and barrels, when `npx fallow dead-code` runs, then determine signal-to-noise: real dead code vs. false positives from invisible entry points                                                                                | ⚠ VALIDATED (gap)    | fallow, static-analysis, dead-code, tooling                              |
-| 011  | fallow-circular-deps                | standard   | Given `import-x/no-cycle` (orchestrators-only) and the accepted `bridges/hooks/` cycle knot, when `npx fallow` checks the whole graph, then determine coverage beyond the narrower existing rule and whether the known knot can be accepted                                  | PENDING              | fallow, static-analysis, circular-deps, tooling                          |
+| 011  | fallow-circular-deps                | standard   | Given `import-x/no-cycle` (orchestrators-only) and the accepted `bridges/hooks/` cycle knot, when `npx fallow` checks the whole graph, then determine coverage beyond the narrower existing rule and whether the known knot can be accepted                                  | ✓ VALIDATED          | fallow, static-analysis, circular-deps, tooling                          |
 | 012  | fallow-boundary-fidelity            | standard   | Given the 9-zone `no-restricted-paths` config plus custom grep-gate architecture tests, when the same rules are expressed in `.fallowrc.json`, then determine match, gap, or noise                                                                                            | PENDING              | fallow, static-analysis, boundaries, tooling                             |
 | 013  | fallow-duplication-detection        | standard   | Given SonarCloud's configured CPD, when `npx fallow dupes` runs, then compare findings for overlap, false positives, and anything Sonar misses                                                                                                                                | PENDING              | fallow, static-analysis, duplication, tooling                            |
 | 014  | fallow-complexity-health            | standard   | Given `sonarjs/cognitive-complexity: 15` (lint-time hard error), when `npx fallow health` runs, then compare its 0-100 scoring against cognitive-complexity findings for the same hotspots                                                                                    | PENDING              | fallow, static-analysis, complexity, tooling                             |
