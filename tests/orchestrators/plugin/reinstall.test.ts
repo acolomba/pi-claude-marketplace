@@ -4003,7 +4003,7 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
 
 /**
  * DFEN-08: the overwhelming majority of plugins say nothing about install-time
- * enablement, so what this milestone owes them is that NOTHING moved. The
+ * enablement, so what DFEN-08 owes them is that NOTHING moved. The
  * triple is what makes that checkable instead of assumed: `beta` declares the
  * install-time default TRUE, `gamma` declares nothing at all, and the two must
  * render the same row as each other AND as the row this surface produced before

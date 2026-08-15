@@ -894,7 +894,7 @@ test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available
       assert.equal(out.includes("gitplug"), false, out);
     }
 
-    // --available --remote: BOTH rows restore the pre-milestone set.
+    // --available --remote: BOTH rows restore the pre-`defaultEnabled` set.
     {
       const { ctx, pi, notifications } = makeCtx();
       await listPlugins({ ctx, pi, cwd, scope: "user", available: true, remote: true });
