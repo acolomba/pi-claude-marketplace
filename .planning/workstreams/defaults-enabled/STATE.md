@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-current_phase: 102
-current_phase_name: Reason token, install write-through and notification
-current_plan: 3
-status: executing
-stopped_at: Phase 102 verified — passed with one accepted override
-last_updated: "2026-08-15T03:35:00.000Z"
+current_phase: 103
+current_phase_name: Reconcile stability and lifecycle non-reapplication
+current_plan: Not started
+status: planning
+stopped_at: Phase 102 closed and verified; phase 103 not started
+last_updated: "2026-08-15T10:25:52.765Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 102 reviewed, fixed and verified — six code-review findings closed, 5/5 success criteria met
 progress:
@@ -30,27 +30,27 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 102 — Reason token, install write-through and
-notification. The milestone goal is that a plugin author can ship a plugin that
-installs disabled (`defaultEnabled: false`), and nothing later re-enables it
+**Current focus:** Phase 103 — Reconcile stability and lifecycle
+non-reapplication. The milestone goal is that a plugin author can ship a plugin
+that installs disabled (`defaultEnabled: false`), and nothing later re-enables it
 behind the user's back. Phase 101 landed the schema field and the single
-precedence evaluation; Phase 102 is the milestone's substantive phase, where
-the resolved value first changes what a user observes.
+precedence evaluation; Phase 102 made the resolved value change what a user
+observes; Phase 103 proves the state Phase 102 writes is a fixed point — that
+the reconcile planner produces an empty plan over it, reload after reload.
 
 ## Current Position
 
-Phase: 102 — Reason token, install write-through and notification — VERIFIED
-Plan: 3/3 complete, code review closed, verification passed
-Status: 5/5 success criteria met with one accepted override; ready to advance
-Last activity: 2026-08-15 — the code review found two blockers and four
-warnings, all six were fixed with regression tests that fail without their fix,
-and the verifier then confirmed every success criterion against the current tree
-rather than against the plan summaries. `npm run check` green.
+Phase: 103 — Reconcile stability and lifecycle non-reapplication
+Plan: none yet — discuss and plan are both still to run
+Status: Ready to discuss
+Last activity: 2026-08-15 — Phase 102 closed: three plans executed, six
+code-review findings fixed, 5/5 success criteria verified with one accepted
+override. Transitioned to Phase 103.
 
 ## Progress
 
 **Phases Complete:** 2/5
-**Current Plan:** 102-03 (complete)
+**Current Plan:** Not started
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
@@ -117,6 +117,7 @@ success criterion, both backlog-grade rather than blocking:
   the only escape named to the user is `uninstall`. A `/reload` does converge,
   because the config now declares `enabled: false`
   (`orchestrators/plugin/install.ts:1638-1653`).
+
 - **Criterion 2's agents/MCP arm is proven by composition, not directly.** The
   tests assert skills, commands and hooks are gone from disk; agents and MCP
   rest on `cascadeUnstagePlugin` covering all five kinds. One `stat` on

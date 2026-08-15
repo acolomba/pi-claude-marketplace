@@ -21,7 +21,7 @@ phases (101.1, 102.1) are urgent insertions only, marked `INSERTED`.
 
 - [x] **Phase 101: Manifest field and precedence resolution** — `defaultEnabled` becomes an optional boolean on both declaration sites through the shared `PLUGIN_METADATA_FIELDS` group, and the marketplace-entry-wins precedence rule is evaluated once, in the resolver, rather than re-derived by each consumer. No observable behavior changes in this phase. (DFEN-01, DFEN-02, DFEN-03) (completed 2026-08-14)
 
-- [ ] **Phase 102: Reason token, install write-through and notification** — the milestone's substantive phase. Installing a plugin that resolves `defaultEnabled: false` records it disabled AND writes `enabled: false` through to that scope's `claude-plugins.json` entry — the first field the install write-back's plugin patch has ever carried — so the disabled state lives where reconcile already looks for it. An `enabled` value already in the entry wins in both directions. The `installs disabled` token lands as one indivisible closed-set amendment, and the install notification says what happened at informational severity. (OUT-01, DFEN-04, DFEN-05, OUT-04)
+- [x] **Phase 102: Reason token, install write-through and notification** — the milestone's substantive phase. Installing a plugin that resolves `defaultEnabled: false` records it disabled AND writes `enabled: false` through to that scope's `claude-plugins.json` entry — the first field the install write-back's plugin patch has ever carried — so the disabled state lives where reconcile already looks for it. An `enabled` value already in the entry wins in both directions. The `installs disabled` token lands as one indivisible closed-set amendment, and the install notification says what happened at informational severity. (OUT-01, DFEN-04, DFEN-05, OUT-04) (completed 2026-08-15)
 
 - [ ] **Phase 103: Reconcile stability and lifecycle non-reapplication** — closes the silent-re-enable hazard by verifying it against the reconcile planner itself, not at the install boundary: a `/reload` after an install-disabled plugin plans no action for it and never reaches `acc.enable.push(...)`. `update` and `reinstall` never re-read `defaultEnabled` for an already-installed plugin, so a later release that flips the field cannot flip the user. (DFEN-06, DFEN-07)
 
@@ -133,7 +133,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 102-02-PLAN.md — the DFEN-05 precedence matrix over all three values of the config entry's `enabled` key in both directions, the D-102-03 proof that the import cascade never opts in, and the D-102-02 ledger-succeeds / cascade-fails characterization
-- [ ] 102-03-PLAN.md — the reconcile path: the absent-key-only stamp through `writePluginConfigEntry`, targeted at the declaring physical file via the previously-unread `PlannedPluginInstall.configSource`, and a cascade row that reports the install as disabled rather than installed
+- [x] 102-03-PLAN.md — the reconcile path: the absent-key-only stamp through `writePluginConfigEntry`, targeted at the declaring physical file via the previously-unread `PlannedPluginInstall.configSource`, and a cascade row that reports the install as disabled rather than installed
 
 **Notes**:
 
@@ -264,7 +264,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
-| 102. Reason token, install write-through and notification | defaults-enabled | 2/3 | In Progress|  |
+| 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 0/? | Not started | - |
 | 104. Pre-install read surfaces | defaults-enabled | 0/? | Not started | - |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
