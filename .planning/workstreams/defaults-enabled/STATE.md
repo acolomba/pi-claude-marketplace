@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-current_phase: 104
-current_phase_name: Pre-install read surfaces
+current_phase: 105
+current_phase_name: No-op parity sweep and contract documentation
 current_plan: Not started
 status: planning
-stopped_at: Phase 103 closed and verified; phase 104 not started
-last_updated: "2026-08-15T15:05:00.000Z"
+stopped_at: Phase 104 closed and verified; phase 105 not started
+last_updated: "2026-08-15T20:21:25.362Z"
 last_activity: 2026-08-15
-last_activity_desc: Phase 103 closed — six plans, three production fixes for one defect at three call sites, six review findings fixed, 4/4 criteria verified
+last_activity_desc: Phase 104 closed — five plans across three waves, one critical review finding fixed, 5/5 criteria verified by mutation
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
-  percent: 60
+  completed_phases: 4
+  total_plans: 17
+  completed_plans: 17
+  percent: 80
 ---
 
 # Project State
@@ -30,27 +30,29 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 104 — Pre-install read surfaces. The milestone goal is
-that a plugin author can ship a plugin that installs disabled
+**Current focus:** Phase 105 — No-op parity sweep and contract documentation. The
+milestone goal is that a plugin author can ship a plugin that installs disabled
 (`defaultEnabled: false`), and nothing later re-enables it behind the user's
 back. Phase 101 landed the schema field and the single precedence evaluation;
 Phase 102 made the resolved value change what a user observes; Phase 103 proved
 the resulting state is a fixed point and closed the three lifecycle doors that
-could still re-enable a plugin. Phase 104 surfaces the field BEFORE install, so
-a user can see what they are about to get.
+could still re-enable a plugin; Phase 104 surfaced the field BEFORE install, on
+both read surfaces, offline. Phase 105 proves the silent and `true` cases are
+byte-identical to pre-milestone behavior and writes down the contract, including
+the divergences this milestone deliberately does not close.
 
 ## Current Position
 
-Phase: 104 — Pre-install read surfaces
+Phase: 105 — No-op parity sweep and contract documentation
 Plan: none yet — discuss and plan are both still to run
 Status: Ready to discuss
-Last activity: 2026-08-15 — Phase 103 closed: six plans across three waves, six
-code-review findings fixed, 4/4 success criteria verified by mutation with one
-accepted override. Transitioned to Phase 104.
+Last activity: 2026-08-15 — Phase 104 closed: five plans across three waves, one
+critical code-review finding fixed, 5/5 success criteria verified by mutation.
+Transitioned to Phase 105.
 
 ## Progress
 
-**Phases Complete:** 3/5
+**Phases Complete:** 4/5
 **Current Plan:** Not started
 
 | Phase | Name | Requirements | Status |
@@ -58,7 +60,7 @@ accepted override. Transitioned to Phase 104.
 | 101 | Manifest field and precedence resolution | DFEN-01, DFEN-02, DFEN-03 | Complete (3/3 plans) |
 | 102 | Reason token, install write-through and notification | OUT-01, DFEN-04, DFEN-05, OUT-04 | Complete (3/3 plans), verified |
 | 103 | Reconcile stability and lifecycle non-reapplication | DFEN-06, DFEN-07 | Complete (6/6 plans), verified |
-| 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Not started |
+| 104 | Pre-install read surfaces | OUT-02, OUT-03, OUT-05 | Complete (5/5 plans), verified |
 | 105 | No-op parity sweep and contract documentation | DFEN-08, DOC-01, DOC-02 | Not started |
 
 ## Accumulated Context
@@ -97,6 +99,53 @@ carrying the DFEN-08 argument in its comment.
 
 None of these blocks a phase; all are recorded so a later reader does not
 rediscover them.
+
+**Carried out of Phase 104 — the first four are Phase 105 inputs, not optional:**
+
+- **`OUT-02`'s own wording is now contradicted by the shipped rule.**
+  `REQUIREMENTS.md:43` says the token renders when the **resolved**
+  `defaultEnabled` is `false`. The shipped rule is narrower and has THREE inputs,
+  not one: the marketplace entry (manifest side, `plugin.json` deliberately never
+  read on a read path), and the user's config `enabled` opinion, which OUTRANKS
+  the manifest default in either direction. Correct the requirement text in Phase
+  105 rather than leaving a requirement that its own implementation violates.
+
+- **The entry-only divergence has no correct durable anchor.** Phase 104's
+  comments first cited `DOC-02`, which is actually the dependency-requirement
+  override (PDEP-01) — an unrelated subject. They were re-anchored to `D-104-01`.
+  Phase 105's DOC-02 work should give the divergence its own requirement-level
+  home, and state all three inputs above.
+
+- **The config-precedence term was found by code review, not by planning.** The
+  read surfaces originally claimed `{installs disabled}` from the entry alone,
+  which is FALSE whenever the user's config declares `enabled: true` — the install
+  then lands enabled. Fixed in `3ff3f55d` via `rowClaimsInstallDisabled`. The
+  contract write-up must state that a config opinion suppresses the token in BOTH
+  directions, matching `install.ts`'s own `declaredEnabled === undefined` gate.
+  Note the deliberate consequence: a config-chosen `enabled: false` also renders
+  bare, because the token names the AUTHOR-declared cause only.
+
+- **Two of the new catalog blocks are paired with a different renderer** than the
+  rest of their section. The list-surface `available` / `remote` fixtures drive
+  `notifyWithContext(..., LIST_CONTEXT, ...)` rather than plain `notify()`,
+  because the central `renderPluginRow` arms deliberately drop `reasons`
+  (D-104-06). If a producer ever renders a declaring row through the central arm,
+  the by-construction comment there stops being true and the catalog will not
+  catch it.
+
+- **The hollow NFR-5 guard is still in the tree.**
+  `tests/orchestrators/plugin/list.test.ts` (~`:2593`) calls `readFile` on a
+  DIRECTORY, so its boolean is unconditionally `false`, and it runs BEFORE the
+  call it means to constrain. Left as found under the surgical-changes rule;
+  Phase 104 added a correct sibling beside it. Two guards where one is known
+  hollow should not be the end state.
+
+- **Four Info-level code-review findings from Phase 104 remain open** (`104-REVIEW.md`
+  IN-01..IN-04): the `(available)` token-table row not updated alongside
+  `(remote)`; the network-free gate's docstring no longer describing its target
+  set now that a `domain/` file is in it; an out-of-scope `disabled`-variant
+  correction folded into a style-guide edit; and `installsDisabledField` typed off
+  `PluginAvailableMessage` while also being spread into a `PluginRemoteMessage`.
 
 - **A fourth flag-aimed config write remains.** `maybeWritePluginConfigBack`
   (`orchestrators/plugin/shared.ts`, ~`:965` after the Phase 103 helper was
@@ -154,28 +203,34 @@ recorded as D-102-01..D-102-10 in
 
 ## Session Continuity
 
-**Last session:** 2026-08-15T15:05:00.000Z
+**Last session:** 2026-08-15T20:21:25.000Z
 
-**Stopped At:** Phase 103 closed. It was scoped as characterization — a scout
-found three of its four criteria already structurally true — and grew twice.
-Research probed the criteria against the real orchestrators instead of reading
-them and found `reinstall` re-materializing a disabled plugin and `enable`
-writing to the wrong physical config file; planning then found the same
-write-target defect a third time, on `install`, where it was a permanent
-re-enable loop on every reload rather than an edge. The three are one defect at
-three call sites: every verb that authors a declaration on the user's behalf
-aimed its write with the caller's `--local` flag instead of with the
-declaration's location. They now share one selector. A code review then found
-that selector treating an unreadable config as one that declares nothing, and
-guessing the shadowed file; all six findings were fixed with regression tests
-that fail without them. 4/4 criteria verified by mutation, one accepted
-override. `npm run check` exits 0.
+**Stopped At:** Phase 104 closed. Five plans across three waves landed the
+`{installs disabled}` claim on both read surfaces, offline. The phase's own
+lesson repeated Phase 103's: reading was not enough. Research built a throwaway
+prototype and proved `composeReasons` renders `""` identically for `undefined`
+and `[]`, which is what keeps DFEN-08 byte-identity, and found that `info`
+needed no shape change at all because `PluginInfoRowBase` already carried
+`reasons?`. The load-bearing structural fact was that `info` has EIGHT
+not-installed return sites across five builders but ONE funnel, so the composer
+was applied at the funnel rather than per builder. Then a code review found the
+real defect: the surfaces claimed from the marketplace entry ALONE, while
+`install` also gates on the user's config `enabled` opinion — so a config saying
+`enabled: true` over an entry saying `defaultEnabled: false` installs enabled
+while the row claimed disabled. The claim was false on a reachable state. Fixed
+in `3ff3f55d` by moving the whole two-input rule into one `rowClaimsInstallDisabled`
+predicate, at no I/O cost since both surfaces already load the merged config.
+5/5 criteria verified by mutation. `npm run check` exits 0; full suite 3548 pass,
+0 fail, 1 pre-existing skip.
 **Resume File:** None
-**Next Action:** discuss, plan and execute phase 104 (OUT-02 / OUT-03 / OUT-05)
-— pre-install read surfaces, so a user can see the declared default before
-installing. No open decision is carried into it; the Backlog Carried Forward
-section above holds four non-blocking items, two of which are Phase 105
-candidates.
+**Next Action:** discuss, plan and execute phase 105 (DFEN-08 / DOC-01 / DOC-02)
+— the no-op parity sweep and the contract write-up. No open decision blocks it,
+but the Backlog Carried Forward section above now holds SIX items, and its first
+four are Phase 105 inputs rather than optional polish: `OUT-02`'s own text is
+contradicted by the shipped three-input rule, the entry-only divergence still
+has no correct requirement-level anchor, the config-precedence term must reach
+the contract document, and two new catalog blocks are paired with a different
+renderer than the rest of their section.
 
 **Resume requirement:** run GSD from the worktree
 `/home/acolomba/pi-claude-marketplace/.worktrees/defaults-enabled` (branch

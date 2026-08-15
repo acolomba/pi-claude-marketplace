@@ -25,7 +25,7 @@ phases (101.1, 102.1) are urgent insertions only, marked `INSERTED`.
 
 - [x] **Phase 103: Reconcile stability and lifecycle non-reapplication** — closes the silent-re-enable hazard by verifying it against the reconcile planner itself, not at the install boundary: a `/reload` after an install-disabled plugin plans no action for it and never reaches `acc.enable.push(...)`. `update` and `reinstall` never re-read `defaultEnabled` for an already-installed plugin, so a later release that flips the field cannot flip the user. (DFEN-06, DFEN-07) (completed 2026-08-15)
 
-- [ ] **Phase 104: Pre-install read surfaces** — `list` and `info` tell a user that a plugin will install disabled BEFORE they commit to the install, and stay network-free doing it. The marketplace entry is always readable from the cached manifest; `plugin.json` is not, without a clone. Where the entry is silent, the surfaces decline to claim rather than fetch. (OUT-02, OUT-03, OUT-05)
+- [x] **Phase 104: Pre-install read surfaces** — `list` and `info` tell a user that a plugin will install disabled BEFORE they commit to the install, and stay network-free doing it. The marketplace entry is always readable from the cached manifest; `plugin.json` is not, without a clone. Where the entry is silent, the surfaces decline to claim rather than fetch. (OUT-02, OUT-03, OUT-05) (completed 2026-08-15)
 
 - [ ] **Phase 105: No-op parity sweep and contract documentation** — a plugin that says `defaultEnabled: true`, or says nothing, behaves byte-identically to pre-milestone across all six surfaces; the output catalog carries the new token and its emitters; and the dependency-requirement override is documented as a known divergence rather than half-built. (DFEN-08, DOC-01, DOC-02)
 
@@ -235,17 +235,17 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 104-01-PLAN.md — the tracer: the one-parameter entry-only domain predicate, the first optional `reasons` field, the `available` render arm and its stamp, one end-to-end byte assertion carrying its own no-op-parity pair, the two corrected charter comments, the predicate's unit contract, and the network gate's new target
+- [x] 104-01-PLAN.md — the tracer: the one-parameter entry-only domain predicate, the first optional `reasons` field, the `available` render arm and its stamp, one end-to-end byte assertion carrying its own no-op-parity pair, the two corrected charter comments, the predicate's unit contract, and the network gate's new target
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 104-02-PLAN.md — the list expansion: the second optional `reasons` field, the `remote` render arm, the cold-clone and partially-available stamps with the tail-append order pinned, the two by-construction comments on the arms that keep dropping the field, and both `(unavailable)` negatives
-- [ ] 104-03-PLAN.md — the info surface: one post-hoc composer at the single not-installed consumer gated by a total status map, four positive rows including the degraded combined form, and four negative rows each driven by an input that declares
+- [x] 104-02-PLAN.md — the list expansion: the second optional `reasons` field, the `remote` render arm, the cold-clone and partially-available stamps with the tail-append order pinned, the two by-construction comments on the arms that keep dropping the field, and both `(unavailable)` negatives
+- [x] 104-03-PLAN.md — the info surface: one post-hoc composer at the single not-installed consumer gated by a total status map, four positive rows including the degraded combined form, and four negative rows each driven by an input that declares
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 104-04-PLAN.md — the negative guarantees: two offline guards that observe the effect rather than the fixture, the warm-clone declining case on both surfaces (the phase's tripwire against closing the entry-only divergence), and the render-map live-field guard for the two new optional fields
-- [ ] 104-05-PLAN.md — the contract surface: three catalog block/fixture pairs under the byte-equality runner, and the four sentence corrections that stop two documents asserting the bare-row rule this phase narrowed
+- [x] 104-04-PLAN.md — the negative guarantees: two offline guards that observe the effect rather than the fixture, the warm-clone declining case on both surfaces (the phase's tripwire against closing the entry-only divergence), and the render-map live-field guard for the two new optional fields
+- [x] 104-05-PLAN.md — the contract surface: three catalog block/fixture pairs under the byte-equality runner, and the four sentence corrections that stop two documents asserting the bare-row rule this phase narrowed
 
 **Notes**:
 
@@ -297,7 +297,7 @@ Plans:
 | 101. Manifest field and precedence resolution | defaults-enabled | 3/3 | Complete    | 2026-08-14 |
 | 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
-| 104. Pre-install read surfaces | defaults-enabled | 0/5 | Planned     | - |
+| 104. Pre-install read surfaces | defaults-enabled | 5/5 | Complete    | 2026-08-15 |
 | 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
 
 ## Requirement Coverage

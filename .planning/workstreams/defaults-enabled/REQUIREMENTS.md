@@ -40,10 +40,10 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 ### Read Surfaces
 
 - [x] **OUT-01**: A new closed-set reason token `installs disabled` is appended at the tail of the `REASONS` tuple (membership and order are catalog-stable per D-09 / OUT-08 -- new tokens append, existing entries never reorder) and is given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof fails otherwise. Existing tokens stay byte-stable.
-- [ ] **OUT-02**: `plugin list` renders `{installs disabled}` on the row of a not-installed plugin whose resolved `defaultEnabled` is `false`, following the established subject-first row grammar.
-- [ ] **OUT-03**: `plugin info` reports that the plugin will install disabled, so a user can see it before committing to the install.
+- [x] **OUT-02**: `plugin list` renders `{installs disabled}` on the row of a not-installed plugin whose resolved `defaultEnabled` is `false`, following the established subject-first row grammar.
+- [x] **OUT-03**: `plugin info` reports that the plugin will install disabled, so a user can see it before committing to the install.
 - [x] **OUT-04**: The install notification states that the plugin installed disabled and how to enable it. Severity is informational -- the desired state was reached (an install-disabled plugin is the author's declared intent, not a shortfall).
-- [ ] **OUT-05**: `list` and `info` stay network-free (NFR-5). The marketplace entry is always readable from the cached manifest, but `plugin.json` requires a materialized clone, so an unfetched `(remote)` plugin can only be judged from the entry. When the entry is silent, the surfaces must not claim `{installs disabled}` on a `plugin.json` value they cannot read, and must not fetch in order to read it.
+- [x] **OUT-05**: `list` and `info` stay network-free (NFR-5). The marketplace entry is always readable from the cached manifest, but `plugin.json` requires a materialized clone, so an unfetched `(remote)` plugin can only be judged from the entry. When the entry is silent, the surfaces must not claim `{installs disabled}` on a `plugin.json` value they cannot read, and must not fetch in order to read it.
 
 ### Documentation
 
@@ -82,10 +82,10 @@ definitions: `.planning/workstreams/defaults-enabled/ROADMAP.md`.
 | DFEN-07 | Phase 103 | Complete |
 | DFEN-08 | Phase 105 | Pending |
 | OUT-01 | Phase 102 | Complete |
-| OUT-02 | Phase 104 | Pending |
-| OUT-03 | Phase 104 | Pending |
+| OUT-02 | Phase 104 | Complete |
+| OUT-03 | Phase 104 | Complete |
 | OUT-04 | Phase 102 | Complete |
-| OUT-05 | Phase 104 | Pending |
+| OUT-05 | Phase 104 | Complete |
 | DOC-01 | Phase 105 | Pending |
 | DOC-02 | Phase 105 | Pending |
 
