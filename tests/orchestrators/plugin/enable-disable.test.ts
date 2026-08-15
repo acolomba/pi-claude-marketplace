@@ -18,6 +18,9 @@ import {
   __test_staleGateDropped,
   setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   MarketplaceNotFoundError,
   PluginShapeError,
@@ -167,6 +170,32 @@ async function writeUserState(
 async function readConfig(configPath: string): Promise<unknown> {
   const raw = await readFile(configPath, "utf8");
   return JSON.parse(raw);
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The MERGED view of the user scope, which is the only view that proves a
+ * config write happened: CFG-02 replaces a same-keyed base entry wholesale, so
+ * an entry written into the shadowed file changes no effective value even
+ * though the file on disk visibly gained it.
+ */
+async function readMergedUserPluginEntry(
+  cwd: string,
+  key: string,
+): Promise<{ source: "base" | "local"; declaredEnabled: boolean } | undefined> {
+  const { merged } = await loadMergedScopeConfig(locationsFor("user", cwd));
+  const entry = merged.plugins[key];
+  return entry === undefined
+    ? undefined
+    : { source: entry.source, declaredEnabled: isDeclaredEnabled(entry.entry) };
 }
 
 /**
@@ -361,15 +390,6 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     });
 
     // Verify base does NOT exist at start.
-    async function fileExists(p: string): Promise<boolean> {
-      try {
-        await stat(p);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
     const baseExistsPre = await fileExists(configPath);
     const { ctx } = makeCtx(cwd);
     await setPluginEnabled({
@@ -391,6 +411,69 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     const cfg = await readConfig(configLocalPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     assert.equal(plugins["foo@mp"]?.enabled, false, "--local file should carry enabled:false");
+  });
+});
+
+test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin writes the LOCAL file and moves the merged view", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const scopeRoot = path.join(home, ".pi", "agent");
+    const configPath = path.join(scopeRoot, "claude-plugins.json");
+    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    // The declaration lives ONLY in the local file, matching the disabled
+    // record. The base file does not exist.
+    await writeFile(
+      configLocalPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(home, "mp-src") } },
+        plugins: { "foo@mp": { enabled: false } },
+      }),
+      "utf8",
+    );
+
+    const { ctx } = makeCtx(cwd);
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      // NO --local: the user named no file, so the declaration names it.
+    });
+
+    // The flip landed in the DECLARING file, as the whole entry -- an added or
+    // removed key fails here rather than passing on a loose field probe.
+    const localCfg = (await readConfig(configLocalPath)) as {
+      plugins?: Record<string, unknown>;
+    };
+    assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
+    // The shadowed file was not touched. It did not exist and still does not.
+    assert.equal(await fileExists(configPath), false, "base file must stay absent");
+
+    // The load-bearing assertion. Before this fix the flip landed in the BASE
+    // file: that file visibly gained `enabled: true`, the merged view still
+    // read `enabled: false` from the local entry that replaces it wholesale,
+    // and the next reload planned a disable and put the record back -- so the
+    // user's explicit command survived until the next reload and no further.
+    // A physical-file check alone cannot tell that write from a correct one.
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: "local",
+      declaredEnabled: true,
+    });
+
+    const state = JSON.parse(
+      await readFile(path.join(scopeRoot, "pi-claude-marketplace", "state.json"), "utf8"),
+    ) as {
+      marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+    };
+    assert.equal(state.marketplaces["mp"]?.plugins["foo"]?.enabled, true);
   });
 });
 

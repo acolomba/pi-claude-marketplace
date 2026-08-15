@@ -416,6 +416,63 @@ export function selectConfigWriteTarget(
 }
 
 /**
+ * D-103-13: select the physical config file a verb that AUTHORS an enablement
+ * declaration must write to, and the scope's other file as its sibling.
+ *
+ * The rule: an explicit `--local` targets the local file; absent the flag,
+ * target the file the plugin's declaration already lives in; absent both a flag
+ * and a declaration, target the base file.
+ *
+ * `--local` says which file to WRITE. It does not say which file a declaration
+ * already lives IN, and those are different questions -- a caller who typed no
+ * flag has answered neither, and answering the second one with the first is
+ * what makes the write a no-op. CFG-02: a `claude-plugins.local.json` entry
+ * replaces the same-keyed base entry WHOLESALE, so a write into the base file
+ * under a local declaration changes no merged value. The verb reports success,
+ * the merged view the reconcile planner reads is unmoved, and the next pass
+ * plans the opposite of the command the user just ran.
+ *
+ * The local file is inspected for KEY MEMBERSHIP only -- the key's PRESENCE
+ * decides the file, never its `enabled` value. A local entry shadows the base
+ * entry's `enabled` too, so a bare `{}` is still the effective declaration;
+ * reading the value here would re-open a precedence question the caller has
+ * already settled. `absent` / `invalid` local arms mean "not declared locally"
+ * and yield the base target, mirroring the D-18 merge fallback: this never
+ * throws and never creates the file.
+ *
+ * This is the WRITE-side counterpart of the READ-side rule
+ * `install.ts::readDeclaredEnabled` states -- the local file wins by IDENTITY,
+ * not by precedence. WB-01 / UAT-05: the read is membership-test-only and never
+ * serialized back, and callers hold the scope lock, so the file inspected here
+ * cannot change before the write lands. `targetIsLocal` reports the selection's
+ * locality so callers reading across both files do not re-derive it by
+ * comparing paths.
+ */
+export async function selectDeclaringConfigWriteTarget(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean | undefined;
+  readonly key: string;
+}): Promise<{
+  readonly targetConfigPath: string;
+  readonly siblingConfigPath: string;
+  readonly targetIsLocal: boolean;
+}> {
+  // Delegate BOTH arms to the flag-only selector so `--local`'s file pairing
+  // -- and its ENOENT fresh-create contract -- keeps exactly one definition.
+  if (opts.local === true) {
+    return { ...selectConfigWriteTarget(opts.locations, true), targetIsLocal: true };
+  }
+
+  const localCfg = await loadConfig(opts.locations.configLocalJsonPath);
+  const declaredLocally =
+    localCfg.status === "valid" && localCfg.config.plugins?.[opts.key] !== undefined;
+  return {
+    ...selectConfigWriteTarget(opts.locations, declaredLocally),
+    targetIsLocal: declaredLocally,
+  };
+}
+
+/**
  * UAT-05 convenience seam over `synthesizeUndeclaredMarketplaceSource`:
  * reads the scope's sibling config file FRESH (callers hold the scope lock
  * -- WB-01 discipline) and runs the merged-view membership gate against

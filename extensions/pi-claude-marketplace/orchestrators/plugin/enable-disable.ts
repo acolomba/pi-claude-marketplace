@@ -46,6 +46,15 @@
 // absent arm yields an empty starting shape that `saveConfig` writes back to
 // the local file, creating it fresh).
 //
+// D-103-13: absent the flag the target follows the DECLARATION -- the local
+// file when the plugin key is declared there, the base file otherwise. The flag
+// names the file the user wants written; it cannot name the file a declaration
+// already lives in. CFG-02 replaces a same-keyed base entry wholesale, so a
+// flagless flip written to the base file under a local declaration moves no
+// merged value: the verb reports success and the next reconcile pass plans the
+// opposite of the command. Selection therefore happens INSIDE the lock (it
+// reads a config file) -- see `selectDeclaringConfigWriteTarget`.
+//
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
 // path -- reusing the dry-run preview pattern.
@@ -82,7 +91,7 @@ import {
   applyPartialCascadeFold,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
-  selectConfigWriteTarget,
+  selectDeclaringConfigWriteTarget,
   synthesizeAdoptedMarketplaceSource,
 } from "./shared.ts";
 
@@ -514,11 +523,12 @@ export async function setPluginEnabled(
   }
 
   const { scope, locations } = resolution;
-  // WB-01 / UAT-05: target selected ONCE; the sibling path exists only for
-  // the merged-view membership test (read fresh inside the lock, never
-  // written).
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(locations, opts.local);
-  const configBasename = path.basename(targetConfigPath);
+  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
+  // the row is rendered after the lock closes. The target is now chosen inside
+  // the lock, so the basename escapes the closure through this `let`. It starts
+  // at the base file -- the value the no-flag, no-declaration arm yields -- so
+  // the pre-assignment value is never wrong and the type stays definite.
+  let configBasename = path.basename(locations.configJsonPath);
 
   let outcome: SetEnabledOutcome | undefined;
 
@@ -531,6 +541,19 @@ export async function setPluginEnabled(
     // discipline.
     // eslint-disable-next-line sonarjs/cognitive-complexity
     await withLockedStateTransaction(locations, async (tx) => {
+      // D-103-13: ONE selection, made before anything reads a config path, so
+      // the ordinary write-back and the config-truth promotion below cannot
+      // drift onto different files. It runs inside the lock because it READS
+      // the local config -- the WB-01 discipline that sibling reads happen
+      // fresh under the lock the write also holds. UAT-05: the sibling path is
+      // the scope's OTHER file, for the merged-view membership test only.
+      const { targetConfigPath, siblingConfigPath } = await selectDeclaringConfigWriteTarget({
+        locations,
+        local: opts.local,
+        key: `${plugin}@${marketplace}`,
+      });
+      configBasename = path.basename(targetConfigPath);
+
       const state = tx.state;
       const cfg = await loadConfig(targetConfigPath);
       if (cfg.status === "invalid") {
