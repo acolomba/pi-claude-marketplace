@@ -270,7 +270,7 @@ Plans:
 
   1. `defaultEnabled: true` and an absent `defaultEnabled` produce byte-identical behavior and output to pre-milestone across all six surfaces — install, update, reinstall, list, info and reconcile — so the overwhelming majority of plugins are untouched by this milestone.
   2. `docs/output-catalog.md` carries the `installs disabled` token and every surface that emits it, reconciled against what actually shipped rather than what was planned.
-  3. The dependency-requirement override is documented as a known divergence: Claude Code writes an explicit `enabled: true` for a plugin another active plugin requires, and we cannot, because plugin dependency declarations are dropped entirely today (BACKLOG.md PDEP-01). A reader can tell this is a stated limit, not an oversight.
+  3. The dependency-requirement override is documented as a known divergence: Claude Code writes an explicit `enabled: true` for a plugin another active plugin requires, and we cannot, because a plugin's own dependency declarations are parsed and surfaced on `info`, but never resolved, never auto-installed and never consulted for enablement (BACKLOG.md PDEP-01). A reader can tell this is a stated limit, not an oversight.
   4. The closed sets stay closed: `REASONS` grew by exactly one member at the tail, and no status token, glyph, installation-record key or state schema version was added.
 
 **Plans**: 6 plans

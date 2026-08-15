@@ -40,7 +40,7 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 ### Read Surfaces
 
 - [x] **OUT-01**: A new closed-set reason token `installs disabled` is appended at the tail of the `REASONS` tuple (membership and order are catalog-stable per D-09 / OUT-08 -- new tokens append, existing entries never reorder) and is given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof fails otherwise. Existing tokens stay byte-stable.
-- [x] **OUT-02**: `plugin list` renders `{installs disabled}` on the row of a not-installed plugin whose resolved `defaultEnabled` is `false`, following the established subject-first row grammar.
+- [x] **OUT-02**: `plugin list` renders `{installs disabled}` on the row of a not-installed plugin whose MARKETPLACE ENTRY declares `defaultEnabled: false` and for which the user has stated no `enabled` value, following the established subject-first row grammar. The user's own value outranks the entry in either direction, so a config-chosen `enabled: false` also renders the row bare -- the token names the AUTHOR-declared cause only. The plugin's own `plugin.json` is deliberately never read on a read path; OUT-05 is the home of that carve-out.
 - [x] **OUT-03**: `plugin info` reports that the plugin will install disabled, so a user can see it before committing to the install.
 - [x] **OUT-04**: The install notification states that the plugin installed disabled and how to enable it. Severity is informational -- the desired state was reached (an install-disabled plugin is the author's declared intent, not a shortfall).
 - [x] **OUT-05**: `list` and `info` stay network-free (NFR-5). The marketplace entry is always readable from the cached manifest, but `plugin.json` requires a materialized clone, so an unfetched `(remote)` plugin can only be judged from the entry. When the entry is silent, the surfaces must not claim `{installs disabled}` on a `plugin.json` value they cannot read, and must not fetch in order to read it.
@@ -48,7 +48,7 @@ The alternative -- teaching `isDeclaredEnabled` the manifest value -- was reject
 ### Documentation
 
 - [ ] **DOC-01**: `docs/output-catalog.md` is amended for the new token and the surfaces that emit it.
-- [ ] **DOC-02**: The dependency-requirement override is documented as a known divergence: Claude writes an explicit `true` for a plugin required by another active plugin, which we cannot do because plugin dependency declarations are not honored at all (BACKLOG.md PDEP-01).
+- [ ] **DOC-02**: The enablement contract is written down in `docs/plugin-enablement.md`, the durable home of two divergences. First, the dependency-requirement override: Claude writes an explicit `true` for a plugin required by another active plugin, at install or enable time, which we cannot do because a plugin's own dependency declarations are schema-accepted opaquely and surfaced in string-shaped form on `info`, but are never resolved, never auto-installed and never consulted for enablement, so no code path can write that value on a plugin's behalf (BACKLOG.md PDEP-01). Second, the entry-only pre-install read rule: `list` and `info` answer the manifest side of `{installs disabled}` from the marketplace entry alone and decline to claim where only the unread `plugin.json` declares (OUT-02 / OUT-05), so source comments citing that rule have a requirement-level anchor that does not archive.
 
 ## v2 Requirements
 
