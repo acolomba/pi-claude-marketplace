@@ -1177,6 +1177,14 @@ interface DfenPrecedenceCase {
    * write target chosen by file identity from one chosen by the caller's flag.
    */
   readonly alsoSeedSiblingEntry?: Record<string, unknown>;
+  /**
+   * D-103-03: run ONE reconcile pass after the install and assert it drives the
+   * record to disabled and drops the artifacts, leaving `expectEntryAfter`
+   * byte-identical. Opt-in per case: only the row whose install deliberately
+   * lands ENABLED under a declaration saying otherwise has a divergence to
+   * close, and the other rows would be asserting a no-op pass.
+   */
+  readonly expectReconcileConverges?: boolean;
 }
 
 const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
@@ -1194,17 +1202,40 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     // manifest says `true` and the user said `false`. The install verb still
     // materializes -- running `install` IS the user asking for the install --
     // so the contract asserted here is the CONFIG one DFEN-05 actually states:
-    // the entry the user wrote comes back byte-for-byte. The record landing
-    // `enabled: true` under an `enabled: false` declaration is the ordinary
-    // install-then-reconcile relationship, not something this behavior invents.
+    // the entry the user wrote comes back byte-for-byte.
+    //
+    // To the reader about to make the two directions symmetric: that edit is
+    // the one this comment exists to stop. The symmetric shape is to widen the
+    // landed-disabled verdict so it ALSO fires on an explicit `enabled: false`,
+    // letting the config value decide in both directions at the install
+    // boundary. DFEN-08 forbids it (D-103-01). That requirement demands that a
+    // plugin whose manifest declares `defaultEnabled: true`, and a plugin whose
+    // manifest never mentions the field at all, behave and render
+    // byte-identically to the pre-`defaultEnabled` releases across install,
+    // update, reinstall, list, info and reconcile. Widening changes `install`
+    // for the silent manifests: a config `enabled: false` with no declaration
+    // anywhere would begin installing disabled. Gating the widening on the
+    // manifest declaring the field does not rescue it -- `defaultEnabled: true`
+    // plus a config `false` is exactly this row, and it would change too. There
+    // is no form of the widening that leaves DFEN-08 intact, so the verdict
+    // keeps firing only on the ABSENT value.
+    //
+    // What makes the asymmetry tolerable rather than merely deliberate is that
+    // the divergence it leaves -- a materialized, enabled record under a
+    // declaration saying otherwise -- is TRANSIENT by construction.
+    // `expectReconcileConverges` proves it below: one reconcile pass drives the
+    // record to disabled and removes the artifacts, and it does so by acting on
+    // the RECORD. The user's entry is still byte-identical afterwards; a pass
+    // that "fixed" the config instead would be the overwrite DFEN-05 forbids.
     label:
-      "an explicit `enabled: false` is not rewritten by a manifest declaring defaultEnabled true",
+      "an explicit `enabled: false` is not rewritten by a defaultEnabled-true manifest (DFEN-08), and the next pass converges the record",
     tmpPrefix: "install-dfen05-false-kept-",
     seededEntry: { enabled: false },
     manifestDefaultEnabled: true,
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: false },
+    expectReconcileConverges: true,
   },
   {
     // The only case the manifest gets to answer, and the one that separates
@@ -1376,6 +1407,59 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           const siblingPlugins =
             siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
           assert.equal(siblingPlugins?.["hello@mp"], undefined);
+        }
+
+        if (precedence.expectReconcileConverges === true) {
+          const { loadMergedScopeConfig } =
+            await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+          const { planReconcile } =
+            await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+          const { applyReconcile } =
+            await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+
+          // Two fixture preconditions, asserted rather than assumed, because
+          // either one silently turns the pass below into a no-op that would
+          // "prove" convergence by never planning anything. The config must
+          // declare the MARKETPLACE -- an entry naming an undeclared one is a
+          // dangling reference and gets no disable -- and the merged read must
+          // not be an invalid arm, which aborts the pass under CFG-03 before
+          // the planner runs at all.
+          const { merged } = await loadMergedScopeConfig(locations);
+          const planned = planReconcile(merged, after, "project");
+          assert.deepEqual(
+            planned.sourceMismatches,
+            [],
+            "the marketplace must be declared -- a dangling reference plans no disable",
+          );
+          assert.deepEqual(planned.pluginsToDisable, [
+            { scope: "project", plugin: "hello", marketplace: "mp" },
+          ]);
+
+          const reload = makeCtx();
+          await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+          assert.deepEqual(
+            reload.notifications.filter((n) => n.severity === "error"),
+            [],
+          );
+
+          // The record moved to match the declaration, and a disable is
+          // materially the artifacts leaving disk.
+          const converged = await loadState(locations.extensionRoot);
+          assert.equal(converged.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
+          await assert.rejects(stat(skillDir), "the disable must remove the staged skill");
+
+          // The half that makes the divergence defensible rather than merely
+          // temporary: convergence acted on the RECORD. The entry the user
+          // wrote is still the whole object it was, so nothing rewrote a value
+          // it does not own.
+          const cfgConverged = await loadConfig(seededPath);
+          assert.equal(cfgConverged.status, "valid");
+          if (cfgConverged.status === "valid") {
+            assert.deepEqual(
+              cfgConverged.config.plugins?.["hello@mp"],
+              precedence.expectEntryAfter,
+            );
+          }
         }
       } finally {
         await rm(cwd, { recursive: true, force: true });
