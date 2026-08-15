@@ -273,7 +273,23 @@ Plans:
   3. The dependency-requirement override is documented as a known divergence: Claude Code writes an explicit `enabled: true` for a plugin another active plugin requires, and we cannot, because plugin dependency declarations are dropped entirely today (BACKLOG.md PDEP-01). A reader can tell this is a stated limit, not an oversight.
   4. The closed sets stay closed: `REASONS` grew by exactly one member at the tail, and no status token, glyph, installation-record key or state schema version was added.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 105-01-PLAN.md — the tracer: the DFEN-08 three-plugin triple proven end to end on `update`, with the flip-plus-version-control discipline, plus the evidence that the inherited closed-set gate and the inherited lifecycle source gate are ASSERTED rather than rebuilt
+- [ ] 105-03-PLAN.md — the DOC-02 contract: a new `docs/plugin-enablement.md` owning both divergences and the shipped three-input precedence rule, wired into both README editions, plus the `OUT-02` / `DOC-02` requirement corrections and the matching roadmap criterion reword
+- [ ] 105-05-PLAN.md — the four open review findings: the unfalsifiable network-free probe deleted with its dangling cross-reference repaired, the network gate's stale header and failure message, the restored enumerable clause in the message-shape reference, and the reason holder retyped against the domain reason type
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 105-02-PLAN.md — the parity expansion: the same triple through the real bulk `reinstall` cascade and through three real `applyReconcile` passes, plus the reconcile fixture helper widened from a scalar plugin to a plugin map with every caller converted
+- [ ] 105-04-PLAN.md — the two DOC-01 catalog gaps: the reinstall cascade's `(skipped) {already disabled}` block with its fixture under the byte-equality runner, and the `(available)` token-table cell that was not updated alongside its sibling
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 105-06-PLAN.md — the durable re-anchoring sweep: all 73 citations of the six archiving read-surface decision IDs across 14 files replaced by requirement-level anchors under a fixed one-to-one mapping, comments and titles only
 
 **Notes**:
 
@@ -298,7 +314,7 @@ Plans:
 | 102. Reason token, install write-through and notification | defaults-enabled | 3/3 | Complete    | 2026-08-15 |
 | 103. Reconcile stability and lifecycle non-reapplication | defaults-enabled | 6/6 | Complete    | 2026-08-15 |
 | 104. Pre-install read surfaces | defaults-enabled | 5/5 | Complete    | 2026-08-15 |
-| 105. No-op parity sweep and contract documentation | defaults-enabled | 0/? | Not started | - |
+| 105. No-op parity sweep and contract documentation | defaults-enabled | 0/6 | Planned | - |
 
 ## Requirement Coverage
 
