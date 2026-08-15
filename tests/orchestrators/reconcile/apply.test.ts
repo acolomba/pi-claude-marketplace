@@ -2011,3 +2011,96 @@ test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the p
     );
   });
 });
+
+test("D-102-02 / NFR-3: a reconcile install whose disable cascade fails still declares enabled:false, so the next pass plans and completes the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: { "foo@mp": {} },
+    });
+    const locations = locationsFor("project", cwd);
+
+    // The fault: AG-5 foreign content under a generated agent name, claimed by
+    // an agents-index row owned by (mp, foo). The install ledger routes it to
+    // `failed[]` and proceeds, while the disable cascade turns a non-empty
+    // `failed[]` into a throw -- so the install succeeds and the disable half
+    // then fails, which is the only window this composition creates.
+    await mkdir(locations.agentsDir, { recursive: true });
+    const foreignAgentPath = path.join(locations.agentsDir, "pi-claude-marketplace-foo-bot.md");
+    await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "foo",
+            marketplace: "mp",
+            sourceAgent: "bot",
+            generatedName: "pi-claude-marketplace-foo-bot",
+            sourcePath: "/orig/bot.md",
+            targetPath: foreignAgentPath,
+            sourceHash: "deadbeef",
+            droppedFields: [],
+            droppedTools: [],
+            warnings: [],
+          },
+        ],
+      }),
+    );
+
+    await applyReconcile({
+      ctx: makeCtx() as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // The cascade never reached the disabled-record producer, so the record is
+    // still enabled -- the same asymmetry a failed `disable` leaves behind.
+    const afterFirst = await loadState(extensionRoot);
+    assert.equal(afterFirst.marketplaces.mp!.plugins.foo!.enabled, true);
+
+    // The declaration is written anyway. Without it the entry stays bare, and a
+    // bare entry over a recorded, enabled, not-disabled record is steady state
+    // for the planner: no further pass would ever act, while the plugin's
+    // artifacts are already gone from disk.
+    const base = JSON.parse(await readFile(basePath, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    assert.deepEqual(
+      base.plugins["foo@mp"],
+      { enabled: false },
+      "a failed disable cascade must still declare enabled:false",
+    );
+
+    // Clear the fault the way an operator would -- the foreign file goes, and
+    // ENOENT on the target counts as removed (the unstage is idempotent).
+    await rm(foreignAgentPath);
+
+    const ctx = makeCtx();
+    await applyReconcile({
+      ctx: ctx as unknown as ExtensionContext,
+      pi: STUB_PI,
+      cwd,
+      scope: "project",
+    });
+
+    // Convergence: the declaration/record divergence is exactly what the
+    // disable bucket exists to close, so the second pass plans the disable and
+    // completes it.
+    const afterSecond = await loadState(extensionRoot);
+    assert.equal(
+      afterSecond.marketplaces.mp!.plugins.foo!.enabled,
+      false,
+      "the second pass must complete the disable the first one could not",
+    );
+    assert.equal(ctx.ui.notify.mock.calls.length, 1);
+    const secondArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+    assert.ok(
+      secondArgs[0].includes("foo") && secondArgs[0].includes("(disabled)"),
+      `expected a (disabled) row for foo on the second pass; got:\n${secondArgs[0]}`,
+    );
+  });
+});

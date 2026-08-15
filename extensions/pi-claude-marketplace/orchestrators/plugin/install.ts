@@ -1624,13 +1624,21 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
           plugin,
         });
         if (!disableResult.ok) {
-          // D-102-02: save the shrunken record (the fold already subtracted
-          // what DID drop) and let the post-guard path surface the existing
-          // install failure row. Returning rather than throwing is what keeps
-          // state.json honest about what is still on disk (NFR-3).
+          // D-102-02: record the cause and fall through. The fold already
+          // subtracted what DID drop, so the `tx.save()` below persists the
+          // shrunken record and the post-guard path surfaces the existing
+          // install failure row; not throwing is what keeps state.json honest
+          // about what is still on disk (NFR-3).
+          //
+          // NFR-3: falling through rather than returning early is what makes
+          // the write-back arms below stamp `enabled: false` on this path too.
+          // Saving a record while writing no declaration leaves a state neither
+          // convergence path can act on -- the entry that reached the reconcile
+          // install bucket is bare, so the planner reads declared-enabled +
+          // recorded + not-disabled and calls it steady state forever, while
+          // the plugin's artifacts are already gone from disk. The stamp turns
+          // that into the divergence the disable bucket closes on the next pass.
           disabledInstall.cascadeError = disableResult.cause;
-          await tx.save();
-          return;
         }
       }
 
@@ -1640,8 +1648,11 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // per-machine override).
       //
       // DFEN-04: the plugin patch carries `enabled: false` when the install
-      // landed disabled -- the first field this patch has ever carried. It
-      // stays `{}` otherwise, because the entry shape carries no other
+      // landed disabled -- the first field this patch has ever carried. That
+      // includes the D-102-02 window where the disable cascade FAILED: the
+      // declaration states what the plugin should be, and it is what lets a
+      // later reconcile pass retry the disable. It stays `{}` otherwise,
+      // because the entry shape carries no other
       // install-time field beyond the implicit declaration and D-04 keeps the
       // "enabled" default at consume time. The patch merges over the existing
       // entry, so no key the user already wrote is disturbed.
@@ -1924,7 +1935,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // the cascade's own cause -- no new failure semantics, no new rollback
   // composition, and no new reason token. The record stays `enabled: true` with
   // a shrunken inventory, which is exactly what an install followed by a failed
-  // disable produces.
+  // disable produces, and the config entry the write-back arms just stamped
+  // says `enabled: false` -- the divergence a later reconcile pass closes by
+  // planning the disable this one could not finish.
   const cascadeError = disabledInstall.cascadeError;
   if (cascadeError !== undefined) {
     const cause = errorMessage(cascadeError);

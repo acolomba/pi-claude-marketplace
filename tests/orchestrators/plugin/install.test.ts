@@ -1577,6 +1577,24 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
       );
 
       assert.notEqual(record.updatedAt, record.installedAt, "updatedAt must have moved");
+
+      // NFR-3: the declaration is written on this path too. A saved record with
+      // no declaration is a state neither convergence path can act on -- the
+      // standalone retry is rejected by the PI-15 already-installed gate, and a
+      // bare reconcile entry over a recorded, enabled, not-disabled record is
+      // steady state for the planner. `enabled: false` is what makes the next
+      // pass plan the disable this one could not finish.
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const cfg = await loadConfig(locations.configJsonPath);
+      assert.equal(cfg.status, "valid");
+      if (cfg.status === "valid") {
+        assert.deepEqual(
+          cfg.config.plugins?.["hello@mp"],
+          { enabled: false },
+          "a failed disable cascade must still declare enabled:false",
+        );
+      }
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
