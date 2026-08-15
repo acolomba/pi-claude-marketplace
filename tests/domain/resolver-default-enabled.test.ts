@@ -24,17 +24,17 @@ import {
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
-test("OUT-05 / D-104-01: `defaultEnabled` set to the false literal is a declaration", () => {
+test("OUT-05 / DOC-02: `defaultEnabled` set to the false literal is a declaration", () => {
   const entry = { name: "alpha", source: "./alpha", defaultEnabled: false } as PluginEntry;
   assert.equal(entryDeclaresInstallDisabled(entry), true);
 });
 
-test("OUT-05 / D-104-01: `defaultEnabled` set to the true literal is silent", () => {
+test("OUT-05 / DOC-02: `defaultEnabled` set to the true literal is silent", () => {
   const entry = { name: "alpha", source: "./alpha", defaultEnabled: true } as PluginEntry;
   assert.equal(entryDeclaresInstallDisabled(entry), false);
 });
 
-test("OUT-05 / D-104-01: an entry omitting `defaultEnabled` is silent -- absence is not a declaration", () => {
+test("OUT-05 / DOC-02: an entry omitting `defaultEnabled` is silent -- absence is not a declaration", () => {
   // The negating form of the predicate (`!entry.defaultEnabled`) passes both
   // cases above and fails HERE, claiming on every silent entry in the corpus.
   // That is the whole reason this case exists.
@@ -42,7 +42,7 @@ test("OUT-05 / D-104-01: an entry omitting `defaultEnabled` is silent -- absence
   assert.equal(entryDeclaresInstallDisabled(entry), false);
 });
 
-test("OUT-05 / D-104-01: a non-boolean `defaultEnabled` is silent -- a value past the validator degrades, it never claims", () => {
+test("OUT-05 / DOC-02: a non-boolean `defaultEnabled` is silent -- a value past the validator degrades, it never claims", () => {
   // PLUGIN_ENTRY_VALIDATOR types the field `boolean | undefined`, so this shape
   // is unreachable in production and a deliberate cast is the only way to reach
   // the case at all. What is pinned here is therefore the DEGRADATION RULE, not

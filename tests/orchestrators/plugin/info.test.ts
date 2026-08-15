@@ -3377,7 +3377,8 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
 //
 // A not-installed row whose marketplace ENTRY declares `defaultEnabled: false`
 // says so in the row's existing reason brace, so a user deciding whether to
-// install learns it before committing. D-104-01: the entry is the only source
+// install learns it before committing. OUT-05 / DOC-02: the entry is the only
+// source
 // -- the plugin's own manifest is never read, which is what lets a row with no
 // materialized tree at all carry the claim.
 //
@@ -3386,7 +3387,7 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
 // not move the surface off informational severity.
 // ---------------------------------------------------------------------------
 
-test("OUT-03 / D-104-05: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` info row, and a declared-true entry differs by exactly that brace", async () => {
+test("OUT-03: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` info row, and a declared-true entry differs by exactly that brace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -3461,7 +3462,7 @@ test("OUT-03 / D-104-05: an entry declaring `defaultEnabled: false` puts `{insta
       ].join("\n"),
     );
 
-    // D-104-05: the fact is stated through the brace the row ALREADY has, never
+    // OUT-03: the fact is stated through the brace the row ALREADY has, never
     // through a new body line. Asserting the two renders line-by-line is what
     // proves it: same line count, every non-row line identical, and the row
     // line differing by the brace alone. One fact keeps one grammar here.
@@ -3544,7 +3545,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
   });
 });
 
-test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `defaultEnabled: false` carries `{installs disabled}` with no tree materialized anywhere", async () => {
+test("OUT-03 / OUT-05 / RSTA-01: a COLD `(remote)` row whose entry declares `defaultEnabled: false` carries `{installs disabled}` with no tree materialized anywhere", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -3568,7 +3569,7 @@ test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `de
     // No mirror is staged, so there is no `plugin.json` on disk to read and no
     // fetch is made to produce one. The claim can only have come from the
     // marketplace entry -- which is exactly why the entry is the single source
-    // (D-104-01): it reads the same warm and cold.
+    // (OUT-05 / DOC-02): it reads the same warm and cold.
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
     assert.equal(notifications.length, 1);
@@ -3584,7 +3585,7 @@ test("OUT-03 / OUT-05 / D-104-06: a COLD `(remote)` row whose entry declares `de
   });
 });
 
-test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const cloneUrl = "https://example.com/warmdecl";
@@ -3614,7 +3615,7 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
 
     const { ctx, pi, notifications } = makeCtx();
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "warmdecl", scope: "user", cwd });
-    // Three things this pins, in the order they matter (OUT-05 / D-104-01):
+    // Three things this pins, in the order they matter (OUT-05 / DOC-02):
     //
     // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
     //    asserted so the absence of the brace is proven alongside the component
@@ -3630,7 +3631,7 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
     //    bug fix -- it would make these surfaces agree with what the install
     //    path reads -- and it is not one. It reintroduces the warm/cold
     //    asymmetry, and the only remedy for that asymmetry is a fetch the
-    //    network-free requirement forbids. D-104-01 / OUT-05 own the rule; do
+    //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
     //    not "fix" this toward what install reads.
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
@@ -3646,7 +3647,7 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
   });
 });
 
-test("OUT-03 / D-104-03: a `(partially-available)` row appends `installs disabled` at the tail of the degrade token it already carries", async () => {
+test("OUT-03: a `(partially-available)` row appends `installs disabled` at the tail of the degrade token it already carries", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const cloneUrl = "https://example.com/repo";
@@ -3688,7 +3689,7 @@ test("OUT-03 / D-104-03: a `(partially-available)` row appends `installs disable
   });
 });
 
-test("OUT-05 / D-104-04: a degraded `(remote)` row reporting a read failure carries BOTH facts in one brace, failure first", async () => {
+test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carries BOTH facts in one brace, failure first", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const cloneUrl = "https://example.com/repo";
@@ -3740,14 +3741,14 @@ test("OUT-05 / D-104-04: a degraded `(remote)` row reporting a read failure carr
 });
 
 // ---------------------------------------------------------------------------
-// OUT-03 / D-104-03: the info rows that stay clean.
+// OUT-03: the info rows that stay clean.
 //
 // Every case below seeds an entry that DOES declare `defaultEnabled: false`.
 // A negative test whose input says nothing proves nothing -- these prove an
 // EXCLUSION, against the one input that would otherwise produce the token.
 // ---------------------------------------------------------------------------
 
-test("OUT-03 / D-104-03: an `(unavailable)` row never acquires `installs disabled`, however the entry declares", async () => {
+test("OUT-03: an `(unavailable)` row never acquires `installs disabled`, however the entry declares", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -3790,7 +3791,7 @@ test("OUT-03 / D-104-03: an `(unavailable)` row never acquires `installs disable
   });
 });
 
-test("OUT-03 / D-104-03: an `(installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+test("OUT-03: an `(installed)` row never acquires `installs disabled`, however the entry declares", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -3838,7 +3839,7 @@ test("OUT-03 / D-104-03: an `(installed)` row never acquires `installs disabled`
   });
 });
 
-test("OUT-03 / D-104-03: a `(partially-installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+test("OUT-03: a `(partially-installed)` row never acquires `installs disabled`, however the entry declares", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({
@@ -3874,7 +3875,7 @@ test("OUT-03 / D-104-03: a `(partially-installed)` row never acquires `installs 
   });
 });
 
-test("OUT-03 / D-104-03: a `(disabled)` row never acquires `installs disabled`, however the entry declares", async () => {
+test("OUT-03: a `(disabled)` row never acquires `installs disabled`, however the entry declares", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedPathMarketplace({

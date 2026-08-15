@@ -515,13 +515,13 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
     const out = notifications[0]!.message;
     // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), and no
     // PROBE- or SOFT-DEP-derived reason brace (D-80-03 as narrowed by
-    // D-104-06). This fixture's entry declares nothing, so there is no
+    // OUT-05). This fixture's entry declares nothing, so there is no
     // entry-derived token either, and the row is bare on both counts.
     assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
   });
 });
 
-test("OUT-02 / OUT-05 / D-104-06: a COLD git-source entry declaring `defaultEnabled: false` carries `{installs disabled}` on its `(remote)` row; a silent cold entry stays bare", async () => {
+test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabled: false` carries `{installs disabled}` on its `(remote)` row; a silent cold entry stays bare", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -549,7 +549,8 @@ test("OUT-02 / OUT-05 / D-104-06: a COLD git-source entry declaring `defaultEnab
     const out = notifications[0]!.message;
     // The load-bearing fact is that NO tree exists for either row -- no clone,
     // no mirror, no plugin manifest to read -- so `delta`'s claim can only have
-    // come from the marketplace ENTRY the cached manifest holds (D-104-01).
+    // come from the marketplace ENTRY the cached manifest holds (OUT-05 /
+    // DOC-02).
     // That is what makes the claim reachable on the row of a marketplace the
     // user has never fetched from. `epsilon` is the parity half: a silent entry
     // renders the bare row byte-for-byte, exactly as the assertion above pins.
@@ -626,7 +627,7 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
   });
 });
 
-test("OUT-02 / D-104-01: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` row; a declared-true entry and a silent entry stay bare", async () => {
+test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts `{installs disabled}` on its `(available)` row; a declared-true entry and a silent entry stay bare", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -651,7 +652,7 @@ test("OUT-02 / D-104-01: an entry declaring `defaultEnabled: false` puts `{insta
     // Byte-equal over the whole body, so the three rows prove two facts on one
     // run. `alpha`'s ENTRY declares that installing it would leave it disabled,
     // so its row carries the brace -- read offline, with no clone materialized
-    // (D-104-01 / OUT-05). `beta` declares the opposite and `gamma` says nothing
+    // (OUT-05 / DOC-02). `beta` declares the opposite and `gamma` says nothing
     // at all; both render exactly the bytes they rendered before the token
     // existed, which is the no-op parity every plugin that does not use the
     // field is owed.
@@ -735,7 +736,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
   });
 });
 
-test("OUT-02 / D-104-03: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
+test("OUT-02: on a `(partially-available)` row the author-declared token appends at the TAIL, after the degrade tokens", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -777,7 +778,7 @@ test("OUT-02 / D-104-03: on a `(partially-available)` row the author-declared to
   });
 });
 
-test("D-104-03: NEITHER `(unavailable)` path acquires the token -- not the structural resolver arm, not the probe-failure catch -- though both entries declare `defaultEnabled: false`", async () => {
+test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structural resolver arm, not the probe-failure catch -- though both entries declare `defaultEnabled: false`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -825,7 +826,7 @@ test("D-104-03: NEITHER `(unavailable)` path acquires the token -- not the struc
   });
 });
 
-test("OUT-02 / D-104-03 / D-95-02: an INSTALLED plugin's row never acquires the token, though its entry declares `defaultEnabled: false`", async () => {
+test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, though its entry declares `defaultEnabled: false`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
@@ -944,7 +945,7 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
   });
 });
 
-test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
+test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEnabled: false` renders the bare row -- declining to claim is the correct answer", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");
     const canonicalUrl = "https://example.com/warmdecl";
@@ -967,7 +968,7 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
     const { ctx, pi, notifications } = makeCtx();
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     const out = notifications[0]!.message;
-    // Three things this pins, in the order they matter (OUT-05 / D-104-01):
+    // Three things this pins, in the order they matter (OUT-05 / DOC-02):
     //
     // 1. The bare row is the CORRECT outcome, not a gap. The whole body is
     //    asserted so the absence of the brace is proven alongside everything
@@ -983,7 +984,7 @@ test("OUT-05 / D-104-01: a SILENT entry over a warm clone that declares `default
     //    bug fix -- it would make these surfaces agree with what the install
     //    path reads -- and it is not one. It reintroduces the warm/cold
     //    asymmetry, and the only remedy for that asymmetry is a fetch the
-    //    network-free requirement forbids. D-104-01 / OUT-05 own the rule; do
+    //    network-free requirement forbids. OUT-05 / DOC-02 own the rule; do
     //    not "fix" this toward what install reads.
     assert.equal(out, ["● mp1 [user]", "  ○ warmdecl v1.0.0 (available)"].join("\n"), out);
   });

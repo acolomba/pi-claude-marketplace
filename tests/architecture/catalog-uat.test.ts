@@ -281,7 +281,7 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 // The filter buckets (`--partial` / `--unavailable`) are unchanged; only the
 // rendered token splits.
 // ---------------------------------------------------------------------------
-// OUT-02 / OUT-05 / DFEN-04 / D-104-06: the two list-surface rows whose reason
+// OUT-02 / OUT-05 / DFEN-04 / RSTA-01: the two list-surface rows whose reason
 // brace is composed by `LIST_RENDER` rather than by the central
 // `renderPluginRow` arms. Declared once each so the fixture's `message` payload
 // and its `emit` override cannot drift apart -- the driver byte-pairs whatever
@@ -787,7 +787,8 @@ const FIXTURES: FixtureMap = {
     // `(available)` / `(remote)` row is composed by `LIST_RENDER`, while the
     // central `renderPluginRow` arms omit `composeReasons` by construction --
     // no producer that renders through THEM stamps `reasons` on those two
-    // statuses (D-104-06). `notifyWithContext` is the seam `listPlugins` itself
+    // statuses (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins`
+    // itself
     // calls, so the block below is byte-paired with the real list surface.
     "available-installs-disabled": {
       pi: piWithBothLoaded(),
@@ -854,7 +855,7 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // OUT-02 / OUT-05 / RSTA-01 / D-104-06: the `remote-inventory` row above
+    // OUT-02 / OUT-05 / RSTA-01: the `remote-inventory` row above
     // whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS
     // the bare-row rule rather than reversing it: the row still refuses every
     // probe-derived reason and both soft-dependency markers (no materialized

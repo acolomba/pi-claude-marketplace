@@ -1,6 +1,6 @@
 /**
- * tests/shared/notify-not-installed-reasons.test.ts -- OUT-02 / D-104-03 /
- * D-104-06 live-field guard for the reasons brace on the two NOT-INSTALLED
+ * tests/shared/notify-not-installed-reasons.test.ts -- OUT-02 / OUT-05 /
+ * RSTA-01 live-field guard for the reasons brace on the two NOT-INSTALLED
  * candidate rows, `(available)` and `(remote)`.
  *
  * Both shared row shapes gained an OPTIONAL `reasons` field. An arm that passes
@@ -120,11 +120,11 @@ function infoBody(plugin: PluginInfoRow): string {
   return soleBody(ctx);
 }
 
-test("OUT-02 / D-104-03: the LIST render map renders a stamped reason on the `(available)` candidate row", () => {
+test("OUT-02: the LIST render map renders a stamped reason on the `(available)` candidate row", () => {
   assert.equal(listBody(AVAILABLE_ROW), ["● mp [user]", EXPECTED_AVAILABLE_ROW].join("\n"));
 });
 
-test("OUT-02 / D-104-06: the LIST render map renders a stamped reason on the unfetched `(remote)` row", () => {
+test("OUT-02 / OUT-05 / RSTA-01: the LIST render map renders a stamped reason on the unfetched `(remote)` row", () => {
   assert.equal(listBody(REMOTE_ROW), ["● mp [user]", EXPECTED_REMOTE_ROW].join("\n"));
 });
 
@@ -138,11 +138,11 @@ test("OUT-02 / D-104-06: the LIST render map renders a stamped reason on the unf
 // passed an empty one would prove nothing about dropping. If a producer for one
 // of these arms is ever added, THIS test is the one that must be updated first
 // -- which is the whole reason the drop is asserted instead of commented.
-test("D-104-06: the CENTRAL row renderer drops a stamped reason on the `(available)` row", () => {
+test("OUT-05 / RSTA-01: the CENTRAL row renderer drops a stamped reason on the `(available)` row", () => {
   assert.equal(centralBody(AVAILABLE_ROW), ["● mp [user]", BARE_AVAILABLE_ROW].join("\n"));
 });
 
-test("D-104-06: the CENTRAL row renderer drops a stamped reason on the `(remote)` row", () => {
+test("OUT-05 / RSTA-01: the CENTRAL row renderer drops a stamped reason on the `(remote)` row", () => {
   assert.equal(centralBody(REMOTE_ROW), ["● mp [user]", BARE_REMOTE_ROW].join("\n"));
 });
 
