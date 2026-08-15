@@ -273,3 +273,53 @@ dev-only and does not reach the published package.
 `.planning/codebase/STACK.md` gains a fallow entry under Build/Dev, so
 the document that was just corrected for two stale packages does not go
 stale again on the same commit series.
+
+## Amendment 2: fallow runs everywhere ESLint runs
+
+The first cut wired fallow into one place only -- the `fallow` job in
+`lint.yml`, which fires on pull requests. ESLint ran at four points:
+the `npm-lint` pre-commit hook, `npm run check`, every `ci.yml` run,
+and the `lint.yml` pre-commit job. A cross-bridge import therefore
+survived a local `npm run check`, a commit, and every branch push, and
+was caught only once a PR opened.
+
+Two changes close that gap:
+
+- `npm run check` gains `npm run fallow`, placed next to `npm run lint`
+  as the paired static-analysis step. This also covers `ci.yml`, which
+  runs `npm run check` on push, PR, workflow_call and dispatch.
+- `.pre-commit-config.yaml` gains an `npm-fallow` local hook mirroring
+  `npm-lint`.
+
+Cost is not a factor. Measured on this codebase: ESLint 22.1s, the
+fallow boundary gate 0.34s, `fallow audit` 1.06s. The boundary gate is
+roughly 65x faster than ESLint while covering the whole import graph.
+
+Hook `files:` pattern is `^(\.fallowrc\.json|extensions/.*\.ts|package(-lock)?\.json)$`.
+It differs from `npm-lint`'s on both ends, deliberately:
+
+- `.fallowrc.json` is included because the zone definitions decide what
+  counts as a violation, so editing the config can turn a clean tree
+  dirty without any source file changing.
+- `tests/**` is excluded, though ESLint lints it. Under `production:
+  true` fallow excludes test files from the consumer graph entirely, so
+  a test-only edit cannot produce or clear a boundary violation.
+
+`pass_filenames: false`, like its three siblings, and for a stronger
+reason than theirs: the analysis is whole-graph. Moving a single import
+can orphan a file the commit never touches, so a filename-scoped run
+would miss it.
+
+Verified by probe rather than by assertion: a planted
+`bridges/agents -> bridges/mcp` import makes the `npm-fallow` hook fail
+with `(bridges-agents -> bridges-mcp)`, blocking the commit. Reverted
+after the check.
+
+The `lint.yml` fallow job stays. It is not redundant -- `fallow audit`
+covers dead code, duplication and complexity on changed files with
+new-vs-inherited attribution, whereas `npm run fallow` is isolated to
+boundary violations. The two answer different questions.
+
+Note that the pre-commit hook is only practical because Amendment 1
+made fallow a real devDependency. Under `npx --yes` the hook would
+re-resolve the package on every commit.
