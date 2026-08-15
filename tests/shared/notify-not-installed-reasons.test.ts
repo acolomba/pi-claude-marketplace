@@ -1,7 +1,8 @@
 /**
- * tests/shared/notify-not-installed-reasons.test.ts -- OUT-02 / OUT-05 /
- * RSTA-01 live-field guard for the reasons brace on the two NOT-INSTALLED
- * candidate rows, `(available)` and `(remote)`.
+ * tests/shared/notify-not-installed-reasons.test.ts -- live-field guard for the
+ * reasons brace on the two NOT-INSTALLED candidate rows. Each row has its own
+ * anchor and they are not interchangeable: `(available)` is OUT-02's row, and
+ * `(remote)` is RSTA-01's, read network-free under OUT-05.
  *
  * Both shared row shapes gained an OPTIONAL `reasons` field. An arm that passes
  * nothing in its place still type-checks, still renders identical bytes for
@@ -138,7 +139,12 @@ test("OUT-02 / OUT-05 / RSTA-01: the LIST render map renders a stamped reason on
 // passed an empty one would prove nothing about dropping. If a producer for one
 // of these arms is ever added, THIS test is the one that must be updated first
 // -- which is the whole reason the drop is asserted instead of commented.
-test("OUT-05 / RSTA-01: the CENTRAL row renderer drops a stamped reason on the `(available)` row", () => {
+//
+// The IDs on the two titles name the ROW each case covers, not the drop: the
+// drop is a renderer-level consequence of there being no producer, and it has
+// no requirement-level home. Borrowing an unrelated ID for it would read as
+// traceability while supplying none.
+test("OUT-02: the CENTRAL row renderer drops a stamped reason on the `(available)` row", () => {
   assert.equal(centralBody(AVAILABLE_ROW), ["● mp [user]", BARE_AVAILABLE_ROW].join("\n"));
 });
 
