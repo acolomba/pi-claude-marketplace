@@ -3556,3 +3556,186 @@ test("OUT-05 / D-104-04: a degraded `(remote)` row reporting a read failure carr
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// OUT-03 / D-104-03: the info rows that stay clean.
+//
+// Every case below seeds an entry that DOES declare `defaultEnabled: false`.
+// A negative test whose input says nothing proves nothing -- these prove an
+// EXCLUSION, against the one input that would otherwise produce the token.
+// ---------------------------------------------------------------------------
+
+test("OUT-03 / D-104-03: an `(unavailable)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
+            version: "1.0.0",
+            description: "Remote plugin sourced from an external npm package.",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      // NOT installed -> the not-installed consumer, so this row DOES reach the
+      // composer and is excluded there by status rather than by never arriving.
+    });
+
+    // Nothing will install at all, so the token would describe an install that
+    // cannot happen -- and the brace already carries the blocker that stops it.
+    // Adding a second token here would answer a question the user cannot act on.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ⊘ remote v1.0.0 (unavailable) {unsupported source}",
+        "    Remote plugin sourced from an external npm package.",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03 / D-104-03: an `(installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { foo: { version: "1.2.3" } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    // This row and the two below are clean STRUCTURALLY, not by a runtime
+    // guard: the composer is applied at the not-installed consumer alone, so the
+    // installed bucket never reaches it. The guarantee is the absence of an
+    // edit, which is stronger than a check a later change could relax. The
+    // token is also a claim about a FUTURE install, and on a record the action
+    // is already taken -- the row reports what exists, not what would happen.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● foo v1.2.3 (installed)",
+        "    Foo plugin",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OUT-03 / D-104-03: a `(partially-installed)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "degraded",
+            source: "./degraded",
+            version: "1.0.0",
+            lspServers: { foo: { command: "foo-lsp" } },
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { degraded: { version: "1.0.0" } },
+      installablePluginDirs: ["degraded"],
+    });
+
+    // Clean for the reason given on the `(installed)` case above.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ◉ degraded v1.0.0 (partially-installed) {lsp}"].join("\n"),
+    );
+  });
+});
+
+test("OUT-03 / D-104-03: a `(disabled)` row never acquires `installs disabled`, however the entry declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "foo",
+            source: "./foo",
+            version: "1.2.3",
+            description: "Foo plugin",
+            skills: "skills",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      installed: { foo: { version: "1.2.3", disabled: true } },
+      installablePluginDirs: ["foo"],
+      componentDirs: { foo: ["skills/s1"] },
+    });
+
+    // The sharpest of the four: this row is disabled AND its entry declares the
+    // install-time default false, so a naive implementation would report the
+    // same idea twice in two tenses. It does not. The row's disabled-ness is a
+    // recorded fact about a record; the token is a prediction about an install
+    // that, here, already happened. Clean for the structural reason given on the
+    // `(installed)` case above.
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◍ foo v1.2.3 (disabled)",
+        "    Foo plugin",
+        "    skills: s1",
+      ].join("\n"),
+    );
+  });
+});
