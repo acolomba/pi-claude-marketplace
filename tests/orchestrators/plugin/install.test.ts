@@ -1171,6 +1171,12 @@ interface DfenPrecedenceCase {
    * all, and `loadConfig` answers `absent` rather than `valid` for it.
    */
   readonly expectSiblingKeyAbsent?: boolean;
+  /**
+   * Seed this entry into the file `seedLocal` does NOT name, so the fixture
+   * declares the key in BOTH physical files -- the shape that separates a
+   * write target chosen by file identity from one chosen by the caller's flag.
+   */
+  readonly alsoSeedSiblingEntry?: Record<string, unknown>;
 }
 
 const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
@@ -1250,6 +1256,36 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     // neither file, so there is no base-file declaration for it to contradict.
     expectSiblingKeyAbsent: true,
   },
+  {
+    // The case that fails if the effective-declaration label is derived from
+    // the caller's `--local` flag instead of from the SELECTED file's identity.
+    //
+    // Both files declare the key: base bare `{}`, local `enabled: true`. The
+    // key is in the local file, so the target is local, the local entry is the
+    // effective declaration, its `enabled` is true, the verdict never fires and
+    // the plugin installs ENABLED with both entries left exactly as seeded.
+    //
+    // Label the local target with the flag (false, since none was typed) and
+    // the two files swap identities: the BASE bare `{}` is read as the
+    // effective declaration, `enabled` comes back undefined, the verdict fires
+    // against a manifest declaring false, and the install lands DISABLED while
+    // stamping `enabled: false` over the `enabled: true` the user typed. The
+    // entry is selected by physical-file identity BEFORE its `enabled` field is
+    // read, which is why the label decides the answer rather than merely
+    // describing it -- and why it is derived from the path the selector
+    // returned, not from the flag.
+    label:
+      "CFG-02 / D-103-16: with the key in BOTH files the LOCAL entry decides, and neither file moves",
+    tmpPrefix: "install-dfen05-both-files-",
+    seedLocal: true,
+    seededEntry: { enabled: true },
+    alsoSeedSiblingEntry: {},
+    manifestDefaultEnabled: false,
+    expectRecordEnabled: true,
+    expectArtifacts: true,
+    expectEntryAfter: { enabled: true },
+    expectSiblingEntryAfter: {},
+  },
 ];
 
 for (const precedence of DFEN_PRECEDENCE_CASES) {
@@ -1280,6 +1316,13 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.seededEntry } } },
           locations.scopeRoot,
         );
+        if (precedence.alsoSeedSiblingEntry !== undefined) {
+          await saveConfig(
+            siblingPath,
+            { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.alsoSeedSiblingEntry } } },
+            locations.scopeRoot,
+          );
+        }
 
         const { ctx, pi, notifications } = makeCtx();
         await installPlugin({
