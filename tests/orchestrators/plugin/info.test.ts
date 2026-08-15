@@ -3060,6 +3060,61 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
   });
 });
 
+test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEnabled: false` carries the claim while making ZERO git-seam calls", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0", defaultEnabled: false }],
+      },
+    });
+
+    // The seam is injected but `fetch` is omitted, so any call through it is a
+    // defect rather than a consented fetch. Counting the calls is what makes
+    // this evidence: a source grep says the module holds no git import, while
+    // the count says the injected surface was never reached at run time.
+    const { gitOps, state: gitState } = makeMockGitOps({});
+    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { ctx, pi, notifications } = makeCtx();
+    await getPluginInfo({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // The pair asserted in one run: the claim IS made, and nothing was fetched
+    // to make it. The second half is what turns the first half into a
+    // requirement rather than a coincidence -- a surface that quietly
+    // materialized a mirror and read its `plugin.json` would emit these same
+    // bytes, so the row cannot testify about its own source.
+    assert.equal(gitState.cloneCalls.length, 0, "the claim must cost no clone");
+    assert.equal(gitState.fetchCalls.length, 0, "the claim must cost no fetch");
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    const msg = notifications[0]!.message;
+    assert.ok(msg.includes("(remote) {installs disabled}"), msg);
+    assert.equal(
+      msg,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ◌ gplug v1.0.0 (remote) {installs disabled}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
 test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing clone surfaces the fetch failure reason WITHOUT regressing the recorded status", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     const userRoot = path.join(home, ".pi", "agent");

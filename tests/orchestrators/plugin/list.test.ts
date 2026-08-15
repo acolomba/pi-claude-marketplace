@@ -26,7 +26,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -553,6 +553,68 @@ test("OUT-02 / OUT-05 / D-104-06: a COLD git-source entry declaring `defaultEnab
       ].join("\n"),
       out,
     );
+  });
+});
+
+test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO clone directory on disk after the call returns", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [
+          {
+            name: "delta",
+            source: "https://example.com/delta.git",
+            version: "1.0.0",
+            defaultEnabled: false,
+          },
+        ],
+      },
+      // No mirror staged: the row is COLD.
+    });
+
+    const { ctx, pi, notifications } = makeCtx();
+    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const out = notifications[0]!.message;
+    assert.equal(
+      out,
+      ["● mp1 [user]", "  ◌ delta v1.0.0 (remote) {installs disabled}"].join("\n"),
+      out,
+    );
+
+    // The two halves of the guarantee are asserted TOGETHER: the row states what
+    // an install would do, AND nothing was fetched to let it say so. A clone or
+    // any other network touch would have to materialize `plugin-clones/`, so the
+    // directory's absence after the render is the evidence for the second half.
+    // The bytes alone cannot supply it -- a surface that quietly materialized a
+    // clone and read it would render exactly the same row.
+    //
+    // The probe's shape is deliberate on two counts. It asks for path METADATA
+    // rather than file content, because a content read against an EXISTING
+    // directory throws just as it does against a missing one, so a content-read
+    // probe answers "absent" either way. And it runs AFTER the orchestrator
+    // returns, because a probe taken before the call describes the fixture
+    // rather than the render. The caught code is asserted rather than a bare
+    // boolean derived from the try/catch, so a probe that failed for some
+    // unrelated reason cannot pass as an absence.
+    //
+    // A similar block near the tail of this file has both of those faults. It is
+    // pre-existing and out of scope here, and it is deliberately left as found
+    // -- do not harmonize this probe toward it.
+    const locations = locationsFor("user", cwd);
+    let probeCode: unknown;
+    try {
+      await stat(locations.pluginClonesDir);
+    } catch (err) {
+      probeCode = (err as { code?: unknown }).code;
+    }
+
+    assert.equal(probeCode, "ENOENT", "plugin-clones/ must not exist after the render");
   });
 });
 
