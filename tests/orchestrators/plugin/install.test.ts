@@ -4199,6 +4199,191 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// WB-01 / UAT-05 / D-103-16 -- the three arms the declaration-following write
+// target must NOT have moved. Together they bound its blast radius to the one
+// case it fixes: a stamp that used to land in a file CFG-02 shadows.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the base file, local not created", async () => {
+  // The majority path -- the shape every fresh `/claude:plugin install` has --
+  // and the reason this change is narrow: the membership probe finds no local
+  // entry, so the selection falls through to today's answer, the base file.
+  //
+  // Contrast with the locally-declared stamp regression above: the fixture is
+  // identical apart from the seeded local declaration, and only that
+  // declaration moves the target. Do not reconcile the two toward each other.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.deepEqual(baseCfg.config.plugins?.["hello@mp"], { enabled: false });
+      }
+
+      assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WB-01 / UAT-05 / D-103-16: a typed --local still targets the local file over a BASE declaration", async () => {
+  // The flag is the user naming the file they want written, and a per-machine
+  // override that shadows a shared base declaration is the local file's whole
+  // purpose. The declaration-following rule answers the question the user did
+  // NOT answer; it never overrules the one they did.
+  //
+  // Contrast with the control above: there the flag is absent AND no
+  // declaration exists, so both roads lead to the base file. Here they
+  // disagree, and the flag wins.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        { schemaVersion: 1, plugins: { "hello@mp": { enabled: true } } },
+        locations.scopeRoot,
+      );
+
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+        local: true,
+      });
+
+      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      assert.equal(localCfg.status, "valid");
+      if (localCfg.status === "valid") {
+        assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
+      }
+
+      // The base entry keeps its pre-call value.
+      const baseCfg = await loadConfig(locations.configJsonPath);
+      assert.equal(baseCfg.status, "valid");
+      if (baseCfg.status === "valid") {
+        assert.deepEqual(baseCfg.config.plugins?.["hello@mp"], { enabled: true });
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const arm of [
+  { configSource: "local" as const, tmpPrefix: "install-wb01-orch-local-" },
+  { configSource: "base" as const, tmpPrefix: "install-wb01-orch-base-" },
+]) {
+  test(`WB-01 / UAT-05 / D-103-16: the orchestrated stamp targets the ${arm.configSource} file, unchanged`, async () => {
+    // The reconcile apply path passes `local: op.configSource === "local"`, and
+    // the argument that this arm cannot move is airtight: a "local" source sets
+    // the flag, and a "base" source implies the key is ABSENT from the local
+    // file, because a local entry would have made the merged source "local"
+    // (CFG-02). There is no third case. An argument is not a test, though, and
+    // this is the arm a future change to `configSource` could break silently.
+    //
+    // The end-to-end half -- planner through apply through the on-disk file --
+    // is owned by the reconcile suite's DFEN-04 / D-102-04 base-declared and
+    // locally-declared stamp cases. This asserts the narrower orchestrator
+    // fact: given the flag the apply path derives, the stamp lands in the file
+    // it lands in today. The two are not duplicates.
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), arm.tmpPrefix));
+      try {
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          entryDefaultEnabled: false,
+          skills: [{ sourceName: "tool" }],
+        });
+
+        const { loadConfig, saveConfig } =
+          await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+        const declaringPath =
+          arm.configSource === "local" ? locations.configLocalJsonPath : locations.configJsonPath;
+        const otherPath =
+          arm.configSource === "local" ? locations.configJsonPath : locations.configLocalJsonPath;
+        await saveConfig(
+          declaringPath,
+          { schemaVersion: 1, plugins: { "hello@mp": {} } },
+          locations.scopeRoot,
+        );
+
+        const { ctx, pi, notifications } = makeCtx();
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          applyDefaultEnabled: true,
+          local: arm.configSource === "local",
+          notifications: { mode: "orchestrated" },
+        });
+        assert.equal(outcome.status, "installed");
+        assert.deepEqual(notifications, []);
+
+        const declaringCfg = await loadConfig(declaringPath);
+        assert.equal(declaringCfg.status, "valid");
+        if (declaringCfg.status === "valid") {
+          assert.deepEqual(declaringCfg.config.plugins?.["hello@mp"], { enabled: false });
+        }
+
+        // The other file is never created: the orchestrated arm writes ONE
+        // entry to ONE file and skips the batched write-back entirely (WR-09).
+        assert.equal((await loadConfig(otherPath)).status, "absent");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
