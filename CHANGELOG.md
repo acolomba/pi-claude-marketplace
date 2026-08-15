@@ -4,6 +4,7 @@
 
 - Added GitLab support for private marketplace and plugin sources. Adding a `https://gitlab.com/...` marketplace or plugin source now authenticates via RFC 8628 OAuth Device Flow when no credential is cached, the same flow already used for GitHub.
 - Fixed a clone failure for GitLab (and any other non-GitHub) `https://` marketplace or plugin source. The network clone URL was missing its `.git` suffix, which made GitLab's smart-HTTP endpoint reject the request with `422 Unprocessable Entity` after a redirect. Every clone and remote-ref resolution for a url-kind or git-subdir-kind source now sends a `.git`-suffixed URL, while the stored source record and cache keys keep their canonical (unsuffixed) form.
+- A project-scope plugin's `SessionStart` hooks now fire on the session that starts them. Pi emits `session_start` before `resources_discover`, and the project-scope hook cache was only hydrated on `resources_discover` -- so at dispatch time the `SessionStart` routing bucket held no project entries and those hooks were skipped, becoming reachable only after a later `/reload`. The bridge now hydrates project scope against the event's own `cwd` before dispatching `SessionStart`. User-scope hooks were never affected. Thanks to @rakesh-vs for the contribution (#127).
 
 ## [0.14.0] - 2026-08-12
 
