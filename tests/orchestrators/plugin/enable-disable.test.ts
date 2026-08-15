@@ -18,6 +18,9 @@ import {
   __test_staleGateDropped,
   setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -252,8 +255,30 @@ async function seedRealDisabledMarketplace(
      * one, which is what makes the row declare the `pi-subagents` companion.
      */
     withAgent?: boolean;
+    /**
+     * DFEN-07: spread `defaultEnabled` onto the plugin's MARKETPLACE ENTRY.
+     * The entry is the side that WINS the resolution (`resolveDefaultEnabled`
+     * consults it before `plugin.json`), so a fixture that declared the field
+     * on the manifest instead could be satisfied by an entry that never
+     * carried it. Omitted by default, which resolves to `true`.
+     */
+    defaultEnabled?: boolean;
+    /**
+     * Seed the plugin's config declaration into ONE of the scope's two
+     * physical files, alongside the marketplace declaration the planner needs
+     * to see. Naming the file is the point: which file a declaration lives in
+     * is what selects the write target of every verb that authors enablement.
+     * Omitted by default, leaving both files absent.
+     */
+    configSeed?: { file: "base" | "local"; entry: Record<string, unknown> };
   },
-): Promise<{ statePath: string; configPath: string }> {
+): Promise<{
+  statePath: string;
+  configPath: string;
+  configLocalPath: string;
+  mpRoot: string;
+  manifestPath: string;
+}> {
   const scopeRoot = path.join(home, ".pi", "agent");
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
@@ -303,10 +328,26 @@ async function seedRealDisabledMarketplace(
                 name: opts.pluginName,
                 source: `./plugins/${opts.pluginName}`,
                 version: opts.version,
+                ...(opts.defaultEnabled !== undefined && { defaultEnabled: opts.defaultEnabled }),
               },
             ],
     }),
   );
+
+  if (opts.configSeed !== undefined) {
+    await writeFile(
+      path.join(
+        scopeRoot,
+        opts.configSeed.file === "local" ? "claude-plugins.local.json" : "claude-plugins.json",
+      ),
+      JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { [opts.marketplaceName]: { source: mpRoot } },
+        plugins: { [`${opts.pluginName}@${opts.marketplaceName}`]: opts.configSeed.entry },
+      }),
+      "utf8",
+    );
+  }
 
   // State: the KEPT disabled record -- the pinned version + explicit
   // enabled: false. `installable` mirrors the seeded availability axis, which
@@ -350,7 +391,13 @@ async function seedRealDisabledMarketplace(
     },
   };
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-  return { statePath, configPath: path.join(scopeRoot, "claude-plugins.json") };
+  return {
+    statePath,
+    configPath: path.join(scopeRoot, "claude-plugins.json"),
+    configLocalPath: path.join(scopeRoot, "claude-plugins.local.json"),
+    mpRoot,
+    manifestPath,
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -2331,4 +2378,213 @@ test("WR-05: a stale-gate cause that narrows to NO reasons is not a match", () =
     partialable: false,
   });
   assert.equal(__test_staleGateDropped(structural), undefined);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// DFEN-07 / D-103-10 / D-103-11: an explicit enable outlives the lifecycle
+// ──────────────────────────────────────────────────────────────────────────
+
+/** One leg's expectation. The leg name lands in every assertion message. */
+interface ChainLeg {
+  readonly leg: string;
+  readonly version: string;
+  readonly declaringSource: "base" | "local";
+}
+
+/**
+ * The invariant every leg of the chain restates: the record is enabled AND the
+ * declaration the next reload reads agrees. Asserting only the record would
+ * pass on a config the next reload immediately reverses, which is the failure
+ * mode the chain exists to catch.
+ */
+async function assertStaysEnabled(
+  env: { readonly cwd: string; readonly statePath: string },
+  leg: ChainLeg,
+): Promise<void> {
+  const state = JSON.parse(await readFile(env.statePath, "utf8")) as {
+    marketplaces: Record<
+      string,
+      { plugins: Record<string, { version: string; enabled: boolean }> }
+    >;
+  };
+  const record = state.marketplaces["mp"]?.plugins["foo"];
+  assert.equal(record?.enabled, true, `${leg.leg}: the record must still be enabled`);
+  assert.equal(record?.version, leg.version, `${leg.leg}: recorded version`);
+  assert.deepEqual(
+    await readMergedUserPluginEntry(env.cwd, "foo@mp"),
+    { source: leg.declaringSource, declaredEnabled: true },
+    `${leg.leg}: the merged view the next reload reads`,
+  );
+}
+
+/**
+ * The converse of this milestone's main claim, run end to end against real
+ * on-disk artifacts. The milestone closes a reload that turns a plugin ON
+ * against the user's word; this asserts the same reload cannot turn one OFF
+ * against it. Both are one rule: the merged config is the desired state, and
+ * the commands the user runs must move it.
+ *
+ * The plugin's author shipped it off (`defaultEnabled: false` on the
+ * marketplace entry) and the user turned it on with no flag. It must stay on
+ * across a reload, a release that flips nothing in the user's favor, and a
+ * repair -- whichever physical file the declaration lives in.
+ */
+async function runConverseEnableChain(declarationFile: "base" | "local"): Promise<void> {
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { statePath, configPath, configLocalPath, manifestPath, mpRoot } =
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.0.0",
+        defaultEnabled: false,
+        configSeed: { file: declarationFile, entry: { enabled: false } },
+      });
+    const declaringPath = declarationFile === "local" ? configLocalPath : configPath;
+    const pi = makePi();
+    const skillsTargetDir = locationsFor("user", cwd).skillsTargetDir;
+
+    // 1. START: the install-disabled steady state. Asserted so a mis-seeded
+    // fixture cannot make the rest of the chain pass vacuously.
+    assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
+      source: declarationFile,
+      declaredEnabled: false,
+    });
+    const seeded = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+    };
+    assert.equal(seeded.marketplaces["mp"]?.plugins["foo"]?.enabled, false);
+
+    // 2. ENABLE, with no flag.
+    await setPluginEnabled({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "enable", version: "1.0.0", declaringSource: declarationFile },
+    );
+    assert.deepEqual(
+      ((await readConfig(declaringPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+        "foo@mp"
+      ],
+      { enabled: true },
+      "enable: the DECLARING file carries the flip",
+    );
+    assert.ok((await readdir(skillsTargetDir)).length > 0, "enable: artifacts staged on disk");
+    if (declarationFile === "local") {
+      assert.equal(await fileExists(configPath), false, "enable: the shadowed file stays absent");
+    }
+
+    // 3. RELOAD. This is the leg that failed for the local declaration before
+    // the write target followed the declaration: the merged view still read
+    // `enabled: false`, the planner planned a disable, and this pass rendered
+    // a `(disabled)` row and put the record back.
+    const firstReload = makeCtx(cwd);
+    await applyReconcile({ ctx: firstReload.ctx, pi, cwd, scope: "user" });
+    assert.deepEqual(firstReload.notifications, [], "reload: a converged pass says nothing");
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "reload", version: "1.0.0", declaringSource: declarationFile },
+    );
+    if (declarationFile === "local") {
+      // The reload's first-run config materialization writes a base file from
+      // recorded state when none exists. Its plugin entry is FIELDLESS, so the
+      // local entry keeps replacing it wholesale (CFG-02) and the merged view
+      // asserted above does not move -- which is why the reload leg converges
+      // instead of planning a disable.
+      assert.deepEqual(
+        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+          "foo@mp"
+        ],
+        {},
+      );
+    }
+
+    // 4. UPDATE against a manifest whose declaration is STILL false. The
+    // version bump is the control proving the update really ran and really
+    // re-read the manifest, rather than short-circuiting on version equality.
+    // `plugin.json` is the first tier of the version derivation, so a bump
+    // confined to the marketplace entry would never reach the record.
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "foo", source: "./plugins/foo", version: "2.0.0", defaultEnabled: false },
+        ],
+      }),
+    );
+    await writeFile(
+      path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo", version: "2.0.0" }),
+    );
+    await updatePlugins({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      cwd,
+      scope: "user",
+      target: { kind: "plugin", plugin: "foo", marketplace: "mp" },
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "update", version: "2.0.0", declaringSource: declarationFile },
+    );
+    if (declarationFile === "local") {
+      // The update's post-success write-back is still aimed by the FLAG, so a
+      // flagless update under a local-only declaration writes the shadowed
+      // base file. Pinned rather than glossed: that patch carries no `enabled`
+      // field, so the entry stays fieldless, the local entry keeps replacing
+      // it wholesale, and the merged view asserted immediately above does not
+      // move. Cosmetic, not a reversal -- which is why re-aiming that write is
+      // deliberately outside this change's scope.
+      assert.deepEqual(
+        ((await readConfig(configPath)) as { plugins?: Record<string, unknown> }).plugins?.[
+          "foo@mp"
+        ],
+        {},
+      );
+    }
+
+    // 5. REINSTALL: a repair, never an upgrade.
+    await reinstallPlugin({
+      ctx: makeCtx(cwd).ctx,
+      pi,
+      scope: "user",
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+    });
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "reinstall", version: "2.0.0", declaringSource: declarationFile },
+    );
+    assert.ok((await readdir(skillsTargetDir)).length > 0, "reinstall: artifacts on disk");
+
+    // 6. RELOAD again: the chain ends where it started, in a fixed point
+    // pointed the other way.
+    const secondReload = makeCtx(cwd);
+    await applyReconcile({ ctx: secondReload.ctx, pi, cwd, scope: "user" });
+    assert.deepEqual(secondReload.notifications, [], "reload: still converged");
+    await assertStaysEnabled(
+      { cwd, statePath },
+      { leg: "final reload", version: "2.0.0", declaringSource: declarationFile },
+    );
+  });
+}
+
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugin survives reload, update and reinstall", async () => {
+  await runConverseEnableChain("base");
+});
+
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared plugin survives reload, update and reinstall", async () => {
+  // The base variant above passes without the declaring-file write target;
+  // this one does not. Before that fix the enable wrote the base file, the
+  // local entry kept shadowing it wholesale, and the reload leg reversed the
+  // user's command.
+  await runConverseEnableChain("local");
 });
