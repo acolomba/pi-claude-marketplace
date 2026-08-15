@@ -2176,6 +2176,50 @@ test("DFEN-04 / D-102-04: a locally-declared bare entry stamps claude-plugins.lo
   });
 });
 
+test("DFEN-06 / D-103-07: the three-reload fixed point holds identically for a plugin declared ONLY in claude-plugins.local.json, in the MERGED view the planner reads", async () => {
+  // This case, and not its base-declared twin, is the one that can tell a
+  // correct stamp from a silently ineffective one.
+  //
+  // With a base declaration the physical file and the merged view agree by
+  // construction, so reading either answers the question. Here they can
+  // DISAGREE. CFG-02 replaces the whole entry per key, so a stamp mis-aimed at
+  // the base file would leave the merged entry with `enabled` ABSENT:
+  // `isDeclaredEnabled` would return true, the record would still be
+  // recorded-but-disabled, and the planner would push an enable on EVERY pass.
+  // A mis-targeted stamp therefore surfaces here as a non-empty pluginsToEnable
+  // and a non-zero notify count on pass 2 -- loud rather than silent.
+  await withHermeticHome(async ({ cwd, home }) => {
+    const { basePath, localPath, extensionRoot } = await seedDefaultDisabledInstallScope({
+      cwd,
+      home,
+      base: {},
+      local: { "foo@mp": {} },
+    });
+
+    // WR-09: the base file is the reconcile's input, not its output. Captured
+    // before the first pass, it must survive all three unchanged.
+    const baseBefore = await readFile(basePath, "utf8");
+
+    const { effective } = await assertInstallDisabledReloadFixedPoint({
+      cwd,
+      extensionRoot,
+      declaringConfigPath: localPath,
+    });
+
+    assert.equal(
+      await readFile(basePath, "utf8"),
+      baseBefore,
+      "no pass may rewrite the base config for a locally-declared plugin",
+    );
+    assert.equal(effective.source, "local", "the local declaration must win the merged view");
+    assert.equal(
+      isDeclaredEnabled(effective.entry),
+      false,
+      "the predicate the planner calls must read the merged entry as disabled",
+    );
+  });
+});
+
 test("DFEN-05 / D-102-04: an entry that already says enabled:true installs the plugin ENABLED and is left exactly as the user wrote it", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     const { basePath, extensionRoot } = await seedDefaultDisabledInstallScope({
