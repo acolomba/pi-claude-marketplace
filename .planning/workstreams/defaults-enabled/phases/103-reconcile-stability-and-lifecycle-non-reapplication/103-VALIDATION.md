@@ -59,7 +59,7 @@ Task IDs are assigned by the planner. Each row below is a required behavior; the
 | 103-06-T3 | 103-06 | 2 | DFEN-08 | T-103-16 | The unchanged arms: a key declared in neither file still targets base, a typed `--local` still targets local, and the orchestrated reconcile caller writes the same file for both `configSource` values | unit | `node --test tests/orchestrators/plugin/install.test.ts tests/orchestrators/reconcile/apply.test.ts` | ✅ | ✅ green |
 | 103-05-T1 | 103-05 | 3 | DFEN-05 / DFEN-08 | T-103-06 | The D-103-01 decision is pinned: installing over a config entry that already says `enabled: false` materializes the plugin and leaves the entry byte-identical — the behavior that widening would have changed (D-103-03), with the DFEN-08 argument in the comment (D-103-14) | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ | ✅ green |
 | 103-05-T1 | 103-05 | 3 | DFEN-06 | T-103-06 | The convergence half that decision rests on: one reconcile pass after that install drives the record disabled and leaves the user's entry byte-identical | unit | same | ✅ | ✅ green |
-| 103-05-T2 | 103-05 | 3 | NFR-6 | — | Whole suite green at the phase boundary | integration | `npm run check` | ✅ | ⬜ pending |
+| 103-05-T2 | 103-05 | 3 | NFR-6 | — | Whole suite green at the phase boundary | integration | `npm run check` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

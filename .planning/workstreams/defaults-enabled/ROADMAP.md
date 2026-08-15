@@ -119,7 +119,7 @@ Plans:
 
   1. Installing a plugin that resolves `defaultEnabled: false` produces an installation record marked disabled AND an `enabled: false` field in that scope's `claude-plugins.json` plugin entry — the first field the install write-back's currently-empty plugin patch has ever carried.
   2. That plugin's artifacts are not materialized. Its terminal state matches an ordinary disable: the record keeps its inventory (ENBL-18) and no skills, commands, agents, hooks or MCP entries appear on disk.
-  3. An `enabled` value already present in the config entry wins over `defaultEnabled` and is never overwritten, in either direction — a user who wrote `enabled: true` for a `defaultEnabled: false` plugin gets it enabled, and a user who wrote `enabled: false` for a `defaultEnabled: true` plugin stays disabled.
+  3. An `enabled` value already present in the config entry wins over `defaultEnabled` and is never overwritten, in either direction — a user who wrote `enabled: true` for a `defaultEnabled: false` plugin gets it enabled, and a user who wrote `enabled: false` for a `defaultEnabled: true` plugin keeps that value, unrewritten by the manifest and honored by reconcile, where desired enablement is read.
   4. The install notification states that the plugin installed disabled and how to enable it, at informational severity — the desired state WAS reached (an install-disabled plugin is the author's declared intent, not a shortfall).
   5. The `installs disabled` token exists as one indivisible closed-set amendment: appended at the tail of `REASONS` (`shared/notify.ts`) with no existing entry reordered or reworded, and given a home in the `notify-reasons.ts` topic partition, whose compile-time completeness proof would otherwise fail.
 
