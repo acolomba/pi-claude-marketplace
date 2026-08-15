@@ -2,6 +2,20 @@
 
 ## Idea
 
+### Hooks circular-dependency removal
+
+- The `bridges/hooks/` cycle knot is removable, and the cure is leaf
+  extraction of shared state, not dependency inversion (Spikes 019a/019b).
+- Any module-state relocation MUST convert every reassignment site to a
+  named mutator: ESM imported bindings are read-only, so a `let` cell
+  cannot move without its writes moving too (Spike 018).
+- A leaf state module owns the state AND its pure accessors. Leaving a
+  one-line reader like `getRoutingBucket` behind in the hub just re-creates
+  the edge (Spike 019a).
+- `--circular-deps` may only join the local gate in the same change that
+  removes the cycles. Added alone it fails on the 8 inherited cycles at the
+  first commit (Spike 020).
+
 ### GitLab plugin-marketplace parity (spikes 008-009)
 
 Upstream Claude Code shipped a plugin-marketplace changelog entry: "bare
@@ -298,3 +312,7 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 015  | fallow-security-candidates          | standard   | Given SonarCloud's security-hotspot view, when `npx fallow security` runs, then determine what it ranks and whether it surfaces anything Sonar doesn't                                                                                                                        | ⚠ VALIDATED (gap)    | fallow, static-analysis, security, tooling                               |
 | 016  | fallow-fix-autofix-safety           | standard   | Given findings from spikes 010-015, when `npx fallow fix --dry-run` runs, then determine what it can safely auto-apply vs. what needs human judgment                                                                                                                          | ⚠ VALIDATED (gap)    | fallow, static-analysis, autofix, tooling                                |
 | 017  | fallow-ci-overhead                  | standard   | Given the existing pre-commit/CI pipeline, when the full free `npx fallow audit` suite is added as a gate, then measure wall-clock cost and total redundant-vs-novel signal across spikes 010-015                                                                             | ✓ VALIDATED          | fallow, static-analysis, ci, tooling                                     |
+| 018  | hooks-module-state-portability      | standard   | Given 4 module-level mutable cells in event-router.ts and 17 test files reaching its _*ForTest seams, when that state moves to a leaf module re-exported from the hub, then every seam still observes the same live state and the full check stays green | ✓ VALIDATED          | hooks, circular-deps, refactor, module-state, esm                        |
+| 019a | hooks-cycle-leaf-extraction         | comparison | Given the 8-cycle bridges/hooks knot, when shared state and RoutingEntry move to a leaf and the five importers point at it, then all 8 cycles disappear and the full check stays green                                                                  | ✓ WINNER             | hooks, circular-deps, refactor, comparison                               |
+| 019b | hooks-cycle-inversion               | comparison | Given the same knot, when event-router stops importing dispatch/settle/registry and they register handlers instead, then all 8 cycles disappear -- and at what cost relative to 019a                                                                    | ✗ LOSES              | hooks, circular-deps, refactor, comparison, dependency-inversion         |
+| 020  | hooks-cycle-gate-closure            | standard   | Given zero cycles after 019a, when --circular-deps joins the local fallow gate, then boundary detection survives, cycles are newly caught, and npm run check stays green -- closing FLOW-02                                                             | ✓ VALIDATED          | hooks, circular-deps, tooling, gate, fallow                              |

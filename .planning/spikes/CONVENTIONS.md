@@ -34,6 +34,50 @@ single-file spikes.
 
 ## Patterns
 
+**Verify the probe changed the tree before believing the tool.** This is
+the single most expensive lesson of the 018-020 series, which produced two
+separate false results from probes that were never actually applied. In
+019a a regex meant to split import blocks matched past its closing brace
+and left the original imports in place; the cycle count came back unchanged
+and read as a clean architectural finding ("leaf extraction is necessary
+but not sufficient"). In 020 a boundary probe ran from the wrong working
+directory and never wrote the planted import; the gate reported `No issues
+found`, which read as "the combined gate stopped catching boundary
+violations." Both were wrong, both were plausible, and both would have
+shipped as findings.
+
+What caught them was not a failing command. Every command exited cleanly.
+It was internal inconsistency: cycles reported through edges that had
+supposedly just been deleted, and a "no issues" result on a probe that
+should have been guaranteed to fail. Before recording any probe result,
+confirm the tree actually changed (`git status`, `git diff --stat`, or read
+the first line of the file). A green result from a probe that does not
+exist is indistinguishable from a green result that means something.
+
+**Regex is not a parser, in both directions.** Spike 018 lost two real
+import edges to a single-line grep that could not see multi-line import
+blocks. Spike 019a mangled single-line imports with a multi-line regex.
+When the question is "what does this module import," extract with a
+specifier-level matcher and cross-check the answer against fallow's own
+graph. Disagreement between hand-rolled extraction and the tool is the
+signal, and the tool has been right both times.
+
+**Probe-and-revert for refactor spikes.** Spikes that ask "can this
+structure change" apply the real change to real source in a throwaway
+worktree, measure, then revert with `git checkout -- extensions/` and
+confirm the baseline metric is restored. Capture the diff into the spike
+directory (`*.diff` plus any new file) so the finding survives the revert.
+Spikes 018-020 all followed this, and 020's `full-candidate.diff` is
+directly appliable if the work is ever picked up.
+
+**Measure graph shape before building machinery.** Spike 019b answered
+"would dependency inversion break the cycles" by severing the three
+relevant import statements and running the cycle check -- a deliberately
+non-compiling probe that measures the import graph only. It reached zero
+cycles in about a minute, which established the arm was viable on efficacy
+and moved the comparison onto cost, where it lost. Building the full
+registry first would have cost hours to reach the same verdict.
+
 **Audit method (grep, then verify the call graph):** for "is this code
 still load-bearing / still legacy-only" questions, a broad `grep -rniE`
 sweep always over-matches (comments mentioning the term, unrelated
