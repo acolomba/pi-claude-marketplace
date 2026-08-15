@@ -1147,14 +1147,16 @@ async function backfillOnePluginIsolated(
     return false;
   }
 
-  // ENBL-08: never scan a record the user disabled. The backfill re-materializes
-  // through reinstall, whose record write sets `enabled: true` unconditionally,
-  // so scanning a disabled record would reverse an explicit user disable at load
-  // time -- restoring that plugin's hooks, MCP servers and PATH entries with no
-  // command and no prompt. Availability and disabled-ness are orthogonal axes
-  // (ENBL-05), so the filter above does not cover this one. Read through the
-  // single predicate rather than the boolean, so this site cannot drift from
-  // the rule `persistence/state-io.ts` owns.
+  // ENBL-08: never scan a record the user disabled. Promoting a disabled record
+  // would restore that plugin's hooks, MCP servers and PATH entries at load time
+  // with no command and no prompt. Reinstall now refuses a disabled record
+  // itself, so this is no longer the only thing standing between the scan and
+  // that reversal -- it stays as the caller-side guard, so the scan does no
+  // pointless work and the promotion policy stays visible beside the scan's
+  // other filters. Availability and disabled-ness are orthogonal axes (ENBL-05),
+  // so the filter above does not cover this one. Read through the single
+  // predicate rather than the boolean, so this site cannot drift from the rule
+  // `persistence/state-io.ts` owns.
   if (isRecordedButDisabled(record)) {
     return false;
   }

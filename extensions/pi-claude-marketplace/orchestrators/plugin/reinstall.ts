@@ -69,7 +69,7 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -1099,6 +1099,13 @@ function narrowReason(note: string): ContentReason {
     return "already installed";
   }
 
+  // ENBL-05: the disabled-record short-circuit's note. Without this arm it
+  // falls through to `"unreadable"` and the row claims the cascade could not
+  // read the plugin, which is false -- it read it and found the user's disable.
+  if (note === "already disabled") {
+    return "already disabled";
+  }
+
   // Substring matches for common synthetic messages.
   if (note.includes("not found in cached manifest")) {
     return "not in manifest";
@@ -1202,6 +1209,33 @@ async function runLockedReinstall(
   if (mp === undefined || oldRecord === undefined) {
     return {
       outcome: { partition: "skipped", name: plugin, marketplace, scope, notes: ["not installed"] },
+      bridgeWarnings: [],
+    };
+  }
+
+  // ENBL-05: a record carrying an explicit `enabled: false` marker is the
+  // user's standing instruction, read through the single predicate
+  // `persistence/state-io.ts` owns so this site cannot drift from `update`'s.
+  // Re-materializing under it would restore the plugin's hooks, MCP servers and
+  // PATH entries with no command and no prompt, and the record write below
+  // would turn the plugin back on while the configuration still says otherwise.
+  //
+  // The counterpart branch in `update` refreshes the record's pin before it
+  // returns; this one refreshes NOTHING and returns before the resolve, because
+  // reinstall preserves the recorded version (D-68-02) and carries the recorded
+  // git identity forward (PURL-07) -- there is no pin for it to move, so there
+  // is nothing a re-resolve could truthfully write. ENBL-18: the record keeps
+  // its `resources.*` inventory while disabled, so a populated inventory is not
+  // evidence that anything is on disk and must not be read as one.
+  if (isRecordedButDisabled(oldRecord)) {
+    return {
+      outcome: {
+        partition: "skipped",
+        name: plugin,
+        marketplace,
+        scope,
+        notes: ["already disabled"],
+      },
       bridgeWarnings: [],
     };
   }

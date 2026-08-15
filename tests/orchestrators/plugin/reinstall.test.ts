@@ -9,6 +9,7 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -111,6 +112,19 @@ async function seedMarketplace(opts: {
   readonly resources?: ResourceSet;
   readonly install?: boolean;
   readonly scope?: "user" | "project";
+  /**
+   * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE ENTRY -- the side that
+   * WINS the precedence rule. A knob on the plugin's own plugin.json would
+   * resolve through the fallback instead, so a fixture built there could pass
+   * for the wrong reason. Absent -> the entry is written without the field.
+   */
+  readonly entryDefaultEnabled?: boolean;
+  /**
+   * DFEN-04: let the install honor the resolved declaration, so a record can
+   * land disabled through the production path rather than by hand. Only
+   * meaningful together with `install: true`.
+   */
+  readonly applyDefaultEnabled?: boolean;
 }): Promise<{ readonly pluginRoot: string; readonly manifestPath: string }> {
   const marketplaceName = opts.marketplaceName ?? "mp";
   const pluginName = opts.pluginName ?? "hello";
@@ -125,6 +139,7 @@ async function seedMarketplace(opts: {
     marketplaceName,
     pluginName,
     version,
+    opts.entryDefaultEnabled,
   );
 
   const locations = locationsFor(scope, opts.cwd);
@@ -156,6 +171,9 @@ async function seedMarketplace(opts: {
       cwd: opts.cwd,
       marketplace: marketplaceName,
       plugin: pluginName,
+      ...(opts.applyDefaultEnabled !== undefined && {
+        applyDefaultEnabled: opts.applyDefaultEnabled,
+      }),
     });
   }
 
@@ -218,16 +236,26 @@ async function mergeManifestEntry(
   marketplaceName: string,
   pluginName: string,
   version: string,
+  /** DFEN-01: stamped on this plugin's entry; absent leaves the field off. */
+  defaultEnabled?: boolean,
 ): Promise<string> {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   const plugins: Record<string, string> = {};
+  const declarations: Record<string, boolean> = {};
   try {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      readonly plugins?: readonly { readonly name?: unknown; readonly version?: unknown }[];
+      readonly plugins?: readonly {
+        readonly name?: unknown;
+        readonly version?: unknown;
+        readonly defaultEnabled?: unknown;
+      }[];
     };
     for (const entry of manifest.plugins ?? []) {
       if (typeof entry.name === "string" && typeof entry.version === "string") {
         plugins[entry.name] = entry.version;
+        if (typeof entry.defaultEnabled === "boolean") {
+          declarations[entry.name] = entry.defaultEnabled;
+        }
       }
     }
   } catch (err) {
@@ -237,13 +265,18 @@ async function mergeManifestEntry(
   }
 
   plugins[pluginName] = version;
-  return writeManifest(marketplaceRoot, marketplaceName, plugins);
+  if (defaultEnabled !== undefined) {
+    declarations[pluginName] = defaultEnabled;
+  }
+
+  return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations);
 }
 
 async function writeManifest(
   marketplaceRoot: string,
   marketplaceName: string,
   plugins: Record<string, string>,
+  declarations: Record<string, boolean> = {},
 ): Promise<string> {
   const manifestDir = path.join(marketplaceRoot, ".claude-plugin");
   await mkdir(manifestDir, { recursive: true });
@@ -256,6 +289,7 @@ async function writeManifest(
         name,
         version,
         source: `./plugins/${name}`,
+        ...(Object.hasOwn(declarations, name) && { defaultEnabled: declarations[name] }),
       })),
     }),
   );
@@ -3793,6 +3827,234 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
       assert.ok(after.marketplaces["mp"]?.plugins["hello"] !== undefined);
       assert.match(await readSkill(cwd), /old skill/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// ENBL-05: reinstall over a record the user disabled
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Overwrite the installed record's enablement marker in place, keeping every
+ * other field the install wrote. ENBL-18: a disabled record KEEPS its
+ * `resources.*` inventory, so this is the shape production actually produces --
+ * an empty-inventory stand-in would let a re-materialization hide.
+ */
+async function markRecordedPluginDisabled(
+  cwd: string,
+  marketplace: string,
+  plugin: string,
+): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const mp = state.marketplaces[marketplace];
+  assert.ok(mp !== undefined);
+  const record = mp.plugins[plugin];
+  assert.ok(record !== undefined);
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      ...state.marketplaces,
+      [marketplace]: {
+        ...mp,
+        plugins: { ...mp.plugins, [plugin]: { ...record, enabled: false } },
+      },
+    },
+  });
+}
+
+/**
+ * Seed, install, disable the record, and delete the staged skill directory so
+ * the fixture matches a real disabled plugin: the record is retained, the
+ * artifacts are gone. A re-materialization is then visible as the directory
+ * coming back.
+ */
+async function seedDisabledInstall(
+  cwd: string,
+  opts: { readonly pluginName?: string; readonly marketplaceRoot?: string } = {},
+): Promise<{ readonly skillDir: string }> {
+  const pluginName = opts.pluginName ?? "hello";
+  await seedMarketplace({
+    cwd,
+    marketplaceRoot: opts.marketplaceRoot ?? path.join(cwd, "mp-src"),
+    pluginName,
+    resources: { skill: "old skill", command: "old command" },
+    install: true,
+  });
+  await markRecordedPluginDisabled(cwd, "mp", pluginName);
+
+  const skillDir = path.join(locationsFor("project", cwd).skillsTargetDir, `${pluginName}-tool`);
+  await rm(skillDir, { recursive: true, force: true });
+  return { skillDir };
+}
+
+// A reinstall of a disabled plugin used to re-stage its artifacts, flip the
+// record to enabled, and report `(reinstalled)` over a configuration that still
+// said the plugin was off -- so a verb invoked to repair a plugin silently
+// turned it back on until the next reload undid that.
+test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes nothing and stages nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { skillDir } = await seedDisabledInstall(cwd);
+
+      const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(recordBefore !== undefined);
+      assert.equal(recordBefore.enabled, false);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      assert.equal(outcome.partition, "skipped");
+      assert.deepEqual(outcome.notes, ["already disabled"]);
+
+      // The stronger statement than record equality: the verb did not write at
+      // all, so `state.json`'s mtime is untouched and the load-time no-op
+      // detection that reads it still sees a quiet file (RECON-05).
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      const recordAfter = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(recordAfter, recordBefore);
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBefore);
+      assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// The two reinstall surfaces compose their rows through different code paths,
+// so a fix applied to one would leave the other telling the old, untruthful
+// story. The shared closed-set narrowing is what makes them agree; these two
+// cases are what stop them from drifting apart again.
+test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped row for a disabled plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-row-"));
+    try {
+      await seedDisabledInstall(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await reinstallDefault(cwd, ctx, pi);
+
+      // IL-2: one emission for the whole reinstall. The mock records a severity
+      // only when the producer passes one, so an absent severity is the info
+      // row -- the reason is benign and idempotent, so it must neither raise
+      // nor take the error flip the absent-target skip takes.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      // Subject-first, and asserted whole rather than as independent
+      // `includes` checks a reordering could survive. No summary line (an info
+      // cascade emits none) and no reload hint (nothing was materialized).
+      assert.equal(
+        notifications[0]?.message,
+        "● mp [project]\n  ⊘ hello (skipped) {already disabled}",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstalled row together", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-bulk-"));
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "keeper",
+        resources: { skill: "keeper skill" },
+        install: true,
+      });
+      await seedDisabledInstall(cwd, { marketplaceRoot, pluginName: "sleeper" });
+      const { ctx, pi, notifications } = makeCtx();
+
+      const outcomes = await reinstallPlugins({
+        ctx,
+        pi,
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["keeper:reinstalled", "sleeper:skipped"],
+      );
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      const body = notifications[0]?.message ?? "";
+      assert.match(body, /● keeper v[^\n]* \(reinstalled\)/);
+      assert.match(body, /⊘ sleeper \(skipped\) \{already disabled\}/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// Installing and reinstalling against the SAME manifest cannot distinguish
+// "never re-read the declaration" from "re-read it and got the same answer".
+// Only a flip between the two calls separates those.
+test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall does not move the record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-flip-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill", command: "old command" },
+        install: true,
+        entryDefaultEnabled: false,
+        applyDefaultEnabled: true,
+      });
+
+      // Precondition and anti-vacuity anchor: the record landed disabled
+      // through the production install path, not by hand.
+      const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(recordBefore !== undefined);
+      assert.equal(recordBefore.enabled, false);
+
+      const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+      await rm(skillDir, { recursive: true, force: true });
+
+      await mergeManifestEntry(marketplaceRoot, "mp", "hello", "1.0.0", true);
+
+      // THE CONTROL. A verb that short-circuits moves no version, so there is
+      // no record field to read the flip out of. Read the manifest directly
+      // instead: that read goes through the same process-lifetime cache the
+      // orchestrator uses, so a flipped value here proves the cache is serving
+      // the rewritten bytes to THIS process -- the property a version bump
+      // would otherwise have proven. The parse is returned by reference and
+      // must be treated as read-only (D-03).
+      const manifest = await loadMarketplaceManifest(manifestPath);
+      assert.equal(
+        manifest.plugins.find((e) => e.name === "hello")?.defaultEnabled,
+        true,
+        "the rewritten declaration must be visible to this process",
+      );
+
+      const { ctx, pi } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      assert.equal(outcome.partition, "skipped");
+      const recordAfter = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.equal(recordAfter?.enabled, false);
+      assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
