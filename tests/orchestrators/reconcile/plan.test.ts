@@ -300,21 +300,26 @@ test("Plugin cell (declared+enabled-true, recorded, non-empty resources): plugin
 
 /**
  * Build a state with a recorded plugin carrying the disabled marker -- the
- * explicit `enabled: false` boolean (ENBL-05) -- and every `resources.*` array
- * emptied, which is what the disable path leaves behind.
+ * explicit `enabled: false` boolean (ENBL-05).
  *
  * `opts.unsupported` seeds the soft-degraded axis: a non-empty list derives
  * `installable: false`, giving the disabled PARTIAL shape. The two axes are
  * orthogonal, so the default (an empty list) is the canonical fully-available
  * disabled record.
+ *
+ * `opts.skills` seeds the inventory axis. ENBL-18 / D-100-10: a disable
+ * PRESERVES `resources.*`, so an install-disabled record carries the inventory
+ * it would materialize once enabled. The default (empty) is the shape the older
+ * cases below were written against and keeps every one of them unmoved.
  */
 function stateWithDisabledRecord(
   mpName: string,
   rawSource: string,
   plugin: string,
-  opts: { readonly unsupported?: readonly string[] } = {},
+  opts: { readonly unsupported?: readonly string[]; readonly skills?: readonly string[] } = {},
 ): ExtensionState {
   const unsupported = opts.unsupported ?? [];
+  const skills = opts.skills ?? [];
   return {
     schemaVersion: 2,
     marketplaces: {
@@ -335,7 +340,7 @@ function stateWithDisabledRecord(
               supported: [],
               unsupported: [...unsupported],
             },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: { skills: [...skills], prompts: [], agents: [], mcpServers: [], hooks: [] },
             enabled: false,
             installedAt: "2025-01-01T00:00:00.000Z",
             updatedAt: "2025-01-01T00:00:00.000Z",
@@ -518,6 +523,83 @@ test("ENBL-05 / ENBL-08 counter-case: a config-declared-ENABLED disabled PARTIAL
   const state = stateWithDisabledRecord("mp", "acme/tools", "cr", {
     unsupported: ["lspServers"],
   });
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
+    {},
+  );
+
+  const plan = planReconcile(merged, state, "project");
+  assert.deepEqual(plan.pluginsToEnable, [{ scope: "project", plugin: "cr", marketplace: "mp" }]);
+  assert.equal(plan.pluginsToDisable.length, 0);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// DFEN-06: the install-disabled cell -- declared `enabled: false` over a
+// record that is `installable: true`, `enabled: false`, inventory RETAINED
+// ──────────────────────────────────────────────────────────────────────────
+
+test("DFEN-06 / D-103-04 / D-103-06: a declared-disabled plugin over an install-disabled record reaches NO action bucket, on two identical passes", () => {
+  // The cell an install-disabled plugin occupies once the config stamp has
+  // landed: the entry says `enabled: false` and the record says the same.
+  //
+  // This is NOT the ENBL-08 cell directly above. That record is a soft-degraded
+  // PARTIAL -- `installable: false` with every `resources.*` array empty. This
+  // one is the ordinary shape a real install writes: `installable: true`, and
+  // the populated inventory ENBL-18 / D-100-10 preserves across the disable.
+  // The two families must not collapse toward each other; the record shape is
+  // what separates them.
+  //
+  // The hazard the cell guards is the enable push: a plugin the user's own
+  // configuration says is disabled must not be switched back on by an
+  // unattended reload, which runs with no command typed and no prompt shown.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr", { skills: ["s1"] });
+  const record = state.marketplaces["mp"]!.plugins["cr"]!;
+  assert.ok(
+    record.resources.skills.length > 0,
+    "ENBL-18: the record under test must carry the inventory a real install-disabled record keeps",
+  );
+  assert.equal(record.compatibility.installable, true);
+  assert.equal(isRecordedButDisabled(record), true);
+
+  const merged = mergeScopeConfigs(
+    configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: false } }),
+    {},
+  );
+
+  // The planner is pure (DIFF-01), so two identical calls are the planner-tier
+  // statement of the fixed point.
+  const pass1 = planReconcile(merged, state, "project");
+  const pass2 = planReconcile(merged, state, "project");
+  assert.deepEqual(pass1, emptyReconcilePlan("project"));
+  assert.deepEqual(pass2, emptyReconcilePlan("project"));
+
+  // D-103-06 wants absence from all seven buckets, which the whole-plan
+  // equality above states in one line. The per-identifier negatives are kept
+  // beside it so a later change that populated BOTH plausible buckets cannot
+  // pass by deep-equalling some other empty-ish shape.
+  for (const plan of [pass1, pass2]) {
+    assert.ok(
+      !plan.pluginsToEnable.some((p) => p.plugin === "cr" && p.marketplace === "mp"),
+      "cr@mp must not appear in the enable bucket",
+    );
+    assert.ok(
+      !plan.pluginsToDisable.some((p) => p.plugin === "cr" && p.marketplace === "mp"),
+      "cr@mp must not appear in the disable bucket",
+    );
+  }
+});
+
+test("DFEN-06 counter-case: the SAME install-disabled record under a declared enabled:true DOES reach the enable bucket", () => {
+  // What makes the empty plan above mean something. An empty plan is also the
+  // DEFAULT outcome, so absence of input and correctness of classification
+  // produce identical output: a typo in the plugin key, a scope mismatch, or a
+  // `plugins` map that was never populated would all pass the case above
+  // without the fixture ever reaching `classifyDeclaredPlugin`. Flipping only
+  // the declaration proves the classifier saw it.
+  //
+  // Same move as the ENBL-05 counter-case directly above, over the other record
+  // shape.
+  const state = stateWithDisabledRecord("mp", "acme/tools", "cr", { skills: ["s1"] });
   const merged = mergeScopeConfigs(
     configWith({ mp: { source: "acme/tools" } }, { "cr@mp": { enabled: true } }),
     {},
