@@ -777,6 +777,22 @@ Plugin reinstall: 1 warning
 
 A reinstall drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(reinstalled)` -- a degraded component is reinstalled-but-short, not dropped -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable and backfill rows use. Severity `warning` with the summary line, the same raise those surfaces take for the same class of degrade: this one the reinstall's own ledger just produced. OUT-03/D-04: the tally counts by STAMPED severity, so the raised row lands in `1 warning` rather than `1 success` -- the operation completed, short of ideal, and the tally says so without a second vocabulary. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the one signal, so the two surfaces cannot disagree. A clean reinstall renders the brace-less rows above unchanged.
 
+### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
+
+<!-- catalog-state: reinstall-disabled-record-cascade -->
+
+```text
+● official [user]
+  ● alpha v1.0.0 (reinstalled)
+  ⊘ beta (skipped) {already disabled}
+
+Plugin reinstall: 2 successes
+
+/reload to pick up changes
+```
+
+A cascade reaching a plugin whose record carries the explicit `enabled: false` marker (ENBL-05) short-circuits before the resolve instead of re-staging, so a verb invoked to repair a plugin cannot silently turn it back on. Nothing is re-materialized and nothing is written: the record is left exactly as the disable wrote it, its `resources.*` component inventory included (ENBL-18), and that retained inventory is bookkeeping rather than evidence that anything sits on disk. Severity is `info` -- the outcome is benign and idempotent, and with every row informational the cascade emits no summary line at all. The reload-hint still fires, because the sibling `(reinstalled)` row IS state-changing. OUT-03/D-04: the plural tally counts the informational skip as a success alongside the reinstalled row, so a cascade that re-materialized one plugin reports `2 successes`; that is the tally's severity rule (idempotent -> info per D-01), not a miscount. The standalone verb renders the same skipped row over the same short-circuit (DFEN-07), but at single cardinality the tally composer returns nothing and the row stands alone -- byte-identical to the update surface's disabled-record refresh block, which is why it carries no separate state of its own.
+
 ### Single marketplace, mixed outcomes (reinstalled + skipped + failed)
 
 <!-- catalog-state: single-mp-mixed-outcomes -->

@@ -1529,6 +1529,43 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // ENBL-05 / ENBL-18 / DFEN-07: a cascade reaching an already-disabled
+    // record short-circuits before the resolve, so nothing is re-materialized
+    // and the record keeps its component inventory. The row is benign and
+    // idempotent, hence info severity and no summary line; the reload hint
+    // still fires off the sibling `(reinstalled)` row, and the plural tally
+    // counts the informational skip as a success.
+    "reinstall-disabled-record-cascade": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "info",
+                needsReload: true,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+              },
+              {
+                status: "skipped",
+                name: "beta",
+                reasons: ["already disabled"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "single-mp-mixed-outcomes": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
