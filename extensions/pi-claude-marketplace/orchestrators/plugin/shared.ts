@@ -392,13 +392,20 @@ export function synthesizeUndeclaredMarketplaceSource(
 }
 
 /**
- * WB-01 / UAT-05: select the targeted physical config file and
- * its sibling (the scope's OTHER file). Target-path selection happens ONCE
+ * WB-01 / UAT-05: pair the targeted physical config file with its sibling (the
+ * scope's OTHER file) for a given locality. Target-path selection happens ONCE
  * at the orchestrator boundary so the write path never falls back to the
  * base file on ENOENT; the sibling path exists ONLY for the UAT-05
  * merged-view membership test (read fresh inside the lock, never written).
+ *
+ * NOT exported: `selectDeclaringConfigWriteTarget` is the orchestrator-facing
+ * selector, and this one answers a strictly narrower question -- which files a
+ * locality names, with no say in what that locality should be. A caller who
+ * reached for it would be aiming the write with the flag alone, which is the
+ * defect D-103-13 removed from three call sites. The compiler keeps the module's
+ * public surface down to the one selector that answers the whole question.
  */
-export function selectConfigWriteTarget(
+function selectConfigWriteTarget(
   locations: ScopedLocations,
   local: boolean | undefined,
 ): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
