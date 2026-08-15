@@ -4,9 +4,9 @@ milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 status: Awaiting next milestone
 stopped_at: Milestone v1.18 closed and archived (2026-08-12)
-last_updated: "2026-08-12T21:00:00.000Z"
-last_activity: 2026-08-12
-last_activity_desc: Milestone v1.18 completed and archived
+last_updated: "2026-08-15T22:20:00.000Z"
+last_activity: 2026-08-15
+last_activity_desc: "Completed quick task 260815-p25: remove the bridges/hooks circular-dependency knot and gate cycles locally"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -37,7 +37,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-15 - Completed quick task 260815-h7g: Adopt fallow static analysis as a linting gate
+Last activity: 2026-08-15 - Completed quick task 260815-p25: Remove the bridges/hooks circular-dependency knot and gate cycles locally
 
 ## Milestone Summary
 
@@ -76,6 +76,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260814-fqf | Withdraw SRCP-01 backlog item -- upstream rejects bare GitLab shorthand too | 2026-08-14 | 7bbefc4a | [260814-fqf-correct-backlog-md-item-srcp-01-based-on](./quick/260814-fqf-correct-backlog-md-item-srcp-01-based-on/) |
 | 260814-hdc | Fix GitLab (and any non-GitHub url-kind) clone .git-suffix bug | 2026-08-14 | 82aa35cb | [260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non](./quick/260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non/) |
 | 260815-h7g | Adopt fallow static analysis as a linting gate | 2026-08-15 | 1d4f478b..a93d2be9 | [260815-h7g-adopt-fallow-static-analysis-as-a-lintin](./quick/260815-h7g-adopt-fallow-static-analysis-as-a-lintin/) |
+| 260815-p25 | Remove the bridges/hooks circular-dependency knot and gate cycles locally | 2026-08-15 | cee12150 | [260815-p25-implement-hooks-cycle-removal-from-spike](./quick/260815-p25-implement-hooks-cycle-removal-from-spike/) |
 
 ## Decisions
 
