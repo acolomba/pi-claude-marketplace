@@ -15,6 +15,13 @@
 - `--circular-deps` may only join the local gate in the same change that
   removes the cycles. Added alone it fails on the 8 inherited cycles at the
   first commit (Spike 020).
+- The local gate MUST pass `--re-export-cycles` alongside `--circular-deps`.
+  They are separate isolating flags, so a gate carrying only the latter
+  leaves re-export cycles unchecked. Free to add today at 0 findings
+  (Spike 020).
+- Do not reach for `rules.<name>` severity to control the gate.
+  `--fail-on-issues` exits 1 on warn-severity findings too; the flag, not
+  the severity, decides what the gate sees (Spike 020).
 
 ### GitLab plugin-marketplace parity (spikes 008-009)
 

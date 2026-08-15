@@ -18,7 +18,7 @@ index 0e5b109e..1c7b0362 100644
 @@ -76,7 +76,7 @@ import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
  import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
  import { parseHookStdout } from "./wire-protocol.ts";
-
+ 
 -import type { RoutingEntry } from "./event-router.ts";
 +import type { RoutingEntry } from "./routing-state.ts";
  import type { HookExecResult } from "./exec-result.ts";
@@ -36,19 +36,19 @@ index 307c3ea1..f6587d10 100644
 +import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./routing-state.ts";
  import { assertNever, type HookExecResult } from "./exec-result.ts";
  import { ifFires } from "./if-field/index.ts";
-
+ 
 diff --git a/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts b/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
 index f6ee28b5..b3c16b69 100644
 --- a/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
 +++ b/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
 @@ -54,7 +54,7 @@
-
+ 
  import { hookDebugLog } from "../../shared/debug-log.ts";
-
+ 
 -import { appendPendingSessionStartContext } from "./event-router.ts";
 +import { appendPendingSessionStartContext } from "./routing-state.ts";
  import { assertNever, type HookExecResult } from "./exec-result.ts";
-
+ 
  import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 diff --git a/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts b/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
 index e4bbae89..ebbaf8c7 100644
@@ -123,7 +123,7 @@ index e4bbae89..ebbaf8c7 100644
 -   */
 -  readonly ifPredicate: IfPredicate;
 -}
-
+ 
 -interface CacheEntry {
 -  readonly scope: Scope;
 -  readonly marketplace: string;
@@ -145,17 +145,17 @@ index e4bbae89..ebbaf8c7 100644
 -   */
 -  readonly ifPredicates: ReadonlyMap<string, IfPredicate>;
 -}
-
+ 
  // ──────────────────────────────────────────────────────────────────────────
  // Module-state cells (D-59-02 / D-59-03)
  // ──────────────────────────────────────────────────────────────────────────
-
+ 
 -let liveEpoch = 0;
-
+ 
 -const parsedConfigCache = new Map<string, CacheEntry>();
-
+ 
 -const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
-
+ 
  /**
   * SessionStart additionalContext capture buffer.
 @@ -183,14 +137,7 @@ const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
@@ -168,9 +168,9 @@ index e4bbae89..ebbaf8c7 100644
 -  readonly marketplace: string;
 -  readonly scope: Scope;
 -}
-
+ 
 -let pendingSessionStartContext: PendingSessionStartContext[] = [];
-
+ 
  // ──────────────────────────────────────────────────────────────────────────
  // Cache key helper (D-59-02 + marketplace inclusion)
 @@ -303,9 +250,6 @@ export async function readAndCachePluginHooks(opts: {
@@ -180,7 +180,7 @@ index e4bbae89..ebbaf8c7 100644
 -export function currentEpoch(): number {
 -  return liveEpoch;
 -}
-
+ 
  // ──────────────────────────────────────────────────────────────────────────
  // SessionStart additionalContext bridge
 @@ -325,13 +269,6 @@ export function currentEpoch(): number {
@@ -194,18 +194,18 @@ index e4bbae89..ebbaf8c7 100644
 -
 -  pendingSessionStartContext.push(entry);
 -}
-
+ 
  /**
   * Factory: build the `before_agent_start` handler closure registered on
 @@ -367,12 +304,14 @@ export function beforeAgentStartHandlerFor(
        return Promise.resolve(undefined);
      }
-
+ 
 -    if (pendingSessionStartContext.length === 0) {
 +    if (pendingSessionStartContextEntries().length === 0) {
        return Promise.resolve(undefined);
      }
-
+ 
 -    const buffered = pendingSessionStartContext.map((e) => e.context).join("\n\n");
 -    pendingSessionStartContext = [];
 +    const buffered = pendingSessionStartContextEntries()
@@ -222,7 +222,7 @@ index e4bbae89..ebbaf8c7 100644
 -export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
 -  return routingTable.get(claudeEvent) ?? [];
 -}
-
+ 
  // ──────────────────────────────────────────────────────────────────────────
  // registerHooksBridge (DISP-01 / DISP-02 / DISP-03)
 @@ -821,15 +757,14 @@ export async function registerHooksBridge(
@@ -232,7 +232,7 @@ index e4bbae89..ebbaf8c7 100644
 -  liveEpoch += 1;
 -  const capturedEpoch = liveEpoch;
 +  const capturedEpoch = bumpEpoch();
-
+ 
    // /reload re-enters this factory and must not leak a stale SessionStart
    // additionalContext entry from the prior session into the new buffer.
    // Clearing here makes the invariant explicit: each bridge load starts
@@ -240,7 +240,7 @@ index e4bbae89..ebbaf8c7 100644
    // (via `appendPendingSessionStartContext`) can subsequently populate.
 -  pendingSessionStartContext = [];
 +  clearPendingSessionStartContext();
-
+ 
    // Same epoch hygiene for the settle dispatcher's cached last-assistant
    // message: clear it so a `/reload` cannot leak the prior session's message
 @@ -960,10 +895,10 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
@@ -254,7 +254,7 @@ index e4bbae89..ebbaf8c7 100644
 -  pendingSessionStartContext = [];
 +  clearPendingSessionStartContext();
  }
-
+ 
  /**
 @@ -972,7 +907,7 @@ export function _resetForTest(): void {
   * does not affect the module state. Not part of the public surface.
@@ -263,7 +263,7 @@ index e4bbae89..ebbaf8c7 100644
 -  return Array.from(pendingSessionStartContext);
 +  return Array.from(pendingSessionStartContextEntries());
  }
-
+ 
  /**
 @@ -981,8 +916,7 @@ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingS
   * registerHooksBridge factory path. Not part of the public surface.
@@ -273,7 +273,7 @@ index e4bbae89..ebbaf8c7 100644
 -  return liveEpoch;
 +  return bumpEpoch();
  }
-
+ 
  /**
 @@ -997,3 +931,11 @@ export function _setRoutingBucketForTest(
  ): void {
@@ -293,12 +293,12 @@ index 2083d4f9..548d0ba5 100644
 +++ b/extensions/pi-claude-marketplace/bridges/hooks/settle.ts
 @@ -19,7 +19,7 @@ import { errorMessage } from "../../shared/errors.ts";
  import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
-
+ 
  import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 -import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 +import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
  import { classifyStopFailure } from "./payloads/stop-failure.ts";
-
+ 
  import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 diff --git a/package.json b/package.json
 index 92c7688a..cd227a24 100644

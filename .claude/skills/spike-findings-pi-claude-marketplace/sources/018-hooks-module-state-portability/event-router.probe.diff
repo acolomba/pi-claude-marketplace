@@ -1,57 +1,5 @@
-diff --git a/extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts b/extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-index 75d22cf6..0f5bf910 100644
---- a/extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-+++ b/extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-@@ -48,7 +48,7 @@ import { assertNever, errorMessage } from "../../../shared/errors.ts";
- import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
- import { assertPathInside } from "../../../shared/path-safety.ts";
- import { claudeSessionEnvFor } from "../../../shared/session-env.ts";
--import { currentEpoch, type RoutingEntry } from "../event-router.ts";
-+import { currentEpoch, type RoutingEntry } from "../routing-state.ts";
- import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
- import { translate as translatePostCompact } from "../payloads/post-compact.ts";
- import { translate as translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
-diff --git a/extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts b/extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
-index 0e5b109e..1c7b0362 100644
---- a/extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
-+++ b/extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
-@@ -76,7 +76,7 @@ import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
- import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
- import { parseHookStdout } from "./wire-protocol.ts";
-
--import type { RoutingEntry } from "./event-router.ts";
-+import type { RoutingEntry } from "./routing-state.ts";
- import type { HookExecResult } from "./exec-result.ts";
- import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
- import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-diff --git a/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts b/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts
-index 307c3ea1..f6587d10 100644
---- a/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts
-+++ b/extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts
-@@ -49,7 +49,7 @@ import {
-   adaptToolResultResult,
-   applyMutationInPlace,
- } from "./event-adapters.ts";
--import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./event-router.ts";
-+import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./routing-state.ts";
- import { assertNever, type HookExecResult } from "./exec-result.ts";
- import { ifFires } from "./if-field/index.ts";
-
-diff --git a/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts b/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
-index f6ee28b5..b3c16b69 100644
---- a/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
-+++ b/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
-@@ -54,7 +54,7 @@
-
- import { hookDebugLog } from "../../shared/debug-log.ts";
-
--import { appendPendingSessionStartContext } from "./event-router.ts";
-+import { appendPendingSessionStartContext } from "./routing-state.ts";
- import { assertNever, type HookExecResult } from "./exec-result.ts";
-
- import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 diff --git a/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts b/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
-index e4bbae89..ebbaf8c7 100644
+index e4bbae89..b250d2c1 100644
 --- a/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
 +++ b/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
 @@ -37,9 +37,7 @@ import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook
@@ -64,7 +12,7 @@ index e4bbae89..ebbaf8c7 100644
  } from "../../domain/components/hooks.ts";
  import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
  import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-@@ -58,6 +56,20 @@ import { SCOPES } from "../../shared/types.ts";
+@@ -58,6 +56,19 @@ import { SCOPES } from "../../shared/types.ts";
  import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
  import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
  import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
@@ -73,7 +21,6 @@ index e4bbae89..ebbaf8c7 100644
 +  bumpEpoch,
 +  clearPendingSessionStartContext,
 +  currentEpoch,
-+  getRoutingBucket,
 +  parsedConfigCache,
 +  pendingSessionStartContextEntries,
 +  resetEpoch,
@@ -85,7 +32,7 @@ index e4bbae89..ebbaf8c7 100644
  import {
    agentEndCacheHandler,
    inputResetHandlerFor,
-@@ -92,72 +104,14 @@ import type { Scope } from "../../shared/types.ts";
+@@ -92,72 +103,14 @@ import type { Scope } from "../../shared/types.ts";
   * (event, group, handler) flattening; it preserves intra-plugin source
   * order across the per-plugin bucket merge (DISP-04).
   */
@@ -158,7 +105,7 @@ index e4bbae89..ebbaf8c7 100644
 
  /**
   * SessionStart additionalContext capture buffer.
-@@ -183,14 +137,7 @@ const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
+@@ -183,14 +136,7 @@ const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
   * string. Provenance is dropped at drain time -- only the joined text
   * reaches `before_agent_start.systemPrompt`.
   */
@@ -173,7 +120,7 @@ index e4bbae89..ebbaf8c7 100644
 
  // ──────────────────────────────────────────────────────────────────────────
  // Cache key helper (D-59-02 + marketplace inclusion)
-@@ -303,9 +250,6 @@ export async function readAndCachePluginHooks(opts: {
+@@ -303,9 +249,6 @@ export async function readAndCachePluginHooks(opts: {
   * registerHooksBridge time and compare against `currentEpoch()` on every
   * event) and by tests that pin the no-op-on-mismatch contract.
   */
@@ -183,7 +130,7 @@ index e4bbae89..ebbaf8c7 100644
 
  // ──────────────────────────────────────────────────────────────────────────
  // SessionStart additionalContext bridge
-@@ -325,13 +269,6 @@ export function currentEpoch(): number {
+@@ -325,13 +268,6 @@ export function currentEpoch(): number {
   * required on the argument shape so the call site always carries
   * attribution -- the skipped-empty arm just discards both.
   */
@@ -197,7 +144,7 @@ index e4bbae89..ebbaf8c7 100644
 
  /**
   * Factory: build the `before_agent_start` handler closure registered on
-@@ -367,12 +304,14 @@ export function beforeAgentStartHandlerFor(
+@@ -367,12 +303,14 @@ export function beforeAgentStartHandlerFor(
        return Promise.resolve(undefined);
      }
 
@@ -215,17 +162,7 @@ index e4bbae89..ebbaf8c7 100644
      return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
    };
  }
-@@ -702,9 +641,6 @@ async function tryHydrateOnePlugin(
-  * the composite handlers don't reach into the routingTable cell directly
-  * (the cell stays module-private).
-  */
--export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
--  return routingTable.get(claudeEvent) ?? [];
--}
-
- // ──────────────────────────────────────────────────────────────────────────
- // registerHooksBridge (DISP-01 / DISP-02 / DISP-03)
-@@ -821,15 +757,14 @@ export async function registerHooksBridge(
+@@ -821,15 +759,14 @@ export async function registerHooksBridge(
    pi: ExtensionAPI,
    opts: { ctx: ExtensionContext; cwd: string },
  ): Promise<void> {
@@ -243,7 +180,7 @@ index e4bbae89..ebbaf8c7 100644
 
    // Same epoch hygiene for the settle dispatcher's cached last-assistant
    // message: clear it so a `/reload` cannot leak the prior session's message
-@@ -960,10 +895,10 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
+@@ -960,10 +897,10 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
   * from a clean baseline. Not part of the public surface.
   */
  export function _resetForTest(): void {
@@ -256,7 +193,7 @@ index e4bbae89..ebbaf8c7 100644
  }
 
  /**
-@@ -972,7 +907,7 @@ export function _resetForTest(): void {
+@@ -972,7 +909,7 @@ export function _resetForTest(): void {
   * does not affect the module state. Not part of the public surface.
   */
  export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingSessionStartContext> {
@@ -265,7 +202,7 @@ index e4bbae89..ebbaf8c7 100644
  }
 
  /**
-@@ -981,8 +916,7 @@ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingS
+@@ -981,8 +918,7 @@ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingS
   * registerHooksBridge factory path. Not part of the public surface.
   */
  export function _bumpEpochForTest(): number {
@@ -275,7 +212,7 @@ index e4bbae89..ebbaf8c7 100644
  }
 
  /**
-@@ -997,3 +931,11 @@ export function _setRoutingBucketForTest(
+@@ -997,3 +933,10 @@ export function _setRoutingBucketForTest(
  ): void {
    routingTable.set(claudeEvent, entries);
  }
@@ -283,33 +220,6 @@ index e4bbae89..ebbaf8c7 100644
 +export {
 +  appendPendingSessionStartContext,
 +  currentEpoch,
-+  getRoutingBucket,
 +  type PendingSessionStartContext,
 +  type RoutingEntry,
 +};
-diff --git a/extensions/pi-claude-marketplace/bridges/hooks/settle.ts b/extensions/pi-claude-marketplace/bridges/hooks/settle.ts
-index 2083d4f9..548d0ba5 100644
---- a/extensions/pi-claude-marketplace/bridges/hooks/settle.ts
-+++ b/extensions/pi-claude-marketplace/bridges/hooks/settle.ts
-@@ -19,7 +19,7 @@ import { errorMessage } from "../../shared/errors.ts";
- import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
-
- import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
--import { currentEpoch, getRoutingBucket } from "./event-router.ts";
-+import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
- import { classifyStopFailure } from "./payloads/stop-failure.ts";
-
- import type { StopFailureEvent } from "./payloads/stop-failure.ts";
-diff --git a/package.json b/package.json
-index 92c7688a..cd227a24 100644
---- a/package.json
-+++ b/package.json
-@@ -73,7 +73,7 @@
-   },
-   "scripts": {
-     "check": "npm run typecheck && npm run lint && npm run fallow && npm run format:check && npm test && npm run test:integration",
--    "fallow": "fallow dead-code --boundary-violations --fail-on-issues --format human",
-+    "fallow": "fallow dead-code --boundary-violations --circular-deps --re-export-cycles --fail-on-issues --format human",
-     "fallow:audit": "fallow audit --format human",
-     "format": "prettier --write \"**/*.{js,json,ts}\"",
-     "format:check": "prettier --check \"**/*.{js,json,ts}\"",
