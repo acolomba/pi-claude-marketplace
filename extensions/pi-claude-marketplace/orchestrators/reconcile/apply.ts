@@ -588,9 +588,43 @@ async function applyPluginInstalls(
         marketplace: op.marketplace,
         plugin: op.plugin,
         notifications: { mode: "orchestrated" },
+        // DFEN-04 / D-102-04: unconditional on this path. A user who hand-adds
+        // a bare `"p@mp": {}` entry has declared WHICH plugin, not WHETHER it
+        // is enabled -- which is the gap the plugin's own `defaultEnabled`
+        // exists to fill. An entry that DOES carry `enabled` is untouched: the
+        // install's own precedence gate answers only the absent key.
+        applyDefaultEnabled: true,
+        // DFEN-05 / D-102-04: address the physical file the declaration lives
+        // in, from the merge provenance the planner recorded. Both the
+        // precedence read and the stamp follow this selection; a base-file read
+        // under a local declaration reports `enabled` absent even when the local
+        // entry says otherwise, and a base-file stamp under a local declaration
+        // is invisible to the merged view. Conditional spread because
+        // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
+        ...(op.configSource === "local" && { local: true }),
       });
 
-      if (result.status === "installed") {
+      if (result.status === "installed" && result.landedDisabled === true) {
+        // DFEN-04: the install ran whole and then unstaged, because the
+        // plugin's declaration said so. Reuse the EXISTING disabled outcome
+        // kind rather than reporting `(installed)` over a record that is
+        // disabled -- one row contradicting its own record teaches the user to
+        // distrust every other row in the same cascade. The projection's
+        // `(disabled)` arm hard-codes both soft-dep flags false (ENBL-15 /
+        // D-100-06), so this push needs no `dependencies` counterpart.
+        //
+        // The row inherits that arm's `needsReload: true` while the standalone
+        // install-disabled row stamps `false`. The asymmetry is deliberate:
+        // nothing net entered or left Pi's resource view inside the standalone
+        // command, whereas this row shares the realized-transition arm every
+        // other reconcile disable uses.
+        outcomes.push({
+          kind: "plugin-disabled",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          plugin: op.plugin,
+        });
+      } else if (result.status === "installed") {
         outcomes.push({
           kind: "plugin-installed",
           scope: op.scope,
