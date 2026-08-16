@@ -3,6 +3,9 @@ import * as fs from "node:fs";
 import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+
 import type { CredentialOps } from "./git-credential.ts";
 
 /**
@@ -41,8 +44,10 @@ export interface CloneOptions {
   /**
    * Remote URL. Any `https://` git URL is accepted: github sources reconstruct
    * their canonical `https://github.com/<owner>/<repo>.git` form, while url
-   * sources (MURL-01 / D-76-06) pass `source.url` verbatim. Auth is omitted
-   * for public url clones (D-76-07); see `opts.auth` below.
+   * sources (MURL-01 / D-76-06) supply their canonical `source.url` passed
+   * through `domain/source.ts::ensureGitSuffix` -- the stored identity form is
+   * `.git`-stripped, the wire form is not. Auth is omitted for public url
+   * clones (D-76-07); see `opts.auth` below.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
@@ -330,9 +335,11 @@ export interface GitCredentials {
 
 /**
  * Discriminated result returned by an `onAuthRequired`
- * closure. Both arms carry `authAttempted: true` so downstream onAuthFailure
- * logic can detect that an interactive auth attempt has already happened
- * (CP-9 retry-loop guard).
+ * closure. Both arms carry `authAttempted: true` as a reference-only /
+ * future-proofing marker (CP-9): `onAuthFailure(url, cred)` never receives
+ * this value -- it is called with only the credential -- and the current
+ * implementation does not branch on the flag; onAuthFailure always returns
+ * `{ cancel: true }` regardless.
  *
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in platform/git.ts so this module honors the
@@ -391,11 +398,30 @@ export interface BuildAuthCallbacksOpts {
  *   next invocation re-enters via onAuth, which falls through to
  *   `onAuthRequired` on the (now-empty) fill miss.
  * - CP-10 (no raw exception escape): both callbacks wrap their bodies in
- *   try/catch and convert any thrown error into `{ cancel: true }`. Error
- *   messages from CredentialOps and onAuthRequired are intentionally NOT
- *   interpolated into return values, log lines, or notify calls -- a
- *   credential could be interpolated into an upstream Error, so dropping
- *   the message on the floor is the AUTH-09 default.
+ *   try/catch and convert any thrown error into `{ cancel: true }` -- the
+ *   value isomorphic-git receives is unchanged. Error messages from
+ *   CredentialOps and onAuthRequired are intentionally NOT interpolated into
+ *   RETURN VALUES or notify calls -- a credential could be interpolated into
+ *   an upstream Error, so surfacing it to the user or to isomorphic-git
+ *   would violate AUTH-09. The failure reason IS routed through
+ *   `hookDebugLog` before the `{ cancel: true }` fallback -- in onAuth (both
+ *   the Device Flow failure path and the catch-all) and in onAuthFailure (a
+ *   caught reject() throw) -- so the specific cause (which OAuth provider
+ *   error, which host) is diagnosable rather than discarded outright:
+ *   `onAuthRequired`'s `result.reason` (from
+ *   `domain/github-auth.ts::DeviceFlowResult`) is built only from fixed
+ *   strings, `err.message` on a network/fetch failure, or the OAuth
+ *   provider's own `error`/`error_description` fields on a PRE-TOKEN
+ *   response -- never from `access_token`/`accessToken`/`cred.*`. A caught
+ *   exception's message is covered by `platform/git-credential.ts`'s own
+ *   docstring discipline (CredentialOps Error messages reference only the
+ *   subcommand name + timeout-ms/exit code). `hookDebugLog` calls in THIS
+ *   file, plus `describeDeviceCodeErrorBody`'s own body and the `reason:`
+ *   field construction in `domain/github-auth.ts`, are all scanned by
+ *   `tests/architecture/no-credential-leak.test.ts` for credential-field
+ *   interpolation (AUTH-09); `hookDebugLog` itself also writes to
+ *   `console.error` only when `PI_CLAUDE_MARKETPLACE_DEBUG=1`, never to the
+ *   return value or a user-visible notify.
  *
  * @see REQUIREMENTS.md::AUTH-01 (private repo auth via Device Flow)
  * @see REQUIREMENTS.md::AUTH-02 (silent keychain reuse on subsequent ops)
@@ -424,13 +450,20 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
         return result.cred;
       }
 
+      // Capture the specific failure reason for diagnosis (AUTH-09-safe per
+      // the no-credential-leak gate on DeviceFlowResult.reason) before
+      // falling back to the generic { cancel: true } isomorphic-git sees.
+      hookDebugLog(`onAuth: Device Flow failed for ${opts.host}: ${result.reason}`, "auth");
       return { cancel: true };
-    } catch {
+    } catch (err) {
       // CP-10: catch ANY thrown error from fill / onAuthRequired and turn
-      // it into a cancel. The Error message is dropped on the floor --
-      // a credential could legitimately appear inside an upstream Error
-      // (subprocess output, Device Flow HTTP error), so interpolating it
-      // into a log line or rethrown error would violate AUTH-09.
+      // it into a cancel; isomorphic-git never sees the raw error. The
+      // caught message is still routed through hookDebugLog rather than
+      // dropped -- platform/git-credential.ts's own docstring pins that
+      // CredentialOps Error messages reference only the subcommand name +
+      // timeout-ms/exit code, never a credential field, so this stays
+      // AUTH-09-safe.
+      hookDebugLog(`onAuth threw for ${opts.host}: ${errorMessage(err)}`, "auth");
       return { cancel: true };
     }
   }
@@ -438,10 +471,15 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
     try {
       await opts.credentialOps.reject(opts.host, cred);
-    } catch {
+    } catch (err) {
       // CP-10: swallow any reject() throw and still return cancel below.
       // The credential has not been evicted from the keychain, but the
-      // current operation will not retry against this seam regardless.
+      // current operation will not retry against this seam regardless. The
+      // caught message is still routed through hookDebugLog (AUTH-09-safe
+      // per platform/git-credential.ts's own docstring discipline, same as
+      // onAuth's catch-all above) so the failure is diagnosable rather than
+      // discarded outright.
+      hookDebugLog(`onAuthFailure: reject() threw for ${opts.host}: ${errorMessage(err)}`, "auth");
     }
 
     // CP-9: ALWAYS cancel. Returning a fresh credential here would

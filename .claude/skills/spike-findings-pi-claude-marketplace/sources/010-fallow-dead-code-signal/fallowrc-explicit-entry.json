@@ -1,0 +1,4 @@
+{
+  "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "production": true
+}

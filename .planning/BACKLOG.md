@@ -77,6 +77,63 @@ original carrier. Their uncovered remainder is the same shape the bounded sweep
 worked -- rare-failure and cascade-diagnostic arms. Decide whether they get a
 follow-on bounded sweep or are accepted as-is. Do not decide it by exclusion.
 
+## FLOW-01: unzoned files are boundary-unchecked and nothing says so
+
+Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+`.fallowrc.json`'s `boundaries` block names 12 zones, one per layer plus one
+per bridge kind. Every file under `extensions/pi-claude-marketplace/` matches
+one today, so the gate is complete by accident of the current tree rather than
+by construction. A new top-level directory -- say
+`extensions/pi-claude-marketplace/telemetry/` -- would match no zone, and
+fallow would boundary-check none of it while still reporting a clean run.
+
+`fallow config-schema` exposes `boundaries.coverage`, documented as an
+"Optional policy for files that match no zone." It is currently unset. Setting
+it should turn an unzoned file into a loud failure that says "add a zone,"
+instead of silence that reads as "no violations."
+
+Two things to settle when picking this up. First, the failure has to name the
+unzoned path, or it just moves the confusion. Second, decide whether `tests/`
+and repo-root config files are in or out of the policy's scope -- they match no
+zone either, by design, and a naive policy would flag every one of them.
+
+Verify by creating a throwaway directory outside all 12 zone patterns,
+confirming `npm run fallow` fails on it, then deleting it. A clean run against
+the current tree proves nothing here, because the current tree has no unzoned
+files.
+
+## FLOW-02: circular dependencies are gated in CI but not locally
+
+Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+`npm run fallow` passes `--boundary-violations`, which isolates the run to
+boundary violations. Cycles are computed and discarded. The full report on the
+current tree is `4 files, 190 exports, 93 types, 1 class member, 4 duplicate
+pairs, 8 circular dependencies` -- none of which fails a commit, a
+`npm run check`, or a `ci.yml` run.
+
+CI is better off: `fallow audit` reports `circular_dependencies` and
+`re_export_cycles` under its default `gate: new-only`, so a newly introduced
+cycle fails a pull request while inherited ones pass with attribution. The
+local gate has no equivalent, so a developer can introduce a cycle and see
+green until the pull request opens.
+
+All 8 inherited cycles are the single `bridges/hooks/` knot ARCHITECTURE.md
+already documents by name (`event-router.ts` <-> `dispatch.ts` <->
+`async-rewake/registry.ts`). That knot is why the local gate cannot simply add
+`--circular-deps`: it would fail on day one.
+
+Options, cheapest first: accept the 8 with `fallow-ignore-next-line
+circular-dependency` markers at the knot (the codebase currently has zero
+suppression markers, so this would be the first -- weigh that); adopt a
+baseline if fallow supports one for cycles as it does for `dupes`; or untangle
+the knot, which is a real refactor of the hooks bridge and out of proportion to
+the gap.
+
+Note the asymmetry this leaves today: a green local `npm run check` does not
+imply the pull-request gate will pass.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
@@ -739,6 +796,169 @@ substitution -- the layer that runs BEFORE pi-mcp-adapter sees the value),
 `bridges/mcp/stage.ts` (where the `env` map is composed and where a
 `literalEnv` field would be written), `docs/env-vars.md` ("MCP runtime env
 inheritance" and the MCP env column of the overview matrix).
+
+## SRCP-01/02: git-subdir url expansion (SRCP-01 withdrawn)
+
+Surfaced by a GitLab-parity spike (2026-08-14, `.planning/spikes/008-gitlab-bare-source-parsing`),
+triggered by an upstream Claude Code changelog entry ("bare gitlab.com repo
+URLs, including nested subgroups, now clone like github.com URLs"). Two
+related gaps in `domain/source.ts`'s `parsePluginSource`:
+
+- SRCP-01 (WITHDRAWN 2026-08-14 -- see the correction below):
+  bare host-prefixed strings (no `https://` scheme) are unrecognized
+  for ANY host, including `github.com` itself -- `gitlab.com/group/project`,
+  `gitlab.com/group/subgroup/project`, and `github.com/owner/repo` all fall
+  through to `{kind: "unknown", reason: "non-relative string source ...
+  cannot be classified"}`. Only the already-assumed-GitHub, host-less
+  `owner/repo` shorthand (exactly one slash, D-76-04) is recognized.
+  Full-scheme URLs (`https://gitlab.com/...`) already work today regardless
+  of nested-subgroup depth -- no fix needed there, since the generic `url`
+  source kind treats the whole path as opaque.
+- SRCP-02: the `git-subdir` object source's `url` field is taken as a literal
+  string with no shorthand expansion (`gitSubdirObjectSource`,
+  `domain/source.ts`) -- confirmed against upstream's own git-subdir schema
+  (`https://code.claude.com/docs/en/plugin-marketplaces.md#git-subdirectories`),
+  which documents `url` accepting the bare `owner/repo` GitHub shorthand
+  alongside the separate `path` field. Feeding our parser
+  `{"source": "git-subdir", "url": "owner/repo", "path": "..."}` today stores
+  `"owner/repo"` verbatim as `GitSubdirSource.url`, which is not a valid git
+  remote and would fail at actual clone time.
+
+**SRCP-01 is withdrawn: upstream rejects this form too.** Probed 2026-08-14
+against the installed `claude` CLI v2.1.232 -- the shipped binary, not our
+reimplementation of it. `claude plugin marketplace add
+"gitlab.com/acolomba/pi-cm-test-marketplace"` is rejected outright:
+`not a valid GitHub owner/repo shorthand. For a git repo, use the full
+https:// clone URL from your host...`, and identically so with a `.git`
+suffix appended. The host-less `acolomba/pi-cm-test-marketplace` shorthand
+still routes to GitHub (`git@github.com:acolomba/pi-cm-test-marketplace.git`),
+never to GitLab -- the same already-assumed-GitHub rule we implement as
+D-76-04. Meanwhile `https://gitlab.com/acolomba/nonexistent-repo` and
+`https://gitlab.com/somegroup/somesubgroup/nonexistent-repo` both passed
+source-format validation and reached a real clone attempt.
+
+Read against that behavior, the changelog line this item was filed from ("bare
+`gitlab.com` repo URLs, including nested subgroups, now clone like `github.com`
+URLs") describes the full `https://gitlab.com/...` form getting
+GitHub-URL-equivalent treatment -- nested-subgroup-safe parsing and host-aware
+auth hints -- not a new scheme-less input syntax. Our `{kind: "unknown"}` for
+`gitlab.com/group/project` is therefore agreement with upstream, not a gap
+behind it, and teaching `parsePluginSource` that form would leave us accepting
+input upstream refuses: a parity regression, not a parity fix. The clone
+attempt above also named `gitlab.com` in its auth-failure message, which
+corroborates the other half of the same changelog line -- that half belongs to
+the git-host auth-failure hint item immediately below (spike 009) and is
+unaffected here. Spike 008's other finding stands confirmed: full-scheme GitLab
+URLs, nested subgroups included, already resolve today with no change.
+
+Direction for later, SRCP-02 only: expand a host-less `owner/repo` value in the
+`git-subdir` object source's `url` field to its full GitHub clone URL -- the
+same already-assumed-GitHub rule D-76-04 applies to string sources -- so what
+lands in `GitSubdirSource.url` is a usable git remote. Do not pair it with a
+scheme-less host-prefixed recognition branch in `parsePluginSource`: upstream
+rejects that input form itself, so accepting it would put us ahead of upstream
+rather than level with it. This is a `domain/source.ts`-only change; no
+bridge/orchestrator/NFR-10/NFR-5 impact (confirmed by spike 008).
+
+## GAUTH-01: git host auth-failure hint coverage
+
+Surfaced by the same GitLab-parity spike (2026-08-14,
+`.planning/spikes/009-git-host-auth-hint-coverage`), prompted by the same
+upstream changelog line ("...and clone auth-failure hints name your actual
+git host"). The host-named diagnostic `NO_PROVIDER_CAUSE(host)`
+(`orchestrators/auth-host.ts`) exists and is already host-generic, but is
+wired into exactly one of five auth-relevant call sites -- `marketplace
+update`'s url-source refresh path (`orchestrators/marketplace/update.ts:394`).
+`plugin install`, `plugin reinstall`, `plugin fetch`, and `marketplace add`
+all still surface only the bare, host-less `"authentication required"`
+token on a no-provider host. Pure code, no external dependency -- wire the
+same cause line into the other four call sites.
+
+(GAUTH-02, the sibling item from the same spike -- registering a GitLab
+Device Flow auth provider -- has already shipped: quick task 260814-a7m
+added `GITLAB_PROVIDER` to `domain/auth-registry.ts`.)
+
+## HKDIR-01: factory-time `_shared` mkdir is gated cross-scope, not per-scope
+
+Surfaced 2026-08-14 while reviewing PR #127 (project-scope SessionStart
+hooks never dispatching). The PR fixes the dispatch defect and its own
+mkdir gate is correct; this item is the adjacent pre-existing one it
+leaves in place.
+
+**The defect.** `registerHooksBridge` walks both scopes and, per scope,
+conditionally creates that scope's `_shared` data dir so a `SessionStart`
+hook can rely on `CLAUDE_ENV_FILE`'s directory existing
+(`bridges/hooks/event-router.ts`, the `for (const { loc } of hydrated)`
+loop). The gate reads:
+
+```ts
+if ((routingTable.get("SessionStart") ?? []).length > 0) {
+  await ensureSharedDataDir(loc);
+}
+```
+
+`routingTable` is a single cross-scope map. So the presence of ANY
+`SessionStart` entry, in EITHER scope, satisfies the gate for BOTH
+iterations. A user-scope-only hooks plugin therefore provokes a project
+`_shared` mkdir as well -- at `locationsFor("project", opts.cwd)`, where
+`opts.cwd` is the factory's `homedir()`. In production that lands a
+`~/.pi/pi-claude-marketplace/data/_shared` tree nobody asked for; run the
+factory with any other cwd and it lands there instead. Verified by probe:
+booting the bridge with only a user-scope `SessionStart` plugin creates
+`.pi/` under the boot cwd.
+
+**Why it is only cosmetic today.** The directory is empty, `mkdir` is
+recursive and idempotent, and `assertPathInside` still contains the write,
+so nothing escapes containment and nothing breaks. It is a WR-05
+("no files on a clean reconcile") violation in spirit rather than a
+functional bug -- which is also why it survived this long.
+
+**Fix shape.** One line, matching what PR #127 already does on the
+session_start path:
+
+```ts
+if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === loc.scope)) {
+```
+
+Worth a regression test in the shape of `HOOK-E2E-03`, which pins the same
+invariant for the lazy-hydrate path: boot with a user-scope-only
+`SessionStart` plugin, assert the OTHER scope's root stays empty.
+
+Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
+`ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
+
+## HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable
+
+Surfaced 2026-08-14 measuring branch coverage on PR #127. Cosmetic; the
+only cost is a branch that can never go green.
+
+**The defect.** The lazy project hydrate rebuilds the routing tables and
+then reads the bucket back through a nullish fallback
+(`bridges/hooks/event-router.ts`, the `session_start` wrapper):
+
+```ts
+rebuildRoutingTables();
+if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === "project")) {
+```
+
+`rebuildRoutingTables` pre-seeds a bucket for every `BUCKET_A_EVENTS`
+member before it returns, and `SessionStart` is the first of them. So one
+line after that call `routingTable.get("SessionStart")` cannot be
+`undefined`, and the `?? []` arm is dead by construction. Branch coverage
+confirms it: `BRDA` for that line reports `taken=0` on the fallback arm
+across the whole unit + integration suite, while both arms of the `if`
+itself are exercised (`HOOK-E2E-02` true, `HOOK-E2E-03` false).
+
+**Fix shape.** Drop the `??` and read the bucket directly, or keep it and
+accept a permanently-uncovered branch. No test can close this one -- it is
+a code change or nothing.
+
+Note the same `?? []` idiom appears on the factory-side gate quoted in
+HKDIR-01, where it is equally unreachable for the same reason; fix both
+together or neither.
+
+Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
+`domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.

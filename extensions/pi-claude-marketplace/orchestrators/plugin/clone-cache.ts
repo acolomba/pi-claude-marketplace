@@ -25,7 +25,7 @@ import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
@@ -92,6 +92,10 @@ export async function materializePluginClone(args: {
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const key = pluginCloneKey(args.cloneUrl, args.pin);
+  // MURL-01 / D-77-04: the key hashes the canonical suffix-less url so a dir
+  // keyed before the suffix change still hits warm; only the wire url is
+  // `.git`-suffixed.
+  const networkUrl = ensureGitSuffix(args.cloneUrl);
   const cloneRoot = await args.locations.pluginCloneDir(key);
 
   // PURL-02 / PURL-04: a present key dir is a byte-equivalent warm cache.
@@ -106,7 +110,7 @@ export async function materializePluginClone(args: {
   try {
     await gitOps.clone({
       dir: stagingDir,
-      url: args.cloneUrl,
+      url: networkUrl,
       ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
       ...(args.auth !== undefined && { auth: args.auth }),
     });
@@ -205,6 +209,10 @@ export async function materializeOrRefreshPluginMirror(args: {
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
+  // MURL-01 / D-77-04: same split as `materializePluginClone` -- the mirror key
+  // hashes the canonical suffix-less url (warm mirrors stay valid), the clone
+  // goes out `.git`-suffixed.
+  const networkUrl = ensureGitSuffix(args.cloneUrl);
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
   // mirror tracks a moving ref).
@@ -214,7 +222,7 @@ export async function materializeOrRefreshPluginMirror(args: {
     try {
       await gitOps.clone({
         dir: stagingDir,
-        url: args.cloneUrl,
+        url: networkUrl,
         ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
         ...(args.auth !== undefined && { auth: args.auth }),
       });
@@ -482,6 +490,10 @@ export async function resolvePluginPin(args: {
   const { source, auth } = args;
 
   const cloneUrl = canonicalCloneUrl(source);
+  // MURL-01 / PURL-09: `cloneUrl` is the cache-key identity and is what this
+  // function RETURNS; `networkUrl` is the same value `.git`-suffixed and is
+  // only ever sent to the remote.
+  const networkUrl = ensureGitSuffix(cloneUrl);
 
   // PROV-03 (Q1): forward the optional auth bundle into resolveRemoteRef so an
   // unpinned PRIVATE-repo HEAD resolution authenticates; a pinned sha never
@@ -491,13 +503,13 @@ export async function resolvePluginPin(args: {
     pin = source.sha;
   } else if (source.ref !== undefined) {
     pin = await gitOps.resolveRemoteRef({
-      url: cloneUrl,
+      url: networkUrl,
       ref: source.ref,
       ...(auth !== undefined && { auth }),
     });
   } else {
     pin = await gitOps.resolveRemoteRef({
-      url: cloneUrl,
+      url: networkUrl,
       ...(auth !== undefined && { auth }),
     });
   }

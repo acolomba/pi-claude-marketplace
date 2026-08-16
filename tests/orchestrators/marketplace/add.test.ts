@@ -1231,7 +1231,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
   });
 });
 
-test("MURL-01: url source clones source.url VERBATIM with NO auth key in the clone options", async () => {
+test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in the clone options", async () => {
   await withTmpScope(async ({ cwd }) => {
     const { ctx, pi } = makeCtx();
     const { gitOps, state } = makeMockGitOps({
@@ -1247,12 +1247,13 @@ test("MURL-01: url source clones source.url VERBATIM with NO auth key in the clo
       gitOps,
     });
 
-    // D-76-06: the clone URL is source.url verbatim -- no github.com
-    // reconstruction, and the parser canonicalized the trailing `.git` off.
+    // D-76-06: the clone URL is source.url -- no github.com reconstruction.
+    // MURL-01: the parser canonicalized the trailing `.git` off for identity
+    // comparison, and `ensureGitSuffix` restores it for the wire.
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
+    assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp.git");
     // D-76-07: public-only -- the clone options object carries NO `auth` key.
     assert.equal(Object.hasOwn(cloneCall, "auth"), false);
     assert.equal(cloneCall.auth, undefined);
@@ -1283,7 +1284,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
         singleBranch: state.cloneCalls[0]?.singleBranch,
       },
       {
-        url: "https://gitlab.example.com/team/mp",
+        url: "https://gitlab.example.com/team/mp.git",
         ref: "v1.0",
         singleBranch: true,
       },
@@ -1379,6 +1380,69 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
     const note = notifications.find((n) => n.severity === "error");
     assert.ok(note);
     assert.ok(note.message.includes("(failed) {authentication required}"));
+  });
+});
+
+test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    // A denied/expired Device Flow (or a poll network error) makes
+    // platform/git.ts's onAuth return `{ cancel: true }`, which
+    // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
+    // 401/403 and NOT a network errno.
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: authError,
+    });
+
+    // No raw throw past addMarketplace -- the standalone path must route
+    // through notify() (IL-2).
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const note = notifications.find((n) => n.severity === "error");
+    assert.ok(note, "a declined Device Flow must render a notify()-routed error");
+    assert.ok(
+      note.message.includes("(failed) {authentication required}"),
+      `expected authentication-required row, got: ${note.message}`,
+    );
+    assert.equal(note.message.includes("{unparseable}"), false);
+    assert.equal(note.message.includes("{network unreachable}"), false);
+  });
+});
+
+test("GAUTH-02 orchestrated mode -- UserCanceledError returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: authError,
+    });
+
+    const outcome = await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
+    assert.ok(outcome);
+    assert.equal(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.equal(outcome.reason, "authentication required");
+    }
   });
 });
 
@@ -1517,8 +1581,43 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
     assert.equal(state.cloneCalls.length, 1);
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
-    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp");
+    assert.equal(cloneCall.url, "https://GitHub.com/acme/mp.git");
     assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
+  });
+});
+
+test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the GitLab provider's auth bundle attached to the same clone call", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    const { ctx, pi } = makeCtx();
+    const { gitOps, state } = makeMockGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const { credOps: credentialOps } = makeMockCredentialOps();
+
+    // Unlike the gitlab.example.com adds above (MURL-01, PROV-02), gitlab.com
+    // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
+    // findProviderForHost/buildAuthForHost path (no mock auth registry) must
+    // attach its auth bundle to the SAME clone call that carries the
+    // `.git`-suffixed wire URL.
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.com/team/mp",
+      gitOps,
+      credentialOps,
+    });
+
+    assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    // MURL-01: ensureGitSuffix restores the `.git` suffix on the wire URL.
+    assert.equal(cloneCall.url, "https://gitlab.com/team/mp.git");
+    // GAUTH-02: gitlab.com is provider-registered -- the clone carries the
+    // GitLab auth bundle, not the no-provider authless path.
+    assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");
+    assert.equal(cloneCall.auth.host, "gitlab.com");
   });
 });

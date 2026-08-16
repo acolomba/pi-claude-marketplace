@@ -20,9 +20,10 @@
  *   - D-32-04: notifyFn callback (no `ctx` import; preserves shared/notify.ts
  *     chokepoint at the boundary).
  *   - D-32-05: every DeviceFlowResult -- success OR failure -- carries
- *     `authAttempted: true` so onAuthFailure can detect a second consecutive
- *     auth failure and return { cancel: true } instead of re-triggering Device
- *     Flow infinitely (AUTH-07; CP-9 retry-loop guard).
+ *     `authAttempted: true` as a reference-only / future-proofing marker.
+ *     `onAuthFailure(url, cred)` never receives a DeviceFlowResult (only the
+ *     credential) and does not branch on the flag; it always returns
+ *     { cancel: true } regardless (AUTH-07; CP-9 retry-loop guard).
  *   - D-32-06: AUTH-09 discipline -- user_code and verification_uri MAY
  *     appear in notifyFn; access_token / cred.* / r.accessToken MUST NEVER
  *     appear in notifyFn or new Error(...) interpolation. Enforced by
@@ -135,13 +136,48 @@ export interface InitiateDeviceFlowOpts {
 }
 
 /**
- * Discriminated result. Both branches carry `authAttempted: true` so the
- * onAuthFailure closure can guard against the isomorphic-git retry loop
- * (CP-9) by inspecting a single field across success + failure.
+ * Discriminated result. Both branches carry `authAttempted: true` as a
+ * reference-only / future-proofing marker (CP-9) -- onAuthFailure never
+ * receives this value and does not branch on it; it always returns
+ * { cancel: true } regardless.
  */
 export type DeviceFlowResult =
   | { ok: true; cred: GitCredentials; authAttempted: true }
   | { ok: false; reason: string; authAttempted: true };
+
+/**
+ * Extract a `(<error> -- <error_description>)` suffix from a non-2xx
+ * device-code response body, mirroring the `${r.error}${detail}` shape
+ * `runPollLoop` uses for poll-error responses. No credential has been
+ * issued yet at this point in the flow (this is the pre-token device-code
+ * request), so the body's `error` / `error_description` fields are safe to
+ * surface -- AUTH-09. The generic new-Error(...)/notifyFn(...) scan in
+ * tests/architecture/no-credential-leak.test.ts cannot see through the
+ * describeDeviceCodeErrorBody(res) call at requestCodeImpl's `new
+ * Error(...)` site -- a lexical scan only ever sees `res.status` and a
+ * function-call expression there. A dedicated test scans THIS function's
+ * own body directly instead, so a future regression that read
+ * `access_token` / `cred.*` here (rather than `error` / `error_description`)
+ * would still be caught. Returns "" when the body isn't parseable JSON or
+ * carries no `error` field, so the caller falls back to the bare HTTP
+ * status.
+ */
+async function describeDeviceCodeErrorBody(res: Response): Promise<string> {
+  let data: Record<string, unknown>;
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+
+  const { error: errorRaw, error_description: errorDescRaw } = data;
+  if (typeof errorRaw !== "string") {
+    return "";
+  }
+
+  const detail = typeof errorDescRaw === "string" ? ` -- ${errorDescRaw}` : "";
+  return ` (${errorRaw}${detail})`;
+}
 
 async function requestCodeImpl(
   deviceCodeUrl: string,
@@ -158,10 +194,12 @@ async function requestCodeImpl(
     body,
   });
   if (!res.ok) {
-    // AUTH-09: ONLY the status code is interpolated, never the response
-    // body (defense in depth -- the body shouldn't contain credentials at
-    // this point but the discipline is uniform across the file).
-    throw new Error(`Device code request failed: HTTP ${res.status}`);
+    // AUTH-09: the provider's error/error_description fields are folded in
+    // via describeDeviceCodeErrorBody (safe -- see its doc comment); no
+    // other part of the response body is ever interpolated.
+    throw new Error(
+      `Device code request failed: HTTP ${res.status}${await describeDeviceCodeErrorBody(res)}`,
+    );
   }
 
   const data = (await res.json()) as DeviceCodeResponse;
@@ -287,8 +325,9 @@ export const DEFAULT_DEVICE_FLOW_HTTP: DeviceFlowHttp = makeDeviceFlowHttp(
  *     (access_denied / expired_token / deadline exceeded / init failure /
  *     unexpected error / caller aborted).
  *
- * D-32-05: authAttempted is true in BOTH branches so onAuthFailure can guard
- * the retry loop.
+ * D-32-05: authAttempted is true in BOTH branches as a reference-only /
+ * future-proofing marker -- onAuthFailure never receives this value and
+ * does not branch on it; it always returns { cancel: true } regardless.
  */
 async function safePollToken(
   http: DeviceFlowHttp,

@@ -51,7 +51,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -66,6 +66,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -249,38 +250,25 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
   if (err instanceof Error) {
     const code = (err as NodeJS.ErrnoException).code;
 
-    // D-76-08: an isomorphic-git `HttpError` carries a `.code` STRING
-    // ("HttpError"), not an errno, so it would fall through the errno ladder
-    // below to `unparseable` -- falsely implying a corrupted source tree when
-    // the truth is a 401/403 auth challenge from a private/nonexistent repo.
-    // Catch it HERE, above the errno ladder. Duck-typed on the name+status
-    // (D-13: no isomorphic-git import in the orchestrator tier; mirrors the
-    // isGitNotFoundError name-check idiom in shared.ts).
-    const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-    if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-      return "authentication required";
-    }
-
     if (code === "ENOENT" || code === "ENOTDIR") {
       return "source missing";
     }
 
-    // WR-03: a clone network failure (errno-carrying
-    // throw from the github guard's gitOps.clone) is the NFR-5 per-entry
-    // soft-fail the catalog's `soft-fail-mixed` state documents as
-    // `{network unreachable}`. The clone-catch only cleans staging and
-    // rethrows unclassified, so the errno must be recognised HERE --
-    // otherwise the reason falls through to `unparseable`, falsely implying
-    // a corrupted manifest when the user's network is down.
-    if (
-      code === "ENETUNREACH" ||
-      code === "ECONNREFUSED" ||
-      code === "ENOTFOUND" ||
-      code === "ETIMEDOUT" ||
-      code === "ECONNRESET" ||
-      code === "EAI_AGAIN"
-    ) {
-      return "network unreachable";
+    // GAUTH-02: delegate the isomorphic-git `HttpError` 401/403 challenge /
+    // `UserCanceledError` (a declined or failed Device Flow) / network-errno
+    // ladder to the shared classifier (`shared/git-failure-classifiers.ts`)
+    // instead of a hand-rolled copy, so `add` cannot drift out of sync with
+    // `install.ts`/`update.ts` (plugin)/`fetch.ts`, which already delegate to
+    // it. WR-03: a clone network failure (errno-carrying throw from the
+    // github guard's gitOps.clone) is the NFR-5 per-entry soft-fail the
+    // catalog's `soft-fail-mixed` state documents as `{network unreachable}`.
+    // The clone-catch only cleans staging and rethrows unclassified, so the
+    // failure must be recognised HERE -- otherwise the reason falls through
+    // to `unparseable`, falsely implying a corrupted manifest when the
+    // truth is an auth challenge or the user's network being down.
+    const transportReason = classifyGitTransportFailure(err);
+    if (transportReason !== undefined) {
+      return transportReason;
     }
   }
 
@@ -387,7 +375,8 @@ async function runAddInGuard(args: {
         cwd: opts.cwd,
       });
     } else if (source.kind === "url") {
-      // MURL-01 / D-76-06: clone source.url verbatim; per-host provider
+      // MURL-01 / D-76-06: source.url is the stored canonical identity; the
+      // clone url is that value through `ensureGitSuffix`. Per-host provider
       // lookup decides the auth bundle (PROV-02/03/04).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
@@ -645,7 +634,7 @@ async function addGitClonedInGuard(args: {
   try {
     await gitOps.clone({
       dir: stagingDir,
-      url: cloneUrl,
+      url: ensureGitSuffix(cloneUrl),
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
       ...(auth !== undefined && { auth }),
     });
@@ -752,8 +741,10 @@ async function addGithubInGuard(args: {
 }
 
 /**
- * MURL-01 / D-76-06: url-source add. Clones `source.url` VERBATIM (no
- * github.com reconstruction). PROV-02/03/04: the host is extracted from the
+ * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
+ * identity form (parse-time `.git`-stripped) and NOT reconstructed against
+ * github.com; the url actually cloned is that value passed through
+ * `ensureGitSuffix`. PROV-02/03/04: the host is extracted from the
  * url and looked up in the provider registry via buildAuthForHost -- a
  * provider-registered host authenticates host-keyed; a no-provider host gets
  * NO bundle (buildAuthForHost returns undefined), so the clone runs authless

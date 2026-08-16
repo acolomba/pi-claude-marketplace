@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   GITHUB_PROVIDER,
+  GITLAB_PROVIDER,
   findProviderForHost,
 } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
@@ -25,8 +26,14 @@ test("PROV-01 findProviderForHost('example.com') returns undefined", () => {
   assert.equal(findProviderForHost("example.com"), undefined);
 });
 
-test("PROV-01 findProviderForHost('gitlab.com') returns undefined (no GitLab descriptor in v1)", () => {
-  assert.equal(findProviderForHost("gitlab.com"), undefined);
+test("GAUTH-02 findProviderForHost('gitlab.com') returns the GitLab descriptor", () => {
+  const provider = findProviderForHost("gitlab.com");
+  assert.ok(provider, "expected a provider for gitlab.com");
+  assert.equal(provider.id, "gitlab");
+});
+
+test("GAUTH-02 findProviderForHost('gitlab.example.com') returns undefined (SaaS host only)", () => {
+  assert.equal(findProviderForHost("gitlab.example.com"), undefined);
 });
 
 test("GITHUB_PROVIDER.credentialFrom maps the token to x-access-token basic auth", () => {
@@ -41,6 +48,39 @@ test("GITHUB_PROVIDER carries today's exact github.com endpoints, client_id, and
   assert.equal(GITHUB_PROVIDER.tokenUrl, "https://github.com/login/oauth/access_token");
   assert.equal(GITHUB_PROVIDER.clientId, "Ov23liNcyK08uGdU0mMl");
   assert.equal(GITHUB_PROVIDER.scope, "repo");
+});
+
+test("GAUTH-02 GITLAB_PROVIDER carries GitLab's exact endpoints, client_id, and scope", () => {
+  assert.equal(GITLAB_PROVIDER.deviceCodeUrl, "https://gitlab.com/oauth/authorize_device");
+  assert.equal(GITLAB_PROVIDER.tokenUrl, "https://gitlab.com/oauth/token");
+  assert.equal(
+    GITLAB_PROVIDER.clientId,
+    "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
+  );
+  // Least privilege: this project only ever clones read-only. Widening this to
+  // match GitHub's broader `repo` scope would be a regression, not a fix.
+  assert.equal(GITLAB_PROVIDER.scope, "read_repository");
+});
+
+test("GAUTH-02 GITLAB_PROVIDER.credentialFrom maps the token to oauth2 basic auth", () => {
+  assert.deepEqual(GITLAB_PROVIDER.credentialFrom("tok"), {
+    username: "oauth2",
+    password: "tok",
+  });
+});
+
+test("GAUTH-02 GITLAB_PROVIDER.hostMatch accepts only the bare SaaS host", () => {
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.com"), true);
+  // Exact equality, never a suffix match: a suffix match would claim
+  // lookalike hosts and bind a real token to a hostile remote.
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.example.com"), false);
+  assert.equal(GITLAB_PROVIDER.hostMatch("sub.gitlab.com"), false);
+  assert.equal(GITLAB_PROVIDER.hostMatch("gitlab.com:8443"), false);
+});
+
+test("PROV-01 a second descriptor does not disturb first-match ordering", () => {
+  assert.equal(findProviderForHost("github.com"), GITHUB_PROVIDER);
+  assert.equal(findProviderForHost("gitlab.com"), GITLAB_PROVIDER);
 });
 
 test("initiateDeviceFlow drives the engine identically with and without an explicit GITHUB_PROVIDER", async () => {
@@ -120,6 +160,47 @@ test("initiateDeviceFlow drives clientId/scope and credentialFrom from a synthet
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.cred.username, "oauth2");
+  }
+
+  assert.equal(credState.approveCalls[0]?.cred.username, "oauth2");
+});
+
+test("GAUTH-02 initiateDeviceFlow drives GitLab's clientId/scope and yields oauth2 credentials", async () => {
+  const { http, state: httpState } = makeMockDeviceFlowHttp({
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      user_code: "ABCD-1234",
+      verification_uri: "https://gitlab.com/oauth/device",
+      expires_in: 900,
+      interval: 0,
+    },
+    pollQueue: [
+      { kind: "success", accessToken: "glpat-mock", tokenType: "bearer", scope: "read_repository" },
+    ],
+  });
+  const { credOps, state: credState } = makeMockCredentialOps();
+
+  const result = await initiateDeviceFlow({
+    host: "gitlab.com",
+    credentialOps: credOps,
+    notifyFn: noopNotify,
+    http,
+    provider: GITLAB_PROVIDER,
+  });
+
+  assert.equal(
+    httpState.requestCodeCalls[0]?.clientId,
+    "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
+  );
+  assert.equal(httpState.requestCodeCalls[0]?.scope, "read_repository");
+  assert.equal(
+    httpState.pollTokenCalls[0]?.clientId,
+    "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
+  );
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.cred.username, "oauth2");
+    assert.equal(result.cred.password, "glpat-mock");
   }
 
   assert.equal(credState.approveCalls[0]?.cred.username, "oauth2");

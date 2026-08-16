@@ -111,3 +111,12 @@ repos:
         language: system
         pass_filenames: false
         files: '^(extensions/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
+      # Whole-graph, so it never takes filenames: moving a single import can
+      # orphan a file the commit does not touch. .fallowrc.json is a trigger
+      # because the zone definitions decide what counts as a violation.
+      - id: npm-fallow
+        name: npm fallow
+        entry: npm run fallow
+        language: system
+        pass_filenames: false
+        files: '^(\.fallowrc\.json|extensions/.*\.ts|package(-lock)?\.json)$'

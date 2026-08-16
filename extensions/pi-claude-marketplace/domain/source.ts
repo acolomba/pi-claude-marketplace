@@ -406,6 +406,38 @@ function stripUrlDecorations(input: string): { base: string; ref: string | undef
 }
 
 /**
+ * MURL-01 / D-76-06: the network-side counterpart to `stripUrlDecorations`.
+ * Parse time strips a trailing `.git` so `sourceLogical` / `samePlannedSource`
+ * compare one canonical identity per repo (D-76-01); this restores the suffix
+ * on the string that actually goes to the wire.
+ *
+ * Host-agnostic on purpose: the `.git` suffix is a general git-hosting
+ * convention, and a host that 301-redirects the suffix-less smart-HTTP
+ * endpoint makes the transport replay the `POST git-upload-pack` as a bodyless
+ * `GET`, which the host then rejects (observed against gitlab.com as
+ * `422 Unprocessable Entity`). This mirrors the GitHub `url`-kind clone-URL
+ * builder (`orchestrators/marketplace/add.ts` / `update.ts`), which already
+ * appends `.git` unconditionally, rather than special-casing gitlab.com.
+ * Accepted trade-off: a smart-HTTP host that serves ONLY the un-suffixed path
+ * (unlike GitHub/GitLab/Gitea/Bitbucket, which serve both forms or redirect
+ * one to the other) will now fail to clone via a `url`-kind or
+ * `git-subdir`-kind source where it may have worked before this change.
+ *
+ * The trailing-slash trim exists because a `git-subdir` source stores its
+ * manifest `url` verbatim (`gitSubdirObjectSource`) and is therefore not
+ * parse-canonicalized the way a `url` source is.
+ */
+export function ensureGitSuffix(url: string): string {
+  let rest = url;
+
+  while (rest.endsWith("/")) {
+    rest = rest.slice(0, -1);
+  }
+
+  return rest.endsWith(".git") ? rest : `${rest}.git`;
+}
+
+/**
  * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
  * `UrlSource`. Mirrors `parseGitHubUrl`'s canonicalization: strip a trailing
  * slash, split off an optional `#<ref>` fragment (empty fragment dropped), then

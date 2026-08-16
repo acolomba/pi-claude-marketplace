@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.0] - 2026-08-14
+
+- Added GitLab support for private marketplace and plugin sources. Adding a `https://gitlab.com/...` marketplace or plugin source now authenticates via RFC 8628 OAuth Device Flow when no credential is cached, the same flow already used for GitHub.
+- Fixed a clone failure for GitLab (and any other non-GitHub) `https://` marketplace or plugin source. The network clone URL was missing its `.git` suffix, which made GitLab's smart-HTTP endpoint reject the request with `422 Unprocessable Entity` after a redirect. Every clone and remote-ref resolution for a url-kind or git-subdir-kind source now sends a `.git`-suffixed URL, while the stored source record and cache keys keep their canonical (unsuffixed) form.
+- A project-scope plugin's `SessionStart` hooks now fire on the session that starts them. Pi emits `session_start` before `resources_discover`, and the project-scope hook cache was only hydrated on `resources_discover` -- so at dispatch time the `SessionStart` routing bucket held no project entries and those hooks were skipped, becoming reachable only after a later `/reload`. The bridge now hydrates project scope against the event's own `cwd` before dispatching `SessionStart`. User-scope hooks were never affected. Thanks to @rakesh-vs for the contribution (#127).
+
 ## [0.14.0] - 2026-08-12
 
 - An installed plugin now survives its entry disappearing from the marketplace manifest. `list` keeps the installation record and marks the row `{not in manifest}` instead of dropping the plugin, and the same reason reaches the LLM `list` tool. A manifest that cannot be read is never reported as a missing entry: absence can only be asserted after a successful load, so an unreadable or malformed manifest keeps its own failure reason instead.

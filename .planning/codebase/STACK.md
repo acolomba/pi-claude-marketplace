@@ -8,7 +8,7 @@
 - TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`tests/`)
 
 **Secondary:**
-- YAML - Claude plugin manifests and marketplace metadata parsed via the `yaml` package
+- YAML - agent and skill frontmatter, read and emitted line-by-line by `bridges/agents/frontmatter.ts` and `bridges/skills/frontmatter-degrade.ts` (D-82-02: line-based, no nested mappings), not via a YAML library. Plugin and marketplace manifests are JSON and go through `JSON.parse`
 - Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime
@@ -31,13 +31,14 @@
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,docs,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`
-- `memfs` `^4.57.2` - in-memory filesystem mocking for platform/persistence tests
+- Real temporary directories (`mkdtemp`, plus the `withHermeticHome` helper) for filesystem isolation - no in-memory filesystem layer is used
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`, `integration`, `e2e` reports feeding SonarCloud
 
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines, includes custom architecture-boundary gates)
 - `prettier` `^3.8.3` for formatting
+- `fallow` `^3.16.0` - whole-graph static analysis (`.fallowrc.json`), covering the reachability questions ESLint cannot answer: unused files, circular dependencies, and architecture-zone boundaries. Its 12-zone `boundaries` block is finer-grained than the ESLint `no-restricted-paths` gate and is the only thing enforcing that cross-bridge imports are forbidden. `npm run fallow` is the local gate; `npm run fallow:audit` gates PRs on newly-introduced findings only. Complements rather than replaces the ESLint gate -- fallow's checks are reachability-scoped, ESLint's are glob-based and reachability-blind
 - `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, markdownlint, yamlfmt, gitlint, mdformat, prettier alongside the JS/TS checks
 
 ## Key Dependencies
@@ -47,7 +48,6 @@
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
 - `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
-- `yaml` `^2.9.0` - parsing Claude plugin/marketplace YAML manifests
 
 **Infrastructure:**
 - `isomorphic-git/http/node` - the Node HTTP transport paired with `isomorphic-git` for actual network clone/fetch

@@ -108,6 +108,7 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
 } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -654,9 +655,13 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * `?? ["network unreachable"]` default instead of the correct closed-set
  * `source missing` / `permission denied` reasons.
  *
- * D-76-08 / D-79-03: an isomorphic-git HttpError with a 401/403 status is an
- * auth challenge, not a network outage -- classified BEFORE the errno codes
- * so the row carries the existing closed-set `authentication required` token.
+ * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
+ * has no opinion on them (path-source failures never reach git). The
+ * remaining ladder -- isomorphic-git `HttpError` 401/403, `UserCanceledError`
+ * (a declined or failed Device Flow), and network errno -- delegates to
+ * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
+ * instead of a hand-rolled copy, so `update` cannot drift out of sync with
+ * `install.ts`/`fetch.ts` (plugin), which already delegate to it.
  */
 function transportReason(err: Error): ContentReason | undefined {
   let bearer: NodeJS.ErrnoException | undefined;
@@ -666,21 +671,19 @@ function transportReason(err: Error): ContentReason | undefined {
     bearer = err.cause;
   }
 
-  const code = bearer?.code;
-  const statusCode = (bearer as { data?: { statusCode?: number } } | undefined)?.data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
-    return "authentication required";
+  if (bearer === undefined) {
+    return undefined;
   }
 
-  if (code === "EACCES" || code === "EPERM") {
+  if (bearer.code === "EACCES" || bearer.code === "EPERM") {
     return "permission denied";
   }
 
-  if (code === "ENOENT" || code === "ENOTDIR") {
+  if (bearer.code === "ENOENT" || bearer.code === "ENOTDIR") {
     return "source missing";
   }
 
-  return undefined;
+  return classifyGitTransportFailure(bearer);
 }
 
 /**

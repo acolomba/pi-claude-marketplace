@@ -11,6 +11,10 @@
  *   - SC-3 (CP-10): exceptions inside onAuth / onAuthFailure NEVER propagate
  *     to isomorphic-git -- they are caught and converted to { cancel: true }.
  *     Tests 4 + 7 + 8.
+ *   - CP-10 diagnostic capture: the { cancel: true } value isomorphic-git
+ *     receives is unchanged, but the specific failure reason (from
+ *     onAuthRequired) or caught error message is now routed through
+ *     hookDebugLog rather than dropped.
  *
  * Each test instantiates its own makeMockCredentialOps + its own
  * buildAuthCallbacks pair so the closure-scoped `deviceFlowAttempted` flag
@@ -51,6 +55,37 @@ import type {
 const HOST = "github.com";
 const REMOTE_URL = "https://github.com/owner/repo.git";
 
+/**
+ * Capture `hookDebugLog` output around `fn` by forcing
+ * PI_CLAUDE_MARKETPLACE_DEBUG=1 and swapping console.error, mirroring the
+ * pattern in tests/orchestrators/plugin/info-manifest-absent.test.ts. Restores
+ * both the env var and console.error afterward, even on throw.
+ */
+async function withCapturedDebugLog<T>(fn: () => Promise<T>): Promise<{
+  result: T;
+  logged: string[];
+}> {
+  const originalDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  const originalError = console.error;
+  const logged: string[] = [];
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  console.error = (...args: unknown[]): void => {
+    logged.push(args.map((a) => String(a)).join(" "));
+  };
+
+  try {
+    const result = await fn();
+    return { result, logged };
+  } finally {
+    console.error = originalError;
+    if (originalDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = originalDebug;
+    }
+  }
+}
+
 test("buildAuthCallbacks: fill-hit returns stored credential without invoking onAuthRequired (SC-1)", async () => {
   const stored: GitCredentials = { username: "u", password: "p" };
   const { credOps, state } = makeMockCredentialOps({
@@ -90,22 +125,37 @@ test("buildAuthCallbacks: fill-miss + DF ok returns Device-Flow credential (SC-1
   assert.equal(onAuthRequiredCalls, 1);
 });
 
-test("buildAuthCallbacks: fill-miss + DF !ok returns { cancel: true }", async () => {
-  const { credOps, state } = makeMockCredentialOps();
-  const onAuthRequired: OnAuthRequiredFn = async () => {
-    await Promise.resolve();
-    return {
-      ok: false,
-      reason: "User cancelled authorization.",
-      authAttempted: true,
-    } satisfies AuthAttemptResult;
-  };
+test("buildAuthCallbacks: fill-miss + DF !ok returns { cancel: true } and captures the reason via hookDebugLog", async () => {
+  // Isomorphic-git's external contract (a bare { cancel: true }) is
+  // unchanged; the specific reason is captured on the hookDebugLog
+  // diagnostic seam instead of being dropped.
+  const reasons = [
+    "User cancelled authorization. Run the command again to retry.",
+    "Device code expired before authorization. Run the command again to restart.",
+    "Device Flow failed: invalid_client -- The client_id is invalid.",
+  ];
 
-  const cbs = buildAuthCallbacks({ credentialOps: credOps, host: HOST, onAuthRequired });
-  const result = await cbs.onAuth(REMOTE_URL);
+  for (const reason of reasons) {
+    const { credOps, state } = makeMockCredentialOps();
+    const onAuthRequired: OnAuthRequiredFn = async () => {
+      await Promise.resolve();
+      return { ok: false, reason, authAttempted: true } satisfies AuthAttemptResult;
+    };
 
-  assert.deepEqual(result, { cancel: true });
-  assert.equal(state.fillCalls.length, 1);
+    const cbs = buildAuthCallbacks({ credentialOps: credOps, host: HOST, onAuthRequired });
+    const { result, logged } = await withCapturedDebugLog(() => cbs.onAuth(REMOTE_URL));
+
+    assert.deepEqual(result, { cancel: true });
+    assert.equal(state.fillCalls.length, 1);
+
+    const line = logged.find((l) => l.includes(reason));
+    assert.ok(
+      line !== undefined,
+      `expected a hookDebugLog line carrying the reason "${reason}", got: ${JSON.stringify(logged)}`,
+    );
+    assert.ok(line.includes(HOST), `expected the debug line to name the host, got: "${line}"`);
+    assert.ok(line.startsWith("[auth]"), `expected the "auth" tag, got: "${line}"`);
+  }
 });
 
 test("buildAuthCallbacks: fill throws -- onAuth returns { cancel: true } (CP-10)", async () => {
@@ -182,13 +232,21 @@ test("buildAuthCallbacks: reject throws -- onAuthFailure still returns { cancel:
 
   const cred: GitCredentials = { username: "x-access-token", password: "<DF_TOKEN>" };
   const cbs = buildAuthCallbacks({ credentialOps: credOps, host: HOST, onAuthRequired });
-  const result = await cbs.onAuthFailure(REMOTE_URL, cred);
+  const { result, logged } = await withCapturedDebugLog(() => cbs.onAuthFailure(REMOTE_URL, cred));
 
   assert.deepEqual(result, { cancel: true });
   assert.equal(state.rejectCalls.length, 1, "reject was called before throwing");
+
+  const line = logged.find((l) => l.includes(timeoutErr.message));
+  assert.ok(
+    line !== undefined,
+    `expected a hookDebugLog line carrying the reject() error, got: ${JSON.stringify(logged)}`,
+  );
+  assert.ok(line.includes(HOST), `expected the debug line to name the host, got: "${line}"`);
+  assert.ok(line.startsWith("[auth]"), `expected the "auth" tag, got: "${line}"`);
 });
 
-test("buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true } (CP-10)", async () => {
+test("buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true } and captures the error via hookDebugLog (CP-10)", async () => {
   const { credOps, state } = makeMockCredentialOps();
   const onAuthRequired: OnAuthRequiredFn = async () => {
     await Promise.resolve();
@@ -196,10 +254,17 @@ test("buildAuthCallbacks: onAuthRequired throws -- onAuth returns { cancel: true
   };
 
   const cbs = buildAuthCallbacks({ credentialOps: credOps, host: HOST, onAuthRequired });
-  const result = await cbs.onAuth(REMOTE_URL);
+  const { result, logged } = await withCapturedDebugLog(() => cbs.onAuth(REMOTE_URL));
 
   assert.deepEqual(result, { cancel: true });
   assert.equal(state.fillCalls.length, 1);
+
+  const line = logged.find((l) => l.includes("onAuth threw") && l.includes("network down"));
+  assert.ok(
+    line !== undefined,
+    `expected a hookDebugLog line for the caught error, got: ${JSON.stringify(logged)}`,
+  );
+  assert.ok(line.includes(HOST), `expected the debug line to name the host, got: "${line}"`);
 });
 
 // ---------------------------------------------------------------------------

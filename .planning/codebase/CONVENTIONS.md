@@ -134,7 +134,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **Exports:** Named exports only observed — no default exports in sampled files.
 
-**Barrel Files:** `domain/index.ts` exists as a barrel for the domain layer; not universally used across every directory (check per-directory before assuming one exists).
+**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus the aggregate `bridges/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point. Barrels are not universally used across every directory (check per-directory before assuming one exists).
 
 ---
 

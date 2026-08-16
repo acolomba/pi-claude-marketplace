@@ -46,9 +46,14 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //   2. Pass a placeholder `ctx`: the bridge's hydrate path does not consume
   //      `opts.ctx` (only `opts.cwd`); the field is structurally required by
   //      the signature but functionally unused at factory time.
-  //   3. Defer project-scope hydrate to the first `resources_discover` via
-  //      `hydrateProjectScopeForCwd(event.cwd)` BELOW -- the routing-table
-  //      rebuild inside `applyReconcile` then sees the correct project cache.
+  //   3. Defer project-scope hydrate to event time, where a real `cwd` exists.
+  //      There are TWO deferral points, and the ORDER matters: the bridge's own
+  //      `session_start` wrapper hydrates against `ctx.cwd` first (Pi emits
+  //      `session_start` BEFORE `resources_discover`, so a project-scope
+  //      SessionStart hook would otherwise dispatch against an empty bucket),
+  //      then `hydrateProjectScopeForCwd(event.cwd)` BELOW re-runs it so the
+  //      routing-table rebuild inside `applyReconcile` sees the correct
+  //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
   // the 7 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
