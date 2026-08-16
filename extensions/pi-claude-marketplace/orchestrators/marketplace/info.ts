@@ -11,11 +11,9 @@
 // hide behind a healthy other-scope render.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
-import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
 import { notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -148,27 +146,16 @@ function buildManifestFailureMessage(
 }
 
 export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promise<void> {
-  // Project-first per MSG-GR-3 when both scopes are searched; otherwise
-  // the explicit scope only.
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
-
-  // Each scope's state is loaded read-only via `loadState` (NFR-5
-  // preserved -- NO network).
-  //
-  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
-  // not state. Load the merged config per scope alongside state so each
-  // (scope, record) tuple carries the per-scope autoupdate truth.
-  const found: { scope: Scope; record: MarketplaceRecord; autoupdate: boolean }[] = [];
-  for (const scope of scopes) {
-    const locations = locationsFor(scope, opts.cwd);
-    const state = await loadState(locations.extensionRoot);
-    const record = state.marketplaces[opts.name];
-    if (record !== undefined) {
-      const { merged } = await loadMergedScopeConfig(locations);
-      const autoupdate = merged.marketplaces[opts.name]?.entry.autoupdate ?? false;
-      found.push({ scope, record, autoupdate });
-    }
-  }
+  // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
+  // explicit scope only. The scope fan-out (read-only state + per-scope config truth) is shared with
+  // the plugin `info` surface -- see `orchestrators/scope-fanout.ts`. This
+  // surface has no plugin in hand, so it passes no `pluginKey` and never reads
+  // the `declaredEnabled` the shared row carries.
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace: opts.name,
+  });
 
   if (found.length === 0) {
     notify(opts.ctx, opts.pi, buildNotAddedMessage(opts.name, opts.scope));

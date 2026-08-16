@@ -49,13 +49,8 @@ import {
   type ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver.ts";
 import { parsePluginSource, type GitBackedSource, type ParsedSource } from "../../domain/source.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import {
-  isRecordedButDisabled,
-  loadState,
-  type ExtensionState,
-} from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -72,6 +67,7 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import {
   canonicalCloneUrl,
@@ -2326,35 +2322,19 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   // on the fs-only presence probe (bare info is network-free).
   const fetchCtx = buildInfoFetchContext(opts);
 
-  // Collect (scope, record) tuples so the fan-out renderer preserves
-  // the outer-loop iteration order. Each scope's state is loaded
-  // read-only via `loadState` (NFR-5 preserved -- NO network).
+  // Collect (scope, record) tuples so the fan-out renderer preserves the
+  // outer-loop iteration order. The fan-out itself is shared with the
+  // marketplace `info` surface -- see `orchestrators/scope-fanout.ts`.
   //
-  // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config),
-  // not state. Load the merged config alongside state per scope so each
-  // (scope, record) tuple carries the per-scope autoupdate truth.
-  //
-  // DFEN-04 / D-01: the same merged read also answers whether the user has
-  // stated an `enabled` opinion for this plugin under the flat
-  // `<plugin>@<marketplace>` key, which gates the install-time claim on the
-  // candidate rows. No extra I/O -- the load was already happening.
-  const found: {
-    scope: Scope;
-    record: MarketplaceRecord;
-    autoupdate: boolean;
-    declaredEnabled: boolean | undefined;
-  }[] = [];
-  for (const scope of scopes) {
-    const locations = locationsFor(scope, opts.cwd);
-    const state = await loadState(locations.extensionRoot);
-    const record = state.marketplaces[opts.marketplace];
-    if (record !== undefined) {
-      const { merged } = await loadMergedScopeConfig(locations);
-      const autoupdate = merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false;
-      const declaredEnabled = merged.plugins[`${opts.plugin}@${opts.marketplace}`]?.entry.enabled;
-      found.push({ scope, record, autoupdate, declaredEnabled });
-    }
-  }
+  // DFEN-04 / D-01: passing the flat `<plugin>@<marketplace>` key makes the
+  // same merged read also answer whether the user has stated an `enabled`
+  // opinion, which gates the install-time claim on the candidate rows.
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace: opts.marketplace,
+    pluginKey: `${opts.plugin}@${opts.marketplace}`,
+  });
 
   // Branch on the collected marketplaces (a) / (b) / (c) per the file
   // header.
