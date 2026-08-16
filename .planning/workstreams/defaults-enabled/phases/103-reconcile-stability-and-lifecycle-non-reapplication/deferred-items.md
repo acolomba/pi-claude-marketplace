@@ -1,18 +1,19 @@
 # Deferred items
 
-Out-of-scope discoveries logged during execution. Not fixed here.
+Out-of-scope discoveries logged during execution.
 
-## ✅ RESOLVED at milestone close — pre-existing comment-policy violation in `tests/orchestrators/plugin/install.test.ts`
+## ✅ All items resolved — nothing open
 
-- **Found during:** plan `103-06`, Task 1 self-check
-- **Location:** `tests/orchestrators/plugin/install.test.ts`, the
-  `// ... so it flows through the Phase 65/69 gates` comment
-- **Issue:** `.claude/rules/typescript-comments.md` forbids `Phase NN` planning
-  references in comments. This line predates this phase (introduced in
-  `c695bdab`) and is untouched by `103-06`'s diff.
-- **Why deferred at the time:** outside that plan's scope boundary — the change
-  would touch a comment no task in the plan authored or moved.
-- **Resolution (2026-08-15):** fixed at the milestone-close artifact audit, where
-  it is in scope. The reference now names the behavior — "the force-degradation
-  gates" — instead of the release cycle that built them, which is what the rule
-  asks for and what survives archiving. `install.test.ts` stays at 125/125.
+### Pre-existing comment-policy violation in `install.test.ts` (RESOLVED 2026-08-15)
+
+Found during plan `103-06`'s Task 1 self-check. A comment in
+`tests/orchestrators/plugin/install.test.ts` read "so it flows through the
+Phase 65/69 gates", and `.claude/rules/typescript-comments.md` forbids naming a
+release cycle in a source comment — those references stop resolving once the
+planning documents are archived. The line predated that phase (introduced in
+`c695bdab`) and no task in the plan authored or moved it, so fixing it there
+would have crossed the plan's scope boundary.
+
+Resolved at the milestone-close artifact audit, where it IS in scope. The comment
+now names the behavior — "the force-degradation gates" — instead of the release
+cycle that built them. `install.test.ts` stays at 125/125.
