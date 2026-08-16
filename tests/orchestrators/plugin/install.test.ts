@@ -4085,8 +4085,8 @@ test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher g
 
 // ───────────────────────────────────────────────────────────────────────────
 // SEV-01 / SEV-02 / D-71-06 -- the partial-hook plugin now resolves
-// `unsupported` (force-degradable), so it flows through the Phase 65/69 gates
-// with no severity-layer source change: WITHOUT `--force` it blocks at error
+// `unsupported` (force-degradable), so it flows through the force-degradation
+// gates with no severity-layer source change: WITHOUT `--force` it blocks at error
 // severity carrying the `--force` hint (SEV-02); WITH `--force` it degrades to
 // an info `force-installed` row with NO summary line (SEV-01 / D-71-06).
 // ───────────────────────────────────────────────────────────────────────────
