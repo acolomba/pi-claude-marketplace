@@ -844,11 +844,8 @@ export function _setRoutingBucketForTest(
 
 // The state cells and their accessors live in `routing-state.ts`; these
 // re-exports keep `event-router.ts` the single import surface the test
-// suite addresses. `currentEpoch` is imported from here by 4 test files
-// and `getRoutingBucket` by the reinstall/uninstall WR-03 tests, so the
-// fallow suppressions below are load-bearing, not cosmetic: the analysis
-// runs with `production: true`, which excludes tests from the reachability
-// graph, so a test-only consumer reads as no consumer at all. Removing
-// either export -- as `fallow fix` offers to -- breaks the suite.
-// fallow-ignore-next-line unused-export
+// suite addresses. `currentEpoch` is imported from here by 4 test files and
+// `getRoutingBucket` by the reinstall/uninstall WR-03 tests, so the
+// re-export is load-bearing: removing it -- as `fallow fix` offers to --
+// breaks the suite.
 export { currentEpoch, getRoutingBucket, type PendingSessionStartContext, type RoutingEntry };

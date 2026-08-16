@@ -1,9 +1,30 @@
 {
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
-  "production": true,
+  "production": false,
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    "maxUnitSize": 60,
+    "maxCrap": 0
+  },
   "boundaries": {
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": ["eslint.config.js", "tests/**"]
+    },
     "zones": [
-      { "name": "edge", "patterns": ["extensions/pi-claude-marketplace/edge/**"] },
+      {
+        "name": "entry",
+        "patterns": ["extensions/pi-claude-marketplace/index.ts"]
+      },
+      {
+        "name": "bridges-barrel",
+        "patterns": ["extensions/pi-claude-marketplace/bridges/index.ts"]
+      },
+      {
+        "name": "edge",
+        "patterns": ["extensions/pi-claude-marketplace/edge/**"]
+      },
       {
         "name": "orchestrators",
         "patterns": ["extensions/pi-claude-marketplace/orchestrators/**"]
@@ -16,7 +37,10 @@
         "name": "bridges-commands",
         "patterns": ["extensions/pi-claude-marketplace/bridges/commands/**"]
       },
-      { "name": "bridges-mcp", "patterns": ["extensions/pi-claude-marketplace/bridges/mcp/**"] },
+      {
+        "name": "bridges-mcp",
+        "patterns": ["extensions/pi-claude-marketplace/bridges/mcp/**"]
+      },
       {
         "name": "bridges-skills",
         "patterns": ["extensions/pi-claude-marketplace/bridges/skills/**"]
@@ -25,7 +49,10 @@
         "name": "bridges-hooks",
         "patterns": ["extensions/pi-claude-marketplace/bridges/hooks/**"]
       },
-      { "name": "domain", "patterns": ["extensions/pi-claude-marketplace/domain/**"] },
+      {
+        "name": "domain",
+        "patterns": ["extensions/pi-claude-marketplace/domain/**"]
+      },
       {
         "name": "transaction",
         "patterns": ["extensions/pi-claude-marketplace/transaction/**"]
@@ -34,10 +61,30 @@
         "name": "persistence",
         "patterns": ["extensions/pi-claude-marketplace/persistence/**"]
       },
-      { "name": "platform", "patterns": ["extensions/pi-claude-marketplace/platform/**"] },
-      { "name": "shared", "patterns": ["extensions/pi-claude-marketplace/shared/**"] }
+      {
+        "name": "platform",
+        "patterns": ["extensions/pi-claude-marketplace/platform/**"]
+      },
+      {
+        "name": "shared",
+        "patterns": ["extensions/pi-claude-marketplace/shared/**"]
+      }
     ],
     "rules": [
+      {
+        "from": "entry",
+        "allow": ["edge", "orchestrators", "bridges-hooks", "persistence", "platform", "shared"]
+      },
+      {
+        "from": "bridges-barrel",
+        "allow": [
+          "bridges-agents",
+          "bridges-commands",
+          "bridges-mcp",
+          "bridges-skills",
+          "bridges-hooks"
+        ]
+      },
       {
         "from": "edge",
         "allow": ["orchestrators", "domain", "shared", "platform"]
@@ -57,16 +104,46 @@
           "shared"
         ]
       },
-      { "from": "bridges-agents", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-commands", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-mcp", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-skills", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-hooks", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "domain", "allow": ["shared", "platform"] },
-      { "from": "transaction", "allow": ["persistence", "shared", "platform"] },
-      { "from": "persistence", "allow": ["domain", "shared", "platform"] },
-      { "from": "platform", "allow": ["shared"] },
-      { "from": "shared", "allow": ["platform"] }
+      {
+        "from": "bridges-agents",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-commands",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-mcp",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-skills",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-hooks",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "domain",
+        "allow": ["shared", "platform"]
+      },
+      {
+        "from": "transaction",
+        "allow": ["persistence", "shared", "platform"]
+      },
+      {
+        "from": "persistence",
+        "allow": ["domain", "shared", "platform"]
+      },
+      {
+        "from": "platform",
+        "allow": ["shared"]
+      },
+      {
+        "from": "shared",
+        "allow": ["platform"]
+      }
     ]
   }
 }

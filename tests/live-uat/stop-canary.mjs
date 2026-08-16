@@ -1,5 +1,10 @@
 // tests/live-uat/stop-canary.mjs
 //
+// Standalone operator-run UAT driver: an engineer invokes it from the command
+// line and no module ever imports it, so being unreachable from the import
+// graph is its intended shape, not a defect.
+// fallow-ignore-file unused-file
+//
 // Live runtime UAT (D-88-03b item 4): a scripted "ralph-wiggum" canary that
 // drives a REAL Pi session against an always-blocking Stop hook to prove, on
 // real pi, the settle-time observables the mocked settle tests only approximate.

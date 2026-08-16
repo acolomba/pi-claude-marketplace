@@ -7,12 +7,15 @@
 //
 // Lives outside `shared.ts` because it imports from `bridges/`; the
 // shared-helpers module is intentionally domain/persistence-only.
+//
+// Imports the three per-kind bridge barrels directly rather than the
+// aggregate `bridges/index.ts`. The aggregate re-exports across all five
+// bridge kinds, so importing it would launder a route around the
+// no-cross-bridge-imports boundary rule.
 
-import {
-  discoverPluginAgents,
-  discoverPluginCommands,
-  discoverPluginSkills,
-} from "../../bridges/index.ts";
+import { discoverPluginAgents } from "../../bridges/agents/index.ts";
+import { discoverPluginCommands } from "../../bridges/commands/index.ts";
+import { discoverPluginSkills } from "../../bridges/skills/index.ts";
 
 import { pickAgentsSourceDir } from "./shared.ts";
 

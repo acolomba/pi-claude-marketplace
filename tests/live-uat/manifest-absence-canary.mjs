@@ -1,5 +1,10 @@
 // tests/live-uat/manifest-absence-canary.mjs
 //
+// Standalone operator-run UAT driver: an engineer invokes it from the command
+// line and no module ever imports it, so being unreachable from the import
+// graph is its intended shape, not a defect.
+// fallow-ignore-file unused-file
+//
 // Live runtime UAT for the manifest-independent installed-plugin surface: a
 // scripted canary that drives the REAL extension against a REAL on-disk Pi
 // sandbox to prove, end to end, the milestone's user-visible claim -- an
