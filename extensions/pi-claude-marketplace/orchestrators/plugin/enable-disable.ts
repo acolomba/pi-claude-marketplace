@@ -62,7 +62,6 @@
 import path from "node:path";
 
 import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
-import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -91,7 +90,7 @@ import {
   enableRowDependencies,
   resolveCrossScopePluginTarget,
   selectDeclaringConfigWriteTarget,
-  synthesizeAdoptedMarketplaceSource,
+  writeAdoptingConfigEntries,
 } from "./shared.ts";
 
 import type { InstallFailureCapture } from "./install.ts";
@@ -537,7 +536,7 @@ export async function setPluginEnabled(
     // UAT-05 config write-back -- splitting it would require
     // additional state-snapshot threading and obscure the save-vs-throw
     // discipline.
-    // eslint-disable-next-line sonarjs/cognitive-complexity
+
     await withLockedStateTransaction(locations, async (tx) => {
       // D-103-13: ONE selection, made before anything reads a config path, so
       // the ordinary write-back and the config-truth promotion below cannot
@@ -603,22 +602,19 @@ export async function setPluginEnabled(
           // skips the adoption write instead of counting as a file that
           // declares nothing.
           //
-          // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
-          // collapses the benign (already-declared) and dangerous
-          // (no string `source.raw`) arms. The dangerous arm writes a
-          // dangling plugin declaration -- acknowledged trade-off pending
-          // a return-type widen in a follow-up PR.
-          const adoptedSource = synthesizeAdoptedMarketplaceSource({
+          // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
+          // arms collapse -- benign (already declared) and dangerous (no string
+          // `source.raw`). The dangerous arm seals a dangling plugin
+          // declaration; acknowledged trade-off pending a return-type widen.
+          await writeAdoptingConfigEntries({
             current,
             sibling,
             state,
             marketplace,
-          });
-          await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-            ...(adoptedSource !== undefined && {
-              marketplaces: { [marketplace]: { source: adoptedSource } },
-            }),
-            plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+            plugin,
+            targetConfigPath,
+            scopeRoot: locations.scopeRoot,
+            pluginPatch: { enabled: enable },
           });
           outcome = { kind: "fresh", version: installed.version };
           return;
@@ -676,22 +672,17 @@ export async function setPluginEnabled(
       // wholesale shadowing). Sibling read is fresh inside the lock;
       // membership test only.
       if (!orchestrated) {
-        const adoptedSource = synthesizeAdoptedMarketplaceSource({
+        // S4 (PR #51, CONTEXT.md S4): see the call above -- the benign and
+        // dangerous `adoptedSource === undefined` arms collapse here too.
+        await writeAdoptingConfigEntries({
           current,
           sibling,
           state,
           marketplace,
-        });
-        // S4 (PR #51, CONTEXT.md S4): see the synthesizeAdoptedMarketplaceSource
-        // call above -- the `adoptedSource === undefined` benign /
-        // dangerous arms collapse, and the dangerous arm sealing the
-        // dangling declaration is an acknowledged trade-off pending a
-        // helper-return widen.
-        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-          ...(adoptedSource !== undefined && {
-            marketplaces: { [marketplace]: { source: adoptedSource } },
-          }),
-          plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+          plugin,
+          targetConfigPath,
+          scopeRoot: locations.scopeRoot,
+          pluginPatch: { enabled: enable },
         });
       }
 

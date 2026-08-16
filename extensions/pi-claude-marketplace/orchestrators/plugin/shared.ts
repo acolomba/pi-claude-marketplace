@@ -18,14 +18,21 @@ import path from "node:path";
 
 import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import {
+  writeBatchedConfigEntries,
+  writePluginConfigEntry,
+} from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { CrossPluginConflictError } from "../../shared/errors.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
-import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
+import type {
+  ConfigLoadResult,
+  PluginConfigEntry,
+  ScopeConfig,
+} from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -596,7 +603,7 @@ function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
  * `<marketplace not declared>` row rather than being papered over from a file
  * nobody could read.
  */
-export function synthesizeAdoptedMarketplaceSource(opts: {
+function synthesizeAdoptedMarketplaceSource(opts: {
   readonly current: ScopeConfig;
   readonly sibling: ScopeConfig | undefined;
   readonly state: ExtensionState;
@@ -611,6 +618,54 @@ export function synthesizeAdoptedMarketplaceSource(opts: {
     opts.state,
     opts.marketplace,
   );
+}
+
+/**
+ * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
+ * config view does not already declare the owning marketplace, adopt the
+ * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
+ * dangling declaration the planner converts into a marketplace removal plus a
+ * perpetual failed row.
+ *
+ * The membership gate considers BOTH physical files (base union local), so a
+ * `--local` write never re-declares a base-declared marketplace -- the bare
+ * `{source}` entry would shadow the base entry wholesale (CFG-02) and silently
+ * flip merged `autoupdate`. An UNREADABLE sibling skips the adoption write
+ * rather than counting as a file that declares nothing.
+ *
+ * S4 (PR #51): `adoptedSource === undefined` collapses two arms -- benign
+ * (already declared, no synthesis needed) and dangerous (no string `source.raw`
+ * on the state record, so synthesis is impossible). The write proceeds with the
+ * plugin key alone in BOTH arms, so the dangerous arm writes a dangling
+ * declaration. Acknowledged trade-off pending a widen of the helper's return.
+ *
+ * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
+ * explicit `enabled`, while `install` writes `enabled: false` only when the
+ * install actually landed disabled and otherwise writes an empty patch.
+ */
+export async function writeAdoptingConfigEntries(opts: {
+  readonly current: ScopeConfig;
+  readonly sibling: ScopeConfig | undefined;
+  readonly state: ExtensionState;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly targetConfigPath: string;
+  readonly scopeRoot: string;
+  readonly pluginPatch: Partial<PluginConfigEntry>;
+}): Promise<void> {
+  const adoptedSource = synthesizeAdoptedMarketplaceSource({
+    current: opts.current,
+    sibling: opts.sibling,
+    state: opts.state,
+    marketplace: opts.marketplace,
+  });
+
+  await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
+    ...(adoptedSource !== undefined && {
+      marketplaces: { [opts.marketplace]: { source: adoptedSource } },
+    }),
+    plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
+  });
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */

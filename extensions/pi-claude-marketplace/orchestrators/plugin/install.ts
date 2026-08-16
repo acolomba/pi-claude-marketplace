@@ -108,10 +108,7 @@ import {
 } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
-import {
-  writeBatchedConfigEntries,
-  writePluginConfigEntry,
-} from "../../persistence/config-write-back.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -156,7 +153,7 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   selectDeclaringConfigWriteTarget,
-  synthesizeAdoptedMarketplaceSource,
+  writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
@@ -1806,30 +1803,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // UNREADABLE sibling skips the adoption write rather than counting as a
       // file that declares nothing.
       if (opts.notifications?.mode !== "orchestrated") {
-        const adoptedSource = synthesizeAdoptedMarketplaceSource({
+        await writeAdoptingConfigEntries({
           current,
           sibling,
           state,
           marketplace,
-        });
-        // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
-        // collapses two arms -- benign (already-declared, no synthesis
-        // needed) and dangerous (no string `source.raw` on the state
-        // record, so we cannot synthesize at all). The current write-back
-        // proceeds with the plugin key alone in BOTH arms; the dangerous
-        // arm therefore writes a dangling declaration the next reconcile
-        // converts into a destructive plan. Acknowledged trade-off for
-        // this PR; a future PR should widen the helper's return to
-        // disambiguate and route the dangerous arm to a (failed) row.
-        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-          ...(adoptedSource !== undefined && {
-            marketplaces: { [marketplace]: { source: adoptedSource } },
-          }),
-          plugins: {
-            [`${plugin}@${marketplace}`]: {
-              ...(disabledInstall.landed && { enabled: false }),
-            },
-          },
+          plugin,
+          targetConfigPath,
+          scopeRoot: locations.scopeRoot,
+          // DFEN-04: the plugin key alone unless the install actually landed
+          // disabled, in which case the declaration carries it through.
+          //
+          // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
+          // arms collapse -- benign (already declared) and dangerous (no string
+          // `source.raw` to synthesize from). This site therefore still writes a
+          // dangling declaration in the dangerous arm; acknowledged trade-off
+          // pending a widen of the helper's return that would route it to a
+          // (failed) row.
+          pluginPatch: { ...(disabledInstall.landed && { enabled: false }) },
         });
       } else if (disabledInstall.landed) {
         // DFEN-04 / D-102-04: the orchestrated-mode stamp. An orchestrated
