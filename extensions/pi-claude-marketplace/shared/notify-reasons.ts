@@ -159,13 +159,18 @@ export type FailureReason = (typeof FAILURE_REASONS)[number];
  * inert. On a not-installed candidate row nothing has happened yet and the
  * declaration explains what an install would produce. One group, two tenses,
  * the same cause.
+ *
+ * Declared as a bare union rather than as a `[...] as const` tuple like its
+ * three sibling groups. Those tuples exist because something consumes them at
+ * RUNTIME (`IDEMPOTENT_REASONS` builds `IDEMPOTENT_REASON_SET`); this group has
+ * no such consumer, and a tuple that only ever feeds `(typeof X)[number]` is an
+ * unreferenced runtime value. Add a member by extending the union; convert back
+ * to a tuple if and when a runtime consumer appears.
  */
-export const DECLARED_STATE_REASONS = [
+export type DeclaredStateReason =
   // OUT-01 / DFEN-04: the install completed and left the plugin inert because
   // the plugin declared `defaultEnabled` false.
-  "installs disabled",
-] as const;
-export type DeclaredStateReason = (typeof DECLARED_STATE_REASONS)[number];
+  "installs disabled";
 
 /**
  * WARN-01 / CLASS-01 / D-86-03: a component kind that installs in DEGRADED form

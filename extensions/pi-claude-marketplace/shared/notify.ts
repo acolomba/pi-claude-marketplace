@@ -2163,15 +2163,21 @@ export function composeReasons(
  */
 /**
  * Compose a scope-bearing, reasons-bearing plugin row that carries NO
- * soft-dep marker. Folds the four structurally-identical `renderPluginRow`
- * arms (`upgradable` / `skipped` / `failed` / `manual recovery`) that differ
- * only in their icon and their parenthesized status `label`. `label` is the
- * FULL parenthesized token (the caller passes `"(upgradable)"` etc., INCLUDING
- * the parens, so the `"(manual recovery)"` literal keeps its space verbatim).
- * The `p` param is the structural subset those four variants share: a required
- * `name`, an optional `scope` / `version`, and a required
- * `readonly ContentReason[]` reasons. Both declares-flags are `false` (these
- * arms never carry `dependencies`).
+ * soft-dep marker. Folds the structurally-identical `renderPluginRow` arms
+ * (`upgradable` / `skipped` / `failed` / `manual recovery` / `disabled`) that
+ * differ only in their icon and their parenthesized status `label`. `label` is
+ * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
+ * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
+ * verbatim). The `p` param is the structural subset those variants share: a
+ * required `name` and an optional `scope` / `version` / `reasons`. Both
+ * declares-flags are `false` (these arms never carry `dependencies`).
+ *
+ * `reasons` is OPTIONAL because `PluginDisabledMessage` declares it so;
+ * `composeReasons` already treats `undefined` as the empty list, so a required
+ * `readonly ContentReason[]` caller is unaffected. This is what lets the
+ * `disabled` arm share this composer instead of restating its body -- the four
+ * command-local copies were byte-identical to it, which is exactly the
+ * property their comments asked a reader to maintain by hand.
  */
 export function pluginRow(
   icon: string,
@@ -2179,7 +2185,7 @@ export function pluginRow(
     readonly name: string;
     readonly scope?: Scope;
     readonly version?: string;
-    readonly reasons: readonly ContentReason[];
+    readonly reasons?: readonly ContentReason[];
   },
   mpScope: Scope,
   label: string,

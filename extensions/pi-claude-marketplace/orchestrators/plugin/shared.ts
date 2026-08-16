@@ -514,18 +514,11 @@ export async function selectDeclaringConfigWriteTarget(opts: {
     loadConfig(opts.locations.configLocalJsonPath),
   ]);
 
-  // A typed flag names the destination outright, so no file has to be read to
-  // find it and an unreadable local file cannot make the answer unknowable.
-  // Absent the flag the local file IS the determinant, and an unreadable one
-  // leaves the destination unknown -- abort rather than guess the shadowed
-  // file.
-  if (opts.local !== true && localCfg.status === "invalid") {
+  if (localFileLeavesTargetUnknowable(opts.local, localCfg)) {
     return { kind: "unreadable", filePath: localCfg.filePath };
   }
 
-  const targetIsLocal =
-    opts.local === true ||
-    (localCfg.status === "valid" && localCfg.config.plugins?.[opts.key] !== undefined);
+  const targetIsLocal = resolveTargetIsLocal(opts.local, localCfg, opts.key);
   // Delegate the file pairing to the flag-only selector so `--local`'s pairing
   // -- and its ENOENT fresh-create contract -- keeps exactly one definition,
   // then key the two parses off those PATHS rather than off `targetIsLocal` a
@@ -534,20 +527,56 @@ export async function selectDeclaringConfigWriteTarget(opts: {
     opts.locations,
     targetIsLocal,
   );
-  const isLocalPath = (p: string): boolean => p === opts.locations.configLocalJsonPath;
-  const targetCfg = isLocalPath(targetConfigPath) ? localCfg : baseCfg;
+  const parseFor = (p: string): ConfigLoadResult =>
+    p === opts.locations.configLocalJsonPath ? localCfg : baseCfg;
+  const targetCfg = parseFor(targetConfigPath);
   if (targetCfg.status === "invalid") {
     return { kind: "unreadable", filePath: targetCfg.filePath };
   }
 
-  const siblingCfg = isLocalPath(siblingConfigPath) ? localCfg : baseCfg;
   return {
     kind: "selected",
     targetConfigPath,
     targetIsLocal,
-    current: targetCfg.status === "valid" ? targetCfg.config : { schemaVersion: 1 },
-    sibling: readableConfig(siblingCfg),
+    current: configOrEmpty(targetCfg),
+    sibling: readableConfig(parseFor(siblingConfigPath)),
   };
+}
+
+/**
+ * A typed flag names the destination outright, so no file has to be read to
+ * find it and an unreadable local file cannot make the answer unknowable.
+ * Absent the flag the local file IS the determinant, and an unreadable one
+ * leaves the destination unknown -- abort rather than guess the shadowed file.
+ */
+function localFileLeavesTargetUnknowable(
+  local: boolean | undefined,
+  localCfg: ConfigLoadResult,
+): localCfg is InvalidConfigLoad {
+  return local !== true && localCfg.status === "invalid";
+}
+
+/**
+ * CFG-02 / D-01: the local file answers the key when the caller typed
+ * `--local`, or when it declares the key itself -- a local entry REPLACES the
+ * same-keyed base entry wholesale, so its mere presence decides the target.
+ */
+function resolveTargetIsLocal(
+  local: boolean | undefined,
+  localCfg: ConfigLoadResult,
+  key: string,
+): boolean {
+  if (local === true) {
+    return true;
+  }
+
+  return localCfg.status === "valid" && localCfg.config.plugins?.[key] !== undefined;
+}
+
+type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
+
+function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
+  return result.status === "valid" ? result.config : { schemaVersion: 1 };
 }
 
 /**

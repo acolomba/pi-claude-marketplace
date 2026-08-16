@@ -660,7 +660,7 @@ async function readManifest(
  * source is the load-bearing fact: a reader at the call site needs to know WHICH
  * declaration was consulted, not merely that a boolean came back.
  */
-export function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
+function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
   return entry.defaultEnabled === false;
 }
 
@@ -1485,6 +1485,57 @@ export async function resolveStrict(
   entry: PluginEntry,
   ctx: ResolveContext,
 ): Promise<ResolvedPlugin> {
+  return resolveWithMode(entry, ctx, {
+    // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
+    // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
+    // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
+    // dir exists on disk and is not already declared, it is appended to the
+    // array. First-wins dedup by relative-path string preserves ordering
+    // (declared first, implicit last).
+    collectComponentKind: (args) =>
+      collectStrictComponentKind(
+        args.entry,
+        args.manifest,
+        args.partial,
+        args.pluginRoot,
+        args.ctx,
+        args.kind,
+      ),
+    // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
+    applyMcp: (args) =>
+      applyStrictMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+  });
+}
+
+/**
+ * The stage pipeline both resolution modes run, with the two mode-specific
+ * stages injected. Steps 8b, 9 and 10 and the final decision are mode-agnostic
+ * and were byte-identical in both callers, which is what made a shared driver
+ * the honest shape rather than a coincidence worth restating twice.
+ */
+interface ResolveMode {
+  readonly collectComponentKind: (args: {
+    readonly entry: PluginEntry;
+    readonly manifest: Record<string, unknown> | null;
+    readonly partial: PartialResolution;
+    readonly pluginRoot: string;
+    readonly ctx: ResolveContext;
+    readonly kind: SupportedPathKind;
+  }) => Promise<boolean>;
+  readonly applyMcp: (args: {
+    readonly entry: PluginEntry;
+    readonly manifest: Record<string, unknown> | null;
+    readonly partial: PartialResolution;
+    readonly pluginRoot: string;
+    readonly ctx: ResolveContext;
+  }) => Promise<boolean>;
+}
+
+async function resolveWithMode(
+  entry: PluginEntry,
+  ctx: ResolveContext,
+  mode: ResolveMode,
+): Promise<ResolvedPlugin> {
   const pre = await preflightStages(entry, ctx);
 
   if (pre.kind === "unavailable") {
@@ -1492,34 +1543,7 @@ export async function resolveStrict(
   }
 
   const { pluginRoot, manifest, partial, defaultEnabled } = pre;
-  // D-64-07: `dirty` is the STRUCTURAL accumulator (component-path /
-  // mcp / hooks defects). The unsupported-component signal lives
-  // separately in `partial.unsupported` -- see the decision below.
-  let dirty = false;
-
-  // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
-  // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
-  // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
-  // dir exists on disk and is not already declared, it is appended to the
-  // array. First-wins dedup by relative-path string preserves ordering
-  // (declared first, implicit last).
-  //
-  // HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
-  // NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
-  // per-entry component-path semantics. The hooks-config probe in step 8b
-  // owns the discovery + admission of the `hooks` supported kind.
-  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
-    dirty =
-      (await collectStrictComponentKind(entry, manifest, partial, pluginRoot, ctx, kind)) || dirty;
-  }
-
-  // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
-  dirty = (await applyStrictMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
-
-  // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
-  // either add `hooks` to supported (parse OK) or flip installable=false
-  // with the parse-failure detail.
-  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
+  const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial, mode });
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
@@ -1528,13 +1552,55 @@ export async function resolveStrict(
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
+  noteDeclaredDependencies(entry, partial);
 
-  // Step 10 (PR-5): dependencies stay installable but get a note.
+  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
+}
+
+/**
+ * D-64-07: the STRUCTURAL accumulator (component-path / mcp / hooks defects).
+ * The unsupported-component signal lives separately in `partial.unsupported`.
+ * Every stage runs -- the flags are collected and folded at the end rather than
+ * short-circuited, which is what the original `(await stage()) || dirty` chain
+ * did too.
+ *
+ * HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
+ * NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
+ * per-entry component-path semantics. The hooks-config probe in step 8b owns
+ * the discovery + admission of the `hooks` supported kind.
+ */
+async function runStructuralStages(args: {
+  readonly entry: PluginEntry;
+  readonly ctx: ResolveContext;
+  readonly pluginRoot: string;
+  readonly manifest: Record<string, unknown> | null;
+  readonly partial: PartialResolution;
+  readonly mode: ResolveMode;
+}): Promise<boolean> {
+  const { entry, ctx, pluginRoot, manifest, partial, mode } = args;
+  const flags: boolean[] = [];
+
+  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
+    flags.push(
+      await mode.collectComponentKind({ entry, manifest, partial, pluginRoot, ctx, kind }),
+    );
+  }
+
+  flags.push(await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }));
+  // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
+  // either add `hooks` to supported (parse OK) or flip installable=false with
+  // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
+  // conflict semantics are deferred, so the convention file is the sole gate.
+  flags.push(await applyHooksConfig(ctx, pluginRoot, partial));
+
+  return flags.includes(true);
+}
+
+/** Step 10 (PR-5): dependencies stay installable but get a note. */
+function noteDeclaredDependencies(entry: PluginEntry, partial: PartialResolution): void {
   if ((entry as Record<string, unknown>).dependencies !== undefined) {
     partial.notes.push(`declares dependencies that must be installed manually`);
   }
-
-  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
 }
 
 /**
@@ -1578,45 +1644,24 @@ export async function resolveLoose(
   entry: PluginEntry,
   ctx: ResolveContext,
 ): Promise<ResolvedPlugin> {
-  const pre = await preflightStages(entry, ctx);
-
-  if (pre.kind === "unavailable") {
-    return pre.result;
-  }
-
-  const { pluginRoot, manifest, partial, defaultEnabled } = pre;
-  // D-64-07: structural accumulator only (see resolveStrict).
-  let dirty = false;
-
-  // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
-  // manifest declarations without a matching entry-level declaration are a
-  // conflict. Array shape mirrors strict mode, but with first-wins dedup
-  // applied only to entry-declared paths (no convention probing).
-  //
-  // HOOK-01: iterates the PATH-kinds subset only (see strict-mode note above).
-  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
-    dirty = (await collectLooseComponentKind(entry, manifest, partial, pluginRoot, kind)) || dirty;
-    // No implicit-by-convention in loose mode.
-  }
-
-  // Step 8 (MM-7 loose mcpServers).
-  dirty = (await applyLooseMcp(entry, manifest, partial, pluginRoot, ctx)) || dirty;
-
-  // Step 8b (HOOK-01 / D-57-04): the hooks-config probe is mode-agnostic.
-  // Entry-vs-manifest hooks-FIELD conflict semantics are deferred to future
-  // hooks-dispatch work; here the convention file is the sole gate.
-  dirty = (await applyHooksConfig(ctx, pluginRoot, partial)) || dirty;
-
-  // Step 9 (PR-3 / PR-4): unsupported components -- same as strict. D-64-07:
-  // side-effect only (does not feed `dirty`); read via `partial.unsupported`.
-  await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
-
-  // Step 10 (PR-5): dependencies stay installable but get a note.
-  if ((entry as Record<string, unknown>).dependencies !== undefined) {
-    partial.notes.push(`declares dependencies that must be installed manually`);
-  }
-
-  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
+  return resolveWithMode(entry, ctx, {
+    // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
+    // manifest declarations without a matching entry-level declaration are a
+    // conflict. Array shape mirrors strict mode, but with first-wins dedup
+    // applied only to entry-declared paths (no convention probing). The loose
+    // collector takes no `ctx` precisely because it never probes disk.
+    collectComponentKind: (args) =>
+      collectLooseComponentKind(
+        args.entry,
+        args.manifest,
+        args.partial,
+        args.pluginRoot,
+        args.kind,
+      ),
+    // Step 8 (MM-7 loose mcpServers).
+    applyMcp: (args) =>
+      applyLooseMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+  });
 }
 
 /**

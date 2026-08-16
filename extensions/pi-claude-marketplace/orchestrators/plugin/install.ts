@@ -182,6 +182,7 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { UnstageOutcome } from "../marketplace/shared.ts";
 
 /**
  * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
@@ -1416,9 +1417,8 @@ async function disableFreshlyInstalledPlugin(args: {
   readonly plugin: string;
 }): Promise<{ readonly ok: true } | { readonly ok: false; readonly cause: Error }> {
   const { state, scope, locations, marketplace, plugin } = args;
-  const mp = state.marketplaces[marketplace];
-  const installed = mp?.plugins[plugin];
-  if (mp === undefined || installed === undefined) {
+  const target = locateFreshlyInstalledRecord(state, marketplace, plugin);
+  if (target === undefined) {
     return {
       ok: false,
       cause: new Error(
@@ -1427,23 +1427,58 @@ async function disableFreshlyInstalledPlugin(args: {
     };
   }
 
-  const cascade = await cascadeUnstagePlugin(plugin, marketplace, locations, installed);
+  const cascade = await cascadeUnstagePlugin(plugin, marketplace, locations, target.installed);
   if (!cascade.ok) {
-    applyPartialCascadeFold(installed, cascade.dropped);
-    installed.updatedAt = new Date().toISOString();
-    if (cascade.dropped.hooks.length > 0) {
-      dropInstallDisabledHooks(scope, marketplace, plugin);
-    }
-
-    return {
-      ok: false,
-      cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`),
-    };
+    return foldFailedDisableCascade({ ...args, installed: target.installed, cascade });
   }
 
-  mp.plugins[plugin] = toDisabledRecord(installed, new Date().toISOString());
+  target.mp.plugins[plugin] = toDisabledRecord(target.installed, new Date().toISOString());
   dropInstallDisabledHooks(scope, marketplace, plugin);
   return { ok: true };
+}
+
+/**
+ * Resolve the record the state phase just wrote. Both slots must be present:
+ * a marketplace with no plugin entry is the same internal error as no
+ * marketplace at all, so the pair is returned together or not at all.
+ */
+function locateFreshlyInstalledRecord(
+  state: ExtensionState,
+  marketplace: string,
+  plugin: string,
+): { readonly mp: MarketplaceStateRecord; readonly installed: InstalledPluginRecord } | undefined {
+  const mp = state.marketplaces[marketplace];
+  const installed = mp?.plugins[plugin];
+  if (mp === undefined || installed === undefined) {
+    return undefined;
+  }
+
+  return { mp, installed };
+}
+
+/**
+ * D-102-02: fold a failed cascade into the record and hand the cause back. The
+ * record keeps whatever the cascade actually removed so the caller can SAVE the
+ * shrunken shape rather than let the guard discard it on a throw (ST-7, NFR-3).
+ */
+function foldFailedDisableCascade(args: {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly installed: InstalledPluginRecord;
+  readonly cascade: UnstageOutcome;
+}): { readonly ok: false; readonly cause: Error } {
+  const { scope, marketplace, plugin, installed, cascade } = args;
+  applyPartialCascadeFold(installed, cascade.dropped);
+  installed.updatedAt = new Date().toISOString();
+  if (cascade.dropped.hooks.length > 0) {
+    dropInstallDisabledHooks(scope, marketplace, plugin);
+  }
+
+  return {
+    ok: false,
+    cause: cascade.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`),
+  };
 }
 
 /**
@@ -1475,16 +1510,41 @@ async function disableFreshlyInstalledPlugin(args: {
  * so no abort is owed there, and the arm reads exactly as it did before the
  * sibling parse was threaded.
  */
+type PluginConfigMap = ScopeConfig["plugins"];
+type PluginConfigEntry = NonNullable<PluginConfigMap>[string];
+type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
+type InstalledPluginRecord = MarketplaceStateRecord["plugins"][string];
+
+/**
+ * Sort the two parsed configs into the local-then-base pair the identity rule
+ * consumes. `targetIsLocal` names which of the two the CALLER is holding, so
+ * the sibling takes the other slot.
+ */
+function declaringPluginMaps(args: {
+  readonly current: ScopeConfig;
+  readonly sibling: ScopeConfig | undefined;
+  readonly targetIsLocal: boolean;
+}): { readonly local: PluginConfigMap; readonly base: PluginConfigMap } {
+  const siblingPlugins = args.sibling?.plugins;
+
+  return args.targetIsLocal
+    ? { local: args.current.plugins, base: siblingPlugins }
+    : { local: siblingPlugins, base: args.current.plugins };
+}
+
+function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | undefined {
+  return plugins?.[key];
+}
+
 function readDeclaredEnabled(args: {
   readonly current: ScopeConfig;
   readonly sibling: ScopeConfig | undefined;
   readonly targetIsLocal: boolean;
   readonly key: string;
 }): boolean | undefined {
-  const siblingPlugins = args.sibling?.plugins;
-  const localPlugins = args.targetIsLocal ? args.current.plugins : siblingPlugins;
-  const basePlugins = args.targetIsLocal ? siblingPlugins : args.current.plugins;
-  return (localPlugins?.[args.key] ?? basePlugins?.[args.key])?.enabled;
+  const { local, base } = declaringPluginMaps(args);
+
+  return (entryFor(local, args.key) ?? entryFor(base, args.key))?.enabled;
 }
 
 /**

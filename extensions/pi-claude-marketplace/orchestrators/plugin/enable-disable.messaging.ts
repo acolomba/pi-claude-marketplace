@@ -2,12 +2,9 @@ import {
   ICON_DISABLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  composeReasons,
   installedLikeRow,
-  joinTokens,
   partiallyInstalledRow,
   pluginRow,
-  renderScopeBracket,
   renderVersion,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -103,15 +100,7 @@ const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status
  * (ENBL-15 / D-100-06).
  */
 const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { status: K }>> } = {
-  disabled: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_DISABLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
-      renderVersion(p.version),
-      "(disabled)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
   skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };

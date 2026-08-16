@@ -1015,16 +1015,31 @@ async function applyBackfillForScopeIsolated(
   readResult: ScopeReadResult,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
+  await runScopeIsolated(scope, outcomes, () =>
+    applyBackfillForScope(opts, scope, readResult, outcomes),
+  );
+}
+
+/**
+ * The throw-to-`invalid-block` coercion both isolated wrappers apply. A
+ * transient `StateLockHeldError` or EACCES becomes a structured row (subject
+ * `state.json`, closed-set reason) carrying a redacted cause, so one scope's
+ * transient failure never aborts the cascade for the other.
+ */
+async function runScopeIsolated(
+  scope: Scope,
+  outcomes: PerEntryOutcome[],
+  op: () => Promise<void>,
+): Promise<void> {
   try {
-    await applyBackfillForScope(opts, scope, readResult, outcomes);
+    await op();
   } catch (err) {
-    const causeText = errorMessageOf(err);
     outcomes.push({
       kind: "invalid-block",
       scope,
       basename: "state.json",
       reason: classifyReadPassThrow(err),
-      cause: new Error(redactAbsolutePaths(causeText)),
+      cause: new Error(redactAbsolutePaths(errorMessageOf(err))),
     });
   }
 }
@@ -1506,18 +1521,7 @@ async function rebuildScopeRoutingTableIsolated(
   cwd: string,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  try {
-    await rebuildScopeRoutingTable(scope, cwd);
-  } catch (err) {
-    const causeText = errorMessageOf(err);
-    outcomes.push({
-      kind: "invalid-block",
-      scope,
-      basename: "state.json",
-      reason: classifyReadPassThrow(err),
-      cause: new Error(redactAbsolutePaths(causeText)),
-    });
-  }
+  await runScopeIsolated(scope, outcomes, () => rebuildScopeRoutingTable(scope, cwd));
 }
 
 export function surfacePostCommitWarnings(

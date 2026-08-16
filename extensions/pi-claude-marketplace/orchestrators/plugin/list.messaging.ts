@@ -165,15 +165,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // soft-dep marker whatever inventory the record retained (ENBL-15 /
   // D-100-06). Body otherwise lifted verbatim from the central
   // `renderPluginRow` disabled arm.
-  disabled: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_DISABLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
-      renderVersion(p.version),
-      "(disabled)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. Clones the `available` arm, swapping the glyph

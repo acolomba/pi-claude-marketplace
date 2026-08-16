@@ -132,15 +132,7 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
   // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
   // the record retained (ENBL-18). The enable-hint trailer is composed
   // centrally by the renderer, not here.
-  disabled: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_DISABLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
-      renderVersion(p.version),
-      "(disabled)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
 };
 
 /**

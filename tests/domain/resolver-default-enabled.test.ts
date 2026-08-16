@@ -13,25 +13,29 @@
 // user SEES on a row, so its silence rule is pinned here directly rather than
 // inferred from rendered bytes. A rule observed only through a renderer is a
 // rule whose boundary nobody has actually tested.
+//
+// The predicate itself is module-private, so the silence cases reach it through
+// `rowClaimsInstallDisabled(entry, undefined)`. That is the predicate and
+// nothing else: the wrapper is `declaredEnabled === undefined &&
+// entryDeclaresInstallDisabled(entry)`, so pinning `undefined` reduces it to the
+// entry-only rule exactly. This is still a direct domain-function assertion, not
+// an observation through a renderer.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  entryDeclaresInstallDisabled,
-  rowClaimsInstallDisabled,
-} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import { rowClaimsInstallDisabled } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 test("OUT-05 / DOC-02: `defaultEnabled` set to the false literal is a declaration", () => {
   const entry = { name: "alpha", source: "./alpha", defaultEnabled: false } as PluginEntry;
-  assert.equal(entryDeclaresInstallDisabled(entry), true);
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), true);
 });
 
 test("OUT-05 / DOC-02: `defaultEnabled` set to the true literal is silent", () => {
   const entry = { name: "alpha", source: "./alpha", defaultEnabled: true } as PluginEntry;
-  assert.equal(entryDeclaresInstallDisabled(entry), false);
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), false);
 });
 
 test("OUT-05 / DOC-02: an entry omitting `defaultEnabled` is silent -- absence is not a declaration", () => {
@@ -39,7 +43,7 @@ test("OUT-05 / DOC-02: an entry omitting `defaultEnabled` is silent -- absence i
   // cases above and fails HERE, claiming on every silent entry in the corpus.
   // That is the whole reason this case exists.
   const entry = { name: "alpha", source: "./alpha" } as PluginEntry;
-  assert.equal(entryDeclaresInstallDisabled(entry), false);
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), false);
 });
 
 test("OUT-05 / DOC-02: a non-boolean `defaultEnabled` is silent -- a value past the validator degrades, it never claims", () => {
@@ -54,7 +58,7 @@ test("OUT-05 / DOC-02: a non-boolean `defaultEnabled` is silent -- a value past 
     source: "./alpha",
     defaultEnabled: "false",
   } as unknown as PluginEntry;
-  assert.equal(entryDeclaresInstallDisabled(entry), false);
+  assert.equal(rowClaimsInstallDisabled(entry, undefined), false);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
