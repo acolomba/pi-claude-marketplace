@@ -134,6 +134,48 @@ the gap.
 Note the asymmetry this leaves today: a green local `npm run check` does not
 imply the pull-request gate will pass.
 
+## FLOW-03: the audit gate over-attributes inherited findings on large diffs
+
+Filed 2026-08-16, hit by PR #130 (the defaults-enabled milestone).
+
+`lint.yml`'s `fallow` job runs `fallow:audit --changed-since origin/main`, whose
+default `gate: new-only` is supposed to fail only on findings a change
+introduces. On a 142-file, 163-commit branch it excluded 210 findings as
+inherited and still failed on 55 dead-code, 140 complexity and 33 duplication
+findings -- most of which the branch did not introduce.
+
+The attribution looks line-anchored, and a large insertion moves every function
+below it. Two flagged functions were checked by hand and neither was touched:
+`applyMcpValue` (`domain/resolver.ts:1334`) and `readStandaloneMcp`
+(`resolver.ts:1051`) both exist on `main`, and that file's diff hunks jump
+straight from line 759 to 1350, so both sit outside every hunk. They only
+shifted down the file. `filtersPassive` (`orchestrators/plugin/list.ts:200`) and
+`backfillOnePluginIsolated` (`orchestrators/reconcile/apply.ts:1132`) are
+likewise present on `main`.
+
+The adoption PR validated this job against a 57-file change and all 12 checks
+passed. PR #130 is the first change large enough to stress it, which is why the
+gap surfaced only now.
+
+Not every finding is noise, and the distinction matters when picking this up.
+`entryDeclaresInstallDisabled` (`resolver.ts:663`) is genuinely new and is
+genuinely reported as an unused export -- it is used internally at
+`resolver.ts:693` and by three test files, and `production: true` excludes tests
+from the consumer graph. That is the reachability model working correctly, the
+same behavior the adoption PR already described when it kept four dead-code
+candidates that only tests import. The defect is the line-shift attribution, not
+the test-exclusion rule.
+
+To settle when picking this up: whether fallow can anchor new-only attribution
+on content rather than position, whether the gate should scope to changed hunks
+instead of changed files, and what the fallback is for a legitimately large
+branch if neither is available -- failing every big PR is not a gate, it is a
+tax.
+
+Verify with a branch that inserts a few hundred lines above an untouched
+function that already breaches a threshold, and confirm the gate does not flag
+it. A small diff proves nothing here, because a small diff shifts nothing.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
