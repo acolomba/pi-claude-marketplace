@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
 current_plan: Not started
-status: Awaiting next milestone
+status: "Milestone defaults-enabled shipped — PR #130"
 stopped_at: Milestone complete and archived; awaiting the next milestone
-last_updated: "2026-08-16T00:03:36.043Z"
+last_updated: "2026-08-16T01:47:06.210Z"
 last_activity: 2026-08-15
-last_activity_desc: Phase 105 closed — six plans across three waves, seven review findings fixed, 4/4 criteria verified by mutation; all five phases complete
+current_phase: 105
+current_phase_name: No-op parity sweep and contract documentation
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 23
   completed_plans: 23
   percent: 100
-current_phase: 105
-current_phase_name: No-op parity sweep and contract documentation
+last_activity_desc: Phase 105 closed — six plans across three waves, seven review findings fixed, 4/4 criteria verified by mutation; all five phases complete
 ---
 
 # Project State
@@ -45,8 +45,8 @@ the divergences this milestone deliberately does not close.
 
 Phase: Milestone defaults-enabled complete
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-15 — Milestone defaults-enabled completed and archived
+Status: Milestone defaults-enabled shipped — PR #130
+Last activity: 2026-08-15 — Milestone defaults-enabled shipped as PR #130
 
 ## Progress
 
