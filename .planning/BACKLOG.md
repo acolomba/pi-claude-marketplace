@@ -167,6 +167,70 @@ Verify by widening the glob against the current tree and confirming a clean
 `npm run lint`, then planting a two-file cycle outside `orchestrators/` and
 confirming the rule -- not just fallow -- fails on it.
 
+## FLOW-04: converge the local and pull-request fallow gates on whole-repo, all-checks
+
+Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
+
+FLOW-02 closed the specific hole where a new cycle failed CI but not the local
+gate. The two gates still answer different questions, and neither is a superset
+of the other:
+
+| | local `npm run fallow` | CI `fallow:audit` |
+|---|---|---|
+| Subcommand | `dead-code` | `audit` |
+| Scope | whole repo | changed files only |
+| Classes | boundary violations, circular deps, re-export cycles | dead-code + complexity + duplication + styling |
+| Verdict | any finding, inherited or new | only newly-introduced findings |
+
+A green local run therefore does not imply a green pull-request gate -- add a
+complex or duplicated function and CI fails on something local never examines.
+The delta-scoping in CI exists only because of inherited findings; drive those
+to zero and `--changed-since` can become `--gate all`, at which point the two
+gates converge and the asymmetry is gone for good.
+
+**Why this is not a flag flip.** Whole-repo counts as of this filing:
+
+| Check | Findings |
+|-------|----------|
+| Dead code (`--no-production --include-entry-exports`) | 156 -- 2 files, 62 exports, 91 types, 1 stale suppression |
+| Complexity (`fallow health`) | 439 above threshold of 1517 analyzed, maintainability 87.5 (good) |
+| Duplication (`fallow dupes`) | 2,104 lines (3.5%) across 55 files |
+
+**Do the config fix first -- it is the unlock.** `.fallowrc.json` sets
+`production: true`, which excludes tests from the reachability graph. Against
+this project's deliberate `_*ForTest` seam convention that manufactures roughly
+130 false positives: unisolated dead-code reports 294 findings under
+`production: true` versus 156 under `--no-production --include-entry-exports`.
+Until that is settled, "suppress the false positives" means ~130 suppression
+comments, and no dead-code finding can be trusted on sight. This is not
+hypothetical -- it is exactly why fallow flagged the load-bearing `currentEpoch`
+and `getRoutingBucket` re-exports in `event-router.ts`, which now carry an
+inline suppression rather than a removal.
+
+The tradeoff to decide: `production: true` is designed to catch production code
+whose only consumer is its own test, which is real dead weight. This project's
+seam convention makes that same signal overwhelmingly false. Pick deliberately.
+
+**Sequence.** Same clean-then-gate pattern that landed `--circular-deps`: get a
+class to zero, then add its flag in that same change. Never add a flag first --
+it fails on the inherited findings at the first commit.
+
+1. Settle the `production` question; re-baseline the dead-code count.
+2. Triage the resulting dead-code findings; gate dead-code whole-repo at zero.
+3. Then, and only then, switch CI from `--changed-since` to `--gate all`.
+
+**Complexity and duplication are threshold tuning, not a defect list.** 439
+findings against maintainability 87.5 ("good") says the default thresholds are
+stricter than this codebase's norm. Gating them means choosing thresholds
+first; otherwise the options are raising them until green (cosmetic -- and the
+spike series already caught one cosmetic-lever trap in `rules.<name>` severity)
+or a large refactor. Advisory in CI is the honest posture for these two until
+someone decides what the thresholds should be.
+
+Related: FLOW-01 (unzoned files are boundary-unchecked) is the same class of
+problem -- a gate that is complete by accident of the current tree rather than
+by construction.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
