@@ -16,7 +16,6 @@ tech_debt:
   - phase: cross-cutting
     items:
       - "5 of 23 SUMMARY files carry no `requirements-completed` frontmatter (102-01/02/03, 105-01/02). Bookkeeping only -- all five requirements were manually cross-checked against the phase VERIFICATION tables and are SATISFIED with evidence."
-      - "4 of 5 phases have `status: draft` VALIDATION.md (102, 103, 104, 105). Under the NOT-VALIDATED rule this is a coverage TODO -- run `/gsd-validate-phase <N>` -- not a compliance failure."
   - phase: 104-pre-install-read-surfaces
     items:
       - "Two catalog blocks are paired with a different renderer than the rest of their section: the list-surface `available` / `remote` fixtures drive `notifyWithContext(..., LIST_CONTEXT, ...)` rather than plain `notify()`, because the central `renderPluginRow` arms deliberately drop `reasons`. Guarded by a drop assertion in `notify-not-installed-reasons.test.ts`, but not by the catalog."
@@ -131,15 +130,21 @@ risk:
 | Phase | VALIDATION.md | status | Classification |
 |-------|---------------|--------|----------------|
 | 101 | exists | validated / compliant | COMPLIANT |
-| 102 | exists | draft | NOT-VALIDATED |
-| 103 | exists | draft | NOT-VALIDATED |
-| 104 | exists | draft | NOT-VALIDATED |
-| 105 | exists | draft | NOT-VALIDATED |
+| 102 | exists | validated / compliant | COMPLIANT |
+| 103 | exists | validated / compliant | COMPLIANT |
+| 104 | exists | validated / compliant | COMPLIANT |
+| 105 | exists | validated / compliant | COMPLIANT |
 
-`status: draft` means the file was seeded at planning time and never reconciled by
-`validate-phase`, so its `nyquist_compliant` flag is not authoritative. This is a
-coverage TODO — `/gsd-validate-phase <N>` — not a compliance failure. Overall:
-**1 compliant, 4 not-validated, 0 partial, 0 missing.**
+**Overall: 5 compliant, 0 not-validated, 0 partial, 0 missing.**
+
+The four `draft` files were reconciled at the close rather than accepted as debt.
+`validate-phase` found **zero coverage gaps**: every row in every per-task map
+already carried a green automated command, and the `draft` status meant only that
+no run had ever promoted the files out of their planning-time seed. Two rows in
+Phase 105 remain manual by nature — the `(available)` token-table cell and
+`docs/plugin-enablement.md` — because prose has no behavior to sample; both were
+verified by reading, and they are declared as manual-only rather than claiming a
+green test.
 
 ## Quality Gate
 
