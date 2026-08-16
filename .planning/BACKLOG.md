@@ -134,47 +134,46 @@ the gap.
 Note the asymmetry this leaves today: a green local `npm run check` does not
 imply the pull-request gate will pass.
 
-## FLOW-03: the audit gate over-attributes inherited findings on large diffs
+## FLOW-03: CRAP is scored against assumed-zero coverage, so the real ceiling is cyclomatic 4
 
 Filed 2026-08-16, hit by PR #130 (the defaults-enabled milestone).
 
-`lint.yml`'s `fallow` job runs `fallow:audit --changed-since origin/main`, whose
-default `gate: new-only` is supposed to fail only on findings a change
-introduces. On a 142-file, 163-commit branch it excluded 210 findings as
-inherited and still failed on 55 dead-code, 140 complexity and 33 duplication
-findings -- most of which the branch did not introduce.
+`health.coverage` and `health.coverageRoot` are unset, documented as the
+"Istanbul coverage path and path-prefix strip for accurate CRAP". With no
+coverage supplied, every finding reports `coverage_tier: "none"` and
+`coverage_source: "estimated"`, and CRAP collapses to `cyclomatic^2 +
+cyclomatic`. All four complexity findings on this branch match that exactly: 6
+-> 42, 8 -> 72, 10 -> 110, 17 -> 306.
 
-The attribution looks line-anchored, and a large insertion moves every function
-below it. Two flagged functions were checked by hand and neither was touched:
-`applyMcpValue` (`domain/resolver.ts:1334`) and `readStandaloneMcp`
-(`resolver.ts:1051`) both exist on `main`, and that file's diff hunks jump
-straight from line 759 to 1350, so both sit outside every hunk. They only
-shifted down the file. `filtersPassive` (`orchestrators/plugin/list.ts:200`) and
-`backfillOnePluginIsolated` (`orchestrators/reconcile/apply.ts:1132`) are
-likewise present on `main`.
+`health.maxCrap` is 30 and reports at or above, so cyclomatic 5 scores exactly
+30 and is flagged. **The effective ceiling for any new or modified function is
+cyclomatic 4**, no matter how well tested it is. Three of the four findings here
+breached CRAP alone, with cyclomatic and cognitive both comfortably under their
+own ceilings (10/20 and 8/15, 8/20 and 3/15, 6/20 and 6/15). Only
+`availableRowMessage` breached a real limit, cognitive 16 against 15.
 
-The adoption PR validated this job against a 57-file change and all 12 checks
-passed. PR #130 is the first change large enough to stress it, which is why the
-gap surfaced only now.
+This is why 136 of the 140 complexity findings are inherited: most of the
+codebase does not meet a cyclomatic-4 bar either. `gate: new-only` grandfathers
+them, so the tax falls entirely on new work.
 
-Not every finding is noise, and the distinction matters when picking this up.
-`entryDeclaresInstallDisabled` (`resolver.ts:663`) is genuinely new and is
-genuinely reported as an unused export -- it is used internally at
-`resolver.ts:693` and by three test files, and `production: true` excludes tests
-from the consumer graph. That is the reachability model working correctly, the
-same behavior the adoption PR already described when it kept four dead-code
-candidates that only tests import. The defect is the line-shift attribution, not
-the test-exclusion rule.
+The repo already produces the input. `npm run test:coverage` emits
+`coverage/unit.lcov`, `integration.lcov` and `e2e.lcov`, which
+`sonar-project.properties` already consumes. Two things to settle: whether
+fallow's Istanbul reader accepts lcov directly or wants `coverage-final.json`,
+and that neither `npm run check` nor `lint.yml`'s `fallow` job currently
+generates coverage at all -- so wiring this adds a coverage run to that job, and
+its cost has to be weighed against the ~3 minutes the job takes today.
 
-To settle when picking this up: whether fallow can anchor new-only attribution
-on content rather than position, whether the gate should scope to changed hunks
-instead of changed files, and what the fallback is for a legitimately large
-branch if neither is available -- failing every big PR is not a gate, it is a
-tax.
+Verify by recording a function's CRAP before and after pointing `health.coverage`
+at a real report; a well-covered cyclomatic-10 function should fall from 110 to
+near its cyclomatic count. Until then, treat cyclomatic 4 as the budget when
+writing new functions, and expect CRAP-only findings that say nothing about
+whether the code is tested.
 
-Verify with a branch that inserts a few hundred lines above an untouched
-function that already breaches a threshold, and confirm the gate does not flag
-it. A small diff proves nothing here, because a small diff shifts nothing.
+Filed after an incorrect first diagnosis of the same failure, which is worth
+recording: fallow's human output lists inherited and introduced findings
+together, and only `--format json` carries the per-finding `introduced` boolean
+that separates them. Read the JSON before concluding anything about attribution.
 
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
