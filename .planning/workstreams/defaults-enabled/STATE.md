@@ -2,11 +2,10 @@
 gsd_state_version: 1.0
 milestone: defaults-enabled
 milestone_name: defaultEnabled Manifest Field
-current_phase: 105
 current_plan: Not started
-status: completed
-stopped_at: All five phases closed and verified; milestone ready for audit
-last_updated: "2026-08-15T23:47:45.917Z"
+status: Awaiting next milestone
+stopped_at: Milestone complete and archived; awaiting the next milestone
+last_updated: "2026-08-16T00:03:36.043Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 105 closed — six plans across three waves, seven review findings fixed, 4/4 criteria verified by mutation; all five phases complete
 progress:
@@ -15,6 +14,7 @@ progress:
   total_plans: 23
   completed_plans: 23
   percent: 100
+current_phase: 105
 current_phase_name: No-op parity sweep and contract documentation
 ---
 
@@ -43,11 +43,10 @@ the divergences this milestone deliberately does not close.
 
 ## Current Position
 
-Phase: 105 — No-op parity sweep and contract documentation (final phase)
-Plan: 6 of 6 — complete
-Status: All five phases complete and verified; milestone ready for audit
-Last activity: 2026-08-15 — Phase 105 closed: six plans across three waves, seven
-code-review findings fixed, 4/4 success criteria verified by mutation.
+Phase: Milestone defaults-enabled complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-15 — Milestone defaults-enabled completed and archived
 
 ## Progress
 
@@ -360,3 +359,7 @@ exist and GSD reports no phases, exiting clean — a false negative.
   source-level grep, not only a behavioral test. `update` and `reinstall` never
   read `defaultEnabled` today; the gate fails at the token, before a behavior
   exists to test.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

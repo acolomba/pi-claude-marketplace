@@ -1,3 +1,12 @@
+# Requirements Archive: defaults-enabled defaultEnabled Manifest Field
+
+**Archived:** 2026-08-15
+**Status:** SHIPPED
+
+For current requirements, see `.planning/workstreams/defaults-enabled/REQUIREMENTS.md`.
+
+---
+
 # Requirements: defaults-enabled (milestone)
 
 **Defined:** 2026-08-14
