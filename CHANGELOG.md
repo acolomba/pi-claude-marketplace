@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.0] - 2026-08-17
 
 - No runtime behavior changes. This release is build and tooling only.
 - The `fallow` static-analysis gate now checks the whole repository for dead code, complexity and duplication, and the same `npm run fallow` command runs locally, in the pre-commit hook, and in CI. The local gate previously checked only boundary violations and cycles, while CI ran a different subcommand over only the changed files and failed on newly-introduced findings alone -- so a green local run did not imply a green pull request, and neither implied a clean codebase. A green run now means the same thing everywhere.

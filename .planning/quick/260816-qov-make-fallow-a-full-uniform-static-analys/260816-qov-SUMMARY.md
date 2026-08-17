@@ -3,8 +3,8 @@ task: 260816-qov-make-fallow-a-full-uniform-static-analys
 status: complete
 branch: features/fallow-full-gate
 started_head: 0ce620f1
-final_head: 5ac1fa8f
-commits: 15
+final_head: 10b8b19a
+commits: 20
 requirements: [FLOW-04, FLOW-01, NFR-5, NFR-6, IL-2]
 ---
 
@@ -308,6 +308,117 @@ workaround.
 `fallow dead-code` reports 0 issues and 0 stale suppressions. `npm run check`
 is green: 3466 unit tests pass (net +1 from the new routing-state module test,
 -2 from the deleted barrel-assertion tests), 21 integration tests pass.
+
+## Tasks 13-14 (added after Task 12)
+
+### Task 13 -- enable `private-type-leaks` and clear 78 findings
+
+Added a top-level `rules` block with `"private-type-leaks": "error"` -- the
+ONLY rule override in the project; everything else stays on fallow's defaults.
+No `--private-type-leaks` flag was added: the bare `fallow dead-code` reports
+all 78 and exits 1 with the rule alone, and the flag is a filter that would
+narrow the run to one issue type (the Task 2 trap).
+
+Resolution of the 78, by the requested categories:
+
+| Category | Findings |
+|---|---|
+| (a) export the referenced type | 57 |
+| (b) narrow / inline the signature | 2 |
+| (c) individual suppression with an inline reason | 19 |
+
+**(a) 57.** Nearly all were base interfaces and union members already
+referenced across a contract: `PluginOutcomeBase`, `OutcomeBase`,
+`PluginUpdateBase`, `ReinstallOutcomeBase`, `MpCommon` and the notify message
+variants. Exporting cascaded twice -- exporting a type revealed the private
+types ITS signature named (`MpCommon`, `StatKind`, `InstallCtx`) -- so this was
+iterated to convergence.
+
+**(b) 2.** `SpawnImpl` was a one-token alias for `typeof spawn` in two files, so
+both `_setSpawnForTest` signatures now say `typeof spawn` directly. That removes
+the leak without exporting anything. `OrphanProbes` and `HookExecutor` are
+multi-field, so inlining them would duplicate real structure -- those went to (c).
+
+**(c) 19, in two groups.** Eight are internals of compile-time assertions
+(`_AssertTrue`, `_AssertNever`, `_ReasonInSet`, `_DroppedHookArmKeysDrift`,
+`_UncoveredReason`, `_ExtraReason`), which belong to drift guards whose export
+exists only so `noUnusedLocals` treats them as consumed. Those lines already
+carried an `unused-type` suppression, so the slug list is now comma-separated
+on one directive -- a form I verified works before relying on it.
+
+**The other 11 are the FLOW-09 cluster, reported rather than silenced by
+widening the surface.** Each is an internal type reached only through a
+`__test_*` or `_set*ForTest` export: `OrphanProbes`, `HookExecutor`,
+`RefreshOneArgs`, `RefreshSnapshot`, `EntityErrorRow`, `ListReason`,
+`FilterBucket`, `PluginRecord`, `ScopeReadResult`. Exporting them would widen
+the public API to serve a test -- the anti-pattern CONVENTIONS.md names -- and
+the clean fix is dependency injection. Each suppression names its type and
+cites FLOW-09. Every new suppression uses the inline `-- reason` form, so it
+would already satisfy `require-suppression-reason`.
+
+`EntityErrorRow` looked like a genuine cross-module contract (it appears in
+three `edge/` files), but all three occurrences are COMMENTS -- the same trap
+as before.
+
+Also corrected two comments left stale by the aggregate-barrel deletion: the
+import-boundaries canary now names the fixture's real target
+(`bridges/agents/index.ts`), and `discover-names.ts` describes the aggregate in
+the past tense.
+
+**Plants:** an exported function with a non-exported parameter type exits 1 and
+reverts to 0; the orphan-file and cross-zone-import plants still exit 1 and
+revert to 0. No probe file left behind.
+
+### Task 14 -- `fallow audit` back as an additional PR-time layer
+
+Not a reversal of Task 7. Audit was previously the ONLY CI gate and was
+delta-scoped, so a dirty repo passed CI while local disagreed. The whole-repo
+`npm run fallow` is now the blocking authority in all three surfaces; audit is
+a second job doing a DIFFERENT job -- new-vs-inherited attribution on the diff.
+
+`fallow ci-template` only ships a GitLab template, so the YAML is hand-rolled
+on fallow's documented GitHub guidance: `--format github-annotations`, which
+renders on fork PRs without a write token. The existing `fallow` job is
+untouched and stays shallow; the new `fallow-audit` job takes `fetch-depth: 0`,
+fetches the base branch explicitly, and pins `--base` to the PR base ref.
+Default `new-only` gate; `--gate all` deliberately not passed.
+
+**Verification 1 -- the 9 inherited dead-code findings are gone.**
+
+| | before Task 13 | after |
+|---|---|---|
+| dead_code introduced / inherited | 0 / 9 | **0 / 0** |
+| complexity introduced / inherited | 0 / 0 | 0 / 0 |
+| duplication introduced / inherited | 3 / 24 | 3 / 26 |
+| changed_files_count | 168 | 170 |
+
+Better than the "ideally 0" target: nothing survives, including the
+`_DroppedHookArmKeysCheck`-style guards, because audit honours the inline
+suppressions Task 13 added.
+
+**Verification 2 -- audit and the full gate agree on rule set.** The single
+divergence was `private-type-leaks`, which audit enables by default and our
+bare `dead-code` did not see until Task 13 added it to config; that is closed.
+With 170 changed files against 440 in the repository, any additional default-on
+rule would surface as inherited findings, and inherited dead-code is 0 while
+the gate is also 0.
+
+The remaining difference is duplication's **verdict model, not its rule set**:
+audit counts clone groups per changed file, the gate applies a repo-wide
+percentage. Measured: introduced duplication yields `warn` / exit 0, while a
+planted introduced dead-code finding yields `fail` / exit 1. So duplication
+stays gated by `duplicates.threshold` in the whole-repo job, not by audit --
+recorded in STACK.md so it is not mistaken for a gap.
+
+Audit's styling analysis contributes nothing here (no CSS in the repo);
+`styling_introduced` / `styling_inherited` are structurally 0 and STACK.md says
+so explicitly.
+
+### Final state after Tasks 13-14
+
+`fallow dead-code` reports 0 issues and 0 stale suppressions across all classes
+including `private-type-leaks`. `npm run check` is green: 3466 unit tests, 21
+integration tests. Version deliberately untouched at 0.15.0.
 
 ## Known stubs
 
