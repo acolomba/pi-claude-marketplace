@@ -519,6 +519,69 @@ WITHOUT the `includeEntryExports` workaround.
 Distinct from FLOW-08: that one is dead re-export lines in the bridge barrels,
 a different cause with a different fix.
 
+## FLOW-10: duplication is gated by one repo-wide percentage and nothing else
+
+Filed 2026-08-17 while measuring the audit job's real behaviour on PR #132.
+
+`fallow audit` reports introduced duplication but does not fail on it. The
+verdict is `warn` and the exit code is 0, and this holds under BOTH gate
+modes -- `--gate all` was measured exiting 0 on a branch carrying 3
+introduced and 26 inherited clone groups, exactly as `new-only` did. So the
+PR-time job contributes attribution, not enforcement, for this one class.
+
+That leaves `duplicates.threshold` in `npm run fallow` as the only real
+duplication gate, and it is a whole-repo percentage. The repository sits at
+2.1% against a threshold of 3, so roughly 0.9 points of headroom can be
+spent by any pull request without either job objecting. At the current
+62,170 analysed lines that is on the order of 500 duplicated lines.
+
+This is the direct consequence of raising the threshold from 2.2 to 3
+earlier on the same branch, which was the right call at the time: 2.2 was
+set against a tree that had just been cleaned and left no room to work.
+The question is whether the headroom should be ratcheted back down as the
+number settles, or whether a percentage is simply the wrong instrument and
+introduced-clone-count wants its own gate.
+
+Not urgent. It is a slow leak, not a hole -- but it is invisible until
+someone reads the exit code rather than the red `✗ 1,321 lines (2.1%)`
+line, which prints on a passing run.
+
+Code seams: `.fallowrc.json` (`duplicates.threshold`), `package.json`
+(`npm run fallow`), `.github/workflows/lint.yml` (`fallow-audit`).
+
+## FLOW-11: PR annotations are capped below the finding count
+
+Filed 2026-08-17 from the first `fallow-rs/fallow@v3` run on PR #132.
+
+The audit job reports through `--format github-annotations`, which emits
+log-based `::warning` lines the runner turns into inline markers. The format
+was chosen because it renders on fork pull requests without a write token,
+unlike the PR-comment and review formats. That reasoning still holds.
+
+The limit is GitHub's, and the action states it in the job log:
+
+```text
+##[notice]fallow emitted 8 annotations; GitHub shows at most 10 per type per step
+```
+
+Eight is under the cap, so nothing was lost on that run. But the count
+scales with the diff, and a hand-rolled whole-repo variant of the same
+command emitted 59 locally. A larger pull request will cross 10 silently.
+Findings on lines outside the diff also fall back to the check summary
+rather than rendering inline.
+
+Two ways out, neither taken. The action exposes `sarif: true`, which
+uploads to GitHub Code Scanning -- free on public repositories, no
+per-step cap, findings persist across runs -- at the cost of a
+`security-events: write` permission. Or `github-summary`, which renders the
+full markdown report in the job summary and also survives fork pull
+requests without a token.
+
+The job log always carries the complete list, so nothing is unreachable
+today; it is a discoverability ceiling, not a data loss.
+
+Code seams: `.github/workflows/lint.yml` (`fallow-audit`).
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
@@ -1312,7 +1375,22 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
 `ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
 
-## HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable
+## ~~HKNC-01: session_start lazy-hydrate `?? []` fallback is unreachable~~ -- CLOSED
+
+Closed 2026-08-17 by the routingTable encapsulation, which removed both
+`?? []` call sites as a side effect rather than as a targeted fix. The
+`routingTable` cell is module-private now, so the two reads go through
+`getRoutingBucket("SessionStart")` and the nullish arms this item named no
+longer exist. The fix note asked for both sites together; both went.
+
+NOT closed by the same change: the single `?? []` inside `getRoutingBucket`
+itself, which predates this item and has four other callers in dispatch.ts
+and settle.ts. Whether that arm is covered was not measured. And HKDIR-01,
+which merely QUOTED the same idiom, is untouched -- its defect is the
+cross-scope gate, and rewriting the expression preserved that semantics
+exactly.
+
+Original report follows.
 
 Surfaced 2026-08-14 measuring branch coverage on PR #127. Cosmetic; the
 only cost is a branch that can never go green.

@@ -228,7 +228,7 @@ const ResolvedPluginUnavailableSchema = Type.Object({
  * deleting it would orphan all three arm schemas, so the export is the only
  * form both gates accept.
  */
-// fallow-ignore-next-line unused-export
+// fallow-ignore-next-line unused-export -- canonical runtime definition of the NFR-7 discriminated union, consumed through `Type.Static`; un-exporting it trips `@typescript-eslint/no-unused-vars` ("only used as a type") and deleting it orphans all three arm schemas, so the export is the only form both gates accept.
 export const ResolvedPluginSchema = Type.Union([
   ResolvedPluginInstallableSchema,
   ResolvedPluginPartiallyAvailableSchema,
