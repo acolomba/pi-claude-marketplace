@@ -207,7 +207,7 @@ BEFORE its invocation joined the gate, never the reverse.
 |-------|-----------|------------|
 | Dead code | 156 findings | 0 |
 | Complexity (`fallow health`) | 439 above threshold | 0 |
-| Duplication (`fallow dupes`) | 3.5% | 2.12%, gated at a 2.2% threshold |
+| Duplication (`fallow dupes`) | 3.5% | 2.12%, gated at a 3% threshold |
 
 The `production` question the item called "the unlock" was settled as
 `production: false`. That admits tests to the reachability graph, which retires
@@ -218,7 +218,14 @@ and `getRoutingBucket` re-exports -- be deleted rather than kept.
 Complexity and duplication were NOT closed by threshold tuning. The health
 profile is fallow's own default (cyclomatic 20, cognitive 15) and all 36
 findings were decomposed; duplication was consolidated from 66 clone groups to
-41, and the threshold sits 0.085 points above the measured figure.
+41, measured at 2.12%.
+
+The duplication threshold is set at 3%, deliberately above the measured figure.
+A near-zero margin was rejected as too brittle for routine work: it would fail
+CI on a single moderate copy-paste mid-refactor. 3% still enforces, because it
+sits below the 3.62% the branch started at -- regressing to the pre-cleanup
+level fails the gate -- while leaving room to consolidate within a PR rather
+than being blocked on the first duplicated block.
 
 One caveat worth carrying forward, recorded in STACK.md: under
 `production: false` fallow promotes every discovered file to an entry point, so
