@@ -88,7 +88,7 @@ import {
 
 import type { InstallFailureCapture } from "./install.ts";
 import type { LedgerDegradationSignals } from "./shared.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -446,17 +446,128 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
  * compile error so the cascade always materialises a row (closes S6's fourth
  * loop in the same edit).
  */
+/**
+ * The identity and file targets a config write-back needs, resolved once
+ * before the lock so the write helpers stay pure module functions rather than
+ * closures over the orchestrator body.
+ */
+interface EnabledFlagWriteTarget {
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly enable: boolean;
+  readonly orchestrated: boolean;
+  readonly targetConfigPath: string;
+  /** Read fresh inside the lock for the membership test ONLY -- never written. */
+  readonly siblingConfigPath: string;
+  readonly scopeRoot: string;
+}
+
+/**
+ * Write the plugin's `enabled` flag back through the SOLE sanctioned
+ * saveConfig seam (SPLIT-02).
+ *
+ * CMP-3: when the scope's MERGED config view does not declare the
+ * marketplace (clone-adoption legacy, or a hand-pruned config), declare it in
+ * the SAME batched patch -- a bare plugin key would otherwise be a dangling
+ * declaration the planner converts into a marketplace removal plus a
+ * perpetual failed row.
+ *
+ * UAT-05: the membership gate considers BOTH physical files (base union
+ * local) so a `--local` flip never re-declares a base-declared marketplace
+ * (CFG-02 wholesale shadowing).
+ *
+ * S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined` collapses the
+ * benign (already-declared) and dangerous (no string `source.raw`) arms. The
+ * dangerous arm writes a dangling plugin declaration -- an acknowledged
+ * trade-off pending a return-type widen in a follow-up PR.
+ */
+async function writeEnabledFlagBack(
+  write: EnabledFlagWriteTarget,
+  cfg: ConfigLoadResult,
+  state: ExtensionState,
+): Promise<void> {
+  const { marketplace, plugin, enable } = write;
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const adoptedSource = await synthesizeAdoptedMarketplaceSource({
+    current,
+    siblingConfigPath: write.siblingConfigPath,
+    state,
+    marketplace,
+  });
+  await writeBatchedConfigEntries(current, write.targetConfigPath, write.scopeRoot, {
+    ...(adoptedSource !== undefined && {
+      marketplaces: { [marketplace]: { source: adoptedSource } },
+    }),
+    plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
+  });
+}
+
+/**
+ * ENBL-05 idempotency resolution, reached once the state side already matches
+ * the requested value.
+ *
+ * State-side truth alone is not enough. When the targeted config carries the
+ * OPPOSITE EXPLICIT `enabled` value (hand-edited config, or base/local
+ * divergence pending reconcile), skipping here would leave the config
+ * diverged, and the next reconcile would apply the config side and INVERT the
+ * user's explicit command. This mirrors autoupdate's `reclassifyByConfigTruth`
+ * promotion: the flip is fresh for the CONFIG write even though the state
+ * side already matches, so state stays untouched (no tx.save(), mtime
+ * stable). A MISSING entry or a missing `enabled` field keeps the state-side
+ * classification as-is, exactly like the autoupdate analog.
+ */
+async function resolveIdempotentOutcome(
+  write: EnabledFlagWriteTarget,
+  cfg: ConfigLoadResult,
+  state: ExtensionState,
+  installed: { readonly version: string },
+): Promise<SetEnabledOutcome> {
+  const { marketplace, plugin, enable, orchestrated } = write;
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
+  if (orchestrated || configEnabled === undefined || configEnabled === enable) {
+    return { kind: "idempotent" };
+  }
+
+  await writeEnabledFlagBack(write, cfg, state);
+  return { kind: "fresh", version: installed.version };
+}
+
+/**
+ * M3 / M4: the marketplace is absent from the target scope, or recorded only
+ * in the other one. Standalone emits the canonical
+ * `MarketplaceNotAddedMessage` per D-47-A; orchestrated returns the typed
+ * failure carrying the structural `not added` sentinel.
+ */
+function emitMarketplaceAbsent(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly requestedScope: Scope | undefined;
+  readonly orchestrated: boolean;
+}): EnableDisablePluginOutcome | undefined {
+  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  if (orchestrated) {
+    const scopeList: readonly Scope[] =
+      requestedScope === undefined ? ["project", "user"] : [requestedScope];
+    const err = new MarketplaceNotFoundError(marketplace, scopeList);
+    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+  }
+
+  notify(ctx, pi, {
+    kind: "marketplace-not-added",
+    name: marketplace,
+    ...(requestedScope !== undefined && { scope: requestedScope }),
+  });
+  return undefined;
+}
+
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
 ): Promise<EnableDisablePluginOutcome>;
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined>;
-// Sequencing the cross-scope resolve, the locked transaction body, the
-// post-guard branch dispatch, and the C1 / I3 / I4 failure routings in one
-// audited flow exceeds the default cognitive-complexity budget; splitting it
-// would obscure the per-arm save-vs-throw discipline.
-// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
@@ -491,26 +602,13 @@ export async function setPluginEnabled(
   }
 
   if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
-    const requestedScope: Scope | undefined = resolution.requestedScope;
-    if (orchestrated) {
-      const scopeList: readonly Scope[] =
-        requestedScope === undefined ? ["project", "user"] : [requestedScope];
-      const err = new MarketplaceNotFoundError(marketplace, scopeList);
-      return {
-        status: "failed",
-        reason: "not added",
-        error: err,
-        cause: errorMessage(err),
-      };
-    }
-
-    // M3 / M4: standalone `MarketplaceNotAddedMessage` per D-47-A.
-    notify(ctx, pi, {
-      kind: "marketplace-not-added",
-      name: marketplace,
-      ...(requestedScope !== undefined && { scope: requestedScope }),
+    return emitMarketplaceAbsent({
+      ctx,
+      pi,
+      marketplace,
+      requestedScope: resolution.requestedScope,
+      orchestrated,
     });
-    return undefined;
   }
 
   const { scope, locations } = resolution;
@@ -521,15 +619,22 @@ export async function setPluginEnabled(
   const configBasename = path.basename(targetConfigPath);
 
   let outcome: SetEnabledOutcome | undefined;
+  const write: EnabledFlagWriteTarget = {
+    marketplace,
+    plugin,
+    enable,
+    orchestrated,
+    targetConfigPath,
+    siblingConfigPath,
+    scopeRoot: locations.scopeRoot,
+  };
 
   try {
-    // A single per-scope lock owns the whole critical section.
-    // The closure sequences CFG-03 load, ENBL-02 idempotency, the
-    // enable/disable branch dispatch, the I3 shrunken-record save, and the
-    // UAT-05 config write-back -- splitting it would require
-    // additional state-snapshot threading and obscure the save-vs-throw
-    // discipline.
-    // eslint-disable-next-line sonarjs/cognitive-complexity
+    // A single per-scope lock owns the whole critical section. The closure
+    // sequences CFG-03 load, ENBL-02 idempotency, the enable/disable branch
+    // dispatch, the I3 shrunken-record save, and the UAT-05 config
+    // write-back; keeping that order visible here is what makes the
+    // save-vs-throw discipline auditable.
     await withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
       const cfg = await loadConfig(targetConfigPath);
@@ -550,47 +655,7 @@ export async function setPluginEnabled(
       // disabled PARTIAL record is idempotent on `disable` and re-materializes
       // on `enable`, at parity with the canonical disabled record.
       if (isRecordedButDisabled(installed) === !enable) {
-        // State-side truth alone is not enough.
-        // When the targeted config carries the OPPOSITE EXPLICIT `enabled`
-        // value (hand-edited config, or base/local divergence pending
-        // reconcile), skipping here would leave the config diverged -- and
-        // the next reconcile would apply the config side and INVERT the
-        // user's explicit command. Mirror autoupdate's
-        // `reclassifyByConfigTruth` promotion: the flip is fresh for the
-        // CONFIG write even though the state side already matches (state
-        // untouched -- no tx.save(), mtime stable). A MISSING entry /
-        // missing `enabled` field keeps the state-side classification
-        // as-is, exactly like the autoupdate analog.
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const configEnabled = current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
-        if (!orchestrated && configEnabled !== undefined && configEnabled !== enable) {
-          // UAT-05: membership gate against BOTH physical files (base ∪
-          // local) so a --local flip never re-declares a base-declared
-          // marketplace (CFG-02 wholesale shadowing). Sibling read is fresh
-          // inside the lock; membership test only.
-          //
-          // S4 (PR #51, CONTEXT.md S4): `adoptedSource === undefined`
-          // collapses the benign (already-declared) and dangerous
-          // (no string `source.raw`) arms. The dangerous arm writes a
-          // dangling plugin declaration -- acknowledged trade-off pending
-          // a return-type widen in a follow-up PR.
-          const adoptedSource = await synthesizeAdoptedMarketplaceSource({
-            current,
-            siblingConfigPath,
-            state,
-            marketplace,
-          });
-          await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-            ...(adoptedSource !== undefined && {
-              marketplaces: { [marketplace]: { source: adoptedSource } },
-            }),
-            plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
-          });
-          outcome = { kind: "fresh", version: installed.version };
-          return;
-        }
-
-        outcome = { kind: "idempotent" };
+        outcome = await resolveIdempotentOutcome(write, cfg, state, installed);
         return;
       }
 
@@ -622,44 +687,16 @@ export async function setPluginEnabled(
         return;
       }
 
-      // Config write-back via the SOLE sanctioned saveConfig seam (SPLIT-02).
-      //
-      // RECON-03: SKIPPED in orchestrated mode. A
+      // RECON-03: the write-back is SKIPPED in orchestrated mode. A
       // reconcile-driven call derives the desired state FROM the merged
       // config (base + local), so the declaration already exists by
-      // construction -- possibly ONLY in `claude-plugins.local.json` (the
-      // per-machine override). Writing it back here would
-      // copy the local override's `enabled` flag into the shared BASE file
-      // and clobber a user-authored base declaration. The config is the
-      // reconcile's INPUT; only standalone commands author declarations.
-      // CMP-3: when the scope's MERGED config view does
-      // not declare the marketplace (CMP-3 clone-adoption legacy, or a
-      // hand-pruned config), declare it in the SAME batched patch -- a bare
-      // plugin key would otherwise be a dangling declaration the planner
-      // converts into a marketplace removal + perpetual failed row.
-      // UAT-05: the gate considers BOTH physical files (base ∪ local) so a
-      // --local flip never re-declares a base-declared marketplace (CFG-02
-      // wholesale shadowing). Sibling read is fresh inside the lock;
-      // membership test only.
+      // construction -- possibly ONLY in `claude-plugins.local.json`, the
+      // per-machine override. Writing it back here would copy the local
+      // override's `enabled` flag into the shared BASE file and clobber a
+      // user-authored base declaration. The config is the reconcile's INPUT;
+      // only standalone commands author declarations.
       if (!orchestrated) {
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-        const adoptedSource = await synthesizeAdoptedMarketplaceSource({
-          current,
-          siblingConfigPath,
-          state,
-          marketplace,
-        });
-        // S4 (PR #51, CONTEXT.md S4): see the synthesizeAdoptedMarketplaceSource
-        // call above -- the `adoptedSource === undefined` benign /
-        // dangerous arms collapse, and the dangerous arm sealing the
-        // dangling declaration is an acknowledged trade-off pending a
-        // helper-return widen.
-        await writeBatchedConfigEntries(current, targetConfigPath, locations.scopeRoot, {
-          ...(adoptedSource !== undefined && {
-            marketplaces: { [marketplace]: { source: adoptedSource } },
-          }),
-          plugins: { [`${plugin}@${marketplace}`]: { enabled: enable } },
-        });
+        await writeEnabledFlagBack(write, cfg, state);
       }
 
       await tx.save();
@@ -831,6 +868,41 @@ function sanitizeStateLoadError(err: Error): Error {
  * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
  * standalone `composeOutcomeRow` taxonomy.
  */
+/**
+ * The `fresh` arm of the typed-outcome mapping -- the realized enable or
+ * disable transition.
+ *
+ * ENBL-07 / SURF-05 / WARN-01: the LIVE degradation signals propagate so the
+ * orchestrated (reconcile) caller renders the same row the standalone verb
+ * renders. SEV-01 / D-98-02: the staged-count verdicts cross the boundary too,
+ * so the reconcile projection derives the SAME dependency list. Every field is
+ * omitted when empty, which keeps a clean re-enable byte-identical in the
+ * cascade (NREG-01).
+ */
+function freshOutcomeToTypedResult(
+  plugin: string,
+  enable: boolean,
+  outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
+): EnableDisablePluginOutcome {
+  const version = outcome.version !== undefined && { version: outcome.version };
+  if (!enable) {
+    return { status: "disabled", name: plugin, ...version };
+  }
+
+  return {
+    status: "enabled",
+    name: plugin,
+    ...version,
+    ...(outcome.unsupported !== undefined &&
+      outcome.unsupported.length > 0 && { unsupported: outcome.unsupported }),
+    ...(outcome.orphanRewake === true && { orphanRewake: true }),
+    ...(outcome.degradedKinds !== undefined &&
+      outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
+    ...(outcome.stagedAgents === true && { stagedAgents: true }),
+    ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
+  };
+}
+
 function outcomeToTypedResult(args: {
   plugin: string;
   enable: boolean;
@@ -892,32 +964,7 @@ function outcomeToTypedResult(args: {
     }
 
     case "fresh": {
-      return enable
-        ? {
-            status: "enabled",
-            name: plugin,
-            ...(outcome.version !== undefined && { version: outcome.version }),
-            // ENBL-07 / SURF-05 / WARN-01: propagate the LIVE degradation
-            // signals so the orchestrated (reconcile) caller renders the same
-            // row the standalone verb renders. Each is omitted when empty, so a
-            // clean re-enable folds into the cascade byte-identically
-            // (NREG-01).
-            ...(outcome.unsupported !== undefined &&
-              outcome.unsupported.length > 0 && { unsupported: outcome.unsupported }),
-            ...(outcome.orphanRewake === true && { orphanRewake: true }),
-            ...(outcome.degradedKinds !== undefined &&
-              outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
-            // SEV-01 / D-98-02: the staged-count verdicts cross the orchestrated
-            // boundary too, so the reconcile projection derives the SAME
-            // dependency list the standalone row derives.
-            ...(outcome.stagedAgents === true && { stagedAgents: true }),
-            ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
-          }
-        : {
-            status: "disabled",
-            name: plugin,
-            ...(outcome.version !== undefined && { version: outcome.version }),
-          };
+      return freshOutcomeToTypedResult(plugin, enable, outcome);
     }
   }
 }
@@ -1060,6 +1107,47 @@ function freshEnableRow(
 }
 
 /** Internal: build the plugin row for the outcome (bare mp header -- UAT-04). */
+/**
+ * The `(failed)` row for an enable that threw.
+ *
+ * I4: a non-empty `rollbackPartials` capture means the install ledger unwound
+ * a partial commit before rethrowing, so the row renders the catalog
+ * `rollback partial` reason plus per-phase child rows (MSG-RP-1) and the
+ * operator sees which phases needed recovery -- matching the standalone
+ * install/uninstall path (`composeInstallFailureMessage`).
+ *
+ * WR-02 / D-98-03: a rollback-partial failure KEEPS the `rollback partial`
+ * reason. The ledger got far enough to commit and unwind, which is a
+ * different fact than the pre-ledger stale-gate rejection, so the stale-gate
+ * narrowing is consulted only when no partial was captured.
+ */
+function enableFailedRow(
+  plugin: string,
+  outcome: Extract<SetEnabledOutcome, { kind: "enable-failed" }>,
+): PluginFailedMessage {
+  const partials = outcome.rollbackPartials ?? [];
+  const staleGate = partials.length > 0 ? undefined : staleGateDropped(outcome.cause);
+  const baseReasons =
+    partials.length > 0 ? (["rollback partial"] as const) : narrowEnableFailure(outcome.cause);
+  return {
+    status: "failed",
+    name: plugin,
+    reasons: staleGate ?? baseReasons,
+    ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
+    ...(staleGate !== undefined && { partialHint: true }),
+    cause: outcome.cause,
+    // D-03/D-06: a failed enable -> error, no reload.
+    severity: "error",
+    needsReload: false,
+    ...(partials.length > 0 && {
+      rollbackPartial: partials.map((p) => ({
+        phase: p.phase,
+        ...(p.cause !== undefined && { cause: p.cause }),
+      })),
+    }),
+  };
+}
+
 function composeOutcomeRow(args: {
   readonly plugin: string;
   readonly enable: boolean;
@@ -1123,38 +1211,8 @@ function composeOutcomeRow(args: {
       };
     }
 
-    case "enable-failed": {
-      // I4: a non-empty `rollbackPartials` capture means the install ledger
-      // unwound a partial commit before rethrowing; render the catalog
-      // `rollback partial` reason + per-phase child rows (MSG-RP-1) so the
-      // operator sees which phases needed recovery, matching the standalone
-      // install/uninstall path (`composeInstallFailureMessage`).
-      const partials = outcome.rollbackPartials ?? [];
-      // WR-02 / D-98-03: a rollback-partial failure keeps the `rollback partial`
-      // reason -- the ledger got far enough to commit and unwind, which is a
-      // different fact than the pre-ledger stale-gate rejection.
-      const staleGate = partials.length > 0 ? undefined : staleGateDropped(outcome.cause);
-      const baseReasons =
-        partials.length > 0 ? (["rollback partial"] as const) : narrowEnableFailure(outcome.cause);
-      const row: PluginFailedMessage = {
-        status: "failed",
-        name: plugin,
-        reasons: staleGate ?? baseReasons,
-        ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
-        ...(staleGate !== undefined && { partialHint: true }),
-        cause: outcome.cause,
-        // D-03/D-06: a failed enable -> error, no reload.
-        severity: "error",
-        needsReload: false,
-        ...(partials.length > 0 && {
-          rollbackPartial: partials.map((p) => ({
-            phase: p.phase,
-            ...(p.cause !== undefined && { cause: p.cause }),
-          })),
-        }),
-      };
-      return row;
-    }
+    case "enable-failed":
+      return enableFailedRow(plugin, outcome);
 
     case "disable-failed":
       return {
