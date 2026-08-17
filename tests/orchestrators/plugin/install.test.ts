@@ -3381,8 +3381,10 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));

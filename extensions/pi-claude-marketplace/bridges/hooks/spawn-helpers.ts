@@ -11,7 +11,7 @@
 // emptiness) and on the truncation marker placement (WR-02: assign
 // `_truncated: true` LAST so a payload-supplied key cannot win).
 
-import type { RoutingEntry } from "./event-router.ts";
+import type { RoutingEntry } from "./routing-state.ts";
 
 /** EXEC-02 stdin cap. */
 const STDIN_TRUNCATION_BYTES = 256 * 1024;

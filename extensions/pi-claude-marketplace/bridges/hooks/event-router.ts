@@ -58,7 +58,6 @@ import {
   bumpEpoch,
   clearPendingSessionStartContext,
   currentEpoch,
-  getRoutingBucket,
   parsedConfigCache,
   pendingSessionStartContextEntries,
   resetEpoch,
@@ -862,11 +861,3 @@ export function _setRoutingBucketForTest(
 ): void {
   routingTable.set(claudeEvent, entries);
 }
-
-// The state cells and their accessors live in `routing-state.ts`; these
-// re-exports keep `event-router.ts` the single import surface the test
-// suite addresses. `currentEpoch` is imported from here by 4 test files and
-// `getRoutingBucket` by the reinstall/uninstall WR-03 tests, so the
-// re-export is load-bearing: removing it -- as `fallow fix` offers to --
-// breaks the suite.
-export { currentEpoch, getRoutingBucket, type PendingSessionStartContext, type RoutingEntry };

@@ -18,13 +18,15 @@ import {
   _routingTableForTest,
   _setRoutingBucketForTest,
   addPluginConfigToCache,
-  currentEpoch,
   hydrateProjectScopeForCwd,
   rebuildRoutingTables,
   removePluginConfigFromCache,
-  type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  currentEpoch,
+  type RoutingEntry,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
@@ -383,14 +385,6 @@ test("rebuildRoutingTables: zero disk I/O on the hot path", (t) => {
   });
 
   sentinel.mock.restore();
-});
-
-test("currentEpoch: starts at 0 in a fresh module load and exposes a number", () => {
-  // _resetForTest in beforeEach restores the cell to 0. The registerHooks-
-  // Bridge increment path is exercised by the dispatch suite below and by
-  // the architecture test that ships with the wiring plan.
-  assert.equal(currentEpoch(), 0);
-  assert.equal(typeof currentEpoch(), "number");
 });
 
 // ──────────────────────────────────────────────────────────────────────────

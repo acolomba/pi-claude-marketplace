@@ -30,12 +30,14 @@ import {
   _setExecutorForTest,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
-  currentEpoch,
   _resetForTest,
   _setRoutingBucketForTest,
-  type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  currentEpoch,
+  type RoutingEntry,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { type BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";

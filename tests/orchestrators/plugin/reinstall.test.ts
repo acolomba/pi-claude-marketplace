@@ -2503,8 +2503,10 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));

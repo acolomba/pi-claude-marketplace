@@ -432,6 +432,56 @@ using that script. The computation is cheap and needs no new tooling.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
+## FLOW-09: internals exported only for tests
+
+Filed 2026-08-16 alongside the routing-state test repointing (quick task
+260816-qov).
+
+CONVENTIONS.md now states the principle: tests are written against the public
+interface; pressure to reach inside is signal that a module wants to exist; and
+exporting inner code for a test is the anti-pattern that relieves the pressure
+without doing the design work.
+
+Roughly 84 internal helpers are currently exported only so a test can reach
+them, plus roughly 39 explicit test seams (`_setSpawnForTest`,
+`_resetSpawnForTest`, `_setDispatchIdGeneratorForTest` and the like).
+
+**This is NOT an item to perform 84 extractions.** Each site is a decision with
+two legitimate outcomes:
+
+  (a) the inner code is a semantically coherent unit -> promote it to a module
+      with its own public interface and its own test; or
+  (b) it is not -> delete the export and rewrite the test against the public
+      interface.
+
+Outcome (b) is a real and expected result, not a failure to extract. An attempt
+that mechanically converted all 84 into modules would be applying the principle
+wrongly and would leave the codebase worse -- 84 modules that exist only because
+a test asked for them are the same defect in a new shape.
+
+For the ~39 seams the answer is dependency injection, which is the same
+principle rather than an exception: pass the dependency in, and it becomes part
+of the public interface the test legitimately exercises. Relocating the state
+holder does not help -- `routing-state.ts` is the proof, since production still
+never calls the setter.
+
+**The measured payoff, which is the actual reason to do this.** These exports
+are precisely why `production: true` was unusable, because it flags every
+test-only export as dead:
+
+| Configuration | Findings |
+|---|---|
+| `production: true` | 288 |
+| `production: false` + `includeEntryExports: true` (shipping) | 154 |
+| Exclusively an artifact of the difference | 196 |
+
+Applied fully there would be no test-only exports left, so `production: true`
+becomes viable and yields genuine orphan-file and unused-export detection
+WITHOUT the `includeEntryExports` workaround.
+
+Distinct from FLOW-08: that one is dead re-export lines in the bridge barrels,
+a different cause with a different fix.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`

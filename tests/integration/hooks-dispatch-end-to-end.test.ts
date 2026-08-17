@@ -33,8 +33,8 @@ import {
   _resetForTest,
   _routingTableForTest,
   registerHooksBridge,
-  type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";

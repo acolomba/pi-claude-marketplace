@@ -1887,8 +1887,10 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
-  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache, getRoutingBucket } =
+  const { _resetForTest, _setRoutingBucketForTest, addPluginConfigToCache } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   const { compileIfPredicate, MATCH_ALL_IF } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
   const { parseHooksConfig, parseMatcher } =

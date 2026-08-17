@@ -157,6 +157,41 @@ would silently suppress an unrelated group later.
 
 **Return Values:** All exported functions must have explicit return type annotations (`@typescript-eslint/explicit-module-boundary-types: "error"`).
 
+## Testing and Module Boundaries
+
+**Tests are written against the public interface.** That is the default, and it
+is not negotiable by convenience.
+
+When testing something through the public interface becomes genuinely complex,
+that pressure is SIGNAL, not friction to route around. It is evidence that a
+module wants to exist. Act on it only when the inner code is semantically
+meaningful as a module in its own right: then it becomes a real module with its
+own public interface and its own test, and production and the test consume it
+across that boundary. If the inner code is NOT semantically meaningful as a
+module, the answer is not to extract it -- the answer is that the test goes back
+to the public interface.
+
+**Exporting inner code so a test can reach it is the anti-pattern.** It relieves
+the pressure without doing the design work: the signal is consumed and
+discarded, the missing boundary never gets drawn, and the structure stays bad
+while looking tested. Tests and modularization are a virtuous cycle, and testing
+inner code is what breaks it.
+
+`bridges/hooks/routing-state.ts` is the worked example. The routing state cells
+were extracted into a module with its own public interface, production imports
+them from there, and the tests whose SUBJECT is that state live beside it in
+`tests/bridges/hooks/routing-state.test.ts`. Tests that merely USE
+`currentEpoch` while asserting event-router behaviour stayed in
+`event-router.test.ts` -- they are exercising that module's public interface and
+those symbols are helpers.
+
+**Dependency injection is this principle applied, not an exception to it.**
+Passing `spawn` in as a dependency makes it part of the public interface, so the
+test is once again testing through the public interface. Mutating a module
+global through a `_setSpawnForTest` seam is reaching inside. Same rule, no
+special case -- which is why the fix for a test seam is to inject the
+dependency, after which the seam disappears rather than moving somewhere else.
+
 ## Module Design
 
 **Directory layers** under `extensions/pi-claude-marketplace/`: `domain/`, `orchestrators/`, `bridges/`, `edge/`, `platform/`, `persistence/`, `transaction/`, `shared/` (see ARCHITECTURE.md/STRUCTURE.md for layering rules).

@@ -73,7 +73,7 @@ import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hoo
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {

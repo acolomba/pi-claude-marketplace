@@ -14,7 +14,7 @@ import {
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";

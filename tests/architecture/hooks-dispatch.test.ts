@@ -40,16 +40,18 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
   addPluginConfigToCache,
-  currentEpoch,
   rebuildRoutingTables,
   registerHooksBridge,
   _bumpEpochForTest,
   _resetForTest,
   _routingTableForTest,
   _setRoutingBucketForTest,
-  type RoutingEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  currentEpoch,
+  type RoutingEntry,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
   BUCKET_A_EVENTS,
   type BucketAEvent,
