@@ -74,6 +74,7 @@ import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
+import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -123,27 +124,6 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 };
 
 // ──────────────────────────────────────────────────────────────────────────
-// Test seam (mirrors `_setExecutorForTest` in dispatch.ts)
-// ──────────────────────────────────────────────────────────────────────────
-
-let activeSpawn: typeof spawn = spawn;
-
-/**
- * Test-only seam: substitute the `spawn` implementation for the duration
- * of a unit test so mock fixtures can pin EXEC-01..04 invariants without
- * touching the real OS. Bridge-internal -- NOT re-exported from
- * `bridges/hooks/index.ts`.
- */
-export function _setSpawnForTest(impl: typeof spawn): void {
-  activeSpawn = impl;
-}
-
-/** Reset the spawn seam to the production binding. */
-export function _resetSpawnForTest(): void {
-  activeSpawn = spawn;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
 // Public surface
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -160,7 +140,9 @@ export async function dispatchHookExec(
   event: unknown,
   ctx: ExtensionContext,
   pi?: ExtensionAPI,
+  deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
+  const spawnImpl = deps.spawnImpl ?? spawn;
   // HOOK-06 / EXEC-05 / D-62-01: asyncRewake delegation. Strict `=== true`
   // discriminator (HOOK-03 lenient stance: any non-`true` value -- including
   // a string `"yes"` -- flows to the sync EXEC-01..04 path). The reducer
@@ -186,7 +168,7 @@ export async function dispatchHookExec(
 
     try {
       const loc = locationsFor(entry.scope, ctx.cwd);
-      await spawnAndRegister(entry, event, ctx, pi, loc);
+      await spawnAndRegister(entry, event, ctx, pi, loc, deps);
     } catch (err) {
       hookDebugLog(
         `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
@@ -213,7 +195,7 @@ export async function dispatchHookExec(
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareEnv(entry, transCtx);
-    return await spawnAndCollect(entry, env, stdinJson);
+    return await spawnAndCollect(entry, env, stdinJson, spawnImpl);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     return { kind: "noop" };
@@ -304,12 +286,13 @@ async function spawnAndCollect(
   entry: RoutingEntry,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<HookExecResult> {
   const plan = planSpawn(entry);
   const timeoutMsRaw = entry.handlerDecl.timeout;
   const timeoutMs = typeof timeoutMsRaw === "number" ? timeoutMsRaw : DEFAULT_TIMEOUT_MS;
 
-  const child = activeSpawn(plan.command, [...plan.args], {
+  const child = spawnImpl(plan.command, [...plan.args], {
     cwd: env.CLAUDE_PROJECT_DIR,
     env,
     stdio: ["pipe", "pipe", "pipe"],
