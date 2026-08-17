@@ -145,5 +145,8 @@
         "allow": ["platform"]
       }
     ]
+  },
+  "duplicates": {
+    "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"]
   }
 }
