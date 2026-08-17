@@ -1,13 +1,10 @@
 import {
-  ICON_AVAILABLE,
-  ICON_PARTIALLY_AVAILABLE,
-  ICON_REMOTE,
   ICON_UNINSTALLABLE,
-  composeReasons,
-  joinTokens,
   pluginRow,
-  renderScopeBracket,
-  renderVersion,
+  renderAvailableRow,
+  renderPartiallyAvailableRow,
+  renderRemoteRow,
+  renderUnavailableRow,
   type PluginAvailableMessage,
   type PluginFailedMessage,
   type PluginPartiallyAvailableMessage,
@@ -67,52 +64,19 @@ export type FetchMsg =
  * closed-set reason such as `up-to-date` is carried in `reasons`).
  */
 const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K }>> } = {
-  available: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_AVAILABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(available)",
-      composeReasons(undefined, false, false, probe),
-    ]),
+  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. Body
   // cloned from the `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out
   // and reasons composition); only the glyph and token differ.
-  "partially-available": (p, probe, mpScope) =>
-    joinTokens([
-      ICON_PARTIALLY_AVAILABLE,
-      p.name,
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(partially-available)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
-  unavailable: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_UNINSTALLABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(unavailable)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
+  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. Clones the `available` arm, swapping the glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
   // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
   // NO reasons brace (D-80-03), so the `composeReasons` line is dropped.
-  remote: (p, _probe, mpScope) =>
-    joinTokens([
-      ICON_REMOTE,
-      p.name,
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(remote)",
-    ]),
+  remote: (p, _probe, mpScope) => renderRemoteRow(p, mpScope),
   // D-81-02: no-op fetch (pinned-warm clone / nothing-to-fetch path source).
   // Routes through `pluginRow` with the `(skipped)` token, mirroring the update
   // verb's no-op parity; the existing `up-to-date` REASONS member is carried in

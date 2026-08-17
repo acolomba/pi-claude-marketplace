@@ -1,19 +1,17 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  ICON_PARTIALLY_AVAILABLE,
-  composeReasons,
-  partiallyInstalledRow,
   installedLikeRow,
-  joinTokens,
+  partiallyInstalledRow,
   pluginRow,
-  renderScopeBracket,
+  renderPartiallyAvailableRow,
+  renderUnavailableRow,
   renderVersion,
   type PluginFailedMessage,
-  type PluginPartiallyInstalledMessage,
   type PluginInstalledMessage,
-  type PluginUnavailableMessage,
   type PluginPartiallyAvailableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginUnavailableMessage,
 } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -92,29 +90,11 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
   // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
   // degraded install exactly as on a clean `(installed)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  unavailable: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_UNINSTALLABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(unavailable)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // XSURF-01: the partially-available install-failure arm. Byte-identical to the
   // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
   // `--partial` hint trailer is composed centrally by the renderer, not here.
-  "partially-available": (p, probe, mpScope) =>
-    joinTokens([
-      ICON_PARTIALLY_AVAILABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `partially-available` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(partially-available)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
 

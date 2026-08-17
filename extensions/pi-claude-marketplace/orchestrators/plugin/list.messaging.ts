@@ -1,26 +1,24 @@
 import {
-  ICON_AVAILABLE,
-  ICON_DISABLED,
-  ICON_PARTIALLY_INSTALLED,
   ICON_INSTALLED,
-  ICON_REMOTE,
+  ICON_PARTIALLY_INSTALLED,
   ICON_UNINSTALLABLE,
-  ICON_PARTIALLY_AVAILABLE,
-  composeReasons,
   installedLikeRow,
-  joinTokens,
   pluginRow,
-  renderScopeBracket,
+  renderAvailableRow,
+  renderDisabledRow,
+  renderPartiallyAvailableRow,
+  renderRemoteRow,
+  renderUnavailableRow,
   renderVersion,
   type PluginAvailableMessage,
   type PluginDisabledMessage,
   type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginPartiallyAvailableMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
-  type PluginInstalledMessage,
   type PluginRemoteMessage,
   type PluginUnavailableMessage,
-  type PluginPartiallyAvailableMessage,
   type PluginUpgradableMessage,
 } from "../../shared/notify.ts";
 
@@ -111,39 +109,13 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
       p.reasons,
       probe,
     ),
-  available: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_AVAILABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(available)",
-      composeReasons(undefined, false, false, probe),
-    ]),
-  unavailable: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_UNINSTALLABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(unavailable)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope),
+  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
   // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. Body cloned from the
   // `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out and reasons
   // composition); only the glyph and token differ.
-  "partially-available": (p, probe, mpScope) =>
-    joinTokens([
-      ICON_PARTIALLY_AVAILABLE,
-      p.name,
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(partially-available)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
   upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),
   // FSTAT-02 / D-66-03: dedicated ICON_PARTIALLY_INSTALLED (`◉`) glyph; the reasons
   // brace carries the dropped-component detail (mirrors the `upgradable`
@@ -160,15 +132,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // soft-dep marker whatever inventory the record retained (ENBL-15 /
   // D-100-06). Body otherwise lifted verbatim from the central
   // `renderPluginRow` disabled arm.
-  disabled: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_DISABLED,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
-      renderVersion(p.version),
-      "(disabled)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  disabled: (p, probe, mpScope) => renderDisabledRow(p, probe, mpScope),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
   // materialized locally. Clones the `available` arm, swapping the glyph
@@ -176,14 +140,7 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
   // NO reasons brace (D-80-03), so the `composeReasons` line is dropped. Body
   // lifted verbatim from the central `renderPluginRow` remote arm.
-  remote: (p, _probe, mpScope) =>
-    joinTokens([
-      ICON_REMOTE,
-      p.name,
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(remote)",
-    ]),
+  remote: (p, _probe, mpScope) => renderRemoteRow(p, mpScope),
 };
 
 /**

@@ -14,15 +14,7 @@
 // lifted verbatim from the central `renderPluginRow` `uninstalled` / `failed`
 // arms, so dispatch is byte-identical.
 
-import {
-  ICON_AVAILABLE,
-  ICON_UNINSTALLABLE,
-  composeReasons,
-  joinTokens,
-  pluginRow,
-  renderScopeBracket,
-  renderVersion,
-} from "../../shared/notify.ts";
+import { ICON_UNINSTALLABLE, pluginRow, renderUninstalledRow } from "../../shared/notify.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
@@ -68,15 +60,7 @@ export type RemoveRowMsg = PluginUninstalledMessage | PluginFailedMessage;
 export const REMOVE_CONTEXT = {
   Messaging: { label: "Marketplace remove" },
   render: {
-    uninstalled: (p, probe, mpScope) =>
-      joinTokens([
-        ICON_AVAILABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(uninstalled)",
-        composeReasons(undefined, false, false, probe),
-      ]),
+    uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
     failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   },
 } as const satisfies CommandContext<RemoveRowStatus, RemoveRowMsg>;

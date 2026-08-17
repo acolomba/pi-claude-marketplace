@@ -2315,6 +2315,121 @@ export function installedLikeRow(
  * `enabled !== false`. The arm is always present so enable-wiring stays
  * type-complete.
  */
+/**
+ * The not-installed and realized-removal row renderers, exported so the
+ * per-command render maps in `orchestrators/*.messaging.ts` CALL the central
+ * presentation vocabulary (D-11) instead of re-inlining byte-identical arm
+ * bodies. `renderPluginRow` dispatches to exactly these, so the central switch
+ * and every command map cannot drift.
+ */
+export function renderUninstalledRow(
+  p: PluginUninstalledMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
+  return joinTokens([
+    ICON_AVAILABLE,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    renderVersion(p.version),
+    "(uninstalled)",
+    composeReasons(undefined, false, false, probe),
+  ]);
+}
+
+/** MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field. */
+export function renderAvailableRow(
+  p: PluginAvailableMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
+  return joinTokens([
+    ICON_AVAILABLE,
+    p.name,
+    renderScopeBracket(undefined, mpScope),
+    renderVersion(p.version),
+    "(available)",
+    composeReasons(undefined, false, false, probe),
+  ]);
+}
+
+/**
+ * RSTA-01 / D-80-03: a not-installed git-source row whose clone or mirror is
+ * not materialized locally. It is the `available` row with the glyph swapped
+ * (`○` -> `◌`) and the token swapped, and it is a BARE row -- no reasons brace
+ * (D-80-03), hence no `probe` parameter. SNM-11 carve-out: no `scope?` field.
+ */
+export function renderRemoteRow(p: PluginRemoteMessage, mpScope: Scope): string {
+  return joinTokens([
+    ICON_REMOTE,
+    p.name,
+    renderScopeBracket(undefined, mpScope),
+    renderVersion(p.version),
+    "(remote)",
+  ]);
+}
+
+/** MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field. */
+export function renderUnavailableRow(
+  p: PluginUnavailableMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
+  return joinTokens([
+    ICON_UNINSTALLABLE,
+    p.name,
+    renderScopeBracket(undefined, mpScope),
+    renderVersion(p.version),
+    "(unavailable)",
+    composeReasons(p.reasons, false, false, probe),
+  ]);
+}
+
+/**
+ * USTAT-01 / D-64-01: the not-installed partially-available row. It is the
+ * `unavailable` row with the glyph swapped (`⊘` -> `⊖`) and the token swapped.
+ * MSG-PL-6 / SNM-11 carve-out: no `scope?` field.
+ */
+export function renderPartiallyAvailableRow(
+  p: PluginPartiallyAvailableMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
+  return joinTokens([
+    ICON_PARTIALLY_AVAILABLE,
+    p.name,
+    renderScopeBracket(undefined, mpScope),
+    renderVersion(p.version),
+    "(partially-available)",
+    composeReasons(p.reasons, false, false, probe),
+  ]);
+}
+
+/**
+ * D-54-01 / ENBL-04: the list/info inventory row for a recorded-but-disabled
+ * plugin. Subject-first grammar, using the dedicated ICON_DISABLED (`◍`) glyph
+ * -- the same glyph the `(will disable)` pending-tense row carries.
+ *
+ * ENBL-16: the caller's `reasons` are threaded and the caller stamps at most
+ * `not in manifest`. ENBL-15: both soft-dep flags are hard-coded false, which
+ * is what keeps a disabled row free of a soft-dep marker whatever inventory
+ * the record retained.
+ */
+export function renderDisabledRow(
+  p: PluginDisabledMessage,
+  probe: SoftDepStatus,
+  mpScope: Scope,
+): string {
+  return joinTokens([
+    ICON_DISABLED,
+    p.name,
+    renderScopeBracket(p.scope, mpScope),
+    renderVersion(p.version),
+    "(disabled)",
+    composeReasons(p.reasons, false, false, probe),
+  ]);
+}
+
 function renderPendingRow(
   p: Extract<
     PluginNotificationMessage,
@@ -2406,61 +2521,15 @@ function renderPluginRow(
         ),
       ]);
     case "uninstalled":
-      return joinTokens([
-        ICON_AVAILABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(uninstalled)",
-        composeReasons(undefined, false, false, probe),
-      ]);
+      return renderUninstalledRow(p, probe, mpScope);
     case "available":
-      return joinTokens([
-        ICON_AVAILABLE,
-        p.name,
-        // MSG-PL-6 / SNM-11 carve-out: `available` has NO `scope?` field.
-        renderScopeBracket(undefined, mpScope),
-        renderVersion(p.version),
-        "(available)",
-        composeReasons(undefined, false, false, probe),
-      ]);
+      return renderAvailableRow(p, probe, mpScope);
     case "remote":
-      // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is
-      // not materialized locally. Clones the `available` arm, swapping the
-      // glyph (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11
-      // carve-out: `remote` has NO `scope?` field, so the scope bracket is
-      // omitted. Bare row -- NO reasons brace (D-80-03), so the
-      // `composeReasons` line is dropped.
-      return joinTokens([
-        ICON_REMOTE,
-        p.name,
-        renderScopeBracket(undefined, mpScope),
-        renderVersion(p.version),
-        "(remote)",
-      ]);
+      return renderRemoteRow(p, mpScope);
     case "unavailable":
-      return joinTokens([
-        ICON_UNINSTALLABLE,
-        p.name,
-        // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-        renderScopeBracket(undefined, mpScope),
-        renderVersion(p.version),
-        "(unavailable)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return renderUnavailableRow(p, probe, mpScope);
     case "partially-available":
-      // USTAT-01 / D-64-01: not-installed, partially-available row. Clones the
-      // `unavailable` arm, swapping the glyph (`⊘` -> `⊖`) and token
-      // (`(unavailable)` -> `(partially-available)`). MSG-PL-6 / SNM-11 carve-out:
-      // `partially-available` has NO `scope?` field, so the scope bracket is omitted.
-      return joinTokens([
-        ICON_PARTIALLY_AVAILABLE,
-        p.name,
-        renderScopeBracket(undefined, mpScope),
-        renderVersion(p.version),
-        "(partially-available)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return renderPartiallyAvailableRow(p, probe, mpScope);
     case "upgradable":
       return pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe);
     case "partially-installed":
@@ -2483,21 +2552,7 @@ function renderPluginRow(
     case "will disable":
       return renderPendingRow(p, mpScope);
     case "disabled":
-      // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
-      // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
-      // (`◍`) glyph, the same glyph the `(will disable)` pending-tense row
-      // carries. ENBL-16: the caller's `reasons` are threaded, and the caller
-      // stamps at most `not in manifest`; both soft-dep flags stay hard-coded
-      // false, which is what keeps the disabled row free of a soft-dep marker
-      // whatever inventory the record retained (ENBL-15).
-      return joinTokens([
-        ICON_DISABLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        renderVersion(p.version),
-        "(disabled)",
-        composeReasons(p.reasons, false, false, probe),
-      ]);
+      return renderDisabledRow(p, probe, mpScope);
     default: {
       assertNever(p);
       return "";

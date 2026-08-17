@@ -1,11 +1,7 @@
 import {
-  ICON_AVAILABLE,
   ICON_UNINSTALLABLE,
-  composeReasons,
-  joinTokens,
   pluginRow,
-  renderScopeBracket,
-  renderVersion,
+  renderUninstalledRow,
   type PluginFailedMessage,
   type PluginUninstalledMessage,
 } from "../../shared/notify.ts";
@@ -51,15 +47,7 @@ export type UninstallPrivateReason = "not installed";
 const UNINSTALL_RENDER: {
   [K in UninstallStatus]: RenderFn<Extract<UninstallMsg, { status: K }>>;
 } = {
-  uninstalled: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_AVAILABLE,
-      p.name,
-      renderScopeBracket(p.scope, mpScope),
-      renderVersion(p.version),
-      "(uninstalled)",
-      composeReasons(undefined, false, false, probe),
-    ]),
+  uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
 
