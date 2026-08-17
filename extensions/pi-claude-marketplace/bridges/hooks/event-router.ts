@@ -57,11 +57,14 @@ import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/i
 import {
   bumpEpoch,
   clearPendingSessionStartContext,
+  clearRoutingTable,
   currentEpoch,
+  getRoutingBucket,
   parsedConfigCache,
   pendingSessionStartContextEntries,
   resetEpoch,
-  routingTable,
+  routingTableEntries,
+  setRoutingBucket,
   type CacheEntry,
   type PendingSessionStartContext,
   type RoutingEntry,
@@ -265,8 +268,8 @@ export function beforeAgentStartHandlerFor(
  * ascending (preserves source-file order across the
  * (event, group, handler) flattening).
  *
- * Empty buckets get an empty array so downstream `routingTable.get(event)`
- * never observes `undefined`.
+ * Empty buckets get an empty array so the keyset stays pinned to
+ * BUCKET_A_EVENTS rather than growing and shrinking with the cache.
  */
 export function rebuildRoutingTables(): void {
   // Pre-seed every bucket so an empty cache still clears any stale entries
@@ -286,7 +289,7 @@ export function rebuildRoutingTables(): void {
   }
 
   for (const [event, list] of buckets) {
-    routingTable.set(event, list);
+    setRoutingBucket(event, list);
   }
 }
 
@@ -722,7 +725,7 @@ export async function registerHooksBridge(
     // SessionStart hooks the env-file path will never be set, so the
     // dir's absence is harmless. Idempotent across `/reload` via mkdir {
     // recursive }; failures route through hookDebugLog.
-    if ((routingTable.get("SessionStart") ?? []).length > 0) {
+    if (getRoutingBucket("SessionStart").length > 0) {
       await ensureSharedDataDir(loc);
     }
 
@@ -766,7 +769,7 @@ export async function registerHooksBridge(
     try {
       await hydrateProjectScopeForCwd(ctx.cwd);
       rebuildRoutingTables();
-      if ((routingTable.get("SessionStart") ?? []).some((e) => e.scope === "project")) {
+      if (getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
         await ensureSharedDataDir(locationsFor("project", ctx.cwd));
       }
     } catch (err) {
@@ -808,7 +811,7 @@ export async function registerHooksBridge(
  * contents. Not part of the public surface.
  */
 export function _routingTableForTest(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
-  return routingTable;
+  return routingTableEntries();
 }
 
 /**
@@ -827,7 +830,7 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
 export function _resetForTest(): void {
   resetEpoch();
   parsedConfigCache.clear();
-  routingTable.clear();
+  clearRoutingTable();
   clearPendingSessionStartContext();
 }
 
@@ -859,5 +862,5 @@ export function _setRoutingBucketForTest(
   claudeEvent: BucketAEvent,
   entries: ReadonlyArray<RoutingEntry>,
 ): void {
-  routingTable.set(claudeEvent, entries);
+  setRoutingBucket(claudeEvent, entries);
 }

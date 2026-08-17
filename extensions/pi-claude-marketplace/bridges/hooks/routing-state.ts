@@ -151,7 +151,7 @@ export interface PendingSessionStartContext {
 
 export const parsedConfigCache = new Map<string, CacheEntry>();
 
-export const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
+const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
 
 let liveEpoch = 0;
 
@@ -229,11 +229,41 @@ export function clearPendingSessionStartContext(): void {
 }
 
 /**
- * Production-side accessor for a per-event routing bucket. Returns the
- * bucket or an empty array; never undefined. Imported by dispatch.ts and
- * settle.ts so the composite handlers reach a bucket through this accessor
- * rather than through the `routingTable` cell that lives beside it here.
+ * Read one per-event routing bucket. Returns the bucket or an empty array;
+ * never undefined. The `routingTable` cell is module-private, so every
+ * consumer reaches a bucket through here.
  */
 export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
   return routingTable.get(claudeEvent) ?? [];
+}
+
+/**
+ * Replace one per-event routing bucket. Named mutator rather than a raw
+ * exported Map: interior mutability would otherwise let any importer write
+ * the cell, which is how the read side drifted onto two different paths
+ * (accessor here, `routingTable.get` at the call site) before the cell was
+ * made private.
+ */
+export function setRoutingBucket(
+  claudeEvent: BucketAEvent,
+  entries: ReadonlyArray<RoutingEntry>,
+): void {
+  routingTable.set(claudeEvent, entries);
+}
+
+/**
+ * Drop every bucket. Paired with `setRoutingBucket` so the rebuild path and
+ * the test-reset path share one write surface.
+ */
+export function clearRoutingTable(): void {
+  routingTable.clear();
+}
+
+/**
+ * Read-only view of the whole table, for callers that need the keyset rather
+ * than one bucket. Mirrors `pendingSessionStartContextEntries` for the other
+ * collection cell in this module.
+ */
+export function routingTableEntries(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
+  return routingTable;
 }
