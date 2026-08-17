@@ -147,9 +147,15 @@ export interface PendingSessionStartContext {
 
 // ──────────────────────────────────────────────────────────────────────────
 // Module-state cells (D-59-02 / D-59-03)
+//
+// Every cell here is module-private and reached through the named accessors
+// below. `const` Maps have interior mutability, so exporting one would let
+// any importer write it without the declaring module having a say -- which
+// is how the read path for `routingTable` came to run through an accessor
+// in some call sites and the raw Map in others.
 // ──────────────────────────────────────────────────────────────────────────
 
-export const parsedConfigCache = new Map<string, CacheEntry>();
+const parsedConfigCache = new Map<string, CacheEntry>();
 
 const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
 
@@ -226,6 +232,39 @@ export function pendingSessionStartContextEntries(): ReadonlyArray<PendingSessio
  */
 export function clearPendingSessionStartContext(): void {
   pendingSessionStartContext = [];
+}
+
+/**
+ * D-59-02: upsert one plugin's parsed hooks config. Idempotent -- a replay
+ * overwrites the existing entry rather than duplicating it.
+ */
+export function setParsedConfig(key: string, entry: CacheEntry): void {
+  parsedConfigCache.set(key, entry);
+}
+
+/**
+ * D-59-02: drop one plugin's parsed hooks config. Removing a missing key is
+ * a no-op, which is what makes the uninstall and re-hydrate paths safe to
+ * retry.
+ */
+export function deleteParsedConfig(key: string): void {
+  parsedConfigCache.delete(key);
+}
+
+/**
+ * Drop every parsed config. Paired with the two mutators above so the cache
+ * has one write surface.
+ */
+export function clearParsedConfigCache(): void {
+  parsedConfigCache.clear();
+}
+
+/**
+ * Read-only view of the parsed-config cache, for the rebuild walk (which
+ * needs every value) and the phantom-entry sweep (which needs every key).
+ */
+export function parsedConfigEntries(): ReadonlyMap<string, CacheEntry> {
+  return parsedConfigCache;
 }
 
 /**

@@ -56,14 +56,17 @@ import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 import {
   bumpEpoch,
+  clearParsedConfigCache,
   clearPendingSessionStartContext,
   clearRoutingTable,
   currentEpoch,
+  deleteParsedConfig,
   getRoutingBucket,
-  parsedConfigCache,
+  parsedConfigEntries,
   pendingSessionStartContextEntries,
   resetEpoch,
   routingTableEntries,
+  setParsedConfig,
   setRoutingBucket,
   type CacheEntry,
   type PendingSessionStartContext,
@@ -114,7 +117,7 @@ export function addPluginConfigToCache(
   config: HooksConfig,
   ifPredicates: ReadonlyMap<string, IfPredicate>,
 ): void {
-  parsedConfigCache.set(cacheKey(scope, marketplace, pluginId), {
+  setParsedConfig(cacheKey(scope, marketplace, pluginId), {
     scope,
     marketplace,
     pluginId,
@@ -133,7 +136,7 @@ export function removePluginConfigFromCache(
   marketplace: string,
   pluginId: string,
 ): void {
-  parsedConfigCache.delete(cacheKey(scope, marketplace, pluginId));
+  deleteParsedConfig(cacheKey(scope, marketplace, pluginId));
 }
 
 /**
@@ -309,7 +312,7 @@ export function rebuildRoutingTables(): void {
  * the install path's addPluginConfigToCache lands.
  */
 function collectAllCachedPlugins(): CacheEntry[] {
-  const collected = Array.from(parsedConfigCache.values());
+  const collected = Array.from(parsedConfigEntries().values());
 
   collected.sort((a, b) =>
     compareByNameThenScope(
@@ -614,9 +617,9 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
   // contributor-hygiene change.  A casual reader of the original loop
   // would reach for `Array.from(...)` thinking they need a snapshot;
   // hoisting it here removes that cognitive friction.
-  for (const key of Array.from(parsedConfigCache.keys())) {
+  for (const key of Array.from(parsedConfigEntries().keys())) {
     if (key.startsWith(projectKeyPrefix)) {
-      parsedConfigCache.delete(key);
+      deleteParsedConfig(key);
     }
   }
 
@@ -820,7 +823,7 @@ export function _routingTableForTest(): ReadonlyMap<BucketAEvent, ReadonlyArray<
  * public surface.
  */
 export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
-  return parsedConfigCache;
+  return parsedConfigEntries();
 }
 
 /**
@@ -829,7 +832,7 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
  */
 export function _resetForTest(): void {
   resetEpoch();
-  parsedConfigCache.clear();
+  clearParsedConfigCache();
   clearRoutingTable();
   clearPendingSessionStartContext();
 }
