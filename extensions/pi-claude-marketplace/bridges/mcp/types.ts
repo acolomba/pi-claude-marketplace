@@ -8,19 +8,6 @@
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * Free-shape MCP server entry as it appears in `mcp.json` (post-resolution).
- * Per pi-mcp-adapter contract the bridge does no per-field validation
- * beyond shape ("must be an object"); the adapter owns all runtime
- * semantics. Forward-compat fields land in the index signature.
- */
-export interface McpServerEntry {
-  readonly command?: string;
-  readonly args?: readonly string[];
-  readonly env?: Record<string, string>;
-  readonly [extra: string]: unknown;
-}
-
-/**
  * Top-level shape of any `mcp.json` document we read from disk -- either
  * a scoped (`<scopeRoot>/mcp.json`) doc or one of the four pi-mcp-adapter
  * collision slots. Both wrapped (`{mcpServers: {...}}`) and unwrapped

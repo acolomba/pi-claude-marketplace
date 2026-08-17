@@ -11,8 +11,6 @@
 // barrel change.
 
 export {
-  addPluginConfigToCache,
-  getRoutingBucket,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   registerHooksBridge,
@@ -20,15 +18,7 @@ export {
   removePluginConfigFromCache,
 } from "./event-router.ts";
 
-export type { RoutingEntry } from "./event-router.ts";
-
 // LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
 // (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
 // re-exported -- callers use only the two verbs below.
 export { writeHookConfig, removeHookConfig } from "./stage.ts";
-export type {
-  WriteHookConfigInput,
-  WriteHookConfigResult,
-  RemoveHookConfigInput,
-  RemoveHookConfigResult,
-} from "./stage.ts";

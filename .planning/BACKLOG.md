@@ -403,6 +403,35 @@ catch.
 Settle whether the reachability gap is real on this codebase before removing
 anything.
 
+## FLOW-08: barrel re-export hygiene is unenforced
+
+Filed 2026-08-16 alongside the barrel prune (quick task 260816-qov).
+
+The five per-kind bridge barrels were pruned from 115 declared symbols to 49 --
+the 66 removed were re-exported by the barrel and imported through it by
+nobody. Before the prune `bridges/agents/index.ts` declared 36 symbols public
+while 12 were consumed, publishing internals such as `convertAgent`,
+`MODEL_MAP`, `TOOL_MAP`, `parseFrontmatter`, `emitYamlScalar` and
+`sanitizeProvenanceValue` as public API when only the bridge itself used them.
+That contradicted each barrel's own header, which declares the module's public
+surface and cites D-01 opaque-handle discipline.
+
+**The shipping gate does NOT catch this class, and that is the point of this
+item.** Measured directly: re-adding `export { convertAgent } from
+"./convert.ts"` to the agents barrel leaves `npm run fallow` at exit 0. The
+findings were only ever visible under `production: true`, which is rejected for
+the reasons in FLOW-04 and FLOW-06. So the prune is a one-time cleanup with no
+ongoing protection -- a new dead barrel line can be added tomorrow and nothing
+will notice.
+
+Options if this is worth closing: a small architecture test that computes the
+same live/dead set (collect each barrel's exports, scan for imports resolving
+to that barrel, diff) and fails on a dead line; or a periodic manual audit
+using that script. The computation is cheap and needs no new tooling.
+
+Distinct from FLOW-09: that one is about internals exported for TESTS, a
+different cause with a different fix.
+
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 
 Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`

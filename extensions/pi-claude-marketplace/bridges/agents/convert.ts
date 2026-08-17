@@ -20,7 +20,6 @@ import type { ConvertedAgent, DiscoveredAgent } from "./types.ts";
 
 // Re-export so consumers can import the agent-name generator from the
 // agents-bridge surface rather than knowing it lives in domain/.
-export { generatedAgentName } from "../../domain/name.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else

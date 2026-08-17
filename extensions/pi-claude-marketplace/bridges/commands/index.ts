@@ -9,7 +9,6 @@
 export { discoverPluginCommands } from "./discover.ts";
 export {
   abortPreparedCommands,
-  assertNoCommandCollisions,
   commitPreparedCommands,
   finalizeCommandsReplacement,
   prepareStageCommands,
@@ -18,13 +17,4 @@ export {
 } from "./stage.ts";
 export { unstagePluginCommands } from "./unstage.ts";
 
-export type {
-  CommandsReplacement,
-  DiscoveredCommand,
-  PreparedCommandsStaging,
-  StageCommandsCommitResult,
-  StageCommandsInput,
-  StagedCommandRecord,
-  UnstageCommandsInput,
-  UnstageCommandsResult,
-} from "./types.ts";
+export type { CommandsReplacement, PreparedCommandsStaging } from "./types.ts";
