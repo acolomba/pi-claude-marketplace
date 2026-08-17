@@ -622,22 +622,45 @@ line, which prints on a passing run.
 Code seams: `.fallowrc.json` (`duplicates.threshold`), `package.json`
 (`npm run fallow`), `.github/workflows/lint.yml` (`fallow-audit`).
 
-## ~~FLOW-11: PR annotations are capped below the finding count~~ -- CLOSED
+## ~~FLOW-11: PR annotations are capped below the finding count~~ -- CLOSED (not as first attempted)
 
-Closed 2026-08-17 by enabling the action's `sarif: true` input on the
-`fallow-audit` job, with `security-events: write` granted at job scope
-rather than workflow scope. SARIF uploads to GitHub Code Scanning, which
-is free on public repositories, carries no per-step finding ceiling, and
-persists findings across runs instead of living only in one job log.
+Closed 2026-08-17, but NOT the way this item proposed. The premise was
+partly wrong and the proposed fix does not work.
 
-`format: github-annotations` is KEPT alongside it. The two are not
-alternatives: annotations are log-based and therefore render on fork
-pull requests with no write token, which the SARIF upload cannot do
-because forks do not get `security-events: write`. Annotations stay the
-fork-safe floor; Code Scanning is the uncapped ceiling for everyone else.
+The premise: the job log was said to be the only uncapped view. It is
+not. The action runs a `Job summary` step in addition to the annotation
+step, on every run, independent of `format`:
 
-Verify on the next run that Code Scanning receives the findings and that
-the annotation path is unaffected. Original report follows.
+```text
+Emit inline annotations -> rendered via native github-annotations
+Job summary             -> rendered via native github-summary
+```
+
+So a complete, uncapped report already renders on the run page. The
+10-per-type-per-step ceiling only ever truncated the INLINE markers on
+the diff, which is a presentation limit rather than lost data.
+
+The proposed fix: `sarif: true` was tried and reverted the same day. It
+fails the job outright, and not for want of permission --
+`security-events: write` was granted at job scope and the audit's own
+verdict was `warn`:
+
+```text
+##[error]The CodeQL Action does not support uploading multiple SARIF runs
+with the same category. Please update your workflow to upload a single
+run per category.
+```
+
+Fallow emits one SARIF run per analysis (dead-code, health, dupes,
+styling) under a single `fallow` category, and Code Scanning stopped
+combining those in July 2025. That is inside the action's SARIF
+generation, so no workflow-level setting reaches it. Reopen only if the
+action starts emitting one run per category, and note the fork caveat
+still stands: forks never get `security-events: write`, so a
+SARIF-only reporting path would go dark on fork pull requests, which
+log-based annotations do not.
+
+Original report follows.
 
 Filed 2026-08-17 from the first `fallow-rs/fallow@v3` run on PR #132.
 
