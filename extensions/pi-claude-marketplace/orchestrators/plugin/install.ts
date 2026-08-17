@@ -129,7 +129,7 @@ import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { runPhases, type Phase, type RollbackPartial } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
@@ -524,33 +524,6 @@ type InstallLedgerResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * PROV-02/03/04 / T-79-09: build the host-keyed auth bundle for a resolved
- * cloneUrl. Returns a bundle for a registered host (private authenticates) or
- * undefined for a no-provider / public host (clones authless, no cross-host
- * credential leak). D-79-02: the command-scope authMemo caps the flow at once
- * per host. Shared by the pinned and the unpinned (mirror) probe arms.
- */
-function buildProbeAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  auth: {
-    ctx: ExtensionContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-) {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
-    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  });
-}
-
-/**
  * PURL-01..04 / PURL-09 / D-77-01..06: build the clone-materializing
  * `resolveGitPluginRoot` callback plus a getter for the resolved sha it
  * captured.
@@ -592,7 +565,7 @@ function makeInstallCloneProbe(
   // it reaches the mirror seam only by name.
   const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
     const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
@@ -612,7 +585,7 @@ function makeInstallCloneProbe(
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildProbeAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
     const cloneRoot = await seam.materializePluginClone({
       locations,
       cloneUrl,

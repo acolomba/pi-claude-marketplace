@@ -70,7 +70,7 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
@@ -1354,28 +1354,6 @@ interface InfoFetchContext {
 type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
 
 /**
- * FTCH-06 / T-81-08: build the host-keyed auth bundle for a resolved cloneUrl at
- * install parity (PROV-02/03/04): a registered provider host authenticates, a
- * no-provider / public host clones authless. `buildAuthForHost` never
- * interpolates credentials into any surfaced string (AUTH-09). Mirrors
- * `install.ts::buildProbeAuth`.
- */
-function buildFetchAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  fetchCtx: InfoFetchContext,
-) {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: fetchCtx.credentialOps,
-    ctx: fetchCtx.ctx,
-    ...(fetchCtx.deviceFlowHttp !== undefined && { deviceFlowHttp: fetchCtx.deviceFlowHttp }),
-    ...(fetchCtx.authMemo !== undefined && { authMemo: fetchCtx.authMemo }),
-  });
-}
-
-/**
  * FTCH-03 / FTCH-04 / D-81-05: build the MATERIALIZING git probe for the
  * `info --fetch` hook. A pinned source (manifest sha) clones once into the
  * per-sha immutable cache (network on cache miss); an unpinned source refreshes
@@ -1389,7 +1367,7 @@ function buildFetchAuth(
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
   const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const { pluginRoot: mirrorRoot, resolvedSha } =
       await fetchCtx.seam.materializeOrRefreshPluginMirror({
         locations,
@@ -1402,7 +1380,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildFetchAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,

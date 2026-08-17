@@ -93,7 +93,7 @@ import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { canonicalCloneUrl, materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
@@ -1356,34 +1356,6 @@ async function loadCachedEntry(
 }
 
 /**
- * PROV-02/03: build the host-keyed bundle for the COLD-cache re-clone
- * (undefined for a public / no-provider host). A warm cache short-circuits
- * inside materializePluginClone before the clone, so the bundle is never
- * exercised offline (PURL-07 parity). The bulk path threads a shared authMemo
- * so repeated challenges across one sweep prompt once per host (D-79-02); the
- * standalone single-plugin caller omits it.
- */
-function buildReinstallCloneAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  auth: {
-    ctx: ExtensionContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-): ReturnType<typeof buildAuthForHost> {
-  const host = hostFromCloneUrl(cloneUrl, kind);
-  return buildAuthForHost({
-    host,
-    credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
-    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  });
-}
-
-/**
  * PURL-07 / D-78-02: build the recorded-sha `resolveGitPluginRoot` callback for a
  * git plugin source. Reinstall pins from the state record's `recordedSha` (the pin
  * IS the record) and reaches `materializePluginClone` by name via the seam -- it
@@ -1437,7 +1409,7 @@ function makeReinstallCloneProbe(
       }
     }
 
-    const authBundle = buildReinstallCloneAuth(cloneUrl, gitSource.kind, auth);
+    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
 
     const cloneRoot = await seam.materializePluginClone({
       locations,

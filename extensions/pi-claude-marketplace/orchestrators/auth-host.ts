@@ -110,3 +110,38 @@ export function buildAuthForHost(args: {
 
   return { credentialOps, host, onAuthRequired } satisfies GitAuthBundle;
 }
+
+/**
+ * PROV-02/03/04 / T-79-09 / D-81-05: build the host-keyed auth bundle for a
+ * resolved clone url.
+ *
+ * Returns a bundle for a registered provider host, so a private source
+ * authenticates, and `undefined` for a no-provider or public host, so it
+ * clones authless and no credential crosses hosts (the T-79-04 leak guard).
+ * `buildAuthForHost` never interpolates credentials into any surfaced string
+ * (AUTH-09). D-79-02: the command-scope `authMemo` caps the device flow at
+ * once per host.
+ *
+ * Shared by every probe that materializes a git plugin source -- install,
+ * reinstall, fetch, and `info --fetch` -- and by the pinned and unpinned arms
+ * within each. Those four previously carried copies of this that their own
+ * comments described as mirrors of one another.
+ */
+export function buildCloneAuth(
+  cloneUrl: string,
+  kind: "url" | "git-subdir" | "github",
+  auth: {
+    readonly ctx: ExtensionContext;
+    readonly credentialOps: CredentialOps;
+    readonly deviceFlowHttp?: DeviceFlowHttp;
+    readonly authMemo?: Map<string, AuthAttemptResult>;
+  },
+): GitAuthBundle | undefined {
+  return buildAuthForHost({
+    host: hostFromCloneUrl(cloneUrl, kind),
+    credentialOps: auth.credentialOps,
+    ctx: auth.ctx,
+    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
+    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
+  });
+}
