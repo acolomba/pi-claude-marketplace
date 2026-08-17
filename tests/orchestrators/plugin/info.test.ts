@@ -54,7 +54,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
 import {
@@ -751,7 +750,9 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
 // `{unparseable}` / `{unreadable}` on the `(installed)` row instead
 // of being silently misled.
 //
-// Unit-tests the ladder via the `__test_narrowProbeError` re-export.
+// The ladder itself is unit-tested in
+// tests/shared/probe-classifiers.test.ts, against the public
+// `narrowProbeError` both surfaces delegate to.
 // An end-to-end integration of the THROW branch through the real
 // resolver requires an FS-level fault injection that is not portable
 // across CI sandboxes; the orchestrator-level `(c) install bucket
@@ -759,60 +760,6 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
 // (the `!installable` path runs through the SAME row-construction
 // code as the throw branch).
 // ---------------------------------------------------------------------------
-
-test("WR-01: narrowProbeError -> EACCES classifies as `permission denied`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new Error("EACCES: permission denied, open '/foo/plugin.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(mod.__test_narrowProbeError(err), "permission denied");
-});
-
-test("WR-01: narrowProbeError -> ENOENT classifies as `source missing`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new Error("ENOENT: no such file");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(mod.__test_narrowProbeError(err), "source missing");
-});
-
-test("WR-01: narrowProbeError -> SyntaxError classifies as `unparseable`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  const err = new SyntaxError("Unexpected token");
-  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
-});
-
-test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
-  // surface reports the SAME `{invalid manifest}` reason the write path does.
-  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
-  assert.equal(mod.__test_narrowProbeError(err), "invalid manifest");
-});
-
-test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
-  // into one InvalidMarketplaceManifestError branch must preserve this arm.
-  const err = new InvalidMarketplaceManifestError("bad json", {
-    cause: new SyntaxError("Unexpected token"),
-  });
-  assert.equal(mod.__test_narrowProbeError(err), "unparseable");
-});
-
-test("WR-01: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
-  // The permissive fallback returns `unreadable`, but only AFTER trying
-  // SyntaxError + errno classification first. Hardcoding `unreadable`
-  // would pass this test but FAIL the SyntaxError / EACCES tests
-  // above.
-  const err = new Error("something broke");
-  assert.equal(mod.__test_narrowProbeError(err), "unreadable");
-});
 
 // ---------------------------------------------------------------------------
 // (h-WR-01b) WR-01: an INSTALLED plugin whose manifest declares
@@ -1953,63 +1900,6 @@ test("ADMIT-02: a config declaring Stop + StopFailure lists both bare-supported 
       ].join("\n"),
     );
     assert.doesNotMatch(notifications[0]!.message, /\(unsupported\)/);
-  });
-});
-
-test("SURF-01 / Open Question 3: hooks/hooks.json deleted between resolve and info-render surfaces probe-classifier reason via narrowProbeError (POSIX)", async (t) => {
-  if (process.platform === "win32") {
-    t.skip("chmod-based EACCES fault injection is POSIX-only");
-    return;
-  }
-
-  await withHermeticHome(async ({ home, cwd }) => {
-    const userRoot = path.join(home, ".pi", "agent");
-    const mpRoot = await seedPathMarketplace({
-      scope: "user",
-      scopeRoot: userRoot,
-      cwd,
-      mpName: "mp",
-      manifest: {
-        name: "mp",
-        plugins: [{ name: "hr", source: "./hr", version: "1.0.0" }],
-      },
-      installed: { hr: { version: "1.0.0" } },
-      installablePluginDirs: ["hr"],
-    });
-
-    // Seed a parseable hooks.json so the resolver records `hooksConfigPath`
-    // (`installable: true`), then chmod 000 the file so the info-time
-    // re-read raises EACCES. The narrowProbeError ladder must classify
-    // the failure as `permission denied` -- the SAME closed-set REASON
-    // the other component-probe failures (e.g. skills dir EACCES) emit.
-    const pluginDir = path.join(mpRoot, "hr");
-    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
-    const hooksFile = path.join(pluginDir, "hooks", "hooks.json");
-    await writeFile(
-      hooksFile,
-      JSON.stringify({
-        SessionStart: [{ hooks: [{ type: "command", command: "echo s" }] }],
-      }),
-      "utf8",
-    );
-
-    const { chmod } = await import("node:fs/promises");
-    await chmod(hooksFile, 0o000);
-    try {
-      const { ctx, pi, notifications } = makeCtx();
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "hr", scope: "user", cwd });
-      assert.equal(notifications.length, 1);
-      const msg = notifications[0]!.message;
-      // The closed-set REASON form for unreadable probes flows through
-      // the EXISTING narrowProbeError ladder (Open Question 3: no new
-      // REASON, no new code path). Permission-denied is the expected
-      // classification for an EACCES on the hooks.json read.
-      assert.match(msg, /\(installed\) \{permission denied\}/);
-      // No partial `hooks:` block under a permission-denied row.
-      assert.doesNotMatch(msg, /hooks:/);
-    } finally {
-      await chmod(hooksFile, 0o644).catch(() => undefined);
-    }
   });
 });
 

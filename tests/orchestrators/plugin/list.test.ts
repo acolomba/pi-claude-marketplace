@@ -35,14 +35,9 @@ import * as git from "isomorphic-git";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import {
-  __test_narrowListFailReason,
-  __test_narrowProbeError,
-  listPlugins,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 import {
   buildInstalledPluginRecord,
@@ -1873,63 +1868,15 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 // surface for unexpected `resolveStrict` throws inside `availableRowComputation`.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr A3: narrowProbeError -> EACCES classifies as `permission denied`", () => {
-  const err = new Error("EACCES: permission denied, open '/foo/bar/manifest.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(__test_narrowProbeError(err), "permission denied");
-});
-
-test("260525-cjr A3: narrowProbeError -> EPERM also classifies as `permission denied`", () => {
-  const err = new Error("EPERM");
-  (err as NodeJS.ErrnoException).code = "EPERM";
-  assert.equal(__test_narrowProbeError(err), "permission denied");
-});
-
-test("260525-cjr A3: narrowProbeError -> ENOENT classifies as `source missing`", () => {
-  const err = new Error("ENOENT");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(__test_narrowProbeError(err), "source missing");
-});
-
-test("260525-cjr A3: narrowProbeError -> SyntaxError classifies as `unparseable`", () => {
-  const err = new SyntaxError("Unexpected token } in JSON at position 7");
-  assert.equal(__test_narrowProbeError(err), "unparseable");
-});
-
-test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", () => {
-  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
-  // surface reports the SAME `{invalid manifest}` reason the write path does.
-  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
-  assert.equal(__test_narrowProbeError(err), "invalid manifest");
-});
-
-test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", () => {
-  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
-  // into one InvalidMarketplaceManifestError branch must preserve this arm.
-  const err = new InvalidMarketplaceManifestError("bad json", {
-    cause: new SyntaxError("Unexpected token"),
-  });
-  assert.equal(__test_narrowProbeError(err), "unparseable");
-});
-
-test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", () => {
-  // An unrecognized throw routes to `unreadable`, not `unsupported
-  // source`.
-  const err = new Error("something went wrong probing this plugin");
-  const reason = __test_narrowProbeError(err);
-  assert.equal(reason, "unreadable");
-  assert.notEqual(reason, "unsupported source");
-});
-
 // Note on integration coverage: constructing a real fixture that drives
 // `resolveStrict` into THROWING (vs returning NotInstallable with notes)
 // requires FS-level fault injection that is brittle across platforms
 // (chmod 000 behaves differently as root, on tmpfs, on macOS APFS, etc.).
-// The unit tests above exercise every classifier branch directly through
-// the `__test_narrowProbeError` re-export; the orchestrator wiring is a
-// straightforward pass-through. The binding contract is that
-// `narrowProbeError` returns the closed-set Reason the user sees on the
-// row.
+// The classifier ladder is exercised branch by branch in
+// tests/shared/probe-classifiers.test.ts, against the public
+// `narrowProbeError` this surface delegates to; the orchestrator wiring is
+// a straightforward pass-through. The binding contract is that the ladder
+// returns the closed-set Reason the user sees on the row.
 
 // ──────────────────────────────────────────────────────────────────────────
 // WR-03: narrowListFailReason -- dedicated narrower for orchestrator-level
@@ -1937,40 +1884,6 @@ test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreada
 // narrowProbeError (per-row resolver probe failures). Mirrors the same
 // classifier ladder so the test ergonomics carry over.
 // ──────────────────────────────────────────────────────────────────────────
-
-test("WR-03: narrowListFailReason -> EACCES classifies as `permission denied`", () => {
-  const err = new Error("EACCES: permission denied, open '/foo/state.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(__test_narrowListFailReason(err), "permission denied");
-});
-
-test("WR-03: narrowListFailReason -> EPERM also classifies as `permission denied`", () => {
-  const err = new Error("EPERM");
-  (err as NodeJS.ErrnoException).code = "EPERM";
-  assert.equal(__test_narrowListFailReason(err), "permission denied");
-});
-
-test("WR-03: narrowListFailReason -> ENOENT classifies as `source missing`", () => {
-  const err = new Error("ENOENT");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(__test_narrowListFailReason(err), "source missing");
-});
-
-test("WR-03: narrowListFailReason -> SyntaxError classifies as `unparseable`", () => {
-  const err = new SyntaxError("Unexpected token } in JSON at position 7");
-  assert.equal(__test_narrowListFailReason(err), "unparseable");
-});
-
-test("WR-03: narrowListFailReason -> generic Error falls through to `unreadable`", () => {
-  const err = new Error("something went wrong loading state");
-  assert.equal(__test_narrowListFailReason(err), "unreadable");
-});
-
-test("WR-03: narrowListFailReason -> non-Error throw falls through to `unreadable`", () => {
-  assert.equal(__test_narrowListFailReason("string throw"), "unreadable");
-  assert.equal(__test_narrowListFailReason(42), "unreadable");
-  assert.equal(__test_narrowListFailReason(undefined), "unreadable");
-});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)

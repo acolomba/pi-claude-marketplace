@@ -2300,4 +2300,3 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
 // Test-only re-export of the shared classifier so callers exercising
 // this orchestrator's behavior can verify the closed-set ladder without
 // reaching into `shared/probe-classifiers.ts` directly.
-export { narrowProbeError as __test_narrowProbeError };

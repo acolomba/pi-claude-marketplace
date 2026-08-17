@@ -625,7 +625,6 @@ async function installedRowMessage(
  * failures (`unreadable` means "could not load state.json or walk the
  * marketplace records"). Same underlying ladder, two semantic names.
  */
-// fallow-ignore-next-line private-type-leak -- `ListReason` is list-internal; reached only through __test_narrowProbeError, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 function narrowProbeError(err: unknown): ListReason {
   return sharedNarrowProbeError(err);
 }
@@ -1320,7 +1319,6 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
  * accurate to the list-orchestration failure modes (loadState /
  * loadManifest / cross-scope walk throws).
  */
-// fallow-ignore-next-line private-type-leak -- same list-internal `ListReason`, reached only through __test_narrowListFailReason; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 function narrowListFailReason(err: unknown): ListReason {
   return sharedNarrowProbeError(err);
 }
@@ -1409,17 +1407,9 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
 const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 
-// Test-only re-export. Mirrors the `__test_classifyEntityShapeError` /
-// `__test_classifyInstallFailure` precedent in `install.ts`: the helper
-// is file-private but its classification table is the load-bearing
-// contract that callers (and the user) rely on.
-export { narrowProbeError as __test_narrowProbeError };
-export { narrowListFailReason as __test_narrowListFailReason };
-
 // PURL-08 / D-78-03: test-only re-export of the not-installed row builder. The
 // output-parity drift-guard (tests/orchestrators/edge-deps.test.ts) feeds the
 // SAME git-source manifest through this list-surface builder and the completion
 // bucketizer and asserts identical status buckets, guarding the list
-// `(available)` vs completion `unavailable` divergence class. Mirrors the
-// `__test_narrowProbeError` re-export precedent.
+// `(available)` vs completion `unavailable` divergence class.
 export { availableRowMessage as __test_availableRowMessage };
