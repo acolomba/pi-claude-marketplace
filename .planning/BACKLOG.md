@@ -313,9 +313,49 @@ Picking this up means owning the coverage-format conversion first. Until then
 `maxCrap: 0` is the honest setting, because a CRAP number this project cannot
 compute reliably is worse than no CRAP number.
 
-## FLOW-06: `production: false` makes the dead-code classes nearly vacuous
+## FLOW-06: `production: false` makes the dead-code classes nearly vacuous (CLOSED)
 
 Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+**CLOSED 2026-08-16**, same quick task. The fix was `includeEntryExports: true`
+rather than reverting `production`. Fallow documents it as making "exports of
+entry-point files subject to unused-export detection instead of being
+auto-credited as used", which is exactly the arm the entry-point promotion was
+short-circuiting. `production` stays `false`, so the ~130 false positives from
+the `_*ForTest` seam convention do not return.
+
+Enabling it surfaced 154 real findings. All 154 are resolved, and the
+resolution mix is the evidence they were genuine rather than noise:
+
+| Resolution | Count |
+|---|---|
+| Export used only inside its own file -> dropped the `export` keyword | 60 |
+| Dead name removed from a re-export list | 32 |
+| Unreferenced declaration deleted, plus what it solely supported | 27 |
+| `as const` tuple whose only consumer was a derived type -> direct union | 13 |
+| Dead barrel FILE deleted (`orchestrators/{plugin,marketplace}/index.ts`) | 2 |
+| Suppressed with a written justification | 6 |
+
+The two deleted barrels had no production consumer at all; each one's only
+consumer was a test asserting that the barrel re-exports. Those two tests went
+with them.
+
+All six suppressions are compile-time assertions, not unused code:
+`_DroppedHookDriftCheck`, `_DroppedHookArmKeysCheck` and
+`_ReasonsCoverageProof` fail the BUILD on drift and their `export` is
+load-bearing (dropping it was observed failing typecheck with TS6196);
+`AddPrivateReason` and `RemovePrivateReason` derive through `_ReasonInSet`,
+which is what asserts their literals are members of the closed `Reason` set;
+and `ResolvedPluginSchema` is the canonical typebox definition of the NFR-7
+union, where un-exporting trips `no-unused-vars` and deleting would orphan all
+three arm schemas.
+
+Method note worth keeping: textual grep could not classify these. Symbols
+appeared elsewhere only in comments, in string literals, or as same-named local
+declarations -- `FETCH_STATUSES` and `INSTALL_STATUSES` each collide with an
+unrelated local const in `edge/completions/data.ts`. Typecheck was the decisive
+test, and it caught two real importers a comment-stripped census missed,
+including dynamic `await import()` call sites.
 
 `.fallowrc.json` sets `production: false` so tests join the reachability graph.
 That was the right call for the reason FLOW-04 gives -- it retires roughly 130
