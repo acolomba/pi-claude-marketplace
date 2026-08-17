@@ -111,11 +111,6 @@ repos:
         language: system
         pass_filenames: false
         files: '^(extensions/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
-      # Whole-graph, so it never takes filenames: moving a single import can
-      # orphan a file the commit does not touch. always_run because health and
-      # duplication now cover tests/ too, so a test-only commit can regress the
-      # gate; a file filter would let that through. The whole run is well under
-      # a second, so always running costs less than reasoning about the filter.
       - id: npm-fallow
         name: npm fallow
         entry: npm run fallow
