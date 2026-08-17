@@ -73,7 +73,7 @@
   },
   "scripts": {
     "check": "npm run typecheck && npm run lint && npm run fallow && npm run format:check && npm test && npm run test:integration",
-    "fallow": "fallow dead-code --fail-on-issues --format human",
+    "fallow": "fallow dead-code --fail-on-issues --format human && fallow health --fail-on-issues --format human",
     "fallow:audit": "fallow audit --format human",
     "format": "prettier --write \"**/*.{js,json,ts}\"",
     "format:check": "prettier --check \"**/*.{js,json,ts}\"",

@@ -461,6 +461,29 @@ async function flipOneScope(
   });
 }
 
+/**
+ * Fold one scope's flip result into the cascade rows.
+ *
+ * I2 / PR #51: a write-back-skipped name is demoted from a success row (the
+ * `<autoupdate>` fresh marker) to an honest failed row. Such a name appears in
+ * `result.changed` even though its config write never landed, so reporting it
+ * as a success would lie about persistence.
+ */
+function collectFlipRows(
+  rows: AutoupdateFlipRow[],
+  scope: Scope,
+  result: Awaited<ReturnType<typeof flipOneScope>>,
+): void {
+  const skippedSet = new Set(result.skipped);
+  for (const name of result.changed) {
+    rows.push({ name, scope, alreadyMatching: false, writeBackSkipped: skippedSet.has(name) });
+  }
+
+  for (const name of result.unchanged) {
+    rows.push({ name, scope, alreadyMatching: true });
+  }
+}
+
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
@@ -474,25 +497,13 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
 
   for (const scope of scopes) {
     try {
-      const result = await flipOneScope(opts, scope);
-      const skippedSet = new Set(result.skipped);
-      for (const name of result.changed) {
-        // I2 / PR #51: demote write-back-skipped names from success rows
-        // (`<autoupdate>` fresh marker) to honest failed rows. A skipped
-        // name appears in `result.changed` but its config write never
-        // landed, so claiming success would lie about persistence.
-        rows.push({ name, scope, alreadyMatching: false, writeBackSkipped: skippedSet.has(name) });
-      }
-
-      for (const name of result.unchanged) {
-        rows.push({ name, scope, alreadyMatching: true });
-      }
+      collectFlipRows(rows, scope, await flipOneScope(opts, scope));
     } catch (err) {
-      // For single-name flips: classifyAutoupdateFlip throws
-      // MarketplaceNotFoundError when the name is absent from THIS
-      // scope. With SC-6 bare-form, that is expected if the name only
-      // lives in the OTHER scope; we collect and only surface if BOTH
-      // scopes failed AND no flips happened anywhere.
+      // For a single-name flip `classifyAutoupdateFlip` throws
+      // MarketplaceNotFoundError when the name is absent from THIS scope.
+      // Under the SC-6 bare form that is expected when the name lives only in
+      // the OTHER scope, so it is collected and surfaced only if BOTH scopes
+      // failed AND no flip happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
         notifyAutoupdateScopeFailure(opts, scope, err);
         return;

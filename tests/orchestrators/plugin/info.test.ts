@@ -52,12 +52,17 @@ import {
   getPluginInfo,
   type InfoCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { makeMockCredentialOps } from "../../helpers/credential-mock.ts";
 import { makeMockGitOps } from "../../helpers/git-mock.ts";
+import {
+  buildInstalledPluginRecord,
+  materializeMarketplaceTree,
+  mergeMarketplaceIntoState,
+  seedAutoupdateConfig,
+} from "../../helpers/marketplace-seed.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -159,57 +164,18 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 
-  for (const rel of opts.installablePluginDirs ?? []) {
-    await mkdir(path.join(mpRoot, rel), { recursive: true });
-  }
-
-  for (const [pluginDir, components] of Object.entries(opts.componentDirs ?? {})) {
-    for (const c of components) {
-      await mkdir(path.join(mpRoot, pluginDir, c), { recursive: true });
-    }
-  }
-
-  for (const [pluginDir, files] of Object.entries(opts.componentFiles ?? {})) {
-    for (const rel of files) {
-      const abs = path.join(mpRoot, pluginDir, rel);
-      await mkdir(path.dirname(abs), { recursive: true });
-      await writeFile(abs, "", "utf8");
-    }
-  }
+  await materializeMarketplaceTree(mpRoot, opts);
 
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
-    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
-    // resolution dropped components persists `unsupported` (and
-    // `installable: false`). The deriver reads this to render
-    // `(partially-installed)` -- no separate persisted flag.
-    const unsupported = info.unsupported ?? [];
-    plugins[name] = {
-      version: info.version,
-      resolvedSource: "./placeholder",
-      compatibility: {
-        installable: unsupported.length === 0,
-        notes: [],
-        supported: [],
-        unsupported: [...unsupported],
-      },
-      resources:
-        info.disabled === true
-          ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
-          : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
-      enabled: info.disabled !== true,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
-  }
-
-  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
-  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
-  try {
-    const raw = await readFile(stateJsonPath, "utf8");
-    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
-  } catch {
-    /* first marketplace in scope */
+    // This suite's inventory contract: a disabled record seeds an EMPTY
+    // inventory, an enabled one seeds a single skill.
+    plugins[name] = buildInstalledPluginRecord(
+      info,
+      info.disabled === true
+        ? { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] }
+        : { skills: [`${name}-skill`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    );
   }
 
   const record: Record<string, unknown> = {
@@ -225,36 +191,10 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
     record.autoupdate = opts.autoupdate;
   }
 
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: { ...existing.marketplaces, [mpName]: record },
-  } as unknown as Parameters<typeof saveState>[1]);
+  await mergeMarketplaceIntoState(locations.extensionRoot, mpName, record);
 
-  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
-  // config when autoupdate is set so the info orchestrator reads the
-  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
-    const cfgPath = locations.configJsonPath;
-    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
-      {};
-    try {
-      const raw = await readFile(cfgPath, "utf8");
-      existingCfg = JSON.parse(raw) as typeof existingCfg;
-    } catch {
-      /* first marketplace in scope */
-    }
-
-    await saveConfig(
-      cfgPath,
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          ...(existingCfg.marketplaces ?? {}),
-          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
-        },
-      },
-      locations.scopeRoot,
-    );
+    await seedAutoupdateConfig(locations, mpName, opts.autoupdate);
   }
 
   return mpRoot;

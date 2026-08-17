@@ -70,6 +70,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { isScopeBearingListRow } from "../../shared/notify.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
@@ -1253,59 +1254,6 @@ function compareMpForSort(a: MarketplaceRows<ListMsg>, b: MarketplaceRows<ListMs
   }
 
   return a.scope === "project" ? -1 : 1;
-}
-
-/** The list-surface statuses whose message variant carries an optional `scope`. */
-type ScopeBearingListStatus =
-  "upgradable" | "installed" | "disabled" | "partially-installed" | "partially-upgradable";
-
-/**
- * Which statuses carry a per-row `scope`, as a TOTAL map over the status
- * union. Totality is the exhaustiveness guard: a future
- * `PluginNotificationMessage` status variant that is not listed here fails
- * `npm run check` rather than silently defaulting.
- *
- * FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are scope-bearing
- * list-surface variants and join the orphan-fold arm. D-54-01 / ENBL-04:
- * disabled rows carry an explicit `scope?` and join them too.
- *
- * USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
- * `partially-available` have no `scope` field (the SNM-11 carve-out family).
- * The transition and DIFF-02 `will-*` variants are unreachable on the list
- * surface -- `/claude:plugin pending` emits those and does not flow through
- * this orchestrator -- and are false for the same reason.
- */
-const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
-  upgradable: true,
-  installed: true,
-  disabled: true,
-  "partially-installed": true,
-  "partially-upgradable": true,
-  available: false,
-  remote: false,
-  unavailable: false,
-  "partially-available": false,
-  updated: false,
-  reinstalled: false,
-  uninstalled: false,
-  failed: false,
-  skipped: false,
-  "manual recovery": false,
-  "will install": false,
-  "will uninstall": false,
-  "will enable": false,
-  "will disable": false,
-};
-
-/**
- * Narrow to the scope-bearing list-surface variants. The predicate exists
- * because reading `p.scope` is only safe under TS strict once the union is
- * narrowed, and the table above cannot narrow on its own.
- */
-function isScopeBearingListRow(
-  p: PluginNotificationMessage,
-): p is Extract<PluginNotificationMessage, { status: ScopeBearingListStatus }> {
-  return SCOPE_BEARING_LIST_STATUS[p.status];
 }
 
 /**

@@ -634,9 +634,25 @@ function backfilledRowFromOutcome(
   };
 }
 
-function applyOutcomeToBlock(
+/**
+ * Apply a MARKETPLACE-subject outcome: the block header's own status and
+ * reasons, plus the two arms that also push a synthetic plugin child.
+ */
+function applyMarketplaceOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
-  outcome: PerEntryOutcome,
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "mp-added"
+        | "mp-removed"
+        | "mp-add-failed"
+        | "mp-remove-failed"
+        | "mp-remove-partial"
+        | "source-mismatch"
+        | "invalid-block";
+    }
+  >,
 ): void {
   switch (outcome.kind) {
     case "mp-added":
@@ -657,6 +673,77 @@ function applyOutcomeToBlock(
       // collapses to `⊘ <name> [<scope>] (failed)` when reasons is absent.
       block.status = "failed";
       return;
+    case "source-mismatch":
+      block.status = "failed";
+      if (outcome.cause === "dangling-reference") {
+        // PURL-06: name the real problem -- an orphaned plugin declaration whose
+        // marketplace is undeclared reads as `dangling reference` on both the mp
+        // row and the plugin child, NOT `source mismatch`.
+        block.reasons = ["dangling reference"];
+        block.plugins.push({
+          status: "failed",
+          name: outcome.plugin,
+          reasons: ["dangling reference"],
+          // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
+          severity: "error",
+          needsReload: false,
+        });
+      } else {
+        block.reasons = ["source mismatch"];
+      }
+
+      return;
+    case "invalid-block":
+      // CFG-03 row: the row subject IS the file basename (T-55-02-01).
+      // The block is keyed by (scope, basename) so multiple invalid files in
+      // the same scope render as distinct rows.
+      block.status = "failed";
+      block.reasons = [outcome.reason];
+      // I5 / PR #51: when loadConfig's diagnostic detail was threaded in
+      // (EACCES vs JSON parse vs schema key), surface it via a synthetic
+      // PluginFailedMessage child carrying the cause -- mirrors the SNM-10
+      // pattern used by autoupdateFailedRow. The MarketplaceNotificationMessage
+      // header itself cannot carry a cause (SNM-10 confines causes to
+      // plugin-row + manual-recovery surfaces), so the synthetic child is the
+      // only IL-2-compatible channel that drives the depth-5 cause-chain
+      // trailer below the row. Path tokens were already stripped at the apply
+      // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
+      if (outcome.cause !== undefined) {
+        block.plugins.push({
+          status: "failed",
+          name: outcome.basename,
+          reasons: [outcome.reason],
+          cause: outcome.cause,
+          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+          severity: "error",
+          needsReload: false,
+        });
+      }
+
+      return;
+  }
+}
+
+/** Apply a PLUGIN-subject outcome: one row pushed onto the block's children. */
+function applyPluginOutcomeToBlock(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "plugin-installed"
+        | "plugin-backfilled"
+        | "plugin-uninstalled"
+        | "plugin-enabled"
+        | "plugin-disabled"
+        | "plugin-install-failed"
+        | "plugin-uninstall-failed"
+        | "plugin-enable-failed"
+        | "plugin-disable-failed";
+    }
+  >,
+): void {
+  switch (outcome.kind) {
     case "plugin-installed":
       // D-03/D-06 realized install row; WARN-01 / D-86-03 raises it to warning
       // with the failure-class token when the outcome carries degradedKinds.
@@ -731,53 +818,33 @@ function applyOutcomeToBlock(
         needsReload: false,
       });
       return;
+  }
+}
+
+function applyOutcomeToBlock(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: PerEntryOutcome,
+): void {
+  switch (outcome.kind) {
+    case "mp-added":
+    case "mp-removed":
+    case "mp-add-failed":
+    case "mp-remove-failed":
+    case "mp-remove-partial":
     case "source-mismatch":
-      block.status = "failed";
-      if (outcome.cause === "dangling-reference") {
-        // PURL-06: name the real problem -- an orphaned plugin declaration whose
-        // marketplace is undeclared reads as `dangling reference` on both the mp
-        // row and the plugin child, NOT `source mismatch`.
-        block.reasons = ["dangling reference"];
-        block.plugins.push({
-          status: "failed",
-          name: outcome.plugin,
-          reasons: ["dangling reference"],
-          // D-03/D-06: a dangling-reference diagnostic -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
-      } else {
-        block.reasons = ["source mismatch"];
-      }
-
-      return;
     case "invalid-block":
-      // CFG-03 row: the row subject IS the file basename (T-55-02-01).
-      // The block is keyed by (scope, basename) so multiple invalid files in
-      // the same scope render as distinct rows.
-      block.status = "failed";
-      block.reasons = [outcome.reason];
-      // I5 / PR #51: when loadConfig's diagnostic detail was threaded in
-      // (EACCES vs JSON parse vs schema key), surface it via a synthetic
-      // PluginFailedMessage child carrying the cause -- mirrors the SNM-10
-      // pattern used by autoupdateFailedRow. The MarketplaceNotificationMessage
-      // header itself cannot carry a cause (SNM-10 confines causes to
-      // plugin-row + manual-recovery surfaces), so the synthetic child is the
-      // only IL-2-compatible channel that drives the depth-5 cause-chain
-      // trailer below the row. Path tokens were already stripped at the apply
-      // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
-      if (outcome.cause !== undefined) {
-        block.plugins.push({
-          status: "failed",
-          name: outcome.basename,
-          reasons: [outcome.reason],
-          cause: outcome.cause,
-          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
-      }
-
+      applyMarketplaceOutcomeToBlock(block, outcome);
+      return;
+    case "plugin-installed":
+    case "plugin-backfilled":
+    case "plugin-uninstalled":
+    case "plugin-enabled":
+    case "plugin-disabled":
+    case "plugin-install-failed":
+    case "plugin-uninstall-failed":
+    case "plugin-enable-failed":
+    case "plugin-disable-failed":
+      applyPluginOutcomeToBlock(block, outcome);
       return;
     default:
       assertNever(outcome);

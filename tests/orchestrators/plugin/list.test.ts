@@ -40,11 +40,15 @@ import {
   __test_narrowProbeError,
   listPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
-import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+  seedAutoupdateConfig,
+} from "../../helpers/marketplace-seed.ts";
 
 import type {
   ExtensionAPI,
@@ -189,16 +193,6 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     await mkdir(path.join(mpRoot, rel), { recursive: true });
   }
 
-  // Build state, merging into any pre-existing state for the scope.
-  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
-  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
-  try {
-    const raw = await readFile(stateJsonPath, "utf8");
-    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
-  } catch {
-    /* no existing state.json -- first marketplace in scope */
-  }
-
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
     // ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
@@ -226,27 +220,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       hooks: [...(override?.hooks ?? defaults.hooks)],
     };
 
-    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
-    // resolution dropped components persists `unsupported` (and
-    // `installable: false`). The deriver reads this to render
-    // `(partially-installed)` -- no separate persisted flag.
-    const unsupported = info.unsupported ?? [];
-    const compatibility = {
-      installable: unsupported.length === 0,
-      notes: [],
-      supported: [],
-      unsupported: [...unsupported],
-    };
-
-    plugins[name] = {
-      version: info.version,
-      resolvedSource: "./placeholder",
-      compatibility,
-      resources,
-      enabled: info.disabled !== true,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
+    plugins[name] = buildInstalledPluginRecord(info, resources);
   }
 
   const record: Record<string, unknown> = {
@@ -262,37 +236,10 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     record.autoupdate = opts.autoupdate;
   }
 
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: { ...existing.marketplaces, [mpName]: record },
-    // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
-  } as unknown as Parameters<typeof saveState>[1]);
+  await mergeMarketplaceIntoState(locations.extensionRoot, mpName, record);
 
-  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
-  // config when autoupdate is set so the list/info orchestrators read the
-  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
-    const cfgPath = locations.configJsonPath;
-    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
-      {};
-    try {
-      const raw = await readFile(cfgPath, "utf8");
-      existingCfg = JSON.parse(raw) as typeof existingCfg;
-    } catch {
-      /* no existing config -- first marketplace in scope */
-    }
-
-    await saveConfig(
-      cfgPath,
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          ...(existingCfg.marketplaces ?? {}),
-          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
-        },
-      },
-      locations.scopeRoot,
-    );
+    await seedAutoupdateConfig(locations, mpName, opts.autoupdate);
   }
 }
 

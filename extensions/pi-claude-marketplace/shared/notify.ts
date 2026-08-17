@@ -1097,6 +1097,59 @@ export type PluginNotificationMessage =
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage;
 
+/** The list-surface statuses whose message variant carries an optional `scope`. */
+export type ScopeBearingListStatus =
+  "upgradable" | "installed" | "disabled" | "partially-installed" | "partially-upgradable";
+
+/**
+ * Which statuses carry a per-row `scope`, as a TOTAL map over the status
+ * union. Totality is the exhaustiveness guard: a future
+ * `PluginNotificationMessage` status variant that is not listed here fails
+ * `npm run check` rather than silently defaulting.
+ *
+ * FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are scope-bearing
+ * list-surface variants and join the orphan-fold arm. D-54-01 / ENBL-04:
+ * disabled rows carry an explicit `scope?` and join them too.
+ *
+ * USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
+ * `partially-available` have no `scope` field (the SNM-11 carve-out family).
+ * The transition and DIFF-02 `will-*` variants are unreachable on the list
+ * surface -- `/claude:plugin pending` emits those and does not flow through
+ * this orchestrator -- and are false for the same reason.
+ */
+export const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+  upgradable: true,
+  installed: true,
+  disabled: true,
+  "partially-installed": true,
+  "partially-upgradable": true,
+  available: false,
+  remote: false,
+  unavailable: false,
+  "partially-available": false,
+  updated: false,
+  reinstalled: false,
+  uninstalled: false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  "will install": false,
+  "will uninstall": false,
+  "will enable": false,
+  "will disable": false,
+};
+
+/**
+ * Narrow to the scope-bearing list-surface variants. The predicate exists
+ * because reading `p.scope` is only safe under TS strict once the union is
+ * narrowed, and the table above cannot narrow on its own.
+ */
+export function isScopeBearingListRow(
+  p: PluginNotificationMessage,
+): p is Extract<PluginNotificationMessage, { status: ScopeBearingListStatus }> {
+  return SCOPE_BEARING_LIST_STATUS[p.status];
+}
+
 /**
  * Common fields shared by every arm of the per-status
  * `MarketplaceNotificationMessage` discriminated union (SNM-02 / TYPE-04 /
@@ -2240,6 +2293,53 @@ export function installedLikeRow(
   ]);
 }
 
+/**
+ * DIFF-02 pending-tense rows: the pre-transition analogs the reconcile plan
+ * projects. None carries a `version` slot (the transition has not happened
+ * yet) and none carries reasons.
+ *
+ * Glyphs mirror the realized row of the same class, which is the established
+ * precedent: `●` for `(installed)` / `(will install)` / `(will enable)`, `○`
+ * for `(available)` / `(will uninstall)`, and `◍` for `(disabled)` /
+ * `(will disable)`.
+ *
+ * FSTAT-06 / D-66-04: the `partial` modifier renders
+ * `(will partially install)` when the planned install would degrade (it
+ * resolves `partially-available`). There is deliberately NO
+ * `will partially update` analog -- the reconcile plan has no update bucket
+ * (D-66-05).
+ *
+ * D-53-02 / ENBL-05: the `will enable` bucket is populated only when the
+ * recorded-but-disabled marker (the record's explicit `enabled: false`
+ * boolean, and nothing else) is paired with a config entry whose
+ * `enabled !== false`. The arm is always present so enable-wiring stays
+ * type-complete.
+ */
+function renderPendingRow(
+  p: Extract<
+    PluginNotificationMessage,
+    { status: "will install" | "will uninstall" | "will enable" | "will disable" }
+  >,
+  mpScope: Scope,
+): string {
+  const bracket = renderScopeBracket(p.scope, mpScope);
+  switch (p.status) {
+    case "will install":
+      return joinTokens([
+        ICON_INSTALLED,
+        p.name,
+        bracket,
+        p.partial === true ? "(will partially install)" : "(will install)",
+      ]);
+    case "will uninstall":
+      return joinTokens([ICON_AVAILABLE, p.name, bracket, "(will uninstall)"]);
+    case "will enable":
+      return joinTokens([ICON_INSTALLED, p.name, bracket, "(will enable)"]);
+    case "will disable":
+      return joinTokens([ICON_DISABLED, p.name, bracket, "(will disable)"]);
+  }
+}
+
 function renderPluginRow(
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
@@ -2378,57 +2478,10 @@ function renderPluginRow(
       // `(manual recovery)` discriminator preserved verbatim WITH A SPACE.
       return pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe);
     case "will install":
-      // DIFF-02 / D-53-02: pending-tense row for a plugin declared in
-      // config but not yet recorded. Reuses ICON_INSTALLED. No `version`
-      // slot (the install hasn't happened yet); no reasons (pending rows are
-      // pre-transition). FSTAT-06 / D-66-04: the `partial` modifier renders
-      // `(will partially install)` when the planned install would degrade
-      // (resolves `partially-available`); there is deliberately NO `will partially update`
-      // analog -- the reconcile plan has no update bucket (D-66-05).
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        p.partial === true ? "(will partially install)" : "(will install)",
-      ]);
     case "will uninstall":
-      // DIFF-02: pending-tense row for a plugin recorded in state but
-      // no longer declared. Reuses ICON_AVAILABLE (open circle `○`) -- same
-      // glyph as the realized (uninstalled) row, because a `will uninstall`
-      // is its pre-transition analog.
-      return joinTokens([
-        ICON_AVAILABLE,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        "(will uninstall)",
-      ]);
     case "will enable":
-      // DIFF-02: pending-tense row for a recorded plugin newly
-      // declared `enabled: true` after being locally disabled. Reuses
-      // ICON_INSTALLED. The bucket is populated only when the recorded-
-      // but-disabled marker -- the record's explicit `enabled: false` boolean
-      // and nothing else, per ENBL-05 -- is paired with a config entry whose
-      // `enabled !== false`; the arm is always present so enable-wiring stays
-      // type-complete.
-      return joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        "(will enable)",
-      ]);
     case "will disable":
-      // DIFF-02: pending-tense row for a recorded plugin newly declared
-      // `enabled: false`. Uses ICON_DISABLED (`◍`) -- the same glyph the
-      // realized `(disabled)` inventory row uses; this mirrors the precedent
-      // that realized + pending-tense rows for the same row class share a
-      // glyph (`●` for `(installed)` / `(will install)`, `○` for
-      // `(available)` / `(will uninstall)`).
-      return joinTokens([
-        ICON_DISABLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        "(will disable)",
-      ]);
+      return renderPendingRow(p, mpScope);
     case "disabled":
       // D-54-01 / ENBL-04: list/info inventory row for a recorded-but-disabled
       // plugin. Subject-first grammar; uses the dedicated ICON_DISABLED
@@ -3784,6 +3837,82 @@ export function emitReconcileAppliedContextCascade(
  * row line, never the multi-line trailers (those route through the central
  * path-redaction seam, NFR-9).
  */
+/**
+ * PL-4: which rows carry the manifest description, as a TOTAL map over the
+ * status union so a new variant fails `npm run check` rather than silently
+ * losing its description line. The list inventory rows carry it; a cascade
+ * `installed` row never sets `description`, so those stay single-line.
+ */
+const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+  installed: true,
+  upgradable: true,
+  available: true,
+  remote: true,
+  unavailable: true,
+  "partially-available": true,
+  disabled: true,
+  "partially-installed": true,
+  "partially-upgradable": true,
+  updated: false,
+  reinstalled: false,
+  uninstalled: false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  "will install": false,
+  "will uninstall": false,
+  "will enable": false,
+  "will disable": false,
+};
+
+/** Narrow to the rows whose variant declares an optional `description`. */
+function isDescriptionBearingRow(
+  p: PluginNotificationMessage,
+): p is Extract<PluginNotificationMessage, { description?: string }> {
+  return DESCRIPTION_BEARING_STATUS[p.status];
+}
+
+/**
+ * Select the 4-space-indented `--partial` hint trailer for a row, or
+ * undefined when the row carries none. Exactly one can apply, because each
+ * arm is keyed on a distinct status.
+ *
+ * SEV-02 / D-69-03 / XSURF-01: the partially-available INSTALL-failure row
+ * takes the install-worded hint. That row surfaces as `unavailable` (the
+ * structural arm) or `partially-available` (the resolver-state-driven token);
+ * the structural `unavailable` arm omits `partialHint` because `--partial`
+ * cannot help it. T-69-01: the hint names the user's own flag and
+ * interpolates no plugin or marketplace identifier. D-70-01: the byte form is
+ * FROZEN as the reconciled doc contract, locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md.
+ *
+ * SEV-04 / XSURF-03: the partially-upgradable manual update-decline row takes
+ * the update-worded hint; the list inventory `partially-upgradable` row omits
+ * `partialHint` and stays byte-frozen.
+ *
+ * CR-01 / D-98-03: the stale-gate ENABLE failure takes its OWN trailer. Its
+ * remedy is `update --partial` too, but the failed command is `enable`, so
+ * the "re-run" wording of the update hint would name a command that rejects
+ * the flag it advertises. Only the enable-failure narrowing stamps
+ * `partialHint` on a `failed` row, so this arm stays inert for every other
+ * producer.
+ */
+function partialHintTrailerFor(p: PluginNotificationMessage): string | undefined {
+  if (p.status === "unavailable" || p.status === "partially-available") {
+    return p.partialHint === true ? PARTIAL_INSTALL_HINT_TRAILER : undefined;
+  }
+
+  if (p.status === "partially-upgradable") {
+    return p.partialHint === true ? PARTIAL_UPDATE_HINT_TRAILER : undefined;
+  }
+
+  if (p.status === "failed") {
+    return p.partialHint === true ? STALE_GATE_UPDATE_HINT_TRAILER : undefined;
+  }
+
+  return undefined;
+}
+
 function composePluginLinesWith(
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
@@ -3792,57 +3921,13 @@ function composePluginLinesWith(
 ): string[] {
   const lines: string[] = [`  ${renderRow(p, probe, mpScope)}`];
 
-  // PL-4: the list inventory rows (`installed` / `upgradable`
-  // / `available` / `remote` / `unavailable` / `partially-available` /
-  // `disabled` / `partially-installed` / `partially-upgradable`) carry the
-  // manifest description; cascade `installed` rows never set `description`, so
-  // the guard keeps them single-line.
-  if (
-    (p.status === "installed" ||
-      p.status === "upgradable" ||
-      p.status === "available" ||
-      p.status === "remote" ||
-      p.status === "unavailable" ||
-      p.status === "partially-available" ||
-      p.status === "disabled" ||
-      p.status === "partially-installed" ||
-      p.status === "partially-upgradable") &&
-    p.description !== undefined &&
-    p.description.length > 0
-  ) {
+  if (isDescriptionBearingRow(p) && p.description !== undefined && p.description.length > 0) {
     lines.push(`    ${truncateDescription(p.description)}`);
   }
 
-  // SEV-02 / D-69-03 / XSURF-01: the partially-available install-failure row
-  // carries a 4-space-indented install-worded `--partial` hint trailer. The row
-  // surfaces as `unavailable` (Phase-72 structural arm) or `partially-available`
-  // (resolver-state-driven token, XSURF-01); the structural `unavailable` arm
-  // omits `partialHint` -- `--partial` cannot help. The hint references the user's own
-  // flag only and interpolates no plugin / marketplace identifier (T-69-01).
-  // D-70-01: the byte form is FROZEN as the reconciled DOC contract, locked
-  // byte-for-byte in docs/output-catalog.md and docs/messaging-style-guide.md.
-  if (
-    (p.status === "unavailable" || p.status === "partially-available") &&
-    p.partialHint === true
-  ) {
-    lines.push(`    ${PARTIAL_INSTALL_HINT_TRAILER}`);
-  }
-
-  // SEV-04 / XSURF-03: the partially-upgradable manual update-decline row carries a
-  // 4-space-indented update-worded `--partial` hint trailer. The list inventory
-  // `partially-upgradable` row omits `partialHint` and stays byte-frozen.
-  if (p.status === "partially-upgradable" && p.partialHint === true) {
-    lines.push(`    ${PARTIAL_UPDATE_HINT_TRAILER}`);
-  }
-
-  // CR-01 / D-98-03: the stale-gate enable failure takes its OWN trailer. Its
-  // remedy is `update --partial` too, but the failed command is `enable`, so the
-  // "re-run" wording of `PARTIAL_UPDATE_HINT_TRAILER` would name a command that
-  // rejects the flag it advertises. Only the enable-failure narrowing stamps
-  // `partialHint` on a `failed` row -- every other producer of one omits it, so
-  // this gate stays inert for them.
-  if (p.status === "failed" && p.partialHint === true) {
-    lines.push(`    ${STALE_GATE_UPDATE_HINT_TRAILER}`);
+  const hint = partialHintTrailerFor(p);
+  if (hint !== undefined) {
+    lines.push(`    ${hint}`);
   }
 
   if (p.status === "failed" || p.status === "manual recovery") {

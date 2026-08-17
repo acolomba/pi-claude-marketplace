@@ -289,6 +289,85 @@ function parseObjectPluginSource(raw: Record<string, unknown>): ParsedSource {
   return parseDiscriminatorObjectSource(raw, discriminator);
 }
 
+/**
+ * Local-path forms (SP-1, SP-4, SP-7). Returns undefined when `raw` is not a
+ * path form, so the caller falls through to the URL and shorthand arms.
+ */
+function parsePathSourceForm(raw: string): ParsedSource | undefined {
+  if (raw === "~" || raw.startsWith("~/")) {
+    return { kind: "path", raw, logical: raw };
+  }
+
+  // SP-4: `~user/foo` and every other tilde form is rejected with a hint.
+  if (raw.startsWith("~")) {
+    return { kind: "unknown", raw, reason: TILDE_USER_HINT };
+  }
+
+  if (raw.startsWith("./") || raw.startsWith("../") || raw.startsWith("/")) {
+    return { kind: "path", raw, logical: raw };
+  }
+
+  return undefined;
+}
+
+/**
+ * URL forms. Returns undefined when `raw` carries no scheme, so the caller
+ * falls through to the `owner/repo` shorthand arms.
+ *
+ * D-76-02: the github-host check MUST run BEFORE the generic-https arm so
+ * github.com always normalizes to the `github` kind -- one canonical identity
+ * per repo, and Device Flow auth stays applicable.
+ *
+ * D-76-01: `http://`, `ssh://` and the `git@host:` scp form stay rejected.
+ * Only `https://` URLs and local paths are accepted, so the reject must sit
+ * AFTER both https arms.
+ */
+function parseUrlSourceForm(raw: string): ParsedSource | undefined {
+  if (raw.startsWith("https://github.com/")) {
+    return parseGitHubUrl(raw);
+  }
+
+  // MURL-01 / D-76-01: any other https host is a generic `url` source.
+  if (raw.startsWith("https://")) {
+    return parseUrlSource(raw);
+  }
+
+  if (raw.startsWith("git@") || raw.includes("://")) {
+    return { kind: "unknown", raw, reason: unsupportedUrlReason(raw) };
+  }
+
+  return undefined;
+}
+
+/**
+ * The scheme-less `owner/repo` shorthands.
+ *
+ * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
+ * the LAST `@`, and the fold only happens when the left side is a valid
+ * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
+ * halves non-empty. MM-4: anything else (`foo/bar/baz`, `foo`, the empty
+ * string, whitespace) is unknown.
+ */
+function parseShorthandSourceForm(raw: string): ParsedSource {
+  const atIdx = raw.lastIndexOf("@");
+  if (atIdx !== -1) {
+    const github = parseOwnerRepo(raw.slice(0, atIdx), raw);
+    const ref = raw.slice(atIdx + 1);
+    if (github.kind === "github" && ref.length > 0) {
+      return { ...github, ref };
+    }
+
+    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  }
+
+  const slashCount = (raw.match(/\//g) ?? []).length;
+  if (slashCount === 1) {
+    return parseOwnerRepo(raw, raw);
+  }
+
+  return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+}
+
 export function parsePluginSource(raw: unknown): ParsedSource {
   if (typeof raw !== "string") {
     if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
@@ -298,61 +377,9 @@ export function parsePluginSource(raw: unknown): ParsedSource {
     return { kind: "unknown", raw: String(raw), reason: "source must be a string or object" };
   }
 
-  // path forms (SP-1, SP-7)
-  if (raw === "~" || raw.startsWith("~/")) {
-    return { kind: "path", raw, logical: raw };
-  }
-
-  // SP-4: ~user/foo (any other tilde form)
-  if (raw.startsWith("~")) {
-    return { kind: "unknown", raw, reason: TILDE_USER_HINT };
-  }
-
-  if (raw.startsWith("./") || raw.startsWith("../") || raw.startsWith("/")) {
-    return { kind: "path", raw, logical: raw };
-  }
-
-  // GitHub HTTPS URL. D-76-02: the github-host check MUST run BEFORE the
-  // generic-https arm below so github.com always normalizes to `github` kind
-  // (one canonical identity per repo; Device Flow auth stays applicable).
-  if (raw.startsWith("https://github.com/")) {
-    return parseGitHubUrl(raw);
-  }
-
-  // MURL-01 / D-76-01: any other https:// host is a generic `url` source.
-  // Must sit AFTER the github check and BEFORE the scheme reject below.
-  if (raw.startsWith("https://")) {
-    return parseUrlSource(raw);
-  }
-
-  // D-76-01: http://, ssh://, and git@host: scp-form stay rejected -- only
-  // https:// URLs (and local paths) are accepted.
-  if (raw.startsWith("git@") || raw.includes("://")) {
-    return { kind: "unknown", raw, reason: unsupportedUrlReason(raw) };
-  }
-
-  // D-76-04: owner/repo@<ref> upstream shorthand folds into `github` + ref.
-  // Split on the LAST `@`; only fold when the left side is a valid owner/repo.
-  const atIdx = raw.lastIndexOf("@");
-  if (atIdx !== -1) {
-    const left = raw.slice(0, atIdx);
-    const ref = raw.slice(atIdx + 1);
-    const github = parseOwnerRepo(left, raw);
-    if (github.kind === "github" && ref.length > 0) {
-      return { ...github, ref };
-    }
-
-    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
-  }
-
-  // SP-5: owner/repo -- exactly one slash, both halves non-empty
-  const slashCount = (raw.match(/\//g) ?? []).length;
-  if (slashCount === 1) {
-    return parseOwnerRepo(raw, raw);
-  }
-
-  // MM-4: anything else (foo/bar/baz, foo, "", whitespace-only, etc.) is unknown
-  return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  // Arm order is load-bearing: paths, then URL schemes, then the scheme-less
+  // shorthands as the catch-all.
+  return parsePathSourceForm(raw) ?? parseUrlSourceForm(raw) ?? parseShorthandSourceForm(raw);
 }
 
 /**

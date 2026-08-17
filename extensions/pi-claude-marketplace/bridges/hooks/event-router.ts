@@ -325,6 +325,51 @@ function collectAllCachedPlugins(): CacheEntry[] {
  * within-plugin source order is preserved when the bridge merges multiple
  * plugins' entries into the same bucket.
  */
+/**
+ * Push one matcher group's handlers into its event bucket, in declaration
+ * order. Returns the next `declarationIndex` so the caller's running counter
+ * stays continuous across every group and event of one plugin.
+ */
+function pushGroupHandlers(
+  cacheEntry: CacheEntry,
+  bucket: RoutingEntry[],
+  group: HooksConfig[BucketAEvent] extends readonly (infer G)[] ? G : never,
+  position: { readonly claudeEvent: BucketAEvent; readonly groupIndex: number },
+  startIndex: number,
+): number {
+  const { claudeEvent, groupIndex } = position;
+  const rawMatcher = group.matcher ?? "";
+  const matcher = parseMatcher(rawMatcher);
+  let declarationIndex = startIndex;
+
+  for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {
+    const handlerDecl = group.hooks[handlerIndex];
+    if (handlerDecl === undefined) {
+      continue;
+    }
+
+    // MATCH-03 / D-61-02 always-present-with-sentinel: a missing key means the
+    // handler declared no `if` field, so it falls back to MATCH_ALL_IF.
+    const key = `${claudeEvent}|${groupIndex}|${handlerIndex}`;
+    bucket.push({
+      scope: cacheEntry.scope,
+      marketplace: cacheEntry.marketplace,
+      pluginId: cacheEntry.pluginId,
+      resolvedSource: cacheEntry.resolvedSource,
+      claudeEvent,
+      matcher,
+      rawMatcher,
+      handlerDecl,
+      declarationIndex,
+      ifPredicate: cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF,
+    });
+
+    declarationIndex += 1;
+  }
+
+  return declarationIndex;
+}
+
 function flattenPluginIntoBuckets(
   cacheEntry: CacheEntry,
   buckets: Map<BucketAEvent, RoutingEntry[]>,
@@ -341,38 +386,14 @@ function flattenPluginIntoBuckets(
 
     for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
       const group = groups[groupIndex];
-      if (group === undefined) {
-        continue;
-      }
-
-      const rawMatcher = group.matcher ?? "";
-      const matcher = parseMatcher(rawMatcher);
-
-      for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {
-        const handlerDecl = group.hooks[handlerIndex];
-        if (handlerDecl === undefined) {
-          continue;
-        }
-
-        // MATCH-03 / D-61-02 always-present-with-sentinel: missing key
-        // (handler had no `if` field) falls back to MATCH_ALL_IF.
-        const key = `${claudeEvent}|${groupIndex}|${handlerIndex}`;
-        const ifPredicate = cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF;
-
-        bucket.push({
-          scope: cacheEntry.scope,
-          marketplace: cacheEntry.marketplace,
-          pluginId: cacheEntry.pluginId,
-          resolvedSource: cacheEntry.resolvedSource,
-          claudeEvent,
-          matcher,
-          rawMatcher,
-          handlerDecl,
+      if (group !== undefined) {
+        declarationIndex = pushGroupHandlers(
+          cacheEntry,
+          bucket,
+          group,
+          { claudeEvent, groupIndex },
           declarationIndex,
-          ifPredicate,
-        });
-
-        declarationIndex += 1;
+        );
       }
     }
   }
