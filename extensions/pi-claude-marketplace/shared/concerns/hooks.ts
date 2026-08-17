@@ -79,10 +79,6 @@ export type HookSummaryEntry =
       readonly matcher?: string;
     };
 
-export interface HookSummary {
-  readonly entries: readonly HookSummaryEntry[];
-}
-
 /**
  * SURF-02 / D-63-04: append the multi-line `hooks:` block when the row
  * carries one or more entries. Emits a 4-space-indent header followed by

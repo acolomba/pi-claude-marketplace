@@ -26,13 +26,12 @@ import type { Reason } from "../notify.ts";
  *
  * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
  */
-export const DEPENDENCIES = ["agents", "mcp"] as const;
 
 /**
  * Closed set of dependency probe targets (SNM-06). Derived from
  * `DEPENDENCIES` via indexed access.
  */
-export type Dependency = (typeof DEPENDENCIES)[number];
+export type Dependency = "agents" | "mcp";
 
 /** Soft-dep marker literals -- both are REASONS members (closed set). */
 const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";

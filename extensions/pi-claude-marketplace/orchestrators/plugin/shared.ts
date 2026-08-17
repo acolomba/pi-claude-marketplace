@@ -378,7 +378,7 @@ export function cloneMarketplaceRecordForTargetScope(
  * widen the return to a discriminated result so callers can route the
  * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
  */
-export function synthesizeUndeclaredMarketplaceSource(
+function synthesizeUndeclaredMarketplaceSource(
   scopeConfigs: readonly ScopeConfig[],
   state: ExtensionState,
   marketplace: string,

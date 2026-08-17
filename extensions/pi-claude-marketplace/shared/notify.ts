@@ -290,45 +290,6 @@ export const STATUS_TOKENS = [
 export type StatusToken = (typeof STATUS_TOKENS)[number];
 
 /**
- * CMC-38 closed marker set. This tuple is the SOLE closed-set authority
- * (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`). Entries are
- * stored WITHOUT surrounding `<>` chevrons; the `<marker>` chevron form
- * is composed by the renderer at emission time (MSG-GR-5).
- */
-export const MARKERS = ["autoupdate", "no autoupdate"] as const;
-
-export type Marker = (typeof MARKERS)[number];
-
-/**
- * CMC-38 closed pattern-class set. This tuple is the SOLE closed-set
- * authority (style guide v2.0 retired the binding YAML frontmatter at
- * `docs/messaging-style-guide.md`).
- * Pattern classes label the SHAPES of compact-line emissions (success /
- * failure / cascade-row / etc.) for documentation and rule-attribution
- * purposes. They are NOT emitted in the rendered output -- the renderer
- * dispatches on the `NotificationMessage` discriminated union's `status`
- * field. The set exists so the style-guide body and the catalog can
- * reference the same canonical labels.
- */
-export const PATTERN_CLASSES = [
-  "success",
-  "failure",
-  "cascade-row",
-  "cascade-summary",
-  "list-rendering",
-  "reload-hint",
-  "soft-dep",
-  "manual-recovery",
-  "rollback-partial",
-  "usage",
-  "empty",
-  "legacy-migrate",
-] as const;
-
-export type PatternClass = (typeof PATTERN_CLASSES)[number];
-
-/**
  * Usage error notify (ES-3 primitive). Surfaces a usage-style error at
  * `error` severity with the relevant Usage block appended after a blank
  * line. The on-the-wire string is
@@ -1117,7 +1078,7 @@ export type ScopeBearingListStatus =
  * surface -- `/claude:plugin pending` emits those and does not flow through
  * this orchestrator -- and are false for the same reason.
  */
-export const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
   upgradable: true,
   installed: true,
   disabled: true,

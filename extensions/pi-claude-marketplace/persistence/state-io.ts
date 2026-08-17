@@ -57,9 +57,6 @@ const PERSISTED_HOOK_ENTRY_SCHEMA = Type.Object({
   matcher: Type.Optional(Type.String()),
 });
 
-/** The persisted hook-entry shape derived from its schema. */
-export type PersistedHookEntry = Type.Static<typeof PERSISTED_HOOK_ENTRY_SCHEMA>;
-
 /**
  * ST-3: per-plugin install record (D-09 nesting under marketplaces.<mp>.plugins).
  *

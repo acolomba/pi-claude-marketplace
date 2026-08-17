@@ -37,14 +37,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * row (structural defect) or, per XSURF-01, a `partially-available` row (the
  * partially-available arm, consistent with `list` / `info`).
  */
-export const INSTALL_STATUSES = [
-  "installed",
-  "partially-installed",
-  "failed",
-  "unavailable",
-  "partially-available",
-] as const;
-export type InstallStatus = (typeof INSTALL_STATUSES)[number];
+type InstallStatus =
+  "installed" | "partially-installed" | "failed" | "unavailable" | "partially-available";
 
 /**
  * install's row message union -- the subset of the central plugin message
@@ -58,16 +52,6 @@ export type InstallMsg =
   | PluginFailedMessage
   | PluginUnavailableMessage
   | PluginPartiallyAvailableMessage;
-
-/**
- * install's command-private reason. `orphan rewake` surfaces a hook-config bug
- * (a handler declaring `rewakeMessage` / `rewakeSummary` without
- * `asyncRewake: true`) on the otherwise-successful `installed` row. The
- * failure-class reasons install also references (`rollback partial`,
- * `invalid manifest`, ...) are shared topic reasons owned by
- * `shared/notify-reasons.ts`.
- */
-export type InstallPrivateReason = "orphan rewake";
 
 /**
  * Render map total over install's OWN statuses (D-10): omitting an arm is a

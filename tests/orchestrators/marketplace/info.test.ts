@@ -634,12 +634,3 @@ test("NFR-5: info.ts has zero imports from platform/git, DEFAULT_GIT_OPS, or ref
     "info.ts must not reference refreshGitHubClone",
   );
 });
-
-test("Barrel: orchestrators/marketplace/index.ts re-exports getMarketplaceInfo and GetMarketplaceInfoOptions", async () => {
-  // Static-import the symbol via the barrel; both name + type re-exports
-  // must resolve at typecheck time. The runtime assertion below proves
-  // the named export is a function (not undefined).
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts");
-  assert.equal(typeof mod.getMarketplaceInfo, "function");
-});

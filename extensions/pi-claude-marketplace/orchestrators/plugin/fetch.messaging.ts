@@ -33,15 +33,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * source with nothing to fetch) renders `skipped`; a per-plugin fetch failure
  * inside the failure-tolerant sweep renders `failed`.
  */
-export const FETCH_STATUSES = [
-  "available",
-  "partially-available",
-  "unavailable",
-  "remote",
-  "skipped",
-  "failed",
-] as const;
-export type FetchStatus = (typeof FETCH_STATUSES)[number];
+type FetchStatus =
+  "available" | "partially-available" | "unavailable" | "remote" | "skipped" | "failed";
 
 /** fetch's row message union -- the subset of central plugin shapes fetch emits. */
 export type FetchMsg =

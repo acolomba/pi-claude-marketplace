@@ -335,4 +335,3 @@ export async function getArgumentCompletions(
 }
 
 // Re-export buildItem so unit tests of the dispatcher can compare values.
-export { buildItem } from "./data.ts";

@@ -237,20 +237,6 @@ export function extractScope(tokens: readonly string[]): Scope | undefined {
   return undefined;
 }
 
-/** Emits `--scope user` / `--scope project` suggestions. */
-export function getScopeCompletions(argumentTextPrefix: string): AutocompleteItem[] {
-  return [
-    {
-      ...buildItem(argumentTextPrefix, "--scope user", true),
-      description: "User scope (Pi agent dir; defaults to ~/.pi/agent)",
-    },
-    {
-      ...buildItem(argumentTextPrefix, "--scope project", true),
-      description: "Project scope (.pi/)",
-    },
-  ];
-}
-
 /** Filters names by `currentPrefix` and emits trailing-space terminals. */
 export function getMarketplaceCompletions(
   names: readonly string[],

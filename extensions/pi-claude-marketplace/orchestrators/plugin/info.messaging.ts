@@ -50,8 +50,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * does amend is the `as const satisfies CommandContext<...>` pin below, which
  * makes a missing render arm a compile error rather than a runtime gap.
  */
-export const PLUGIN_INFO_STATUSES = ["skipped"] as const;
-export type PluginInfoStatus = (typeof PLUGIN_INFO_STATUSES)[number];
+type PluginInfoStatus = "skipped";
 
 /** info's cascade row message union (the fetch-skip note). */
 export type PluginInfoCascadeMsg = PluginSkippedMessage;

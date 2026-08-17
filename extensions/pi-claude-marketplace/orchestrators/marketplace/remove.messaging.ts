@@ -25,23 +25,19 @@ import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../.
  * Both header forms render via the central `renderMpHeader` seam the spine
  * reuses.
  */
-export const REMOVE_MP_STATUSES = ["removed", "failed"] as const;
-export type RemoveMpStatus = (typeof REMOVE_MP_STATUSES)[number];
-
 /**
  * D-09 / MOD-01: the command-private reason owned by `marketplace remove`.
  * `plugins remain` is meaningful only to the remove flow (a marketplace that
  * cannot be removed because plugins are still recorded under it). It is a member
  * of the closed `Reason` set; the pin below rejects a typo at compile time.
  */
-export const REMOVE_PRIVATE_REASONS = ["plugins remain"] as const;
 // `_ReasonInSet<R extends Reason> = R` pins the private reason to the closed
 // `Reason` set as it derives `RemovePrivateReason`: an out-of-set literal
 // violates the `extends Reason` constraint -- a TS2344 compile error here, with
 // no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
-export type RemovePrivateReason = _ReasonInSet<(typeof REMOVE_PRIVATE_REASONS)[number]>;
-
+// fallow-ignore-next-line unused-type -- compile-time pin, not a consumed alias: deriving it is what asserts "plugins remain" is a member of the closed Reason set.
+export type RemovePrivateReason = _ReasonInSet<"plugins remain">;
 /**
  * The plugin-child-row statuses `marketplace remove` emits inside its cascade:
  * `uninstalled` (one per unstaged plugin) and `failed` (one per cascade

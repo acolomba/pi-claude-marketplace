@@ -21,22 +21,6 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 import type { PluginFailedMessage } from "../../shared/notify.ts";
 
 /**
- * D-01 / MOD-01: the marketplace-statuses `marketplace autoupdate` owns. The
- * idempotent reason `already autoupdate` comes from the shared idempotent group
- * in `shared/notify-reasons.ts`.
- */
-export const AUTOUPDATE_MP_STATUSES = ["autoupdate enabled", "skipped", "failed"] as const;
-export type AutoupdateMpStatus = (typeof AUTOUPDATE_MP_STATUSES)[number];
-
-/**
- * D-01 / MOD-01: the marketplace-statuses `marketplace noautoupdate` owns. The
- * idempotent reason `already no autoupdate` comes from the shared idempotent
- * group in `shared/notify-reasons.ts`.
- */
-export const NOAUTOUPDATE_MP_STATUSES = ["autoupdate disabled", "skipped", "failed"] as const;
-export type NoautoupdateMpStatus = (typeof NOAUTOUPDATE_MP_STATUSES)[number];
-
-/**
  * The single plugin-child-row status either flip command emits: a synthetic
  * `(failed)` row carrying the flip cause. This is the Status set both render
  * maps below are total over (D-10: a missing arm is a TS2741 compile error).

@@ -23,7 +23,7 @@ import { Compile } from "typebox/compile";
  * arrays default to empty arrays (not optional) -- the CALLER materializes
  * `[]` rather than relying on schema-level absence.
  */
-export const AGENTS_INDEX_ENTRY_SCHEMA = Type.Object({
+const AGENTS_INDEX_ENTRY_SCHEMA = Type.Object({
   plugin: Type.String(),
   marketplace: Type.String(),
   sourceAgent: Type.String(),
@@ -45,7 +45,7 @@ export const AGENTS_INDEX_ENTRY_SCHEMA = Type.Object({
  * Wire field name `agents:` -- DO NOT rename to `entries:`; the
  * rename would be a breaking on-disk change.
  */
-export const AGENTS_INDEX_SCHEMA = Type.Object({
+const AGENTS_INDEX_SCHEMA = Type.Object({
   schemaVersion: Type.Literal(1),
   agents: Type.Array(AGENTS_INDEX_ENTRY_SCHEMA),
 });

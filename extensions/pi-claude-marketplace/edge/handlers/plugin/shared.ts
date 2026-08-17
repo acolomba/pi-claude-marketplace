@@ -36,7 +36,7 @@ export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | u
   };
 }
 
-export interface ParsedPositionalsResult {
+interface ParsedPositionalsResult {
   readonly nonFlagPositionals: readonly string[];
   readonly mapModel: boolean;
   readonly partial: boolean;
@@ -59,7 +59,7 @@ const DOWNSTREAM_BOOLEAN_FLAGS = new Set([
  * unrecognised long flag is encountered (MSG-NC-2: argument-parsing failure
  * with Usage-block-appended sentence form).
  */
-export function parsePositionalsWithFlags(
+function parsePositionalsWithFlags(
   tokens: readonly string[],
   ctx: ExtensionCommandContext,
   usage: string,

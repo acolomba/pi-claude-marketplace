@@ -88,13 +88,6 @@ export const PI_TO_CLAUDE_TOOL_NAMES = {
 } as const satisfies Record<PiToolName, string>;
 
 /**
- * The seven Claude-form tool-name literals, derived from
- * `PI_TO_CLAUDE_TOOL_NAMES` value positions via the `CLAUDE_TO_PI_TOOL_NAMES`
- * key set. `Bash` | `Read` | `Edit` | `Write` | `Grep` | `Glob` | `LS`.
- */
-export type ClaudeToolName = keyof typeof CLAUDE_TO_PI_TOOL_NAMES;
-
-/**
  * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the seven Claude-form
  * tool names; values are the corresponding Pi-form literals.
  *

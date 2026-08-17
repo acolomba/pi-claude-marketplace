@@ -12,8 +12,6 @@
 // import the entire edge type surface from a single module:
 // `import type { EdgeDeps, SubcommandHandlers } from "./types.ts"`.
 
-export type { SubcommandHandlers } from "./router.ts";
-
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,

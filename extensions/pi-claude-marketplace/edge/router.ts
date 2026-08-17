@@ -179,7 +179,7 @@ export async function routeClaudePlugin(
   }
 }
 
-export async function routeMarketplace(
+async function routeMarketplace(
   args: string,
   handlers: SubcommandHandlers,
   ctx: ExtensionCommandContext,

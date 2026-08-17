@@ -137,13 +137,7 @@ import type {
   ReinstallReinstalledOutcome,
 } from "../types.ts";
 
-export type {
-  ReinstallFailedOutcome,
-  ReinstallPluginOutcome,
-  ReinstallPluginPartition,
-  ReinstallReinstalledOutcome,
-  ReinstallSkippedOutcome,
-} from "../types.ts";
+export type { ReinstallPluginOutcome } from "../types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";

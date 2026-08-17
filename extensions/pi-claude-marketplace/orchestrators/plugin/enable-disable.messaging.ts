@@ -38,8 +38,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * through the partial gate), a `skipped` row (already-enabled / not-installed),
  * or a `failed` row.
  */
-export const ENABLE_STATUSES = ["installed", "partially-installed", "skipped", "failed"] as const;
-export type EnableStatus = (typeof ENABLE_STATUSES)[number];
+type EnableStatus = "installed" | "partially-installed" | "skipped" | "failed";
 
 /** enable's row message union. */
 export type EnableMsg =
@@ -52,8 +51,7 @@ export type EnableMsg =
  * disable's private status set: a fresh `disabled` row, a `skipped` row
  * (already-disabled / not-installed), or a `failed` row.
  */
-export const DISABLE_STATUSES = ["disabled", "skipped", "failed"] as const;
-export type DisableStatus = (typeof DISABLE_STATUSES)[number];
+type DisableStatus = "disabled" | "skipped" | "failed";
 
 /** disable's row message union. */
 export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFailedMessage;

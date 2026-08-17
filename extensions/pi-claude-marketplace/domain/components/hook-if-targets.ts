@@ -50,7 +50,7 @@ import type { PiToolName } from "./hook-tool-names.ts";
  *                     `IF_PREFIX_TARGETS` because the MCP family is
  *                     handled at the predicate-kind layer).
  */
-export interface IfPrefixTarget {
+interface IfPrefixTarget {
   readonly piEvents: ReadonlySet<PiToolName>;
   readonly extractTarget: "path" | "command" | "toolName";
 }

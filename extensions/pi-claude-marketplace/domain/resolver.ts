@@ -114,6 +114,7 @@ const DroppedHookSchema = Type.Union([
 type _AssertTrue<T extends true> = T;
 // Exported so `noUnusedLocals` treats this compile-time drift guard as consumed
 // without a runtime `void`; the alias is never imported.
+// fallow-ignore-next-line unused-type -- compile-time drift guard; the export exists so `noUnusedLocals` treats it as consumed (dropping it fails typecheck with TS6196), and it is never imported by design.
 export type _DroppedHookDriftCheck = _AssertTrue<
   DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
 >;
@@ -147,6 +148,7 @@ type _DroppedHookArmKeysDrift =
       : never
     : never;
 // Exported for the same `noUnusedLocals` reason as `_DroppedHookDriftCheck`.
+// fallow-ignore-next-line unused-type -- compile-time key-parity guard; same `noUnusedLocals` contract as _DroppedHookDriftCheck above.
 export type _DroppedHookArmKeysCheck = _AssertTrue<
   [true] extends [_DroppedHookArmKeysDrift] ? true : false
 >;
@@ -215,7 +217,17 @@ const ResolvedPluginUnavailableSchema = Type.Object({
   // pluginRoot intentionally absent -- NFR-7 enforces non-readability
 });
 
-/** Literal-tagged variants ARE the discriminator. NO options arg. */
+/**
+ * Literal-tagged variants ARE the discriminator. NO options arg.
+ *
+ * The suppression below is deliberate: this typebox schema IS the canonical
+ * runtime definition of the NFR-7 discriminated union and composes the three
+ * arm schemas; it is consumed through `Type.Static`. Un-exporting it instead
+ * trips `@typescript-eslint/no-unused-vars` ("only used as a type"), and
+ * deleting it would orphan all three arm schemas, so the export is the only
+ * form both gates accept.
+ */
+// fallow-ignore-next-line unused-export
 export const ResolvedPluginSchema = Type.Union([
   ResolvedPluginInstallableSchema,
   ResolvedPluginPartiallyAvailableSchema,
@@ -323,8 +335,6 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
  * is a convention file, not a component-path field.
  */
 export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"] as const;
-export type SupportedKind = (typeof SUPPORTED_COMPONENT_KINDS)[number];
-
 /**
  * HOOK-01: the PRIVATE subset of supported kinds that carry per-entry
  * component-path semantics (entry/manifest declares a relative dir; the

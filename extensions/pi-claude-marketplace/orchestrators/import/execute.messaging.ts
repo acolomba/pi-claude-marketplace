@@ -43,8 +43,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * source-mismatch / not-in-manifest), and a soft-unavailable plugin
  * (`unavailable`).
  */
-export const IMPORT_STATUSES = ["installed", "skipped", "failed", "unavailable"] as const;
-export type ImportStatus = (typeof IMPORT_STATUSES)[number];
+type ImportStatus = "installed" | "skipped" | "failed" | "unavailable";
 
 /**
  * The discriminated union of plugin-row message shapes import constructs

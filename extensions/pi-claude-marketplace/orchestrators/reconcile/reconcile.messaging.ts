@@ -72,7 +72,7 @@ export const PENDING_STATUSES = [
   "will disable",
   "failed",
 ] as const;
-export type PendingStatus = (typeof PENDING_STATUSES)[number];
+type PendingStatus = (typeof PENDING_STATUSES)[number];
 
 export type PendingMsg =
   | PluginWillInstallMessage
@@ -148,14 +148,8 @@ export const PENDING_CONTEXT = {
  * row. The `partially-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
  */
-export const RECONCILE_APPLIED_STATUSES = [
-  "installed",
-  "uninstalled",
-  "disabled",
-  "failed",
-  "partially-installed",
-] as const;
-export type ReconcileAppliedStatus = (typeof RECONCILE_APPLIED_STATUSES)[number];
+type ReconcileAppliedStatus =
+  "installed" | "uninstalled" | "disabled" | "failed" | "partially-installed";
 
 export type ReconcileAppliedMsg =
   | PluginInstalledMessage

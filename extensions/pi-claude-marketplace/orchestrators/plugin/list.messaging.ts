@@ -45,27 +45,25 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * `disabled` inventory row, and a synthetic `failed` row for list-orchestration
  * failures.
  */
-export const LIST_STATUSES = [
-  "installed",
-  "available",
+type ListStatus =
+  | "installed"
+  | "available"
   // USTAT-01 / D-64-01: not-installed, partially-available row -- distinct from
   // structural `unavailable` (renders `(partially-available)` / `⊖`).
-  "partially-available",
-  "unavailable",
-  "upgradable",
-  "disabled",
-  "failed",
+  | "partially-available"
+  | "unavailable"
+  | "upgradable"
+  | "disabled"
+  | "failed"
   // FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived partial-state inventory
   // rows. `partially-installed` is a recorded-installed plugin currently resolving
   // `partially-available`; `partially-upgradable` is a currently-clean plugin whose newer
   // candidate would newly degrade it.
-  "partially-installed",
-  "partially-upgradable",
+  | "partially-installed"
+  | "partially-upgradable"
   // RSTA-01 / D-80-06: the not-installed git-source row with no materialized
   // clone. Appended last per the closed-set tuple-ordering discipline.
-  "remote",
-] as const;
-export type ListStatus = (typeof LIST_STATUSES)[number];
+  | "remote";
 
 /** the list surface's row message union. */
 export type ListMsg =

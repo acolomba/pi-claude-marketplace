@@ -1416,16 +1416,6 @@ test("INFO-02: manifest entry's `dependencies: string[]` field surfaces as `    
 });
 
 // ---------------------------------------------------------------------------
-// (l) Barrel re-export.
-// ---------------------------------------------------------------------------
-
-test("Barrel: orchestrators/plugin/index.ts re-exports getPluginInfo and GetPluginInfoOptions", async () => {
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/index.ts");
-  assert.equal(typeof mod.getPluginInfo, "function");
-});
-
-// ---------------------------------------------------------------------------
 // Github-source marketplace record: confirm the orchestrator does NOT
 // access the network even when the marketplace record's source is github
 // (the local clone supplies the manifest; the source-kind dispatch only

@@ -22,22 +22,13 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * row. NO soft-dep marker ever appears on either row (MSG-SD-3) -- neither arm
  * declares `dependencies`, so `composeReasons` receives both flags `false`.
  */
-export const UNINSTALL_STATUSES = ["uninstalled", "failed"] as const;
-export type UninstallStatus = (typeof UNINSTALL_STATUSES)[number];
+type UninstallStatus = "uninstalled" | "failed";
 
 /**
  * uninstall's row message union -- the subset of central plugin shapes whose
  * status uninstall emits.
  */
-export type UninstallMsg = PluginUninstalledMessage | PluginFailedMessage;
-
-/**
- * uninstall's command-private reason. `not installed` is surfaced when the
- * target plugin is not present in the resolved scope. The failure-class reasons
- * uninstall also narrows to (`invalid manifest`, `concurrently uninstalled`,
- * ...) are shared topic reasons owned by `shared/notify-reasons.ts`.
- */
-export type UninstallPrivateReason = "not installed";
+type UninstallMsg = PluginUninstalledMessage | PluginFailedMessage;
 
 /**
  * Render map total over uninstall's OWN statuses (D-10): a missing arm is a

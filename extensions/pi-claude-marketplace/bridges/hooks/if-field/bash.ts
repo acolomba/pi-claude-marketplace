@@ -85,7 +85,7 @@ export type ParseResult =
  * asymmetry. `code.claude.com/docs/en/permissions` § "Process wrappers"
  * is the authority.
  */
-export const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
+const WRAPPER_STRIP: ReadonlySet<string> = new Set<string>([
   "timeout",
   "time",
   "nice",
