@@ -37,7 +37,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-15 - Completed quick task 260815-p25: Remove the bridges/hooks circular-dependency knot and gate cycles locally
+Last activity: 2026-08-16 - Completed quick task 260816-qov: Make fallow a full uniform static-analysis gate with zero categorical exclusions
 
 ## Milestone Summary
 
@@ -77,6 +77,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260814-hdc | Fix GitLab (and any non-GitHub url-kind) clone .git-suffix bug | 2026-08-14 | 82aa35cb | [260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non](./quick/260814-hdc-fix-a-real-bug-in-the-gitlab-and-any-non/) |
 | 260815-h7g | Adopt fallow static analysis as a linting gate | 2026-08-15 | 1d4f478b..a93d2be9 | [260815-h7g-adopt-fallow-static-analysis-as-a-lintin](./quick/260815-h7g-adopt-fallow-static-analysis-as-a-lintin/) |
 | 260815-p25 | Remove the bridges/hooks circular-dependency knot and gate cycles locally | 2026-08-15 | cee12150 | [260815-p25-implement-hooks-cycle-removal-from-spike](./quick/260815-p25-implement-hooks-cycle-removal-from-spike/) |
+| 260816-qov | Make fallow a full uniform static-analysis gate with zero categorical exclusions | 2026-08-16 | 345b325e..47abb2be | [260816-qov-make-fallow-a-full-uniform-static-analys](./quick/260816-qov-make-fallow-a-full-uniform-static-analys/) |
 
 ## Decisions
 
