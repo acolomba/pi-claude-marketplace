@@ -148,7 +148,7 @@ let activeSpawn: typeof spawn = spawn;
 
 let dispatchIdGenerator: () => string = () => randomUUID();
 
-interface OrphanProbes {
+export interface OrphanProbes {
   readonly killProbe: (pid: number, sig: number | NodeJS.Signals) => void;
   readonly environReader: (pid: number) => Promise<string>;
 }
@@ -183,7 +183,6 @@ export function _resetDispatchIdGeneratorForTest(): void {
 }
 
 /** Substitute the orphan probes for deterministic reap tests. */
-// fallow-ignore-next-line private-type-leak -- `OrphanProbes` is a bridge-internal probe bundle; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 export function _setOrphanProbesForTest(probes: OrphanProbes): void {
   orphanProbes = probes;
 }

@@ -110,7 +110,7 @@ export interface ApplyReconcileOptions {
  * is never coerced to an empty desired-state diff, which would render as a
  * mass-uninstall).
  */
-interface ScopeReadResult {
+export interface ScopeReadResult {
   readonly scope: Scope;
   readonly plan: ReconcilePlan | undefined;
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
@@ -958,7 +958,6 @@ async function applyBackfillForScope(
 async function applyBackfillForScopeIsolated(
   opts: ApplyReconcileOptions,
   scope: Scope,
-  // fallow-ignore-next-line private-type-leak -- `ScopeReadResult` is reconcile-internal; reached only through __test_applyBackfillForScopeIsolated, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   readResult: ScopeReadResult,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {

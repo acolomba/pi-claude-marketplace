@@ -141,7 +141,7 @@ type PluginRenderStatus =
  * not resolver-classified here -- they carry the `installed-inventory` bucket
  * and the filter keys on their render status instead.
  */
-type FilterBucket =
+export type FilterBucket =
   | "installed-inventory"
   | "available"
   | "partially-available"
@@ -669,7 +669,6 @@ async function availableRowMessage(
     | PluginAvailableMessage
     | PluginPartiallyAvailableMessage
     | PluginUnavailableMessage;
-  // fallow-ignore-next-line private-type-leak -- `FilterBucket` is list-internal; reached only through __test_availableRowMessage, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   bucket: FilterBucket;
 }> {
   // PL-4: description flows from the manifest entry onto the row for every

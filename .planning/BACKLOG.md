@@ -471,6 +471,41 @@ different cause with a different fix.
 
 ## FLOW-09: internals exported only for tests
 
+**Status 2026-08-17: the type-leak half is done; the seams remain.**
+
+All ten `private-type-leak` suppressions that cited this item are gone,
+and no code references FLOW-09 any more. They came off four different
+ways, and the split is the useful part of the record:
+
+- Two were not a seam problem at all. `list.ts` re-exported
+  `narrowProbeError` / `narrowListFailReason` to reach a ladder that
+  `shared/probe-classifiers.ts` already exports publicly and already has
+  a test file for. The tests moved to that file; the seams went.
+- Two were a type in the wrong module. `EntityErrorRow` is a message-row
+  shape and now lives beside `InstallMsg` in `install.messaging.ts`.
+- One was a redundant alias. `reinstall.ts`'s `PluginRecord` duplicated
+  `PluginInstallRecord`, already exported by `persistence/state-io.ts`.
+- Five were contracts that were private for no reason. `HookExecutor`,
+  `OrphanProbes`, `RefreshOneArgs`, `RefreshSnapshot`, `ScopeReadResult`
+  and `FilterBucket` are the parameter and return types of functions the
+  module already exports. A type you cannot name is not injectable, so
+  exporting the contract is the honest shape.
+
+What is NOT done is the thing this item is actually named after. The
+`__test_`-prefixed re-exports and the `_set*ForTest` module-global
+mutators still exist in `install.ts`, `update.ts`, `apply.ts`,
+`list.ts`, `dispatch.ts` and `registry.ts`. They no longer leak private
+types, so fallow is quiet about them, which makes this item HARDER to
+find rather than closed. `registry.ts` alone carries eight seams.
+
+The remaining work is dependency injection proper: pass the executor,
+the probe bundle and the spawn function in, after which the seams
+disappear rather than moving. Note `__test_availableRowMessage` is
+different in kind -- it feeds a real cross-surface drift guard in
+`tests/orchestrators/edge-deps.test.ts`, so it wants a public contract,
+not deletion.
+
+
 Filed 2026-08-16 alongside the routing-state test repointing (quick task
 260816-qov).
 

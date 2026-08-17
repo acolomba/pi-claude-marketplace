@@ -281,7 +281,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   }
 }
 
-interface RefreshOneArgs {
+export interface RefreshOneArgs {
   readonly ctx: ExtensionContext;
   readonly name: string;
   readonly scope: Scope;
@@ -488,7 +488,7 @@ async function refreshRecord(
   }
 }
 
-interface RefreshSnapshot {
+export interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**
@@ -500,7 +500,6 @@ interface RefreshSnapshot {
   readonly changed: boolean;
 }
 
-// fallow-ignore-next-line private-type-leak -- `RefreshOneArgs` / `RefreshSnapshot` are update-internal; reached only through __test_snapshotAfterRefresh, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
   const { name, locations } = args;
   // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config), not

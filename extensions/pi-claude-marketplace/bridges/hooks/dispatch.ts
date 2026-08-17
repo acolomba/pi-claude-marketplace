@@ -83,7 +83,7 @@ import type {
  * fixtures in the existing test files have already been updated to
  * resolve `{ kind: "noop" }` per the evolved seam.
  */
-type HookExecutor = (
+export type HookExecutor = (
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
@@ -96,7 +96,6 @@ let activeExecutor: HookExecutor = dispatchHookExec;
  * Inject a spy executor for the duration of one unit test. Not part of
  * the public surface.
  */
-// fallow-ignore-next-line private-type-leak -- `HookExecutor` is the bridge-internal executor signature; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 export function _setExecutorForTest(executor: HookExecutor): void {
   activeExecutor = executor;
 }
