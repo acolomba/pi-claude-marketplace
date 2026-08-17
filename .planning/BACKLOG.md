@@ -77,9 +77,29 @@ original carrier. Their uncovered remainder is the same shape the bounded sweep
 worked -- rare-failure and cascade-diagnostic arms. Decide whether they get a
 follow-on bounded sweep or are accepted as-is. Do not decide it by exclusion.
 
-## FLOW-01: unzoned files are boundary-unchecked and nothing says so
+## FLOW-01: unzoned files are boundary-unchecked and nothing says so (CLOSED)
 
 Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
+
+**CLOSED 2026-08-16** (quick task 260816-qov). `.fallowrc.json` now sets
+`boundaries.coverage.requireAllFiles: true`, so zone coverage is complete by
+construction rather than by accident of the current tree. Both questions the
+item asked are settled: the failure names the unzoned path
+(`extensions/.../probe.ts:1 no matching boundary zone`), and `tests/**` plus
+`eslint.config.js` are explicitly out of scope through `allowUnmatched`, which
+records them as unmatched by design rather than by oversight.
+
+Two zones were added so no file under `extensions/` is unzoned: `entry` for
+`index.ts` and `bridges-barrel` for the aggregate `bridges/index.ts`, bringing
+the total to 14. `bridges-barrel` is deliberately on no other zone's allow
+list -- it re-exports across all five bridge kinds, so any zone permitted to
+import it would gain a laundering route around the no-cross-bridge-imports
+rule. `orchestrators/plugin/discover-names.ts` was repointed at the three
+per-kind barrels for exactly that reason.
+
+Verified as the item asked: a throwaway directory outside every zone pattern
+took `npm run fallow` to exit 1 naming the path, and deleting it returned the
+gate to exit 0.
 
 `.fallowrc.json`'s `boundaries` block names 12 zones, one per layer plus one
 per bridge kind. Every file under `extensions/pi-claude-marketplace/` matches
@@ -167,9 +187,44 @@ Verify by widening the glob against the current tree and confirming a clean
 `npm run lint`, then planting a two-file cycle outside `orchestrators/` and
 confirming the rule -- not just fallow -- fails on it.
 
-## FLOW-04: converge the local and pull-request fallow gates on whole-repo, all-checks
+## FLOW-04: converge the local and pull-request fallow gates on whole-repo, all-checks (CLOSED)
 
 Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
+
+**CLOSED 2026-08-16** (quick task 260816-qov). The two gates are now one
+command. `npm run fallow` is three explicit invocations --
+`fallow dead-code --fail-on-issues`, `fallow health --fail-on-issues` and
+`fallow dupes --fail-on-issues` -- and that identical command runs in
+`npm run check`, in the `.pre-commit-config.yaml` `npm-fallow` hook, and in
+`.github/workflows/lint.yml`. `fallow:audit`, `--changed-since` and the
+new-only verdict are gone from the repository, so a green local run and a green
+pull request now mean the same thing.
+
+The sequence the item prescribed was followed: each class was driven to zero
+BEFORE its invocation joined the gate, never the reverse.
+
+| Check | At filing | At closure |
+|-------|-----------|------------|
+| Dead code | 156 findings | 0 |
+| Complexity (`fallow health`) | 439 above threshold | 0 |
+| Duplication (`fallow dupes`) | 3.5% | 2.12%, gated at a 2.2% threshold |
+
+The `production` question the item called "the unlock" was settled as
+`production: false`. That admits tests to the reachability graph, which retires
+the ~130 false positives the `_*ForTest` seam convention manufactured and let
+the one existing suppression in the tree -- on the load-bearing `currentEpoch`
+and `getRoutingBucket` re-exports -- be deleted rather than kept.
+
+Complexity and duplication were NOT closed by threshold tuning. The health
+profile is fallow's own default (cyclomatic 20, cognitive 15) and all 36
+findings were decomposed; duplication was consolidated from 66 clone groups to
+41, and the threshold sits 0.085 points above the measured figure.
+
+One caveat worth carrying forward, recorded in STACK.md: under
+`production: false` fallow promotes every discovered file to an entry point, so
+the unused-file and unused-export classes are close to vacuous. Boundary,
+coverage and cycle enforcement are unaffected and were each verified by a
+planted violation. See the new FLOW-05 for the reckoning.
 
 FLOW-02 closed the specific hole where a new cycle failed CI but not the local
 gate. The two gates still answer different questions, and neither is a superset
@@ -230,6 +285,83 @@ someone decides what the thresholds should be.
 Related: FLOW-01 (unzoned files are boundary-unchecked) is the same class of
 problem -- a gate that is complete by accident of the current tree rather than
 by construction.
+
+## FLOW-05: revisit CRAP and real coverage in the fallow health gate
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+`health.maxCrap` is set to `0`, which fallow documents as "disable CRAP
+enforcement entirely: no findings, nothing counts above threshold." That is the
+current posture and it is deliberate, not an oversight: complexity is gated
+directly (cyclomatic 20, cognitive 15), coverage is gated by SonarCloud, and
+CRAP is a product of the two, so it would be a third opinion about facts two
+gates already own.
+
+Record these so a future attempt does not rediscover them:
+
+- Fallow needs Istanbul `coverage-final.json` and rejects lcov. This project
+  emits lcov (`coverage/{unit,integration,e2e}.lcov`) for SonarCloud, so wiring
+  real coverage is a conversion step, not a flag.
+- `c8` emits `-1` branchMap columns that fallow's parser rejects outright.
+- Naively clamping those columns is UNSAFE. One `c8` flag change silently
+  zeroed 119 files and swung the `extensions/` CRAP figure from 25 to 238 --
+  the metric moved by an order of magnitude with no code change, which means a
+  gate built on it would have been enforcing the coverage pipeline's
+  configuration rather than the code's risk.
+
+Picking this up means owning the coverage-format conversion first. Until then
+`maxCrap: 0` is the honest setting, because a CRAP number this project cannot
+compute reliably is worse than no CRAP number.
+
+## FLOW-06: `production: false` makes the dead-code classes nearly vacuous
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+`.fallowrc.json` sets `production: false` so tests join the reachability graph.
+That was the right call for the reason FLOW-04 gives -- it retires roughly 130
+false positives from the `_*ForTest` seam convention -- but it has a cost that
+was measured, not assumed:
+
+Under `production: false`, fallow reports "439 entry points detected (437
+plugin, 1 manual entry, 1 package.json)" against 440 discovered files. It is
+promoting essentially every file to its own entry point. An orphan file planted
+at `shared/zz-orphan.ts` was NOT reported as unused. Under `production: true`
+the same tree reports 2 entry points and 289 findings, almost all false.
+
+So today the `dead-code` invocation earns its place through boundary
+violations, boundary coverage and circular dependencies -- each verified by a
+planted violation -- while `unused_files` and `unused_exports` are close to
+no-ops. The `adoption` skill's warning about a high plugin-entry-point count
+being "a red flag, not a healthy signal" applies here.
+
+Worth investigating whether the per-analysis form
+`production: { deadCode: true, health: false, dupes: false }` (supported, and
+verified working) plus a small number of individually justified suppressions
+can recover real unused-code detection without reintroducing the false-positive
+wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
+93 unused types and 4 duplicate pairs, so it is not a small triage.
+
+## FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?
+
+Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
+
+Deliberately NOT acted on in 260816-qov, which left the rule and its three
+pinning tests untouched.
+
+Fallow's 14-zone model is a finer-grained superset of the ESLint 8-zone matrix,
+and it is the only thing enforcing that cross-bridge imports are forbidden.
+That invites the question of whether the ESLint rule still earns its keep.
+
+Two reasons it might. Fallow's boundary checking is reachability-gated, so a
+violation in a file unreachable from `entry` is invisible to it, while ESLint's
+glob-based rule is reachability-blind and would still catch it. And the three
+architecture tests pin the ESLint rule's CONFIGURATION -- deleting them while
+keeping the rule would leave a silently-misconfigured lint rule undetected,
+which is the exact failure mode the `import-x/no-cycle` test was written to
+catch.
+
+Settle whether the reachability gap is real on this codebase before removing
+anything.
 
 ## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
 

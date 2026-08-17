@@ -122,7 +122,36 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 ## Function Design
 
-**Size:** Bounded implicitly by `sonarjs/cognitive-complexity: 15` (lint error above that threshold) — keep functions small and flat; avoid nested conditionals (`sonarjs/no-nested-conditional` is also an error).
+**Size:** Bounded by two gates. `sonarjs/cognitive-complexity: 15` is a lint error above that threshold, and `fallow health` fails the build above cyclomatic 20 or cognitive 15 across BOTH `extensions/` and `tests/`. Keep functions small and flat; avoid nested conditionals (`sonarjs/no-nested-conditional` is also an error).
+
+The two tools compute cognitive complexity DIFFERENTLY and their numbers do not
+agree: ESLint passed at its threshold of 15 on functions fallow scored at 49. A
+green `npm run lint` is therefore not evidence about a fallow health finding, or
+the reverse.
+
+An exceptional function is recorded as a `health.thresholdOverrides` entry with
+an explicit numeric ceiling and a written `reason`, never as a binary
+`fallow-ignore` suppression: the override states what the limit IS for that
+function, while a suppression only states that someone chose not to look. There
+are currently zero of either.
+
+Flat dispatch is not the same defect as deep nesting. A 19-arm `switch` at
+cognitive 2 is already as readable as it will get, so the fix is a lookup table
+or grouped `case` labels rather than smaller functions. Grouped labels were
+measured collapsing to a single branch. When a `switch` is replaced by a table,
+type it `Record<K, V>` over the full key union: totality is what preserves the
+exhaustiveness guarantee the `switch` plus `assertNever` provided, and it was
+verified by deleting one key and observing `npm run typecheck` fail.
+
+**Duplication:** `fallow dupes` gates `duplicates.threshold`, a real percentage.
+A clone group that must be retained gets an individual `duplicates.ignoredClones`
+entry with a written justification -- never a blanket `ignore` pattern, and never
+a raised `minLines` / `minTokens`, both of which would hide unknown future clones
+as well as the known one. Use ONLY content-addressed fingerprints (`dup:<hash>`)
+as keys. Fallow also emits an index form (`dup:<hash>-NN`) that is NOT stable:
+appending a comment to an unrelated file was observed re-binding `dup:...-25`
+from one file pair to a completely different one, so an entry keyed that way
+would silently suppress an unrelated group later.
 
 **Parameters:** Prefer explicit positional parameters for 1-3 required values; switch to an `opts` object for anything with optional/named fields (see `MarketplaceUpdateError` constructor above).
 

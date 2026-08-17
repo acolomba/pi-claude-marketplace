@@ -208,8 +208,8 @@
 - **Circular imports:** Gated inside `orchestrators/` only, by two mechanisms that cover different halves of the problem (D-11):
   - `import-x/no-cycle` (BLOCK C-2 of `eslint.config.js`), scoped to `extensions/pi-claude-marketplace/orchestrators/**/*.ts`. The block also sets `import-x/extensions` to include `.ts`; without that setting the rule resolves imports but never parses the resolved `.ts` files, so it walks a one-node graph and greens on any cycle. `tests/architecture/import-boundaries.test.ts` pins both the rule and the setting.
   - A directed-edge grep gate in the same test file, because `no-cycle` fires only once a graph is *already* circular — the first of the two edges lands green. The ledger modules of `orchestrators/plugin/` (`install`/`update`/`uninstall`/`reinstall`/`enable-disable`) and of `orchestrators/marketplace/` (`add`/`remove`/`update`/`autoupdate`) must not import each other, in either direction, including `import type`. A plugin ledger reaches marketplace code only through `orchestrators/marketplace/shared.ts`; a marketplace file reaches plugin code only through leaf composers (`orchestrators/plugin/update-row.ts`, `clone-cache.ts`, `clone-gc.ts`), shared types in `orchestrators/types.ts`, or the injected `pluginUpdate` seam.
-  - Not covered: `orchestrators/plugin/bootstrap.ts` imports `marketplace/add.ts` and `marketplace/autoupdate.ts` by design — it is a composer, not a ledger. The `bridges/hooks/` cycle knot (`event-router.ts` ↔ `dispatch.ts` ↔ `async-rewake/registry.ts`) that used to sit outside the glob was removed by extracting the bridge's shared module state — routing table, parsed-config cache, epoch and pending-context cells — into the `bridges/hooks/routing-state.ts` leaf; whole-repo cycle coverage now comes from `npm run fallow`'s `--circular-deps` flag rather than from the ESLint glob. Whether `import-x/no-cycle` should now widen past `orchestrators/` is an open question (BACKLOG FLOW-03), deliberately out of scope of the knot removal because widening the glob has its own blast radius across the extension.
-- **Network boundary:** `orchestrators/plugin/install.ts`, `list.ts`, `uninstall.ts` MUST NOT import `platform/git.ts` or carry a `gitOps` field — enforced by `tests/architecture/no-orchestrator-network.test.ts`, a source-grep architectural test (NFR-5)
+  - Not covered: `orchestrators/plugin/bootstrap.ts` imports `marketplace/add.ts` and `marketplace/autoupdate.ts` by design — it is a composer, not a ledger. The `bridges/hooks/` cycle knot (`event-router.ts` ↔ `dispatch.ts` ↔ `async-rewake/registry.ts`) that used to sit outside the glob was removed by extracting the bridge's shared module state — routing table, parsed-config cache, epoch and pending-context cells — into the `bridges/hooks/routing-state.ts` leaf; whole-repo cycle coverage now comes from the bare `fallow dead-code` run inside `npm run fallow` — the `--circular-deps` flag is gone, because it was a FILTER that narrowed the run to cycles rather than an addition, and the bare form reports every class the subcommand computes. Whether `import-x/no-cycle` should now widen past `orchestrators/` is an open question (BACKLOG FLOW-03), deliberately out of scope of the knot removal because widening the glob has its own blast radius across the extension.
+- **Network boundary:** `orchestrators/plugin/install.ts`, `list.ts`, `uninstall.ts` and seven sibling read-only orchestrators MUST NOT import `platform/git.ts`, reference `DEFAULT_GIT_OPS`, or carry a `gitOps` field — enforced by `tests/architecture/no-orchestrator-network.test.ts`, a source-grep architectural test (NFR-5). Fallow does NOT replace this gate and it was NOT removed: planting a `platform/git.ts` import plus a `clone()` call in `install.ts` was measured leaving `npm run fallow` at exit 0 while the test failed. `orchestrators` -> `platform` is a legal edge that `update.ts`, `clone-cache.ts` and `auth-host.ts` need; a narrow `orchestrators-network-free` zone was tried and produces 26 false violations because the two halves import each other, and allowing them back lets `DEFAULT_GIT_OPS` reach `install.ts` through the `marketplace/shared.ts` re-export anyway. `platform/git.ts` also shares a directory with `platform/pi-api.ts`, which `install.ts` legitimately imports, and fallow zones are directory-scoped. The reasoning is recorded in the test's own header so it is not re-litigated
 - **Lock re-entrancy:** `proper-lockfile` is configured `retries: 0` and is NOT re-entrant; nesting two `withLockedStateTransaction` calls on the same scope's lock file self-deadlocks (`ELOCKED` → `StateLockHeldError`) — guard-free ledger bodies (`runInstallLedger`, etc.) exist specifically so callers that already hold the lock (e.g. `setPluginEnabled`'s enable branch) can invoke the ledger without re-acquiring
 
 ## Anti-Patterns
@@ -219,12 +219,33 @@
 **What happens:** Code outside `shared/notify.ts` calling `ctx.ui.notify(...)` directly instead of going through `notify()`/`notifyWithContext()`/`notifyUsageError()`.
 **Why it's wrong:** Bypasses the single point that computes severity, soft-dependency markers, and the reload-hint trailer (IL-2); breaks the notify-discipline grep gate and an ESLint custom rule (BLOCK A in `eslint.config.js`).
 **Do this instead:** Import and call the exported helpers from `extensions/pi-claude-marketplace/shared/notify.ts`.
+**Enforced by:** three independent gates — the grep gate, the ESLint rule, and `.fallowrc.json`'s `boundaries.calls.forbidden`, which bans `process.stdout.*` / `process.stderr.*` from every zone (verified by a planted `process.stderr.write` in four different zones, each taking `npm run fallow` to exit 1).
 
 ### Orchestrator files importing git/network surfaces
 
 **What happens:** A file under `orchestrators/plugin/install.ts` (or `list.ts`/`uninstall.ts`) importing `platform/git.ts`, the default git ops, or declaring a `gitOps` field.
 **Why it's wrong:** Violates NFR-5 — these commands must be network-free; a hidden git import would silently make an offline-guaranteed operation require network.
 **Do this instead:** Route any needed git materialization through the sibling `clone-cache.ts` seam (e.g. `orchestrators/plugin/clone-cache.ts`), which is exempt and is the sole named consumer of git ops in the install path.
+**Enforced by:** `tests/architecture/no-orchestrator-network.test.ts` only. `npm run fallow` does NOT catch this — see the Network boundary constraint above for the three measured reasons.
+
+### Boundary model: complete by construction
+
+`.fallowrc.json` sets `boundaries.coverage.requireAllFiles`, so zone membership
+is not optional. A file under `extensions/` that matches no zone pattern FAILS
+`npm run fallow`, and the failure names the path
+(`extensions/.../probe.ts:1 no matching boundary zone`). Before this, the
+12-zone block happened to cover every file in the tree, so the gate was complete
+by accident: a new top-level directory would have been boundary-checked by
+nothing while the run still reported clean. `tests/**` and `eslint.config.js`
+are unmatched BY DESIGN and say so through `allowUnmatched`.
+
+Two of the 14 zones exist purely to keep that coverage total. `entry` holds
+`index.ts`, whose allow list is exactly the six zones the factory imports.
+`bridges-barrel` holds the aggregate `bridges/index.ts`, and it is deliberately
+on NO other zone's allow list: it re-exports across all five bridge kinds, so
+any zone permitted to import it would gain a laundering route around the
+no-cross-bridge-imports rule. `orchestrators/plugin/discover-names.ts` imports
+the three per-kind barrels directly for that reason.
 
 ## Error Propagation & Rollback
 
