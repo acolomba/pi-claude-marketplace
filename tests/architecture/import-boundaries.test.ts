@@ -112,50 +112,54 @@ const EXPECTED_FORBIDDEN: Record<string, string[]> = {
   ],
 };
 
-/** Every flat-config block, for the assertions that read more than one field. */
-async function loadBlocks(): Promise<FlatConfigBlock[]> {
-  const mod = (await import(`${REPO_ROOT}/eslint.config.js`)) as { default: FlatConfigBlock[] };
-  return mod.default;
-}
-
 /**
- * D-11: `import-x/no-cycle` must be configured AND must be able to traverse a
- * `.ts` dependency graph.
+ * D-11: whole-repo cycle detection must stay unfiltered.
  *
- * The second half is the whole point. `no-cycle` walks the graph through
- * `import-x`'s module resolution, and that walk only follows files whose
- * extension appears in `settings["import-x/extensions"]` -- which defaults to
- * the JavaScript extensions. On this `.ts`-only tree the rule with default
- * settings parses the entry file, finds nothing traversable, and reports
- * success on a graph it never walked. A deliberate two-file cycle under
- * `orchestrators/` goes completely undetected that way. So a config carrying
- * the rule but not the setting is indistinguishable from no gate at all, and
- * this assertion is what makes the difference visible.
+ * This used to pin `import-x/no-cycle`. That rule was removed after it was
+ * measured reporting NOTHING on a deliberate two-file cycle -- including one
+ * planted inside `orchestrators/`, its own scope -- while `fallow dead-code`
+ * flagged the identical cycle and exited 1. Resolution was not the problem
+ * (`import-x/no-unresolved` fired on a bogus path and stayed silent on the
+ * real one in the same file), and neither the built-in node resolver nor
+ * `eslint-import-resolver-typescript` changed the outcome. The old assertion
+ * checked that the rule was CONFIGURED, which it always was, so it could not
+ * tell a working gate from an inert one.
+ *
+ * Cycles are now caught by `fallow dead-code` inside `npm run fallow`. What
+ * needs pinning is that the invocation stays UNFILTERED: fallow's
+ * `--circular-deps` / `--boundary-violations` flags are only-report filters,
+ * not additions, so naming one silently drops every other class the
+ * subcommand computes. The bare form reports them all.
  */
-test("D-11: import-x/no-cycle is configured and can traverse .ts dependencies", async () => {
-  const blocks = await loadBlocks();
-  const cycleBlock = blocks.find((b) => b.rules?.["import-x/no-cycle"] !== undefined);
-  assert.ok(
-    cycleBlock !== undefined,
-    "no flat-config block configures import-x/no-cycle -- the D-11 cycle boundary is ungated",
-  );
-
-  const entry: unknown = cycleBlock.rules?.["import-x/no-cycle"];
-  // `Array.isArray` on an `unknown` narrows to `any[]`, so re-assert the
-  // element type rather than let an implicit `any` through the strict gate.
-  const severity: unknown = Array.isArray(entry) ? (entry as unknown[])[0] : entry;
-  assert.equal(severity, "error", "import-x/no-cycle must be an error, not a warning");
-
-  const extensions = cycleBlock.settings?.["import-x/extensions"];
-  assert.ok(
-    Array.isArray(extensions) && extensions.includes(".ts"),
-    'the import-x/no-cycle block must set settings["import-x/extensions"] to include ".ts". Without it the rule resolves imports but never parses the resolved .ts files, so it walks a one-node graph and greens on any cycle.',
-  );
+test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", async () => {
+  const pkgPath = path.join(REPO_ROOT, "package.json");
+  const pkg: unknown = JSON.parse(await readFile(pkgPath, "utf8"));
+  const scripts = (pkg as { scripts?: Record<string, string> }).scripts ?? {};
+  const fallowScript = scripts["fallow"];
 
   assert.ok(
-    cycleBlock.files?.some((f) => f.includes("orchestrators")),
-    "the import-x/no-cycle block must cover orchestrators/ -- that is the layer the marketplace/ <-> plugin/ cycle risk lives in",
+    typeof fallowScript === "string",
+    "package.json has no `fallow` script -- whole-repo cycle detection is ungated",
   );
+
+  assert.match(
+    fallowScript,
+    /fallow dead-code(?![\w-])/,
+    "the `fallow` script must invoke `fallow dead-code`; that subcommand is what reports circular dependencies",
+  );
+
+  assert.match(
+    fallowScript,
+    /fallow dead-code[^&|]*--fail-on-issues/,
+    "`fallow dead-code` must carry --fail-on-issues, or a reported cycle still exits 0",
+  );
+
+  for (const filter of ["--circular-deps", "--boundary-violations", "--unused-files"]) {
+    assert.ok(
+      !fallowScript.includes(filter),
+      `the \`fallow\` script must not pass ${filter}. Those flags are only-report FILTERS, not additions: naming one narrows the run to that class and silently stops gating the others.`,
+    );
+  }
 });
 
 /**

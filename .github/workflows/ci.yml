@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - features/**
     # Denylist, not an allowlist. Docs-only changes never affect the npm
     # jobs (Prettier checks js/json/ts only; no test reads repo markdown),
     # but package.json, the lockfile, tsconfig, and lint config live
