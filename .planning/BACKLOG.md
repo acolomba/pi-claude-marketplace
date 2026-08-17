@@ -583,7 +583,16 @@ WITHOUT the `includeEntryExports` workaround.
 Distinct from FLOW-08: that one is dead re-export lines in the bridge barrels,
 a different cause with a different fix.
 
-## FLOW-10: duplication is gated by one repo-wide percentage and nothing else
+## ~~FLOW-10: duplication is gated by one repo-wide percentage and nothing else~~ -- CLOSED
+
+Closed 2026-08-17 as accepted, same day it was filed. Up to 3% duplication
+is the deliberate posture: `duplicates.threshold` is the gate, one
+whole-repo percentage, and the headroom between the current 2.1% and
+that ceiling is budget rather than leak. Audit's warn-not-fail verdict
+on introduced duplication is consistent with that and needs no change.
+
+Reopen only if the intent changes, i.e. if introduced clones should be
+blocked independently of the repo-wide total. Original report follows.
 
 Filed 2026-08-17 while measuring the audit job's real behaviour on PR #132.
 
@@ -613,7 +622,22 @@ line, which prints on a passing run.
 Code seams: `.fallowrc.json` (`duplicates.threshold`), `package.json`
 (`npm run fallow`), `.github/workflows/lint.yml` (`fallow-audit`).
 
-## FLOW-11: PR annotations are capped below the finding count
+## ~~FLOW-11: PR annotations are capped below the finding count~~ -- CLOSED
+
+Closed 2026-08-17 by enabling the action's `sarif: true` input on the
+`fallow-audit` job, with `security-events: write` granted at job scope
+rather than workflow scope. SARIF uploads to GitHub Code Scanning, which
+is free on public repositories, carries no per-step finding ceiling, and
+persists findings across runs instead of living only in one job log.
+
+`format: github-annotations` is KEPT alongside it. The two are not
+alternatives: annotations are log-based and therefore render on fork
+pull requests with no write token, which the SARIF upload cannot do
+because forks do not get `security-events: write`. Annotations stay the
+fork-safe floor; Code Scanning is the uncapped ceiling for everyone else.
+
+Verify on the next run that Code Scanning receives the findings and that
+the annotation path is unaffected. Original report follows.
 
 Filed 2026-08-17 from the first `fallow-rs/fallow@v3` run on PR #132.
 
