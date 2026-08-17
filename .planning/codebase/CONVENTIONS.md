@@ -198,7 +198,17 @@ dependency, after which the seam disappears rather than moving somewhere else.
 
 **Exports:** Named exports only observed — no default exports in sampled files.
 
-**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus the aggregate `bridges/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point. Barrels are not universally used across every directory (check per-directory before assuming one exists).
+**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point, and the aggregate `bridges/index.ts` was removed too. Barrels are not universally used across every directory (check per-directory before assuming one exists).
+
+**Never write an `export *` barrel.** It consumes every export in its target, so
+fallow credits them all as used and dead lines in the re-exported files stop
+being reported. The aggregate `bridges/index.ts` was doing exactly this to all
+five per-kind barrels; deleting it restored detection in each, verified by
+plant. Use explicit named re-exports, which stay individually analyzable.
+
+A barrel is the module's declared public surface, so keep it matching reality:
+a re-export line nobody imports through the barrel widens the declared API for
+no one. Those lines are only detectable while no `export *` shadows the file.
 
 ---
 

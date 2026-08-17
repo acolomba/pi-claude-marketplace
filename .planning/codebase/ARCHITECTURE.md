@@ -239,13 +239,37 @@ by accident: a new top-level directory would have been boundary-checked by
 nothing while the run still reported clean. `tests/**` and `eslint.config.js`
 are unmatched BY DESIGN and say so through `allowUnmatched`.
 
-Two of the 14 zones exist purely to keep that coverage total. `entry` holds
+One of the 13 zones exists purely to keep that coverage total: `entry` holds
 `index.ts`, whose allow list is exactly the six zones the factory imports.
-`bridges-barrel` holds the aggregate `bridges/index.ts`, and it is deliberately
-on NO other zone's allow list: it re-exports across all five bridge kinds, so
-any zone permitted to import it would gain a laundering route around the
-no-cross-bridge-imports rule. `orchestrators/plugin/discover-names.ts` imports
-the three per-kind barrels directly for that reason.
+
+There used to be a second, `bridges-barrel`, holding an aggregate
+`bridges/index.ts` that `export *`-ed all five per-kind barrels. That file is
+gone, for two independent reasons that turned out to share a cause.
+
+As an architecture matter it was a laundering route: any zone permitted to
+import it would reach across all five bridge kinds in one hop, around the
+no-cross-bridge-imports rule. It was therefore on no zone's allow list, and
+`orchestrators/plugin/discover-names.ts` imports the three per-kind barrels
+directly.
+
+As a gate matter it was blinding `fallow dead-code`. An `export *` consumes
+EVERY export in its target, so all five per-kind barrels had their exports
+auto-credited as used and dead lines in them were never reported. This was
+measured, and the mechanism is not what it looks like: it is not about
+re-exports (a plain `export const` in those files was missed identically) and
+not about the `index.ts` filename (`bridges/hooks/if-field/index.ts` and the
+aggregate itself were both caught). Exactly the five `export *` targets were
+blind. Deleting the aggregate restored detection in all five, verified by
+planting a dead export in each.
+
+Its only consumer was `tests/fixtures/bad-imports/edge-imports-bridges.ts`, the
+ESLint boundary canary, via a bare side-effect import taking no symbols; that
+fixture now points at `bridges/agents/index.ts`. The canary's zone `from` is the
+whole `bridges/` tree, so any real file under it serves.
+
+The general lesson is worth keeping: an `export *` barrel suppresses
+unused-export detection for everything it re-exports. Prefer explicit named
+re-exports if such a barrel is ever reintroduced.
 
 ## Error Propagation & Rollback
 

@@ -370,7 +370,7 @@ test(
     assert.equal(
       unresolvedErrors.length,
       0,
-      `'import-x/no-unresolved' fired -- canary is failing for the WRONG reason (the import target should resolve via the bridges/index.ts placeholder). Messages: ${JSON.stringify(messages, null, 2)}`,
+      `'import-x/no-unresolved' fired -- canary is failing for the WRONG reason (the import target bridges/agents/index.ts should resolve). Messages: ${JSON.stringify(messages, null, 2)}`,
     );
   },
 );

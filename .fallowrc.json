@@ -18,10 +18,6 @@
         "patterns": ["extensions/pi-claude-marketplace/index.ts"]
       },
       {
-        "name": "bridges-barrel",
-        "patterns": ["extensions/pi-claude-marketplace/bridges/index.ts"]
-      },
-      {
         "name": "edge",
         "patterns": ["extensions/pi-claude-marketplace/edge/**"]
       },
@@ -74,16 +70,6 @@
       {
         "from": "entry",
         "allow": ["edge", "orchestrators", "bridges-hooks", "persistence", "platform", "shared"]
-      },
-      {
-        "from": "bridges-barrel",
-        "allow": [
-          "bridges-agents",
-          "bridges-commands",
-          "bridges-mcp",
-          "bridges-skills",
-          "bridges-hooks"
-        ]
       },
       {
         "from": "edge",
@@ -149,10 +135,6 @@
       "forbidden": [
         {
           "from": "entry",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-barrel",
           "callee": ["process.stdout.*", "process.stderr.*"]
         },
         {

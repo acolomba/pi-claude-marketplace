@@ -410,9 +410,39 @@ catch.
 Settle whether the reachability gap is real on this codebase before removing
 anything.
 
-## FLOW-08: barrel re-export hygiene is unenforced
+## ~~FLOW-08: barrel re-export hygiene is unenforced~~ -- CLOSED
 
-Filed 2026-08-16 alongside the barrel prune (quick task 260816-qov).
+Filed 2026-08-16 alongside the barrel prune (quick task 260816-qov). CLOSED the
+same day: the cause was found and removed rather than tracked.
+
+**The diagnosis below was wrong**, and is kept because the correction is the
+useful part. The gate was never blind to "barrel re-exports" as a class. It was
+blind to exactly five files, and the reason was an `export *`.
+
+`bridges/index.ts` did `export * from "./agents/index.ts"` and the same for the
+other four per-kind barrels. A star re-export consumes EVERY export in its
+target, so all five barrels had their exports auto-credited as used. Removing
+the single `export *` line for agents made a planted dead export in
+`bridges/agents/index.ts` report immediately.
+
+It was not about re-exports -- a plain `export const` in those files was missed
+identically. It was not about the `index.ts` filename --
+`bridges/hooks/if-field/index.ts` and `bridges/index.ts` itself were both
+caught. Exactly the five `export *` targets were blind, nothing else.
+
+Resolution: the aggregate `bridges/index.ts` was deleted. Its only consumer was
+the ESLint boundary canary fixture, via a bare side-effect import taking no
+symbols; that fixture now points at `bridges/agents/index.ts`. All five barrels
+were then verified enforced by planting a dead export in each. The same file was
+independently an architectural laundering route across bridge kinds, so one
+deletion closed both problems. See ARCHITECTURE.md.
+
+Carry-forward rule, now in CONVENTIONS.md: never write an `export *` barrel; it
+suppresses unused-export detection for everything it re-exports.
+
+---
+
+Original entry, retained for the record:
 
 The five per-kind bridge barrels were pruned from 115 declared symbols to 49 --
 the 66 removed were re-exported by the barrel and imported through it by
@@ -423,18 +453,18 @@ while 12 were consumed, publishing internals such as `convertAgent`,
 That contradicted each barrel's own header, which declares the module's public
 surface and cites D-01 opaque-handle discipline.
 
-**The shipping gate does NOT catch this class, and that is the point of this
+~~**The shipping gate does NOT catch this class, and that is the point of this
 item.** Measured directly: re-adding `export { convertAgent } from
 "./convert.ts"` to the agents barrel leaves `npm run fallow` at exit 0. The
 findings were only ever visible under `production: true`, which is rejected for
 the reasons in FLOW-04 and FLOW-06. So the prune is a one-time cleanup with no
 ongoing protection -- a new dead barrel line can be added tomorrow and nothing
-will notice.
+will notice.~~
 
-Options if this is worth closing: a small architecture test that computes the
-same live/dead set (collect each barrel's exports, scan for imports resolving
-to that barrel, diff) and fails on a dead line; or a periodic manual audit
-using that script. The computation is cheap and needs no new tooling.
+The exit-0 measurement was real; the attribution was not. It was the `export *`
+in the aggregate barrel, not the shipping config, and not re-exports as a
+class. No architecture test is needed -- deleting the aggregate restored native
+fallow coverage on all five barrels.
 
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
