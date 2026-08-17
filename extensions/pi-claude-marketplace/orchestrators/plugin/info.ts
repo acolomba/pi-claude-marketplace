@@ -76,7 +76,7 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  resolveGitSubdirRoot,
+  resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
@@ -1376,30 +1376,6 @@ function buildFetchAuth(
 }
 
 /**
- * PURL-03 / NFR-10: apply the git-subdir containment tail to a materialized
- * clone/mirror root and stamp the resolved sha. A git-subdir source resolves the
- * pluginRoot under the clone root (escapes / missing-subdir arms propagate);
- * other kinds materialize at the clone root itself. Mirrors
- * `install.ts::resolveGitPluginRootWithSubdir`.
- */
-async function resolveFetchedPluginRoot(
-  gitSource: GitBackedSource,
-  cloneRoot: string,
-  resolvedSha: string,
-): Promise<GitPluginRootResult> {
-  if (gitSource.kind === "git-subdir") {
-    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
-    if (subdirResult.kind !== "materialized") {
-      return subdirResult;
-    }
-
-    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-  }
-
-  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
-}
-
-/**
  * FTCH-03 / FTCH-04 / D-81-05: build the MATERIALIZING git probe for the
  * `info --fetch` hook. A pinned source (manifest sha) clones once into the
  * per-sha immutable cache (network on cache miss); an unpinned source refreshes
@@ -1421,7 +1397,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
         ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
         ...(authBundle !== undefined && { auth: authBundle }),
       });
-    return resolveFetchedPluginRoot(gitSource, mirrorRoot, resolvedSha);
+    return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
   };
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
@@ -1434,7 +1410,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       ...(ref !== undefined && { ref }),
       ...(authBundle !== undefined && { auth: authBundle }),
     });
-    return resolveFetchedPluginRoot(gitSource, cloneRoot, pin);
+    return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
   return (gitSource) =>

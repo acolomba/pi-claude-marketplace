@@ -28,7 +28,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { cleanupStaging, pathExists, resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
@@ -36,7 +36,13 @@ import {
   type GitOps,
 } from "../marketplace/shared.ts";
 
-import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
+import type { GitPluginRootResult } from "../../domain/resolver.ts";
+import type {
+  GitBackedSource,
+  GitHubSource,
+  GitSubdirSource,
+  UrlSource,
+} from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
@@ -54,34 +60,6 @@ function isGitCommitNotFetchedError(err: unknown): boolean {
   return err instanceof Error && err.name === "CommitNotFetchedError";
 }
 
-/**
- * PURL-02 / PURL-04: materialize a plugin clone at the exact pin into
- * `plugin-clones/<key>/`, returning the clone root.
- *
- * Flow:
- *   1. key = pluginCloneKey(cloneUrl, pin); cloneRoot = pluginCloneDir(key).
- *   2. Warm-cache short-circuit: if cloneRoot exists, return it -- NO clone,
- *      NO network (PURL-02 offline / PURL-04 dedup).
- *   3. Clone into a staging dir (ref-hint singleBranch fetch when a ref is
- *      given), then checkout the exact `pin` (sha over ref). When the pin is
- *      outside the ref hint's history the singleBranch fetch never pulled the
- *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
- *      clone left a wildcard fetch refspec, so one full fetch widens the
- *      staging clone to every head and the checkout is retried ONCE. A
- *      genuinely unreachable pin throws the same class on the retry and folds
- *      into the fail-clean path. A clone/checkout throw cleans staging and
- *      append-leak-rethrows (MA-9).
- *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
- *      means a concurrent install of the same url+sha already won the race;
- *      its tree is byte-equivalent (same key => same content), so clean our
- *      staging and return cloneRoot as a warm-cache win. Any other rename
- *      errno append-leak-rethrows (MA-9).
- *
- * `auth` is an optional bundle forwarded to `gitOps.clone`. When omitted the
- * clone is byte-identical to the public-only path (PROV-02); when present the
- * provider's credentials thread into the clone so a private source on a
- * registered host authenticates (PROV-03/D-79-01).
- */
 /**
  * Promote a staging dir to its final clone root by atomic rename. Both dirs
  * are siblings under `extensionRoot` (`sources-staging/` and
@@ -149,6 +127,34 @@ async function checkoutPinWithRefetch(
   }
 }
 
+/**
+ * PURL-02 / PURL-04: materialize a plugin clone at the exact pin into
+ * `plugin-clones/<key>/`, returning the clone root.
+ *
+ * Flow:
+ *   1. key = pluginCloneKey(cloneUrl, pin); cloneRoot = pluginCloneDir(key).
+ *   2. Warm-cache short-circuit: if cloneRoot exists, return it -- NO clone,
+ *      NO network (PURL-02 offline / PURL-04 dedup).
+ *   3. Clone into a staging dir (ref-hint singleBranch fetch when a ref is
+ *      given), then checkout the exact `pin` (sha over ref). When the pin is
+ *      outside the ref hint's history the singleBranch fetch never pulled the
+ *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
+ *      clone left a wildcard fetch refspec, so one full fetch widens the
+ *      staging clone to every head and the checkout is retried ONCE. A
+ *      genuinely unreachable pin throws the same class on the retry and folds
+ *      into the fail-clean path. A clone/checkout throw cleans staging and
+ *      append-leak-rethrows (MA-9).
+ *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
+ *      means a concurrent install of the same url+sha already won the race;
+ *      its tree is byte-equivalent (same key => same content), so clean our
+ *      staging and return cloneRoot as a warm-cache win. Any other rename
+ *      errno append-leak-rethrows (MA-9).
+ *
+ * `auth` is an optional bundle forwarded to `gitOps.clone`. When omitted the
+ * clone is byte-identical to the public-only path (PROV-02); when present the
+ * provider's credentials thread into the clone so a private source on a
+ * registered host authenticates (PROV-03/D-79-01).
+ */
 export async function materializePluginClone(args: {
   locations: ScopedLocations;
   cloneUrl: string;
@@ -541,3 +547,32 @@ export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 // Re-exported here under the same name to keep install / update / reinstall /
 // fetch import sites unbroken.
 export { canonicalCloneUrl } from "../../domain/clone-key.ts";
+
+/**
+ * PURL-03 / NFR-10: anchor a materialized clone to the plugin root the source
+ * actually names, and stamp the resolved sha.
+ *
+ * A `git-subdir` source resolves its pluginRoot UNDER the clone root, and the
+ * `escapes` / `missing-subdir` arms propagate unchanged so the resolver can
+ * surface them as `unavailable` (fail-clean). Every other git kind
+ * materializes at the clone root itself.
+ *
+ * Shared by the pinned and unpinned probe arms of BOTH the install path and
+ * the `info --fetch` path, which previously carried byte-identical copies.
+ */
+export async function resolveGitPluginRootWithSubdir(
+  gitSource: GitBackedSource,
+  cloneRoot: string,
+  resolvedSha: string,
+): Promise<GitPluginRootResult> {
+  if (gitSource.kind === "git-subdir") {
+    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
+    if (subdirResult.kind !== "materialized") {
+      return subdirResult;
+    }
+
+    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
+  }
+
+  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
+}

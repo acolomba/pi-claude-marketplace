@@ -50,18 +50,16 @@
 // docstring header.
 
 import { spawn } from "node:child_process";
-import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
 import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
-import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
+import { prepareHookEnv } from "./hook-env.ts";
 import { translate as translatePostCompact } from "./payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translate as translatePostToolUse } from "./payloads/post-tool-use.ts";
@@ -296,42 +294,7 @@ async function prepareEnv(
   entry: RoutingEntry,
   transCtx: TranslationContext,
 ): Promise<NodeJS.ProcessEnv> {
-  const loc = locationsFor(entry.scope, transCtx.cwd);
-
-  // CLAUDE_PLUGIN_ROOT is exported to the spawned hook handler so the
-  // upstream Claude Code `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolves
-  // to the actual plugin source on disk. The value flows from state.json's
-  // `resolvedSource`, hydrated onto RoutingEntry at install + boot. For
-  // GitHub-source marketplaces this is inside `<extensionRoot>/sources/...`;
-  // for path-source marketplaces the user has explicitly pointed at an
-  // external path, so no containment assertion is meaningful here.
-  const pluginRoot = entry.resolvedSource;
-
-  const pluginData = path.join(loc.dataRoot, entry.pluginId);
-  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: transCtx.cwd,
-    CLAUDE_PLUGIN_ROOT: pluginRoot,
-    CLAUDE_PLUGIN_DATA: pluginData,
-    // HENV-01: Claude-Code-parity session env from the shared producer so this
-    // sync lane and the async-rewake lane cannot drift (WR-01). Spread AFTER
-    // the `...process.env` spread so the authoritative per-dispatch snapshot
-    // wins over whatever was last written to the live process.env (D-91-02
-    // race-window safety).
-    ...claudeSessionEnvFor(transCtx.sessionId),
-  };
-
-  if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
-    await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
-    env.CLAUDE_ENV_FILE = envFile;
-  }
-
-  // CLAUDE_CODE_REMOTE is intentionally NOT set (HOOK-05 -- Pi runs
-  // locally; documented absence is the upstream-parity contract).
-  return env;
+  return prepareHookEnv(entry, transCtx, locationsFor(entry.scope, transCtx.cwd));
 }
 
 // ──────────────────────────────────────────────────────────────────────────

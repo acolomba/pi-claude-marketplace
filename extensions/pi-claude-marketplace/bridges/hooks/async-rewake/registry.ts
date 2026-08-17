@@ -40,15 +40,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
-import { assertPathInside } from "../../../shared/path-safety.ts";
-import { claudeSessionEnvFor } from "../../../shared/session-env.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
+import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translate as translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -598,35 +596,9 @@ async function prepareAsyncEnv(
   loc: ScopedLocations,
   dispatchId: string,
 ): Promise<NodeJS.ProcessEnv> {
-  // CLAUDE_PLUGIN_ROOT mirrors dispatch-exec.ts::prepareEnv: source of truth
-  // is `RoutingEntry.resolvedSource` (hydrated from state.json's
-  // `resolvedSource` field). Async-rewake re-dispatches the same handler
-  // declaration, so the env contract must match.
-  const pluginRoot = entry.resolvedSource;
-
-  const pluginData = path.join(loc.dataRoot, entry.pluginId);
-  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: transCtx.cwd,
-    CLAUDE_PLUGIN_ROOT: pluginRoot,
-    CLAUDE_PLUGIN_DATA: pluginData,
-    [MARKER_ENV]: dispatchId,
-    // HENV-02: session env from the shared producer, identical to the sync
-    // dispatch-exec lane by construction (WR-01). Spread after the
-    // `...process.env` spread so the authoritative per-dispatch snapshot wins
-    // (D-91-02).
-    ...claudeSessionEnvFor(transCtx.sessionId),
-  };
-
-  if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
-    await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
-    env.CLAUDE_ENV_FILE = envFile;
-  }
-
-  return env;
+  // The MARKER_ENV stamp is the only per-lane addition: async-rewake tags the
+  // spawned child so a later reap can recognise its own dispatch.
+  return prepareHookEnv(entry, transCtx, loc, { [MARKER_ENV]: dispatchId });
 }
 
 /**

@@ -135,7 +135,7 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  resolveGitSubdirRoot,
+  resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
@@ -548,30 +548,6 @@ function buildProbeAuth(
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
   });
-}
-
-/**
- * PURL-03 / NFR-10: apply the git-subdir containment tail to a materialized
- * clone/mirror root and stamp the resolved sha. For a git-subdir source the
- * pluginRoot resolves under the clone root (escapes / missing-subdir arms
- * propagate unchanged); other kinds materialize at the clone root itself.
- * Shared by the pinned and the unpinned (mirror) probe arms.
- */
-async function resolveGitPluginRootWithSubdir(
-  gitSource: GitBackedSource,
-  cloneRoot: string,
-  resolvedSha: string,
-): Promise<GitPluginRootResult> {
-  if (gitSource.kind === "git-subdir") {
-    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
-    if (subdirResult.kind !== "materialized") {
-      return subdirResult;
-    }
-
-    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-  }
-
-  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
 }
 
 /**
