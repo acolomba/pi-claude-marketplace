@@ -22,6 +22,7 @@ import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
 
+import type { HookExecutor } from "./dispatch.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
@@ -157,6 +158,7 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
 export function settleHandlerFor(
   capturedEpoch: number,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void> {
   return async (_event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -175,7 +177,7 @@ export function settleHandlerFor(
 
     switch (last.stopReason) {
       case "stop":
-        await runStopBucket(last, capturedEpoch, ctx, pi);
+        await runStopBucket(last, capturedEpoch, ctx, pi, executor);
         return;
       case "error":
       case "length":
@@ -184,6 +186,7 @@ export function settleHandlerFor(
           classifyStopFailure(last.errorMessage ?? "", last.stopReason),
           ctx,
           pi,
+          executor,
         );
         return;
       case "pending":
@@ -249,6 +252,7 @@ async function runStopBucket(
   capturedEpoch: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): Promise<void> {
   const bucket = getRoutingBucket("Stop");
   if (bucket.length === 0) {
@@ -262,7 +266,7 @@ async function runStopBucket(
     // bridge-driven continuation loop.
     stop_hook_active: stopHookActive,
   };
-  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
+  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true, executor);
 
   // A /reload while the bucket's hooks were running bumped the epoch and reset
   // the settle state; bail before any loop-state mutation or re-entry.
@@ -324,6 +328,7 @@ async function runStopFailure(
   classifiedError: StopFailureErrorType,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): Promise<void> {
   const bucket = getRoutingBucket("StopFailure");
   if (bucket.length === 0) {
@@ -345,8 +350,13 @@ async function runStopFailure(
   // exact members of the closed error-type vocabulary, so the dispatch filter
   // is literal equality against the classified error (the shared
   // `matcherFiresOnClosedSetValue` predicate).
-  await collectBucketOutcomes(bucket, event, ctx, pi, (entry) =>
-    matcherFiresOnClosedSetValue(entry, classifiedError),
+  await collectBucketOutcomes(
+    bucket,
+    event,
+    ctx,
+    pi,
+    (entry) => matcherFiresOnClosedSetValue(entry, classifiedError),
+    executor,
   );
 }
 

@@ -10,7 +10,7 @@
 //     session_shutdown, session_before_compact, session_compact, input,
 //     tool_call). Each closure: epoch-checks, looks up the bucket for
 //     `claudeEvent`, applies the per-event matcher-fires predicate, runs
-//     the D-60-02 reducer over `await activeExecutor(...)` calls, then
+//     the D-60-02 reducer over `await executor(...)` calls, then
 //     hands the folded `HookExecResult` to the per-Pi-event adapter
 //     (D-60-03) which converts it to the Pi-side handler return shape.
 //
@@ -89,24 +89,6 @@ export type HookExecutor = (
   ctx: ExtensionContext,
   pi?: ExtensionAPI,
 ) => Promise<HookExecResult>;
-
-let activeExecutor: HookExecutor = dispatchHookExec;
-
-/**
- * Inject a spy executor for the duration of one unit test. Not part of
- * the public surface.
- */
-export function _setExecutorForTest(executor: HookExecutor): void {
-  activeExecutor = executor;
-}
-
-/**
- * Reset the executor seam back to the production `dispatchHookExec`. Used
- * by tests to undo their spy injection in cleanup.
- */
-export function _resetExecutorForTest(): void {
-  activeExecutor = dispatchHookExec;
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Matcher-fires predicates
@@ -258,7 +240,7 @@ export interface BucketOutcome {
  * observable. Mutations are NOT applied in place: the settle
  * synthetic event carries no mutable input/output surface.
  *
- * Reuses the same `activeExecutor` seam as `reduceBucket`, so the
+ * Takes the same injected executor as `reduceBucket`, so the
  * `_setExecutorForTest` spy drives this path too.
  */
 export async function collectBucketOutcomes(
@@ -267,7 +249,7 @@ export async function collectBucketOutcomes(
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   matcherFires: (entry: RoutingEntry) => boolean,
-  executor: HookExecutor = activeExecutor,
+  executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
   const outcomes: BucketOutcome[] = [];
   for (const entry of bucket) {
@@ -328,7 +310,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   claudeEvent: E,
   capturedEpoch: number,
   pi?: ExtensionAPI,
-  executor: HookExecutor = activeExecutor,
+  executor: HookExecutor = dispatchHookExec,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -361,7 +343,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
 export function toolResultCompositeHandler(
   capturedEpoch: number,
   pi?: ExtensionAPI,
-  executor: HookExecutor = activeExecutor,
+  executor: HookExecutor = dispatchHookExec,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {

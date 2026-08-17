@@ -79,6 +79,7 @@ import {
   settleHandlerFor,
 } from "./settle.ts";
 
+import type { HookExecutor } from "./dispatch.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -691,7 +692,7 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  */
 export async function registerHooksBridge(
   pi: ExtensionAPI,
-  opts: { ctx: ExtensionContext; cwd: string },
+  opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
 ): Promise<void> {
   const capturedEpoch = bumpEpoch();
 
@@ -767,7 +768,7 @@ export async function registerHooksBridge(
   // The pi.on call count (DISP-01: 11) and locked event-name set (10) are
   // unchanged: this wraps the existing session_start handler, it does not
   // add a registration.
-  const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi);
+  const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi, opts.executor);
   pi.on("session_start", async (event, ctx) => {
     try {
       await hydrateProjectScopeForCwd(ctx.cwd);
@@ -781,12 +782,15 @@ export async function registerHooksBridge(
 
     return sessionStartHandler(event, ctx);
   });
-  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch, pi));
-  pi.on("session_before_compact", compositeHandlerFor("PreCompact", capturedEpoch, pi));
-  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch, pi));
-  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi));
-  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch, pi));
-  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch, pi));
+  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch, pi, opts.executor));
+  pi.on(
+    "session_before_compact",
+    compositeHandlerFor("PreCompact", capturedEpoch, pi, opts.executor),
+  );
+  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch, pi, opts.executor));
+  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi, opts.executor));
+  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch, pi, opts.executor));
+  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch, pi, opts.executor));
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending
   // buffer is empty so the no-context path is a single Map lookup per
@@ -796,7 +800,7 @@ export async function registerHooksBridge(
   // last-assistant message; agent_settled reads it and gates on stopReason
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on("agent_end", agentEndCacheHandler(capturedEpoch));
-  pi.on("agent_settled", settleHandlerFor(capturedEpoch, pi));
+  pi.on("agent_settled", settleHandlerFor(capturedEpoch, pi, opts.executor));
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears
   // `stop_hook_active` and resets the consecutive-block counter + one-shot cap

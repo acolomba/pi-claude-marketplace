@@ -25,10 +25,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import {
-  _resetExecutorForTest,
-  _setExecutorForTest,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
+import {} from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
   _resetForTest,
   _routingTableForTest,
@@ -37,6 +34,7 @@ import {
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
@@ -182,7 +180,6 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
   _resetForTest();
   t.after(() => {
     _resetForTest();
-    _resetExecutorForTest();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -196,10 +193,10 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
 
     // Capture every executor invocation to verify dispatch.
     const executorCalls: Array<{ pluginId: string; claudeEvent: string }> = [];
-    _setExecutorForTest((entry: RoutingEntry) => {
+    const injectedExecutor: HookExecutor = (entry: RoutingEntry) => {
       executorCalls.push({ pluginId: entry.pluginId, claudeEvent: entry.claudeEvent });
       return Promise.resolve({ kind: "noop" });
-    });
+    };
 
     // Boot the bridge against the mock Pi. Project scope is empty (only
     // agentDir is seeded) -- this is the exact shape that triggered the
@@ -208,7 +205,11 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // ctx.cwd is read by the session_start handler's lazy project hydrate;
     // carry the real project cwd so the hydrate resolves the right scope root.
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: projectCwd });
+    await registerHooksBridge(pi, {
+      ctx: placeholderCtx,
+      cwd: projectCwd,
+      executor: injectedExecutor,
+    });
 
     // pi.on("session_start", ...) must have been registered.
     const sessionStartRegs = registrations.filter((r) => r.event === "session_start");
@@ -253,7 +254,6 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
   _resetForTest();
   t.after(() => {
     _resetForTest();
-    _resetExecutorForTest();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -271,14 +271,14 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     await writeFile(path.join(projectHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
 
     const executorCalls: Array<{ pluginId: string; claudeEvent: string; scope: string }> = [];
-    _setExecutorForTest((entry: RoutingEntry) => {
+    const injectedExecutor: HookExecutor = (entry: RoutingEntry) => {
       executorCalls.push({
         pluginId: entry.pluginId,
         claudeEvent: entry.claudeEvent,
         scope: entry.scope,
       });
       return Promise.resolve({ kind: "noop" });
-    });
+    };
 
     // Boot the bridge with cwd=agentDir (a stand-in for the factory's
     // homedir() -- NOT the real project). The factory-time project hydrate
@@ -286,7 +286,11 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     // is empty at boot.
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: agentDir });
+    await registerHooksBridge(pi, {
+      ctx: placeholderCtx,
+      cwd: agentDir,
+      executor: injectedExecutor,
+    });
 
     // Bug condition: no SessionStart entries are dispatchable right after
     // boot, because the factory could not hydrate project scope against the
@@ -322,7 +326,6 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
   _resetForTest();
   t.after(() => {
     _resetForTest();
-    _resetExecutorForTest();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -334,7 +337,7 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     await saveState(userExtensionRoot, buildUserScopeStateWithHooksPlugin());
     await writeFile(path.join(userHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
 
-    _setExecutorForTest(() => Promise.resolve({ kind: "noop" }));
+    const injectedExecutor: HookExecutor = () => Promise.resolve({ kind: "noop" });
 
     // Boot against a THIRD cwd so the factory's own `_shared` mkdir cannot
     // land in projectCwd and mask what the session_start path does.
@@ -343,7 +346,11 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: bootCwd });
+    await registerHooksBridge(pi, {
+      ctx: placeholderCtx,
+      cwd: bootCwd,
+      executor: injectedExecutor,
+    });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg, "bridge must register session_start handler");
@@ -366,7 +373,6 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
   _resetForTest();
   t.after(() => {
     _resetForTest();
-    _resetExecutorForTest();
   });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -379,15 +385,16 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
     await writeFile(path.join(userHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
 
     const executorCalls: Array<{ pluginId: string; claudeEvent: string }> = [];
-    _setExecutorForTest((entry: RoutingEntry) => {
+    const injectedExecutor: HookExecutor = (entry: RoutingEntry) => {
       executorCalls.push({ pluginId: entry.pluginId, claudeEvent: entry.claudeEvent });
       return Promise.resolve({ kind: "noop" });
-    });
+    };
 
     const { pi, registrations } = makeMockPi();
     await registerHooksBridge(pi, {
       ctx: { cwd: projectCwd } as unknown as ExtensionContext,
       cwd: projectCwd,
+      executor: injectedExecutor,
     });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");

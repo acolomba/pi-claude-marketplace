@@ -6,8 +6,6 @@ import path from "node:path";
 import { test, beforeEach } from "node:test";
 
 import {
-  _resetExecutorForTest,
-  _setExecutorForTest,
   compositeHandlerFor,
   toolResultCompositeHandler,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -36,6 +34,7 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -416,15 +415,12 @@ function makeEntry(input: {
 
 const stubCtx = {} as unknown as ExtensionContext;
 
-test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequentially", async (t) => {
+test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequentially", async () => {
   const calls: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     calls.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
@@ -432,7 +428,7 @@ test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequenti
     makeEntry({ pluginId: "p3", declarationIndex: 2 }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   await handler(
     { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
     stubCtx,
@@ -441,15 +437,12 @@ test("compositeHandlerFor: fires dispatchHookExec for each bucket entry sequenti
   assert.deepEqual(calls, ["p1", "p2", "p3"]);
 });
 
-test("compositeHandlerFor: skips entries whose matcher does not fire", async (t) => {
+test("compositeHandlerFor: skips entries whose matcher does not fire", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p-edit-a", rawMatcher: "Edit" }),
@@ -457,7 +450,7 @@ test("compositeHandlerFor: skips entries whose matcher does not fire", async (t)
     makeEntry({ pluginId: "p-bash", rawMatcher: "Bash" }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   await handler(
     { type: "tool_call", toolCallId: "x", toolName: "edit", input: {} as never },
     stubCtx,
@@ -466,15 +459,12 @@ test("compositeHandlerFor: skips entries whose matcher does not fire", async (t)
   assert.deepEqual(fired, ["p-edit-a", "p-edit-b"]);
 });
 
-test("compositeHandlerFor: SessionStart filter against event.reason", async (t) => {
+test("compositeHandlerFor: SessionStart filter against event.reason", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("SessionStart", [
     makeEntry({ pluginId: "p-any", rawMatcher: "" }),
@@ -482,42 +472,41 @@ test("compositeHandlerFor: SessionStart filter against event.reason", async (t) 
     makeEntry({ pluginId: "p-resume", rawMatcher: "resume" }),
   ]);
 
-  const handler = compositeHandlerFor("SessionStart", currentEpoch());
+  const handler = compositeHandlerFor("SessionStart", currentEpoch(), undefined, injectedExecutor);
   await handler({ type: "session_start", reason: "startup" }, stubCtx);
 
   assert.deepEqual(fired, ["p-any", "p-startup"]);
 });
 
-test("compositeHandlerFor: UserPromptSubmit fires unconditionally on every event", async (t) => {
+test("compositeHandlerFor: UserPromptSubmit fires unconditionally on every event", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("UserPromptSubmit", [
     makeEntry({ pluginId: "p-a", rawMatcher: "" }),
     makeEntry({ pluginId: "p-b", rawMatcher: "" }),
   ]);
 
-  const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch());
+  const handler = compositeHandlerFor(
+    "UserPromptSubmit",
+    currentEpoch(),
+    undefined,
+    injectedExecutor,
+  );
   await handler({ type: "input", text: "hello", source: "interactive" }, stubCtx);
 
   assert.deepEqual(fired, ["p-a", "p-b"]);
 });
 
-test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatchHookExec", async (t) => {
+test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatchHookExec", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PreToolUse", [makeEntry({ pluginId: "p1" })]);
 
@@ -527,7 +516,7 @@ test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatch
   _bumpEpochForTest();
   assert.notEqual(stale, currentEpoch());
 
-  const handler = compositeHandlerFor("PreToolUse", stale);
+  const handler = compositeHandlerFor("PreToolUse", stale, undefined, injectedExecutor);
   await handler(
     { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
     stubCtx,
@@ -536,20 +525,17 @@ test("compositeHandlerFor: epoch mismatch causes no-op without invoking dispatch
   assert.deepEqual(fired, []);
 });
 
-test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailure bucket", async (t) => {
+test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailure bucket", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
     {
       type: "tool_result",
@@ -566,20 +552,17 @@ test("toolResultCompositeHandler: event.isError true routes to PostToolUseFailur
   assert.deepEqual(fired, ["p-failure"]);
 });
 
-test("toolResultCompositeHandler: event.isError false routes to PostToolUse bucket", async (t) => {
+test("toolResultCompositeHandler: event.isError false routes to PostToolUse bucket", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p-failure" })]);
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p-success" })]);
 
-  const handler = toolResultCompositeHandler(currentEpoch());
+  const handler = toolResultCompositeHandler(currentEpoch(), undefined, injectedExecutor);
   await handler(
     {
       type: "tool_result",
@@ -596,15 +579,12 @@ test("toolResultCompositeHandler: event.isError false routes to PostToolUse buck
   assert.deepEqual(fired, ["p-success"]);
 });
 
-test("toolResultCompositeHandler: epoch mismatch causes no-op", async (t) => {
+test("toolResultCompositeHandler: epoch mismatch causes no-op", async () => {
   const fired: string[] = [];
-  _setExecutorForTest((entry) => {
+  const injectedExecutor: HookExecutor = (entry) => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "noop" as const });
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PostToolUse", [makeEntry({ pluginId: "p1" })]);
   _setRoutingBucketForTest("PostToolUseFailure", [makeEntry({ pluginId: "p2" })]);
@@ -612,7 +592,7 @@ test("toolResultCompositeHandler: epoch mismatch causes no-op", async (t) => {
   const stale = currentEpoch();
   _bumpEpochForTest();
 
-  const handler = toolResultCompositeHandler(stale);
+  const handler = toolResultCompositeHandler(stale, undefined, injectedExecutor);
   await handler(
     {
       type: "tool_result",
@@ -629,28 +609,25 @@ test("toolResultCompositeHandler: epoch mismatch causes no-op", async (t) => {
   assert.deepEqual(fired, []);
 });
 
-test("dispatch is sequential awaited (NOT Promise.all)", async (t) => {
+test("dispatch is sequential awaited (NOT Promise.all)", async () => {
   // Prove serial dispatch by recording start AND end positions of each
   // call. If entries were dispatched via Promise.all, both calls would
   // start before either ended; with sequential await, the second start
   // must follow the first end.
   const events: string[] = [];
-  _setExecutorForTest(async (entry) => {
+  const injectedExecutor: HookExecutor = async (entry) => {
     events.push(`start:${entry.pluginId}`);
     await new Promise((r) => setTimeout(r, 10));
     events.push(`end:${entry.pluginId}`);
     return { kind: "noop" as const };
-  });
-  t.after(() => {
-    _resetExecutorForTest();
-  });
+  };
 
   _setRoutingBucketForTest("PreToolUse", [
     makeEntry({ pluginId: "p1", declarationIndex: 0 }),
     makeEntry({ pluginId: "p2", declarationIndex: 1 }),
   ]);
 
-  const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+  const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, injectedExecutor);
   await handler(
     { type: "tool_call", toolCallId: "x", toolName: "bash", input: { command: "ls" } },
     stubCtx,
