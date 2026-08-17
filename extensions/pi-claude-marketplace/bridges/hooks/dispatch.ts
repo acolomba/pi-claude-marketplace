@@ -182,6 +182,7 @@ async function reduceBucket(
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<ReducedBucket> {
   let finalResult: HookExecResult = { kind: "noop" };
@@ -197,7 +198,7 @@ async function reduceBucket(
       continue;
     }
 
-    const r = await activeExecutor(entry, event, ctx, pi);
+    const r = await executor(entry, event, ctx, pi);
     switch (r.kind) {
       case "block":
       case "stop":
@@ -266,6 +267,7 @@ export async function collectBucketOutcomes(
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
   matcherFires: (entry: RoutingEntry) => boolean,
+  executor: HookExecutor = activeExecutor,
 ): Promise<BucketOutcome[]> {
   const outcomes: BucketOutcome[] = [];
   for (const entry of bucket) {
@@ -285,7 +287,7 @@ export async function collectBucketOutcomes(
       continue;
     }
 
-    const result = await activeExecutor(entry, event, ctx, pi);
+    const result = await executor(entry, event, ctx, pi);
     outcomes.push({ entry, result });
   }
 
@@ -326,6 +328,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   claudeEvent: E,
   capturedEpoch: number,
   pi?: ExtensionAPI,
+  executor: HookExecutor = activeExecutor,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -337,7 +340,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
@@ -358,6 +361,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
 export function toolResultCompositeHandler(
   capturedEpoch: number,
   pi?: ExtensionAPI,
+  executor: HookExecutor = activeExecutor,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -370,7 +374,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, (entry) =>
+    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 
