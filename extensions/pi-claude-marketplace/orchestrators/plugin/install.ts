@@ -170,32 +170,10 @@ import type {
   PluginFailedMessage,
   PluginUnavailableMessage,
   PluginPartiallyAvailableMessage,
-  StatusToken,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-
-/**
- * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
- * classified-error return shape for `classifyEntityShapeError` and the
- * install.ts error-routing path. File-local; this module is the sole
- * consumer.
- *
- * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
- * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
- */
-interface EntityErrorRow {
-  readonly kind: "entity-error";
-  readonly name: string;
-  readonly marketplace?: string;
-  readonly scope?: Scope;
-  readonly status: Extract<StatusToken, "failed" | "unavailable">;
-  readonly reasons: readonly ContentReason[];
-  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `partialable`
-  // discriminant on the `unavailable` arm -- `true` when the resolver verdict
-  // is partially-available, so the composed row points at `--partial`.
-  readonly partialable?: boolean;
-}
+import type { EntityErrorRow } from "./install.messaging.ts";
 
 /**
  * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is
@@ -1959,7 +1937,6 @@ function composeInstallFailureMessage(args: {
   version: string | undefined;
   rolledBackPartial: boolean;
   rollbackPartials: readonly RollbackPartial[];
-  // fallow-ignore-next-line private-type-leak -- `EntityErrorRow` is install-internal (PI-3/4/5 classifier shape); reached only through __test_composeInstallFailureMessage, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   entityErrorRow: EntityErrorRow | undefined;
 }): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
@@ -2087,7 +2064,6 @@ function formatOrchestratedCause(err: unknown): string {
 function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
-  // fallow-ignore-next-line private-type-leak -- same install-internal `EntityErrorRow`, reached only through __test_classifyEntityShapeError; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 ): EntityErrorRow | undefined {
   // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
   // substring-matching `.message`. The throw sites carry their structural

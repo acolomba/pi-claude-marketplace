@@ -116,7 +116,7 @@ import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/ski
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -139,7 +139,6 @@ import type {
 
 export type { ReinstallPluginOutcome } from "../types.ts";
 
-type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
 export type RemoveDataDirFn = (
   path: string,
@@ -1491,7 +1490,7 @@ async function prepareAllHandles(input: {
   readonly plugin: string;
   readonly installable: MaterializablePlugin;
   readonly pluginDataDir: string;
-  readonly oldRecord: PluginRecord;
+  readonly oldRecord: PluginInstallRecord;
   readonly agentsSourceDir: string | null;
 }): Promise<PreparedHandles> {
   const handles: PartialPreparedHandles = {};
@@ -1660,7 +1659,7 @@ function updateStateRecord(
   state: ExtensionState,
   marketplace: string,
   plugin: string,
-  oldRecord: PluginRecord,
+  oldRecord: PluginInstallRecord,
   installable: MaterializablePlugin,
   handles: PreparedHandles,
   hookEntries: readonly HookSummaryEntry[] | undefined,
@@ -1709,7 +1708,7 @@ function resourcesFromHandles(
   handles: PreparedHandles,
   plugin?: string,
   installable?: MaterializablePlugin,
-): PluginRecord["resources"] {
+): PluginInstallRecord["resources"] {
   return {
     skills: handles.skills.result.recorded.map((r) => r.generatedName),
     prompts: handles.commands.result.recorded.map((r) => r.generatedName),
@@ -1732,7 +1731,7 @@ function successOutcome(
   scope: Scope,
   marketplace: string,
   plugin: string,
-  oldRecord: PluginRecord,
+  oldRecord: PluginInstallRecord,
   handles: PreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
@@ -1769,8 +1768,8 @@ function successOutcome(
 }
 
 function resourcesChanged(
-  oldResources: PluginRecord["resources"],
-  next: PluginRecord["resources"],
+  oldResources: PluginInstallRecord["resources"],
+  next: PluginInstallRecord["resources"],
 ): boolean {
   return (
     next.skills.length > 0 ||
@@ -2009,8 +2008,7 @@ async function runPostSuccessMaintenance(
   return Object.freeze(warnings);
 }
 
-// fallow-ignore-next-line private-type-leak -- `PluginRecord` is a reinstall-local state alias; reached only through __test_clonePluginRecord, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
-function clonePluginRecord(record: PluginRecord): PluginRecord {
+function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
   return {
     version: record.version,
     resolvedSource: record.resolvedSource,
