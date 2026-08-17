@@ -58,3 +58,48 @@ jobs:
 
       - name: Run fallow
         run: npm run fallow
+
+  # Second opinion on the DIFF, not a second opinion on the config. The
+  # whole-repo `fallow` job above is the blocking authority and runs the same
+  # `npm run fallow` as the pre-commit hook and `npm run check`; this job adds
+  # new-vs-inherited attribution scoped to what the pull request changed, so a
+  # finding the branch introduced is separated from one it inherited.
+  #
+  # Default gate (new-only): only findings the changeset introduced affect the
+  # verdict. Introduced dead-code or complexity yields `fail` and exits 1;
+  # introduced duplication yields `warn` and exits 0, so duplication stays
+  # gated by the repo-wide threshold in the `fallow` job rather than here.
+  #
+  # Audit's styling analysis contributes nothing to this repository -- there is
+  # no CSS -- so `styling_introduced` / `styling_inherited` are structurally 0
+  # and are not meaningful coverage.
+  fallow-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history so the merge-base against the pull request's base
+          # branch resolves. The whole-repo `fallow` job needs no merge base
+          # and deliberately keeps its shallow checkout.
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch --no-tags origin "${{ github.event.pull_request.base.ref || 'main' }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The base is pinned explicitly rather than left to origin/HEAD
+      # detection. `github-annotations` renders findings on the diff and works
+      # on fork pull requests without a write token.
+      - name: Run fallow audit
+        run: >-
+          node_modules/.bin/fallow audit --base "origin/${{ github.event.pull_request.base.ref || 'main' }}" --format github-annotations
