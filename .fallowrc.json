@@ -147,6 +147,7 @@
     ]
   },
   "duplicates": {
-    "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"]
+    "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"],
+    "threshold": 2.2
   }
 }
