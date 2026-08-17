@@ -161,7 +161,36 @@ the gap.
 Note the asymmetry this leaves today: a green local `npm run check` does not
 imply the pull-request gate will pass.
 
-## FLOW-03: should `import-x/no-cycle` widen past `orchestrators/` now?
+## ~~FLOW-03: should `import-x/no-cycle` widen past `orchestrators/` now?~~ -- CLOSED
+
+Closed 2026-08-17: the question is moot because the rule is gone.
+
+Following this item's own verification recipe surfaced something larger
+than the glob question. Widening the glob was free -- lint stayed clean
+and took 19.23s against a 19.37s baseline, so the type-aware cost this
+item worried about is measurably zero. But the planted two-file cycle
+the recipe calls for was never reported, at ANY glob, including inside
+`orchestrators/` where the rule already applied.
+
+Six probes: the original config, a real `platform/` <-> `shared/` cycle,
+`createNodeResolver` with `.ts` extensions, the vendor's whole
+`flatConfigs.typescript` preset, that preset's parsers with the node
+resolver, and `eslint-import-resolver-typescript` via
+`createTypeScriptImportResolver`. Only the fourth made the rule emit
+anything, and only a resolve error from the missing dependency. A
+control unused-var error proved eslint was linting the files, and
+`import-x/no-unresolved` firing on a bogus specifier while staying
+silent on the real one proved resolution worked. The failure is in the
+graph traversal, on eslint-plugin-import-x@4.17.1. Untested hypothesis:
+this repository writes explicit `.ts` extensions in import specifiers,
+which is not the convention import-x is built around.
+
+The rule and its pinning test are removed. Cycles are gated by the bare
+`fallow dead-code` run, which was measured catching the identical cycle
+and exiting 1, and the replacement test pins that the invocation stays
+unfiltered.
+
+Original report follows.
 
 Filed 2026-08-15 alongside the FLOW-02 closure (quick task 260815-p25).
 
