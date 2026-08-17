@@ -625,6 +625,7 @@ async function installedRowMessage(
  * failures (`unreadable` means "could not load state.json or walk the
  * marketplace records"). Same underlying ladder, two semantic names.
  */
+// fallow-ignore-next-line private-type-leak -- `ListReason` is list-internal; reached only through __test_narrowProbeError, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 function narrowProbeError(err: unknown): ListReason {
   return sharedNarrowProbeError(err);
 }
@@ -669,6 +670,7 @@ async function availableRowMessage(
     | PluginAvailableMessage
     | PluginPartiallyAvailableMessage
     | PluginUnavailableMessage;
+  // fallow-ignore-next-line private-type-leak -- `FilterBucket` is list-internal; reached only through __test_availableRowMessage, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   bucket: FilterBucket;
 }> {
   // PL-4: description flows from the manifest entry onto the row for every
@@ -1318,6 +1320,7 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
  * accurate to the list-orchestration failure modes (loadState /
  * loadManifest / cross-scope walk throws).
  */
+// fallow-ignore-next-line private-type-leak -- same list-internal `ListReason`, reached only through __test_narrowListFailReason; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 function narrowListFailReason(err: unknown): ListReason {
   return sharedNarrowProbeError(err);
 }

@@ -290,8 +290,8 @@ test(
     // fixture's directory and forbidding imports from the extension's
     // bridges/ folder. The fixture's `import` statement then trips the
     // synthetic zone, ruleId === "import-x/no-restricted-paths" fires, and
-    // because bridges/index.ts exists, no
-    // import-x/no-unresolved is emitted.
+    // because the fixture's target, bridges/agents/index.ts, is a real file,
+    // no import-x/no-unresolved is emitted.
     const { ESLint } = (await import("eslint")) as {
       ESLint: new (opts: {
         cwd: string;

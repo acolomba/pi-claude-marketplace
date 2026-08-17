@@ -144,8 +144,7 @@ export interface AsyncRewakeEntry {
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
 
-type SpawnImpl = typeof spawn;
-let activeSpawn: SpawnImpl = spawn;
+let activeSpawn: typeof spawn = spawn;
 
 let dispatchIdGenerator: () => string = () => randomUUID();
 
@@ -164,7 +163,7 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
 let orphanProbes: OrphanProbes = DEFAULT_ORPHAN_PROBES;
 
 /** Substitute the `spawn` implementation for the duration of a unit test. */
-export function _setSpawnForTest(impl: SpawnImpl): void {
+export function _setSpawnForTest(impl: typeof spawn): void {
   activeSpawn = impl;
 }
 
@@ -184,6 +183,7 @@ export function _resetDispatchIdGeneratorForTest(): void {
 }
 
 /** Substitute the orphan probes for deterministic reap tests. */
+// fallow-ignore-next-line private-type-leak -- `OrphanProbes` is a bridge-internal probe bundle; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 export function _setOrphanProbesForTest(probes: OrphanProbes): void {
   orphanProbes = probes;
 }

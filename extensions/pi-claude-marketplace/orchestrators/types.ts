@@ -12,7 +12,7 @@ import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
-interface ReinstallOutcomeBase {
+export interface ReinstallOutcomeBase {
   readonly name: string;
   readonly marketplace: string;
   readonly scope: Scope;
@@ -128,7 +128,7 @@ export interface UpdatePhaseFailure {
   readonly msg: string;
 }
 
-interface PluginUpdateBase {
+export interface PluginUpdateBase {
   readonly name: string;
   /**
    * CMC-13: required `boolean` on every partition.

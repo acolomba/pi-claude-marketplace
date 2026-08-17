@@ -221,5 +221,5 @@ type CommandPrivateReason =
 type _AssertNever<T extends never> = T;
 type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
 type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
-// fallow-ignore-next-line unused-type -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet.
+// fallow-ignore-next-line unused-type, private-type-leak -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredReason` / `_ExtraReason` are the proof's own internals, meaningless to a caller.
 export type _ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];

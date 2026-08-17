@@ -34,11 +34,11 @@ export interface E2EEnvironment {
   marketplaceAdded: boolean;
 }
 
-interface RegisteredCommand {
+export interface RegisteredCommand {
   readonly handler: (args: string, ctx: ExtensionContext) => Promise<void>;
 }
 
-interface ResourceDiscoverResult {
+export interface ResourceDiscoverResult {
   readonly skillPaths: readonly string[];
   readonly promptPaths: readonly string[];
 }

@@ -133,7 +133,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
  * plugin IS installed; the upgrade status is internal to the slash-command
  * surface per MSG-PL-4).
  */
-type ToolPluginStatus = "installed" | "available" | "unavailable";
+export type ToolPluginStatus = "installed" | "available" | "unavailable";
 
 interface PluginRow {
   marketplace: string;

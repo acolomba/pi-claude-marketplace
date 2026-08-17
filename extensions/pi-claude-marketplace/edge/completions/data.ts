@@ -109,7 +109,7 @@ const FETCH_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "unavailable",
 ]);
 
-type PluginRefCompletionMode =
+export type PluginRefCompletionMode =
   "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
 // ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ export async function getMarketplaceNamesAcrossScopes(
   return Array.from(new Set(perScope.flat()));
 }
 
-interface PluginMapOptions {
+export interface PluginMapOptions {
   /** Install target scope, or explicit uninstall/update scope. */
   readonly targetScope?: Scope;
   /**

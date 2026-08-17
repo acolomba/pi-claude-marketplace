@@ -33,7 +33,7 @@ import type { Reason } from "../../shared/notify.ts";
 // makes the tuple violate the `extends Reason` constraint -- a TS2344 compile
 // error here, with no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
-// fallow-ignore-next-line unused-type -- compile-time pin, not a consumed alias: deriving it is what asserts the add-private reasons are members of the closed Reason set.
+// fallow-ignore-next-line unused-type, private-type-leak -- compile-time pin, not a consumed alias: deriving it is what asserts the add-private reasons are members of the closed Reason set. `_ReasonInSet` is the pin helper and has no caller-facing meaning.
 export type AddPrivateReason = _ReasonInSet<"duplicate name" | "stale clone">;
 /**
  * D-04 / D-05 / MOD-01: the `marketplace add` command context. `marketplace add`

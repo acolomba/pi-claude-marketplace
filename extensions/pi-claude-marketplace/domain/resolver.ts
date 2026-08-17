@@ -114,7 +114,7 @@ const DroppedHookSchema = Type.Union([
 type _AssertTrue<T extends true> = T;
 // Exported so `noUnusedLocals` treats this compile-time drift guard as consumed
 // without a runtime `void`; the alias is never imported.
-// fallow-ignore-next-line unused-type -- compile-time drift guard; the export exists so `noUnusedLocals` treats it as consumed (dropping it fails typecheck with TS6196), and it is never imported by design.
+// fallow-ignore-next-line unused-type, private-type-leak -- compile-time drift guard; the export exists so `noUnusedLocals` treats it as consumed (dropping it fails typecheck with TS6196), and it is never imported by design. `_AssertTrue` is the assertion helper itself and has no meaning to a caller, so exporting it would widen the surface for nothing.
 export type _DroppedHookDriftCheck = _AssertTrue<
   DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
 >;
@@ -148,8 +148,9 @@ type _DroppedHookArmKeysDrift =
       : never
     : never;
 // Exported for the same `noUnusedLocals` reason as `_DroppedHookDriftCheck`.
-// fallow-ignore-next-line unused-type -- compile-time key-parity guard; same `noUnusedLocals` contract as _DroppedHookDriftCheck above.
+// fallow-ignore-next-line unused-type, private-type-leak -- compile-time key-parity guard; same `noUnusedLocals` contract as _DroppedHookDriftCheck above, and `_AssertTrue` / `_DroppedHookArmKeysDrift` are assertion internals no caller can use.
 export type _DroppedHookArmKeysCheck = _AssertTrue<
+  // fallow-ignore-next-line private-type-leak -- `_DroppedHookArmKeysDrift` is an internal step of this compile-time key-parity guard; it has no caller-facing meaning.
   [true] extends [_DroppedHookArmKeysDrift] ? true : false
 >;
 
@@ -248,8 +249,8 @@ export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
 // structurally-broken plugin. This is exactly the type `requirePartialInstallable`
 // narrows to, and the type the partial install/update holders accept.
 export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable;
-type StatKind = "file" | "dir" | null;
-type StatKindReader = (p: string) => Promise<StatKind>;
+export type StatKind = "file" | "dir" | null;
+export type StatKindReader = (p: string) => Promise<StatKind>;
 
 // PURL-01 / PURL-03: the result of the injected git-source pluginRoot policy.
 // A discriminated union whose ONLY `pluginRoot`-bearing arm is `materialized`,

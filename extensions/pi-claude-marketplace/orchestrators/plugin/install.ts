@@ -367,7 +367,7 @@ export interface InstallPluginOptions {
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
  */
-interface InstallCtx {
+export interface InstallCtx {
   readonly locations: ScopedLocations;
   readonly cwd: string;
   readonly marketplace: string;
@@ -519,7 +519,7 @@ export interface InstallFailureCapture {
 }
 
 /** Discriminated result of the guard-free install ledger body. */
-type InstallLedgerResult =
+export type InstallLedgerResult =
   | { readonly kind: "installed"; readonly installCtx: InstallCtx }
   | { readonly kind: "marketplace-absent" };
 
@@ -1959,6 +1959,7 @@ function composeInstallFailureMessage(args: {
   version: string | undefined;
   rolledBackPartial: boolean;
   rollbackPartials: readonly RollbackPartial[];
+  // fallow-ignore-next-line private-type-leak -- `EntityErrorRow` is install-internal (PI-3/4/5 classifier shape); reached only through __test_composeInstallFailureMessage, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   entityErrorRow: EntityErrorRow | undefined;
 }): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
@@ -2086,6 +2087,7 @@ function formatOrchestratedCause(err: unknown): string {
 function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
+  // fallow-ignore-next-line private-type-leak -- same install-internal `EntityErrorRow`, reached only through __test_classifyEntityShapeError; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 ): EntityErrorRow | undefined {
   // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
   // substring-matching `.message`. The throw sites carry their structural

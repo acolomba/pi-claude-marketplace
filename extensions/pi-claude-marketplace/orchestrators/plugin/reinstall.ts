@@ -141,8 +141,11 @@ export type { ReinstallPluginOutcome } from "../types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
-type RemoveDataDirFn = (path: string, options: { recursive: true; force: true }) => Promise<void>;
-type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
+export type RemoveDataDirFn = (
+  path: string,
+  options: { recursive: true; force: true },
+) => Promise<void>;
+export type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
 
 export interface ReinstallPluginOptions {
   readonly ctx: ExtensionContext;
@@ -2006,6 +2009,7 @@ async function runPostSuccessMaintenance(
   return Object.freeze(warnings);
 }
 
+// fallow-ignore-next-line private-type-leak -- `PluginRecord` is a reinstall-local state alias; reached only through __test_clonePluginRecord, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 function clonePluginRecord(record: PluginRecord): PluginRecord {
   return {
     version: record.version,

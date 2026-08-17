@@ -50,7 +50,7 @@ import type { ToolCallEvent } from "../../platform/pi-api.ts";
  * the `CustomToolCallEvent` arm preserves the literal `toolName` fields
  * on the seven specific arms.
  */
-type LiteralToolNameArm<T> = T extends { toolName: infer N }
+export type LiteralToolNameArm<T> = T extends { toolName: infer N }
   ? string extends N
     ? never
     : N

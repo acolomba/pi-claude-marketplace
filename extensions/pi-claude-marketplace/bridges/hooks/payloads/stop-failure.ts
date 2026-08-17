@@ -103,7 +103,7 @@ const CLASSIFIER_TABLE: ReadonlyArray<
  * `error` / `length` here, and the narrowed parameter makes a non-failure
  * `stopReason` a compile error rather than a spurious failure classification.
  */
-type FailureStopReason = Extract<StopReason, "error" | "length">;
+export type FailureStopReason = Extract<StopReason, "error" | "length">;
 
 /**
  * Classify a StopFailure ending into the closed 10-value error-type vocabulary

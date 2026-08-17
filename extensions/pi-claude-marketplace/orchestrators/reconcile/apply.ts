@@ -958,6 +958,7 @@ async function applyBackfillForScope(
 async function applyBackfillForScopeIsolated(
   opts: ApplyReconcileOptions,
   scope: Scope,
+  // fallow-ignore-next-line private-type-leak -- `ScopeReadResult` is reconcile-internal; reached only through __test_applyBackfillForScopeIsolated, so the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
   readResult: ScopeReadResult,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {

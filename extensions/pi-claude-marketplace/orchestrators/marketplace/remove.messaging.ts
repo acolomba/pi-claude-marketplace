@@ -36,7 +36,7 @@ import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../.
 // violates the `extends Reason` constraint -- a TS2344 compile error here, with
 // no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
-// fallow-ignore-next-line unused-type -- compile-time pin, not a consumed alias: deriving it is what asserts "plugins remain" is a member of the closed Reason set.
+// fallow-ignore-next-line unused-type, private-type-leak -- compile-time pin, not a consumed alias: deriving it is what asserts "plugins remain" is a member of the closed Reason set. `_ReasonInSet` is the pin helper and has no caller-facing meaning.
 export type RemovePrivateReason = _ReasonInSet<"plugins remain">;
 /**
  * The plugin-child-row statuses `marketplace remove` emits inside its cascade:

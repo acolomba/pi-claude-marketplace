@@ -155,7 +155,7 @@ interface MutableImportResult {
   changedResources: boolean;
 }
 
-interface ImportDeps {
+export interface ImportDeps {
   readonly loadSettings?: (
     scope: Scope,
     opts: { cwd: string },

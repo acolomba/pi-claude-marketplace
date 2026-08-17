@@ -67,7 +67,7 @@ export type ClaudeHookEvent =
   | "Stop"
   | "StopFailure";
 
-type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
+export type _ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
 
 export type HookSummaryEntry =
   | { readonly event: _ToolEvent; readonly matcher: string }

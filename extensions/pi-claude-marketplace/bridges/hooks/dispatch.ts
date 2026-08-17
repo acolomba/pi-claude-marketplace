@@ -96,6 +96,7 @@ let activeExecutor: HookExecutor = dispatchHookExec;
  * Inject a spy executor for the duration of one unit test. Not part of
  * the public surface.
  */
+// fallow-ignore-next-line private-type-leak -- `HookExecutor` is the bridge-internal executor signature; the private type is internal and the export exists only so a test can reach the function; exporting it would widen the public surface to serve a test (CONVENTIONS.md), and the clean fix is dependency injection -- tracked as BACKLOG FLOW-09.
 export function _setExecutorForTest(executor: HookExecutor): void {
   activeExecutor = executor;
 }
@@ -303,7 +304,7 @@ export async function collectBucketOutcomes(
  * in `settle.ts`). Declared once so the exclusion set cannot drift between
  * the factory constraint and its private helpers.
  */
-type CompositeDispatchEvent = Exclude<
+export type CompositeDispatchEvent = Exclude<
   DispatchableEvent,
   "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
 >;
@@ -435,7 +436,7 @@ function adaptForEvent(
  * filter logic accesses; the other four are typed as their own Pi
  * interfaces for forward-compat.
  */
-type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
+export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
   ? SessionStartEvent
   : E extends "SessionEnd"
     ? SessionShutdownEvent
@@ -456,7 +457,7 @@ type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
  * UserPromptSubmit -> InputEventResult; the four observation events ->
  * undefined (Pi handler return slot is void for those).
  */
-type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
+export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
   ? ToolCallEventResult | undefined
   : E extends "UserPromptSubmit"
     ? InputEventResult | undefined

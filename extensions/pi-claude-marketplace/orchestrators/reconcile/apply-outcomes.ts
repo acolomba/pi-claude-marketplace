@@ -28,12 +28,12 @@ import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 
-interface OutcomeBase {
+export interface OutcomeBase {
   readonly scope: Scope;
   readonly marketplace: string;
 }
 
-interface PluginOutcomeBase extends OutcomeBase {
+export interface PluginOutcomeBase extends OutcomeBase {
   readonly plugin: string;
 }
 

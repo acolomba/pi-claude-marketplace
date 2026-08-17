@@ -126,8 +126,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 // Test seam (mirrors `_setExecutorForTest` in dispatch.ts)
 // ──────────────────────────────────────────────────────────────────────────
 
-type SpawnImpl = typeof spawn;
-let activeSpawn: SpawnImpl = spawn;
+let activeSpawn: typeof spawn = spawn;
 
 /**
  * Test-only seam: substitute the `spawn` implementation for the duration
@@ -135,7 +134,7 @@ let activeSpawn: SpawnImpl = spawn;
  * touching the real OS. Bridge-internal -- NOT re-exported from
  * `bridges/hooks/index.ts`.
  */
-export function _setSpawnForTest(impl: SpawnImpl): void {
+export function _setSpawnForTest(impl: typeof spawn): void {
   activeSpawn = impl;
 }
 

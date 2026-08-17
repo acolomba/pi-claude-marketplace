@@ -1122,24 +1122,24 @@ export function isScopeBearingListRow(
  * normal case (renderer emits the marketplace header alone). No separate
  * `noPlugins` discriminator field.
  */
-interface MpCommon extends MessageBase {
+export interface MpCommon extends MessageBase {
   readonly name: string;
   readonly scope: Scope;
   readonly plugins: readonly PluginNotificationMessage[];
 }
 
 /** `(added)` marketplace block. */
-interface MpAdded extends MpCommon {
+export interface MpAdded extends MpCommon {
   readonly status: "added";
 }
 
 /** `(removed)` marketplace block. */
-interface MpRemoved extends MpCommon {
+export interface MpRemoved extends MpCommon {
   readonly status: "removed";
 }
 
 /** `(updated)` marketplace block. */
-interface MpUpdated extends MpCommon {
+export interface MpUpdated extends MpCommon {
   readonly status: "updated";
 }
 
@@ -1156,7 +1156,7 @@ interface MpUpdated extends MpCommon {
  * existing update/autoupdate mp-failure states that ride the cause on a child
  * row.
  */
-interface MpFailed extends MpCommon {
+export interface MpFailed extends MpCommon {
   readonly status: "failed";
   // GATE-01 / SEV-02: a marketplace failure row must stamp an error-bearing
   // severity -- narrowed from the optional `MessageBase.severity` to REQUIRED
@@ -1166,12 +1166,12 @@ interface MpFailed extends MpCommon {
 }
 
 /** `<autoupdate>` fresh-flip block (UXG-04). Never carries `reasons`. */
-interface MpAutoupdateEnabled extends MpCommon {
+export interface MpAutoupdateEnabled extends MpCommon {
   readonly status: "autoupdate enabled";
 }
 
 /** `<no autoupdate>` fresh-flip block (UXG-04). Never carries `reasons`. */
-interface MpAutoupdateDisabled extends MpCommon {
+export interface MpAutoupdateDisabled extends MpCommon {
   readonly status: "autoupdate disabled";
 }
 
@@ -1184,7 +1184,7 @@ interface MpAutoupdateDisabled extends MpCommon {
  * `info`, an actionable skip `warning`; a missing reason set routes to the
  * `warning` safe default at the producer.
  */
-interface MpSkipped extends MpCommon {
+export interface MpSkipped extends MpCommon {
   readonly status: "skipped";
   readonly reasons?: readonly ContentReason[];
 }
@@ -1196,7 +1196,7 @@ interface MpSkipped extends MpCommon {
  * `details?` is reachable ONLY on this arm (TYPE-04): the list surface
  * composes the `<autoupdate>` marker from `details.autoupdate`.
  */
-interface MpList extends MpCommon {
+export interface MpList extends MpCommon {
   readonly status?: undefined;
   readonly details?: MarketplaceDetails;
 }
@@ -1359,7 +1359,7 @@ export type PluginInfoRow =
  * marketplace-absent condition is carried by the dedicated
  * `MarketplaceNotAddedMessage` variant, never by this row field.
  */
-interface PluginInfoRowBase {
+export interface PluginInfoRowBase {
   // FSTAT-07 / D-66-04: `partially-installed` widens the info row status set so an
   // installed plugin re-resolving `partially-available` reports `(partially-installed)` on
   // the info surface. `partially-upgradable` is deliberately omitted -- it is a
@@ -1401,7 +1401,7 @@ interface PluginInfoRowBase {
  * sorted input and does NOT sort defensively -- defensive sorting
  * would mask caller contract violations.
  */
-interface PluginInfoComponentsResolved {
+export interface PluginInfoComponentsResolved {
   readonly componentsResolved: true;
   readonly components: {
     readonly agents?: readonly string[];
@@ -1420,7 +1420,7 @@ interface PluginInfoComponentsResolved {
  * plugin's `plugin.json` lives at an unsynced external source and the
  * orchestrator deliberately does NOT fetch it (preserves NFR-5).
  */
-interface PluginInfoComponentsUnresolved {
+export interface PluginInfoComponentsUnresolved {
   readonly componentsResolved: false;
 }
 
