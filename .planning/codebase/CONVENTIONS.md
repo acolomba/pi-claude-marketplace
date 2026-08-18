@@ -133,7 +133,15 @@ An exceptional function is recorded as a `health.thresholdOverrides` entry with
 an explicit numeric ceiling and a written `reason`, never as a binary
 `fallow-ignore` suppression: the override states what the limit IS for that
 function, while a suppression only states that someone chose not to look. There
-are currently zero of either.
+are currently zero `health.thresholdOverrides` entries and zero
+complexity-scoped `fallow-ignore` markers. The nine `fallow-ignore` markers the
+tree does carry are all dead-code-scoped and unrelated to health: two
+`fallow-ignore-file unused-file` headers on the standalone `tests/live-uat/*.mjs`
+drivers, and seven `fallow-ignore-next-line unused-type` /
+`unused-export` / `private-type-leak` markers on compile-time proof declarations
+(`shared/notify-reasons.ts`, `orchestrators/marketplace/add.messaging.ts`,
+`orchestrators/marketplace/remove.messaging.ts`, and four in
+`domain/resolver.ts`).
 
 Flat dispatch is not the same defect as deep nesting. A 19-arm `switch` at
 cognitive 2 is already as readable as it will get, so the fix is a lookup table
@@ -198,7 +206,7 @@ dependency, after which the seam disappears rather than moving somewhere else.
 
 **Exports:** Named exports only observed — no default exports in sampled files.
 
-**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point, and the aggregate `bridges/index.ts` was removed too. Barrels are not universally used across every directory (check per-directory before assuming one exists).
+**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus `bridges/hooks/if-field/index.ts`) and under `orchestrators/import/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point; the aggregate `bridges/index.ts` and the `orchestrators/marketplace/` and `orchestrators/plugin/` barrels were removed too. Barrels are not universally used across every directory (check per-directory before assuming one exists).
 
 **Never write an `export *` barrel.** It consumes every export in its target, so
 fallow credits them all as used and dead lines in the re-exported files stop

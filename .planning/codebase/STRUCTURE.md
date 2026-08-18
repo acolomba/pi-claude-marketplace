@@ -53,12 +53,13 @@ pi-claude-marketplace/
 **`extensions/pi-claude-marketplace/orchestrators/`:**
 - Purpose: owns every transactional mutation and its notification composition
 - Contains: per-verb `*.ts` files, each paired with a `*.messaging.ts` sibling that builds the notify() payload
-- Key files: `orchestrators/plugin/install.ts` (largest file, ~2400 lines, the canonical 5-phase ledger example), `orchestrators/reconcile/apply.ts` (load-time self-heal), `orchestrators/import/execute.ts` (bulk cascade)
+- Key files: `orchestrators/plugin/install.ts` (~2350 lines, the canonical 5-phase ledger example and the only production `runPhases` call site), `orchestrators/reconcile/apply.ts` (load-time self-heal), `orchestrators/import/execute.ts` (bulk cascade)
+- Largest files under `extensions/` by line count: `shared/notify.ts` (~4030), `orchestrators/plugin/update.ts` (~3160), `orchestrators/plugin/install.ts` (~2350)
 
 **`extensions/pi-claude-marketplace/bridges/`:**
 - Purpose: one subdirectory per Claude-plugin component kind; each exposes discover/stage/commit/unstage for that kind
 - Contains: `skills/`, `commands/`, `agents/` (also `frontmatter.ts`, `index-mutation.ts`, `marker.ts` for pi-subagents index rows), `mcp/` (also `substitute.ts` for `${VAR}` expansion, `collision-slots.ts`), `hooks/` (also owns Claude-Code hook event dispatch: `dispatch.ts`, `event-router.ts`, `if-field/`, `async-rewake/`, `payloads/`)
-- Key files: `bridges/hooks/index.ts` (registers Pi hook listeners), `bridges/index.ts` (barrel)
+- Key files: `bridges/hooks/index.ts` (registers Pi hook listeners); each kind keeps its own `bridges/<kind>/index.ts` barrel, but the aggregate `bridges/index.ts` was removed
 
 **`extensions/pi-claude-marketplace/domain/`:**
 - Purpose: pure functions — resolve a plugin's installability, parse manifests/sources/versions — no I/O beyond reading already-fetched files

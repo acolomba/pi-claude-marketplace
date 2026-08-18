@@ -3,7 +3,8 @@
 Implementation blueprint for removing the 8-cycle `bridges/hooks/` knot and
 closing the local circular-dependency gate.
 
-**Status: SHIPPED** in `cee12150` on `features/hooks-cycle-removal`. Cycles
+**Status: SHIPPED** as part of PR #132 (`features/fallow-full-gate`); the
+work landed in the `routing-state.ts` leaf extraction. Cycles
 went 8 -> 0, `npm run check` is green, and zero test files were touched. The
 sections below are kept as the record of how it was done; the corrections
 marked below are the places where the pre-implementation blueprint was wrong
@@ -42,9 +43,13 @@ running the thing:
 - `--circular-deps` may only join the local gate in the same change that
   removes the cycles. Added alone it fails on the 8 inherited cycles at the
   first commit.
-- `bridges/hooks/` is outside the `import-x/no-cycle` ESLint glob (which
-  stops at `orchestrators/`) precisely because of this knot. If the knot
-  goes, revisit whether that glob should widen.
+- `bridges/hooks/` used to sit outside the `import-x/no-cycle` ESLint glob
+  (which stopped at `orchestrators/`) precisely because of this knot. That
+  rule no longer exists: the glob question was reopened once the knot went,
+  and the rule was measured reporting NOTHING on a deliberate two-file cycle
+  at any glob, including inside `orchestrators/` where it already applied. It
+  was deleted rather than widened. The unfiltered `fallow dead-code` run in
+  `npm run fallow` is now the repo-wide cycle gate.
 
 ## How to Build It
 
@@ -256,7 +261,8 @@ The gate lives entirely in `package.json`'s `fallow` script.
   breakage are all invisible to typecheck, and one of the three is
   invisible to the whole of `npm run check`. Compile-time safety covers
   what the compiler models, which is not the same as what a reviewer reads.
-- Measured result **as shipped** (`cee12150`): cycles 8 -> 0, `npm run check`
+- Measured result **as shipped** (the cycle-removal commit inside PR #132):
+  cycles 8 -> 0, `npm run check`
   green, zero test files modified, total diff **10 files / +318 / -193**
   including the gate flags.
 
@@ -270,11 +276,14 @@ The gate lives entirely in `package.json`'s `fallow` script.
   flag set run against the parent commit reports `8 circular dependencies`
   and exits non-zero, while the post-change tree exits 0. A gate that has
   never been seen to fail has not been tested.
-- `ARCHITECTURE.md` documents the knot by name and cites it as the reason
-  `import-x/no-cycle` stops at `orchestrators/`. Removing the knot makes
-  that passage stale -- update it in the same change. Done in `cee12150`.
-  Whether the ESLint glob should now widen past `orchestrators/` is left
-  open as `BACKLOG.md` FLOW-03; it was deliberately not decided here.
+- `ARCHITECTURE.md` documented the knot by name and cited it as the reason
+  `import-x/no-cycle` stopped at `orchestrators/`. Removing the knot made
+  that passage stale -- it was updated in the same change.
+  Whether the ESLint glob should widen past `orchestrators/` was left
+  open as `BACKLOG.md` FLOW-03. FLOW-03 is now **CLOSED** (2026-08-17,
+  in PR #132): the question is moot because the rule is gone. Widening the
+  glob was free, but the planted two-file cycle the item's own recipe calls
+  for was never reported at any glob, so the rule was deleted.
 
 ## Corrections to the spike record
 
