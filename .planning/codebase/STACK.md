@@ -30,7 +30,7 @@
 - `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 
 **Testing:**
-- `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`. Two more directories under `tests/` hold no suites: `tests/fixtures/` (JSON and `.ts` inputs the boundary and import tests read) and `tests/live-uat/` (standalone operator-run `.mjs` drivers, excluded from the ESLint typed tree). The `test` / `test:coverage:unit` npm globs still name a `tests/docs` segment that does not exist and matches nothing
+- `node:test` (Node's built-in test runner) - all suites under `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction,integration,e2e}/**/*.test.ts`. Two more directories under `tests/` hold no suites: `tests/fixtures/` (JSON and `.ts` inputs the boundary and import tests read) and `tests/live-uat/` (standalone operator-run `.mjs` drivers, excluded from the ESLint typed tree)
 - Real temporary directories (`mkdtemp`, plus the `withHermeticHome` helper) for filesystem isolation - no in-memory filesystem layer is used
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`, `integration`, `e2e` reports feeding SonarCloud
 
