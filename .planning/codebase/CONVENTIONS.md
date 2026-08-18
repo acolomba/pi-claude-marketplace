@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-08-07
+**Analysis Date:** 2026-08-18
 
 ## Naming Patterns
 
@@ -23,12 +23,12 @@
 ## Code Style
 
 **Formatting:**
-- Prettier config `.prettierrc` at repo root
+- Prettier config `.prettierrc.json` at repo root
   - `printWidth: 100`, `tabWidth: 2`, `trailingComma: "all"`, `useTabs: false`
 - Run via `npm run format` / `npm run format:check`
 
 **Linting:**
-- ESLint 10 flat config: `eslint.config.js` at repo root
+- ESLint 10 flat config: `eslint.config.js` at repo root (`npm run lint` runs `eslint extensions tests eslint.config.js`)
 - Extends `tseslint.configs.strictTypeChecked` + `stylisticTypeChecked` (full type-aware strict linting)
 - Plugins: `@stylistic`, `import-x`, `sonarjs`
 - Key rules:
@@ -36,13 +36,25 @@
   - `@typescript-eslint/no-unused-vars`: error, with `^_` ignore pattern for args/vars/caught errors
   - `@typescript-eslint/explicit-module-boundary-types: "error"` — all exported functions must declare return types
   - `@typescript-eslint/array-type: "off"` and `restrict-template-expressions: "off"` — deliberately not enforced (either `T[]` or `Array<T>` is fine; numeric template interpolation is fine)
-  - `sonarjs/cognitive-complexity: ["error", 15]`
+  - `sonarjs/cognitive-complexity: ["error", 15]` (`eslint.config.js:77`) — turned `"off"` only for a narrow set of blocks (e.g. line 317)
   - `sonarjs/no-identical-functions`, `no-inverted-boolean-check`, `no-nested-conditional`, `no-nested-template-literals`: all error
   - `curly: ["error", "all"]` — braces always required
   - `@stylistic/padding-line-between-statements`: blank line required after every block-like statement
   - `prefer-object-has-own: "error"`
-- **Extension-scoped output discipline** (block for `extensions/pi-claude-marketplace/**/*.ts`): `no-restricted-syntax` forbids direct `process.stdout.write`/`process.stderr.write` calls — matches project constraint IL-2 (all user-visible output via `ctx.ui.notify`)
+- **Extension-scoped output discipline** (`no-restricted-syntax`, `eslint.config.js:94`, scoped to `extensions/pi-claude-marketplace/**/*.ts`): forbids direct `process.stdout.write`/`process.stderr.write` calls — matches project constraint IL-2 (all user-visible output via `ctx.ui.notify`). Turned back `"off"` for a small set of exempted blocks (`eslint.config.js:145,158,172,315`), each with an inline comment explaining the exemption (e.g. the sanctioned `console.warn` selector).
 - Ignored paths: `.claude/`, `.opencode/`, `.pi/`, `.planning/`, `build/`, `coverage/`, `dist/`, `node_modules/`, `tmp/`, `tests/live-uat/` (standalone `.mjs` UAT drivers excluded from typed tree)
+
+**Fallow (whole-graph static analysis) — a second, independent complexity/duplication/dead-code gate:**
+- `.fallowrc.json` at repo root; entry point `extensions/pi-claude-marketplace/index.ts`; `production: false`
+- `npm run fallow` runs three sub-gates in sequence, each `--fail-on-issues`: `fallow dead-code`, `fallow health`, `fallow dupes`
+- `npm run check` is `typecheck && lint && fallow && format:check && test && test:integration` — **fallow is a mandatory member of the check chain, not an optional extra.** Always mention it when describing "the gate."
+- `health` thresholds: `maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`. **This is a second, independently-computed cognitive-complexity ceiling layered on top of ESLint's `sonarjs/cognitive-complexity: 15`** — the two tools use different algorithms and do not agree on a given function's score. A function can pass one and fail the other; both gates must be satisfied. Currently there are **zero** `health.thresholdOverrides` entries in `.fallowrc.json` — no function has an approved exception.
+- `boundaries.zones` (12 zones: entry, edge, orchestrators, bridges-agents, bridges-commands, bridges-mcp, bridges-skills, bridges-hooks, domain, transaction, persistence, platform, shared) is a **finer-grained** architecture-boundary gate than ESLint's `import-x/no-restricted-paths` (which only distinguishes the coarser `bridges` as one zone). It is the only mechanism that forbids one bridge kind from importing a sibling bridge kind (e.g. `bridges-skills` importing `bridges-agents`).
+- `boundaries.calls.forbidden` also re-enforces the `process.stdout.*`/`process.stderr.*` ban per zone, independently of the ESLint `no-restricted-syntax` rule.
+- `duplicates.threshold: 3`; `duplicates.ignoredClones` currently holds exactly two entries (`dup:cc950b18:2`, `dup:6d8c002d:2`) — both retained clones live in `tests/live-uat/manifest-absence-canary.mjs` and `tests/live-uat/stop-canary.mjs`, and each is justified with an inline comment header in **both** files (fallow's `ignoredClones` is typed `string[]`, so the per-clone justification cannot live in the JSON and lives in the source instead). **Fingerprint keys are content-addressed (`dup:<hash>`) and stable; do not use the index-suffixed `dup:<hash>-NN` form anywhere — it is not stable across runs.**
+- Dead-code suppressions: exactly **9** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `grep -a -rn "fallow-ignore" extensions/ tests/`), all scoped to `unused-type`/`unused-export`/`private-type-leak`/`unused-file` — never to complexity or duplication. Two live in `tests/live-uat/*.mjs` (whole-file `fallow-ignore-file unused-file`, marking the standalone operator-run UAT drivers as intentionally unreachable from the import graph); the remaining seven are `fallow-ignore-next-line` markers on compile-time proof/pin types in `extensions/pi-claude-marketplace/{shared/notify-reasons.ts, domain/resolver.ts, orchestrators/marketplace/{add,remove}.messaging.ts}` whose only purpose is to satisfy `noUnusedLocals`/`no-unused-vars` for a TypeScript type-level assertion that no runtime code ever imports.
+- `npm run fallow:audit` gates PRs on newly-introduced findings only (delta mode), distinct from the full `npm run fallow` gate used locally and in `npm run check`.
+- **A gate wants a test that plants the violation, not one that reads the config.** `import-x/no-cycle` (the ESLint half of the circular-import gate) was configured-but-inert for a period while a test that merely re-read the rule config from `eslint.config.js` stayed green. `tests/architecture/import-boundaries.test.ts` and `tests/architecture/no-orchestrator-network.test.ts` now verify by **planting**: they either scan real source files for forbidden import/call tokens (`assertNoForbiddenSurface`, `tests/helpers/source-scan.ts`) or programmatically load the flat config and assert its zones match an independently-maintained expected matrix — never a bare "the rule object exists" check. Apply this pattern to any new architectural gate: prove the rule actually fires on a real (or planted) violation, not just that its configuration is present.
 
 ## Import Organization
 
@@ -66,7 +78,7 @@
   import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
   ```
 - Test files import production modules with explicit `.ts` extensions (ESM-native resolution, no build step for tests)
-- Test-helper mocks use **type-only** imports of production types to avoid pulling runtime code into pure-mock files (see comment in `tests/helpers/credential-mock.ts`)
+- Test-helper mocks use **type-only** imports of production types to avoid pulling runtime code into pure-mock files (see the header comment in `tests/helpers/credential-mock.ts`: "Type-only import for CredentialOps so the helper file does not import the production module at runtime")
 
 **Path Aliases:**
 - None detected — imports use relative paths (`../../extensions/pi-claude-marketplace/...`)
@@ -107,14 +119,14 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **Framework:** No logging library. `console.warn` is the single sanctioned exception (load-time legacy-migration save failure per project constraint IL-3); `no-console` is `"warn"` at lint level everywhere else.
 
-**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` (`extensions/pi-claude-marketplace/shared/notify.ts`, `notify-context.ts`, `notify-reasons.ts`). Direct `process.stdout`/`process.stderr` writes are lint-forbidden inside `extensions/pi-claude-marketplace/**`.
+**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` (`extensions/pi-claude-marketplace/shared/notify.ts`, `notify-context.ts`, `notify-reasons.ts`). Direct `process.stdout`/`process.stderr` writes are forbidden inside `extensions/pi-claude-marketplace/**` by **two independent gates**: the ESLint `no-restricted-syntax` rule and fallow's `boundaries.calls.forbidden` per-zone rule (see Fallow section above).
 
 ## Comments
 
 **When to Comment:**
 - Non-obvious "why", not "what" — see `.claude/rules/typescript-comments.md`
 - Comments and test titles cite durable spec IDs (`D-NN`, `NFR-N`, `PRL-NN`, `MA-N`, `ATTR-NN`, etc.) as traceability anchors, not GSD process artifacts (no `Phase NN`, `Plan NN`, `Wave N`, `Pitfall N` references — these rot as planning docs are archived)
-- File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/helpers/credential-mock.ts` header)
+- File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/helpers/credential-mock.ts` header, and `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` header describing why the module exists where it does and the import invariant that keeps a cycle from reforming)
 
 **JSDoc/TSDoc:**
 - Used selectively above exported classes/functions with non-obvious behavior; not required on every export
@@ -122,83 +134,13 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 ## Function Design
 
-**Size:** Bounded by two gates. `sonarjs/cognitive-complexity: 15` is a lint error above that threshold, and `fallow health` fails the build above cyclomatic 20 or cognitive 15 across BOTH `extensions/` and `tests/`. Keep functions small and flat; avoid nested conditionals (`sonarjs/no-nested-conditional` is also an error).
-
-The two tools compute cognitive complexity DIFFERENTLY and their numbers do not
-agree: ESLint passed at its threshold of 15 on functions fallow scored at 49. A
-green `npm run lint` is therefore not evidence about a fallow health finding, or
-the reverse.
-
-An exceptional function is recorded as a `health.thresholdOverrides` entry with
-an explicit numeric ceiling and a written `reason`, never as a binary
-`fallow-ignore` suppression: the override states what the limit IS for that
-function, while a suppression only states that someone chose not to look. There
-are currently zero `health.thresholdOverrides` entries and zero
-complexity-scoped `fallow-ignore` markers. The nine `fallow-ignore` markers the
-tree does carry are all dead-code-scoped and unrelated to health: two
-`fallow-ignore-file unused-file` headers on the standalone `tests/live-uat/*.mjs`
-drivers, and seven `fallow-ignore-next-line unused-type` /
-`unused-export` / `private-type-leak` markers on compile-time proof declarations
-(`shared/notify-reasons.ts`, `orchestrators/marketplace/add.messaging.ts`,
-`orchestrators/marketplace/remove.messaging.ts`, and four in
-`domain/resolver.ts`).
-
-Flat dispatch is not the same defect as deep nesting. A 19-arm `switch` at
-cognitive 2 is already as readable as it will get, so the fix is a lookup table
-or grouped `case` labels rather than smaller functions. Grouped labels were
-measured collapsing to a single branch. When a `switch` is replaced by a table,
-type it `Record<K, V>` over the full key union: totality is what preserves the
-exhaustiveness guarantee the `switch` plus `assertNever` provided, and it was
-verified by deleting one key and observing `npm run typecheck` fail.
-
-**Duplication:** `fallow dupes` gates `duplicates.threshold`, a real percentage.
-A clone group that must be retained gets an individual `duplicates.ignoredClones`
-entry with a written justification -- never a blanket `ignore` pattern, and never
-a raised `minLines` / `minTokens`, both of which would hide unknown future clones
-as well as the known one. Use ONLY content-addressed fingerprints (`dup:<hash>`)
-as keys. Fallow also emits an index form (`dup:<hash>-NN`) that is NOT stable:
-appending a comment to an unrelated file was observed re-binding `dup:...-25`
-from one file pair to a completely different one, so an entry keyed that way
-would silently suppress an unrelated group later.
+**Size:** Bounded by **two independently-computed complexity gates**: ESLint's `sonarjs/cognitive-complexity: 15` and fallow's `health.maxCognitive: 15` / `health.maxCyclomatic: 20` / `health.maxUnitSize: 60`. The two tools disagree on a given function's cognitive-complexity score (different algorithms), so a function must pass both independently — do not treat a green ESLint run as proof fallow will also be green, or vice versa. Keep functions small and flat; avoid nested conditionals (`sonarjs/no-nested-conditional` is also an ESLint error).
 
 **Parameters:** Prefer explicit positional parameters for 1-3 required values; switch to an `opts` object for anything with optional/named fields (see `MarketplaceUpdateError` constructor above).
 
 **Return Values:** All exported functions must have explicit return type annotations (`@typescript-eslint/explicit-module-boundary-types: "error"`).
 
-## Testing and Module Boundaries
-
-**Tests are written against the public interface.** That is the default, and it
-is not negotiable by convenience.
-
-When testing something through the public interface becomes genuinely complex,
-that pressure is SIGNAL, not friction to route around. It is evidence that a
-module wants to exist. Act on it only when the inner code is semantically
-meaningful as a module in its own right: then it becomes a real module with its
-own public interface and its own test, and production and the test consume it
-across that boundary. If the inner code is NOT semantically meaningful as a
-module, the answer is not to extract it -- the answer is that the test goes back
-to the public interface.
-
-**Exporting inner code so a test can reach it is the anti-pattern.** It relieves
-the pressure without doing the design work: the signal is consumed and
-discarded, the missing boundary never gets drawn, and the structure stays bad
-while looking tested. Tests and modularization are a virtuous cycle, and testing
-inner code is what breaks it.
-
-`bridges/hooks/routing-state.ts` is the worked example. The routing state cells
-were extracted into a module with its own public interface, production imports
-them from there, and the tests whose SUBJECT is that state live beside it in
-`tests/bridges/hooks/routing-state.test.ts`. Tests that merely USE
-`currentEpoch` while asserting event-router behaviour stayed in
-`event-router.test.ts` -- they are exercising that module's public interface and
-those symbols are helpers.
-
-**Dependency injection is this principle applied, not an exception to it.**
-Passing `spawn` in as a dependency makes it part of the public interface, so the
-test is once again testing through the public interface. Mutating a module
-global through a `_setSpawnForTest` seam is reaching inside. Same rule, no
-special case -- which is why the fix for a test seam is to inject the
-dependency, after which the seam disappears rather than moving somewhere else.
+**Dependency injection over test-only seams:** when a function needs to be testable against a side-effecting dependency (subprocess spawn, git ops, credential store), pass that dependency in as a parameter — making it part of the function's public interface — rather than exposing a `_setXForTest`-style module-global seam that reaches inside the module from a test. If testing a unit is hard without such a seam, treat that difficulty as a signal the dependency wants to be an explicit collaborator (its own module/interface), not a reason to punch a test-only hole in the production module. `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` is the worked example of extracting shared state into its own leaf module specifically so the modules that need it can take it as an explicit import rather than reaching into a hub module's internals; the same principle applies to `makeMockGitOps`/`makeMockCredentialOps`-style factories throughout `tests/helpers/`, which are injected as constructor/function arguments (never patched onto a shared global) — see `tests/helpers/credential-mock.ts` ("buildAuthCallbacks tests inject this mock the same way add/update tests inject makeMockGitOps").
 
 ## Module Design
 
@@ -206,18 +148,8 @@ dependency, after which the seam disappears rather than moving somewhere else.
 
 **Exports:** Named exports only observed — no default exports in sampled files.
 
-**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus `bridges/hooks/if-field/index.ts`) and under `orchestrators/import/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point; the aggregate `bridges/index.ts` and the `orchestrators/marketplace/` and `orchestrators/plugin/` barrels were removed too. Barrels are not universally used across every directory (check per-directory before assuming one exists).
-
-**Never write an `export *` barrel.** It consumes every export in its target, so
-fallow credits them all as used and dead lines in the re-exported files stop
-being reported. The aggregate `bridges/index.ts` was doing exactly this to all
-five per-kind barrels; deleting it restored detection in each, verified by
-plant. Use explicit named re-exports, which stay individually analyzable.
-
-A barrel is the module's declared public surface, so keep it matching reality:
-a re-export line nobody imports through the barrel widens the declared API for
-no one. Those lines are only detectable while no `export *` shadows the file.
+**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus the aggregate `bridges/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point. Barrels are not universally used across every directory (check per-directory before assuming one exists).
 
 ---
 
-*Convention analysis: 2026-08-07*
+*Convention analysis: 2026-08-18*
