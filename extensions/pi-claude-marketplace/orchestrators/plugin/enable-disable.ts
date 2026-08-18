@@ -277,19 +277,19 @@ async function runEnableBranch(
     // ENBL-07 / FSTAT-07 / D-66-04 / SURF-05 / WARN-01: thread the LIVE
     // degradation signals out of the ledger. The enable branch runs the SAME
     // `runInstallLedger` over the SAME bridges as `install`, so all three
-    // signals `install.ts` composes off its `installCtx` are reachable here and
-    // all three are carried -- a row that named only one of them would
-    // contradict the ledger that produced it just as surely as an `(installed)`
-    // row over a `partially-available` resolution does.
+    // signals `install.ts` composes off its own ledger context are carried on
+    // the returned summary and all three are read here -- a row that named only
+    // one of them would contradict the ledger that produced it just as surely
+    // as an `(installed)` row over a `partially-available` resolution does.
     //
     // The `unsupported` kind list reads the ledger's OWN resolution, never the persisted
     // `compatibility` block the enable gate was derived from: the record the
     // state phase just wrote carries `installable: false` plus that same
     // non-empty kind list, so a bare `(installed)` row here would contradict
     // the `(partially-installed)` row `list` renders one command later.
-    const ledgerCtx = result.installCtx;
-    const resolved = ledgerCtx.resolved;
-    const degradedKinds = Array.from(new Set(ledgerCtx.frontmatterDegradations.map((d) => d.kind)));
+    const summary = result.summary;
+    const resolved = summary.resolved;
+    const degradedKinds = Array.from(new Set(summary.frontmatterDegradations.map((d) => d.kind)));
     return {
       kind: "fresh",
       version: recordedVersion,
@@ -301,8 +301,8 @@ async function runEnableBranch(
       // SEV-01 / D-98-02: the LENGTH of the staged-name arrays only. The names
       // themselves must never reach a rendered row -- the row needs the
       // declaration verdict, nothing more.
-      ...(ledgerCtx.stagedAgentNames.length > 0 && { stagedAgents: true }),
-      ...(ledgerCtx.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
+      ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
+      ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
     };
   } catch (err) {
     return {

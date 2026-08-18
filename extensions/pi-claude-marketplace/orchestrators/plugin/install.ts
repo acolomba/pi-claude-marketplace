@@ -7,7 +7,7 @@
 // D-02, D-05, D-08:
 //
 //   withLockedStateTransaction(locations, async (tx) => {   // D-02 outer guard
-//     runInstallLedger(state, locations, opts, capture)    // guard-FREE body:
+//     runInstallLedgerBody(state, locations, opts, capture)  // guard-FREE body:
 //       PI-15 early sanity:  throw if state.marketplaces[mp].plugins[plugin] != null
 //       PI-3:                throw if marketplace / entry absent
 //       PI-2:                cached manifest read ONLY (no network)
@@ -25,7 +25,10 @@
 // guard-FREE `runInstallLedger` so `setPluginEnabled`'s enable branch can run
 // it inside ITS OWN `withLockedStateTransaction` -- `proper-lockfile`
 // (`retries: 0`) is not re-entrant, so nesting `installPlugin`'s guard under
-// another guard on the same `stateLockFile` self-deadlocks.
+// another guard on the same `stateLockFile` self-deadlocks. That exported
+// entry returns the outward `InstallLedgerSummary`; `installPlugin` drives the
+// same body directly because its own post-commit composition reads the working
+// `InstallCtx` the summary deliberately withholds.
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir), dropped per D-19-01
 //   Success notify via notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
@@ -344,8 +347,13 @@ export interface InstallPluginOptions {
  * phases read or mutate. Per D-01 corollary "second-consumer rule" this
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
+ *
+ * Module-private on purpose: it is the transaction's mutable scratchpad --
+ * the bridge prep handles a rollback reads, the hooks-write flag, and a live
+ * reference to the caller's state snapshot. Callers outside this module get
+ * the fully-`readonly` `InstallLedgerSummary` projection instead.
  */
-export interface InstallCtx {
+interface InstallCtx {
   readonly locations: ScopedLocations;
   readonly cwd: string;
   readonly marketplace: string;
@@ -496,8 +504,47 @@ export interface InstallFailureCapture {
   version: string | undefined;
 }
 
+/**
+ * The outward view of a completed install ledger run.
+ *
+ * The ledger returns this projection rather than its working `InstallCtx`:
+ * the context is a mutable scratchpad whose prep handles, hooks-write flag and
+ * `stateSnapshot` steer the in-flight transaction, and publishing it would make
+ * that mutation surface part of the ledger's API. This shape carries only the
+ * facts a caller needs to compose its own row / outcome, every field `readonly`
+ * down to the array elements, so no consumer can reach back into the run.
+ */
+export interface InstallLedgerSummary {
+  /**
+   * NFR-7 / D-65-03: the LIVE resolution the ledger materialized. Callers read
+   * `state === "partially-available"` / `orphanRewake` off THIS, never off the
+   * persisted `compatibility` block (FSTAT-07 / D-66-04 / SURF-05).
+   */
+  readonly resolved: MaterializablePlugin;
+  /**
+   * SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade
+   * records, read for the `degradedKinds` outcome seam.
+   */
+  readonly frontmatterDegradations: readonly {
+    readonly kind: DegradeKind;
+    readonly generatedName: string;
+    readonly parseError: string;
+  }[];
+  // Staged-name lists, read only for their emptiness (ENBL-07 soft-dep flags).
+  readonly stagedAgentNames: readonly string[];
+  readonly stagedMcpServerNames: readonly string[];
+}
+
 /** Discriminated result of the guard-free install ledger body. */
 export type InstallLedgerResult =
+  | { readonly kind: "installed"; readonly summary: InstallLedgerSummary }
+  | { readonly kind: "marketplace-absent" };
+
+/**
+ * The same discriminated result carrying the ledger's working context, for
+ * this module's own post-commit composition. Never leaves install.ts.
+ */
+type InstallLedgerCtxResult =
   | { readonly kind: "installed"; readonly installCtx: InstallCtx }
   | { readonly kind: "marketplace-absent" };
 
@@ -771,6 +818,9 @@ async function preflightInstallResolve(
  * preserved). When `capture` is provided, `capture.rollbackPartials` /
  * `capture.version` are populated BEFORE the rethrow so the caller's catch
  * can compose rollback-partial rows.
+ *
+ * Success returns the outward `InstallLedgerSummary` projection, not the
+ * ledger's working context -- see that type for why.
  */
 export async function runInstallLedger(
   state: ExtensionState,
@@ -778,6 +828,38 @@ export async function runInstallLedger(
   opts: InstallLedgerOptions,
   capture?: InstallFailureCapture,
 ): Promise<InstallLedgerResult> {
+  const result = await runInstallLedgerBody(state, locations, opts, capture);
+  if (result.kind === "marketplace-absent") {
+    return result;
+  }
+
+  return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
+}
+
+/** Project the completed ledger context onto its outward summary. */
+function toInstallLedgerSummary(c: InstallCtx): InstallLedgerSummary {
+  return {
+    resolved: c.resolved,
+    frontmatterDegradations: c.frontmatterDegradations,
+    stagedAgentNames: c.stagedAgentNames,
+    stagedMcpServerNames: c.stagedMcpServerNames,
+  };
+}
+
+/**
+ * The ledger body proper, under the contract documented on `runInstallLedger`.
+ * Hands back the working `InstallCtx` for this module's own post-commit
+ * composition (`collectPostCommitWarnings`, `composeInstalledRow`,
+ * `buildInstalledOutcome`), which reads fields -- `locations`, `marketplace`,
+ * `plugin` -- the outward summary withholds. Module-private: only the
+ * declaring module holds the working context.
+ */
+async function runInstallLedgerBody(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+  capture?: InstallFailureCapture,
+): Promise<InstallLedgerCtxResult> {
   const { scope, cwd, marketplace, plugin } = opts;
 
   const preflight = await preflightInstallResolve(state, locations, opts);
@@ -1602,7 +1684,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         return;
       }
 
-      const result = await runInstallLedger(
+      const result = await runInstallLedgerBody(
         state,
         locations,
         buildInstallLedgerOptions(opts, { scope, cwd, marketplace, plugin }),
