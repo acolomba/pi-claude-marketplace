@@ -471,16 +471,18 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
 // Raw `error.message` is NEVER read into a row's reasons field or anywhere
 // else in the rendered output. The catch ladders in `apply.ts` translate
 // orchestrator throws into typed outcomes BEFORE they reach this projection.
+//
+// `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
+// successful enable re-materializes the plugin via installPlugin, so the
+// projection emits the `installed` row, deriving its `dependencies` from the
+// ledger's staged-count signals exactly as the install arm derives its own
+// (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
+// `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES. This
+// belongs to the token mapping above rather than to either row builder below:
+// it is the asymmetry BETWEEN them, and as a `/** */` block stacked above
+// `installedRowFromOutcome` it documented neither.
 // ---------------------------------------------------------------------------
 
-/**
- * `enabled` is NOT a member of PLUGIN_STATUSES (only `disabled` is). A
- * successful enable re-materializes the plugin via installPlugin, so the
- * projection emits the `installed` row, deriving its `dependencies` from the
- * ledger's staged-count signals exactly as the install arm derives its own
- * (SEV-01 / WR-06). The reverse asymmetry (a successful disable maps to
- * `disabled`) is structural: `disabled` IS a member of PLUGIN_STATUSES.
- */
 /**
  * Build the `(installed)` row for a realized reconcile install.
  *

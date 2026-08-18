@@ -40,7 +40,7 @@ pi-claude-marketplace/
 ├── .github/workflows/                  # CI pipelines
 ├── demos/                              # Manual demo scripts/fixtures
 ├── package.json                        # npm package manifest (name: pi-claude-marketplace)
-└── tsconfig.json / eslint.config.js / .prettierrc  # Toolchain config
+└── tsconfig.json / eslint.config.js / .prettierrc.json / .fallowrc.json  # Toolchain config
 ```
 
 ## Directory Purposes
@@ -53,17 +53,17 @@ pi-claude-marketplace/
 **`extensions/pi-claude-marketplace/orchestrators/`:**
 - Purpose: owns every transactional mutation and its notification composition
 - Contains: per-verb `*.ts` files, each paired with a `*.messaging.ts` sibling that builds the notify() payload
-- Key files: `orchestrators/plugin/install.ts` (~2350 lines, the canonical 5-phase ledger example and the only production `runPhases` call site), `orchestrators/reconcile/apply.ts` (load-time self-heal), `orchestrators/import/execute.ts` (bulk cascade)
-- Largest files under `extensions/` by line count: `shared/notify.ts` (~4030), `orchestrators/plugin/update.ts` (~3160), `orchestrators/plugin/install.ts` (~2350)
+- Key files: `orchestrators/plugin/install.ts` (~2440 lines, the canonical 5-phase ledger example and the only production `runPhases` call site), `orchestrators/reconcile/apply.ts` (load-time self-heal), `orchestrators/import/execute.ts` (bulk cascade)
+- Largest files under `extensions/` by line count: `shared/notify.ts` (~4030), `orchestrators/plugin/update.ts` (~3160), `orchestrators/plugin/install.ts` (~2440)
 
 **`extensions/pi-claude-marketplace/bridges/`:**
 - Purpose: one subdirectory per Claude-plugin component kind; each exposes discover/stage/commit/unstage for that kind
-- Contains: `skills/`, `commands/`, `agents/` (also `frontmatter.ts`, `index-mutation.ts`, `marker.ts` for pi-subagents index rows), `mcp/` (also `substitute.ts` for `${VAR}` expansion, `collision-slots.ts`), `hooks/` (also owns Claude-Code hook event dispatch: `dispatch.ts`, `event-router.ts`, `if-field/`, `async-rewake/`, `payloads/`)
+- Contains: `skills/`, `commands/`, `agents/` (also `frontmatter.ts`, `index-mutation.ts`, `marker.ts` for pi-subagents index rows), `mcp/` (also `substitute.ts` for `${VAR}` expansion, `collision-slots.ts`), `hooks/` (also owns Claude-Code hook event dispatch: `dispatch.ts`, `event-router.ts`, `routing-state.ts`, `if-field/`, `async-rewake/`, `payloads/`)
 - Key files: `bridges/hooks/index.ts` (registers Pi hook listeners); each kind keeps its own `bridges/<kind>/index.ts` barrel, but the aggregate `bridges/index.ts` was removed
 
 **`extensions/pi-claude-marketplace/domain/`:**
 - Purpose: pure functions — resolve a plugin's installability, parse manifests/sources/versions — no I/O beyond reading already-fetched files
-- Contains: `resolver.ts`, `manifest.ts`, `manifest-cache.ts`, `source.ts`, `version.ts`, `name.ts`, `plugin-root.ts`, `auth-registry.ts`, `github-auth.ts`, `clone-key.ts`, `components/*.ts` (typebox schemas)
+- Contains: `resolver.ts`, `manifest.ts`, `manifest-cache.ts`, `manifest-lookup.ts`, `source.ts`, `version.ts`, `name.ts`, `plugin-root.ts`, `auth-registry.ts`, `github-auth.ts`, `clone-key.ts`, `components/*.ts` (typebox schemas)
 - Key files: `domain/resolver.ts` (the `installable | partially-available | unavailable` discriminated union)
 
 **`extensions/pi-claude-marketplace/transaction/`:**
@@ -83,12 +83,12 @@ pi-claude-marketplace/
 - Contains: `notify.ts`/`notify-context.ts`/`notify-reasons.ts`, `errors.ts`/`errors-bridges.ts`, `path-safety.ts`, `atomic-json.ts`, `fs-utils.ts`, `concerns/soft-dep.ts`, `concerns/hooks.ts`, `debug-log.ts`, `types.ts`, `vars.ts`, `git-failure-classifiers.ts`, `probe-classifiers.ts`, `session-env.ts`, `markers.ts`, `extension-version.ts`, `completion-cache.ts`
 
 **`tests/`:**
-- Purpose: node:test suite mirroring `extensions/pi-claude-marketplace/` layer-by-layer, plus dedicated tiers for architectural constraints, integration, e2e, and live UAT
-- Contains: `tests/architecture/` (source-grep constraint tests like `no-orchestrator-network.test.ts`), `tests/{domain,persistence,bridges,orchestrators,edge,platform,shared,transaction}/` (unit tests mirroring source dirs), `tests/integration/`, `tests/e2e/`, `tests/live-uat/`, `tests/fixtures/`, `tests/helpers/`
+- Purpose: node:test suite mirroring `extensions/pi-claude-marketplace/` layer-by-layer, plus dedicated tiers for architectural constraints, integration and e2e, and a set of standalone live-UAT drivers
+- Contains: `tests/architecture/` (source-grep constraint tests like `no-orchestrator-network.test.ts`), `tests/{domain,persistence,bridges,orchestrators,edge,platform,shared,transaction}/` (unit tests mirroring source dirs), `tests/integration/`, `tests/e2e/`, `tests/helpers/` (shared drivers, plus one suite of its own). Two directories hold no `.test.ts` suite at all: `tests/fixtures/` (static inputs) and `tests/live-uat/` (standalone operator-run `.mjs` drivers, excluded from the ESLint typed tree)
 
 **`docs/`:**
 - Purpose: authoritative specification and design documentation
-- Contains: `docs/prd/pi-claude-marketplace-prd.md` — the 1068-line PRD that the successor architecture must satisfy; requirement IDs (PI-N, NFR-N, D-NN, etc.) from this document are cited throughout the source as comments
+- Contains: `docs/prd/pi-claude-marketplace-prd.md` — the 1128-line PRD that the successor architecture must satisfy; requirement IDs (PI-N, NFR-N, D-NN, etc.) from this document are cited throughout the source as comments
 
 ## Key File Locations
 
@@ -99,7 +99,8 @@ pi-claude-marketplace/
 - `package.json`: npm package manifest, peer deps (`@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `pi-subagents`, `typebox`)
 - `tsconfig.json`: TypeScript strict-mode configuration
 - `eslint.config.js`: flat ESLint config, including the notify-discipline BLOCK A custom rule
-- `.prettierrc`: formatting rules
+- `.fallowrc.json`: fallow's entry point, 13-zone boundary map, health thresholds and duplication settings for `npm run fallow`
+- `.prettierrc.json`: formatting rules
 
 **Core Logic:**
 - `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`: canonical 5-phase transactional ledger
@@ -115,7 +116,7 @@ pi-claude-marketplace/
 **Files:**
 - Kebab-case `.ts` files throughout: `with-state-guard.ts`, `plugin-state-classifier.ts`, `git-failure-classifiers.ts`
 - Orchestrator verb files paired with a `.messaging.ts` sibling of the same base name: `install.ts` + `install.messaging.ts`
-- Bridge files use a fixed vocabulary per kind: `discover.ts`, `stage.ts`, `unstage.ts`, `types.ts`, `index.ts` (barrel)
+- Bridge files use a fixed vocabulary per kind: `discover.ts`, `stage.ts`, `unstage.ts`, `types.ts`, `index.ts` (barrel) — carried in full by `skills/`, `commands/` and `agents/`; `mcp/` has no `discover.ts`, and `hooks/` takes only `stage.ts` and `index.ts` from the set
 - Test files mirror source paths one-to-one under `tests/`, suffixed `.test.ts`
 
 **Directories:**
@@ -131,7 +132,7 @@ pi-claude-marketplace/
 
 **New Claude-artifact component kind (new bridge):**
 - Implementation: `extensions/pi-claude-marketplace/bridges/<kind>/` with `discover.ts`, `stage.ts`, `unstage.ts`, `types.ts`, `index.ts` matching the existing 5-bridge triplet convention
-- Wire a new `Phase<InstallCtx>` into `orchestrators/plugin/install.ts` (and the symmetric uninstall/update/reinstall ledgers)
+- Wire a new `Phase<InstallCtx>` into `orchestrators/plugin/install.ts`, the only production `runPhases` call site; then add the matching removal/re-derivation step to `uninstall.ts`, `update.ts` and `reinstall.ts`, none of which run a ledger of their own
 - Tests: `tests/bridges/<kind>/`
 
 **Domain-level validation/resolution logic:**
@@ -150,10 +151,10 @@ pi-claude-marketplace/
 **`.claude/gsd-migration-journal/`:**
 - Purpose: GSD tooling's own migration rollback snapshots (unrelated to the extension's runtime code)
 - Generated: Yes (by GSD tooling)
-- Committed: Yes (historical journal)
+- Committed: No (gitignored via `/.claude/gsd-migration-journal/*`)
 
-**`coverage/`, `.pi-lens/cache/`, `.playwright-mcp/`, `tmp/`:**
-- Purpose: build/test tool output (coverage reports, lens cache, playwright artifacts, scratch)
+**`coverage/`, `.fallow/`, `.pi-lens/cache/`, `.playwright-mcp/`, `tmp/`:**
+- Purpose: build/test tool output (coverage reports, fallow's graph/churn caches, lens cache, playwright artifacts, scratch)
 - Generated: Yes
 - Committed: No (tool-generated, not source)
 

@@ -19,7 +19,7 @@ npm run test:integration        # tests/integration/**/*.test.ts (separate scrip
 npm run test:coverage           # Full coverage run: unit + integration + e2e, writes lcov to coverage/
 npm run test:coverage:e2e       # PI_CM_E2E_REF=pinned node --test --experimental-test-coverage tests/e2e/**/*.test.ts
 npm run test:coverage:integration
-npm run check                   # typecheck && lint && format:check && test && test:integration (full CI gate)
+npm run check                   # typecheck && lint && fallow && format:check && test && test:integration (full CI gate)
 TEST_CONCURRENCY=1 npm test     # Override test concurrency (env var respected by the test script)
 ```
 
