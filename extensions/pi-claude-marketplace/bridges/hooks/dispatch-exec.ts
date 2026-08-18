@@ -86,12 +86,13 @@ import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 /** EXEC-02: default 600s timeout; per-handler `timeout` overrides. */
 const DEFAULT_TIMEOUT_MS = 600_000;
-// STDIN_TRUNCATION_BYTES + planSpawn + serializeWithTruncation are shared
-// with `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites
-// build the same `child_process.spawn` invocation against the same
-// `RoutingEntry` shape and both serialize stdin under the same EXEC-02
-// cap, so a single source of truth keeps the two execution paths from
-// drifting.
+// planSpawn + serializeWithTruncation are shared with
+// `async-rewake/registry.ts` via ./spawn-helpers.ts -- both sites build the
+// same `child_process.spawn` invocation against the same `RoutingEntry` shape
+// and both serialize stdin under the same EXEC-02 cap, so a single source of
+// truth keeps the two execution paths from drifting. The cap itself
+// (`STDIN_TRUNCATION_BYTES`) is module-private to spawn-helpers.ts, applied
+// only inside `serializeWithTruncation`; neither execution site names it.
 /** EXEC-02: hard stdout buffer cap; overflow kills + noop. */
 const STDOUT_MAX_BYTES = 1024 * 1024;
 /** EXEC-02: hard stderr buffer cap; overflow kills + noop. */
@@ -132,8 +133,16 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  *
  * NEVER throws. Every error / overflow / timeout / parse failure path
  * resolves to `{ kind: "noop" }` + `hookDebugLog`. The composite handler
- * reducer (lands in a follow-up plan) folds the returned arms across the
- * bucket and dispatches to the per-Pi-event adapter (D-60-03).
+ * reducer folds the returned arms across the bucket and dispatches to the
+ * per-Pi-event adapter (D-60-03).
+ *
+ * `deps` is the spawn injection point, shared verbatim with
+ * `spawnAndRegister` (see `SpawnDeps` in `async-rewake/registry.ts`) and
+ * forwarded to it unchanged on the async branch. Production callers omit it
+ * and take `child_process.spawn` plus `randomUUID`; a test passes a recording
+ * stub so the exec arms are observable without spawning anything. Injection is
+ * deliberate: CONVENTIONS.md rules out a module-global `_set*ForTest` seam,
+ * which is what this parameter replaced.
  */
 export async function dispatchHookExec(
   entry: RoutingEntry,

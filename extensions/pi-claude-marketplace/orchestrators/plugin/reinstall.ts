@@ -1616,7 +1616,8 @@ interface HooksReplaceArgs {
 /**
  * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
  * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
- * on-disk hooks.json (mirroring `install.ts:340-360`) and call writeHookConfig.
+ * on-disk hooks.json (mirroring `install.ts`'s `hooksPhase` inside
+ * `runInstallLedger`) and call writeHookConfig.
  * When the resolved plugin has no hooks, remove any stale subtree (defensive
  * cleanup of an artifact a prior install left behind).
  *

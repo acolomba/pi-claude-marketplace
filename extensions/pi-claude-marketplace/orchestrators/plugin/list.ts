@@ -351,43 +351,6 @@ function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessag
 }
 
 /**
- * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
- * manifest version differs from the installed record's version per PL-5
- * string compare) for an INSTALLED plugin record. `dependencies` derives
- * from the installed record's `resources` (state-recorded counts).
- *
- * `pluginScope`: the actual install scope of this plugin record. Passed
- * through to the row only when it differs from the owning marketplace's
- * scope -- the renderer's MSG-PL-6 orphan-fold rule suppresses
- * the `[<scope>]` bracket when `p.scope === mp.scope`.
- *
- * Inventory-vs-transition discriminator: the steady-state list row emits the
- * `installed` token with `needsReload: false`, and that stamped flag
- * suppresses the OR-reduce reload-hint (RLD-02) for inventory rows.
- *
- * `reasons` on a steady-state inventory row may carry DURABLE facts about the
- * record's relationship to its marketplace -- the absence brace (INV-01) stays
- * true across reloads until either the manifest or the installation changes --
- * but not TRANSIENT conditions tied to a pending action (D-95-02).
- * Under D-95-01 that split is documented convention for future authors, not a
- * code-enforced gate: this builder stamps whatever typed reasons apply and the
- * render map passes them through, with no allowlist in the render path.
- *
- * The reload trailer is a SEPARATE axis: `shouldEmitReloadHint` reduces over
- * `needsReload` only and never reads `reasons`, so stamping a reason here
- * cannot re-trigger it.
- *
- * `lookup` carries the record's relationship to its manifest as ONE value, so
- * the `{not in manifest}` brace and the entry-derived `(upgradable)` /
- * `description` fields cannot disagree: an entry alongside an absence claim is
- * unrepresentable. A manifest plus a separate consistency flag is the drift
- * shape that produced the BOUND-03 defect (WR-07).
- *
- * PL-4: `description` is sourced from the manifest entry (when available).
- * The installed state record does not carry description; if the manifest is
- * unavailable (load failure), description is simply absent from the row.
- */
-/**
  * D-66-02 / FSTAT-04 / FSTAT-05: resolve the upgrade CANDIDATE so an
  * upgradable clean record can split `(upgradable)` from
  * `(partially-upgradable)`. `resolveStrict` is the cache/no-network resolver
@@ -429,6 +392,43 @@ async function probeUpgradeCandidate(
   }
 }
 
+/**
+ * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
+ * manifest version differs from the installed record's version per PL-5
+ * string compare) for an INSTALLED plugin record. `dependencies` derives
+ * from the installed record's `resources` (state-recorded counts).
+ *
+ * `pluginScope`: the actual install scope of this plugin record. Passed
+ * through to the row only when it differs from the owning marketplace's
+ * scope -- the renderer's MSG-PL-6 orphan-fold rule suppresses
+ * the `[<scope>]` bracket when `p.scope === mp.scope`.
+ *
+ * Inventory-vs-transition discriminator: the steady-state list row emits the
+ * `installed` token with `needsReload: false`, and that stamped flag
+ * suppresses the OR-reduce reload-hint (RLD-02) for inventory rows.
+ *
+ * `reasons` on a steady-state inventory row may carry DURABLE facts about the
+ * record's relationship to its marketplace -- the absence brace (INV-01) stays
+ * true across reloads until either the manifest or the installation changes --
+ * but not TRANSIENT conditions tied to a pending action (D-95-02).
+ * Under D-95-01 that split is documented convention for future authors, not a
+ * code-enforced gate: this builder stamps whatever typed reasons apply and the
+ * render map passes them through, with no allowlist in the render path.
+ *
+ * The reload trailer is a SEPARATE axis: `shouldEmitReloadHint` reduces over
+ * `needsReload` only and never reads `reasons`, so stamping a reason here
+ * cannot re-trigger it.
+ *
+ * `lookup` carries the record's relationship to its manifest as ONE value, so
+ * the `{not in manifest}` brace and the entry-derived `(upgradable)` /
+ * `description` fields cannot disagree: an entry alongside an absence claim is
+ * unrepresentable. A manifest plus a separate consistency flag is the drift
+ * shape that produced the BOUND-03 defect (WR-07).
+ *
+ * PL-4: `description` is sourced from the manifest entry (when available).
+ * The installed state record does not carry description; if the manifest is
+ * unavailable (load failure), description is simply absent from the row.
+ */
 async function installedRowMessage(
   pluginName: string,
   pluginScope: Scope,

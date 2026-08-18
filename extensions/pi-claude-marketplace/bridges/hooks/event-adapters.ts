@@ -30,7 +30,7 @@
 //     (SessionStart / SessionEnd / PreCompact / PostCompact) with per-event
 //     narrowing for the SessionStart `additionalContext` bridge. The
 //     SessionStart mutate arm captures `additionalContext` into the
-//     event-router.ts pending buffer (drained by the bridge's
+//     routing-state.ts pending buffer (drained by the bridge's
 //     `before_agent_start` handler on the next agent turn). All other
 //     observation events keep the silent-drop semantics: there is no
 //     downstream Pi surface to thread their payloads through. `block` and
@@ -287,8 +287,9 @@ export function adaptInputResult(
  * `before_agent_start` carries the `systemPrompt` chain Pi extensions use
  * to inject context into the next agent turn. The mutate-arm path here
  * captures `additionalContext` from a SessionStart event into the
- * `event-router.ts` pending buffer; the `beforeAgentStartHandlerFor`
- * closure drains the buffer on the next `before_agent_start` event.
+ * `routing-state.ts` pending buffer; the `beforeAgentStartHandlerFor`
+ * closure in `event-router.ts` drains the buffer on the next
+ * `before_agent_start` event.
  *
  * Per-event semantics:
  *

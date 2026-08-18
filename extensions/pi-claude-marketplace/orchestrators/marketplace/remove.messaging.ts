@@ -2,29 +2,22 @@
 //
 // The `marketplace remove` command's co-located notification vocabulary: its
 // `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits), the mp-status set it owns, and its
-// command-private reason.
+// plugin-child-row statuses it emits) and its command-private reason.
 //
 // D-01 / MOD-01: `marketplace remove` emits a marketplace block whose header is
 // `(removed)` (clean) or `(failed)` (partial), with child plugin rows: one
 // `(uninstalled)` (○) per successfully unstaged plugin and, on the partial arm,
 // one `(failed)` (⊘) per plugin whose cascade failed. The header line renders
 // via the central `renderMpHeader` seam the spine reuses; the per-plugin child
-// rows render through this command's render map below. The render-map arms are
-// lifted verbatim from the central `renderPluginRow` `uninstalled` / `failed`
-// arms, so dispatch is byte-identical.
+// rows render through this command's render map below, whose arms call the same
+// shared row helpers the central `renderPluginRow` `uninstalled` / `failed` arms
+// call, so dispatch is byte-identical.
 
 import { ICON_UNINSTALLABLE, pluginRow, renderUninstalledRow } from "../../shared/notify.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { PluginFailedMessage, PluginUninstalledMessage, Reason } from "../../shared/notify.ts";
 
-/**
- * D-01 / MOD-01: the marketplace-statuses `marketplace remove` owns. A clean
- * removal records `(removed)`; a partial cascade failure records `(failed)`.
- * Both header forms render via the central `renderMpHeader` seam the spine
- * reuses.
- */
 /**
  * D-09 / MOD-01: the command-private reason owned by `marketplace remove`.
  * `plugins remain` is meaningful only to the remove flow (a marketplace that

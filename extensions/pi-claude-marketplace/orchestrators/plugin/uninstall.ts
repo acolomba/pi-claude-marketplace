@@ -339,10 +339,6 @@ async function deletePluginFromLayer(
 }
 
 /**
- * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
- * `undefined` in standalone mode (after firing the standalone notify()).
- */
-/**
  * TR-03 failure split for a cascade that did not fully unstage.
  *
  *   - AG-5 (`AgentsUnstageFailureError`): foreign content owned by another
@@ -516,6 +512,10 @@ function emitAlreadyGone(args: {
   return undefined;
 }
 
+/**
+ * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
+ * `undefined` in standalone mode (after firing the standalone notify()).
+ */
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {

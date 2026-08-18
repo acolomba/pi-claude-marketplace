@@ -1,9 +1,9 @@
 // extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
 //
 // Shared helper for plugin orchestrators that need the set of generated
-// names a plugin would produce when staged. `update.ts` uses it to wire
-// the agents-knownSkills validator and to build cross-plugin conflict
-// inputs; `reinstall.ts` uses it for the same purposes.
+// names a plugin would produce when staged. `install.ts`, `update.ts` and
+// `reinstall.ts` all use it for the same two purposes: wiring the
+// agents-knownSkills validator and building cross-plugin conflict inputs.
 //
 // Lives outside `shared.ts` because it imports from `bridges/`; the
 // shared-helpers module is intentionally domain/persistence-only.

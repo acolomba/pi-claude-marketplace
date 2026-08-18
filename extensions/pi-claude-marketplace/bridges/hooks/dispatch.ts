@@ -71,17 +71,22 @@ import type {
 } from "../../platform/pi-api.ts";
 
 /**
- * Indirection seam: tests swap in a spy via `_setExecutorForTest` while
- * production code keeps the imported `dispatchHookExec` reference. The
- * indirection exists because ESM imports are read-only bindings -- a unit
- * test cannot mock the imported symbol directly. The seam is bridge-internal
- * and not re-exported via index.ts.
+ * The per-entry executor the bucket runners below take as a parameter. Every
+ * runner defaults it to the imported `dispatchHookExec`, so production never
+ * passes one; a test passes a spy and observes exactly which entries ran, in
+ * what order, and with what event.
  *
- * D-59-04 signature evolution: the executor now returns
- * `Promise<HookExecResult>` so the reducer below can fold outcomes across
- * a bucket. The DISP-04 stub previously returned `Promise<void>`; spy
- * fixtures in the existing test files have already been updated to
- * resolve `{ kind: "noop" }` per the evolved seam.
+ * Injected rather than swapped in module scope. ESM imports are read-only
+ * bindings, so mocking `dispatchHookExec` in place is impossible -- that used
+ * to be answered with a mutable module cell behind `_setExecutorForTest`.
+ * Threading the executor through the signature removes the need for the cell
+ * AND the reason for the export: there is no module state to reset between
+ * tests, and CONVENTIONS.md names injection as the sanctioned form (it makes
+ * the dependency part of the public interface instead of reaching inside).
+ * The type is bridge-internal and not re-exported via index.ts.
+ *
+ * D-59-04 signature evolution: the executor returns `Promise<HookExecResult>`
+ * so the reducer below can fold outcomes across a bucket.
  */
 export type HookExecutor = (
   entry: RoutingEntry,
@@ -240,8 +245,8 @@ export interface BucketOutcome {
  * observable. Mutations are NOT applied in place: the settle
  * synthetic event carries no mutable input/output surface.
  *
- * Takes the same injected executor as `reduceBucket`, so the
- * `_setExecutorForTest` spy drives this path too.
+ * Takes the same injected executor as `reduceBucket`, so one spy drives both
+ * paths.
  */
 export async function collectBucketOutcomes(
   bucket: ReadonlyArray<RoutingEntry>,
@@ -305,6 +310,11 @@ export type CompositeDispatchEvent = Exclude<
  * shape selected by the adapter table (tool_call returns
  * `ToolCallEventResult | undefined`; input returns `InputEventResult |
  * undefined`; observation events return `undefined`).
+ *
+ * `executor` defaults to `dispatchHookExec` and is forwarded straight to
+ * `reduceBucket`. `registerHooksBridge` threads its own optional `executor`
+ * into every call here, so a test can register the real bridge against a spy
+ * and assert on dispatch without spawning a child (see `HookExecutor`).
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   claudeEvent: E,
@@ -339,6 +349,9 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
+ *
+ * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
+ * and forwarded identically.
  */
 export function toolResultCompositeHandler(
   capturedEpoch: number,

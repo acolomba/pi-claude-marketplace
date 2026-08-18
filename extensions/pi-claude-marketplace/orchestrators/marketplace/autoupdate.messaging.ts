@@ -5,8 +5,8 @@
 // run one boolean-flag orchestrator (`opts.enable`) the way enable/disable do,
 // so this single module hosts TWO distinct command contexts.
 //
-// D-01 / D-10 / MOD-01 / MOD-03: each command owns its OWN mp-status set and its
-// OWN render map total over its OWN statuses. `marketplace autoupdate` records
+// D-01 / D-10 / MOD-01 / MOD-03: each command owns its OWN render map total over
+// its OWN plugin-child-row statuses. `marketplace autoupdate` records
 // `autoupdate enabled` (fresh flip) / `skipped {already autoupdate}` (idempotent)
 // / `failed`; `marketplace noautoupdate` records `autoupdate disabled` /
 // `skipped {already no autoupdate}` / `failed`. All marketplace headers render

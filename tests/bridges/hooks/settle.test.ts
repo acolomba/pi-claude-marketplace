@@ -1,9 +1,9 @@
 // Settle dispatcher unit tests (STOP-01 / STOP-03).
 //
 // Drives a synthetic `agent_end` -> `agent_settled` sequence through the
-// settle handler with a stub executor injected via dispatch.ts's
-// `_setExecutorForTest` seam and a Stop routing bucket seeded via
-// event-router's `_setRoutingBucketForTest`. Pins the `stopReason` gate, the
+// settle handler with a stub executor passed to `settleHandlerFor`'s
+// `executor` parameter and a Stop routing bucket seeded via event-router's
+// `_setRoutingBucketForTest`. Pins the `stopReason` gate, the
 // Stop block re-entry contract, the last-write-wins cache, and the epoch
 // hygiene.
 

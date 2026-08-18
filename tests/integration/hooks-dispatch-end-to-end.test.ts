@@ -15,9 +15,9 @@
 // routing table for a user-scope plugin when the project scope is empty.
 //
 // Test shape: real on-disk state.json + hooks.json, real cache + rebuild,
-// composite-handler dispatch routed through the `_setExecutorForTest` seam
-// (no child process spawned). This is the smallest test that would have
-// caught the runtime bug the unit tests missed.
+// composite-handler dispatch routed through the `executor` injected into
+// `registerHooksBridge` (no child process spawned). This is the smallest test
+// that would have caught the runtime bug the unit tests missed.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";

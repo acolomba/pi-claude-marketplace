@@ -139,11 +139,32 @@ export interface AsyncRewakeEntry {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Module-state cells + test seams (mirrors dispatch-exec.ts:116-131)
+// Module state
+//
+// The registry Map and the default orphan probes are the only module-level
+// cells left here. The `spawn` implementation and the dispatchId generator
+// used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
+// both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
+// `dispatch-exec.ts` threads through from its own `deps` argument. The two
+// surviving `_*ForTest` exports are read-only observers, not seams: they let a
+// test assert on the Map and drain the in-flight pid-table persist without
+// reaching into module scope.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
 
+/**
+ * The two process probes the orphan reap needs: a liveness/kill signal and a
+ * `/proc/<pid>/environ` reader. Injected rather than called directly so a test
+ * can drive the D-62-05 reap deterministically -- SIGKILL against a live
+ * stranger pid, and a `/proc` read on a non-Linux host, are both unavailable
+ * to a unit test. Production never passes them: `reapOrphans`, `isPidAlive`
+ * and `readProcEnvironMarker` all default to `DEFAULT_ORPHAN_PROBES`, and
+ * `event-router.ts`'s sole `reapOrphans(loc)` call takes that default.
+ *
+ * Exported because `reapOrphans` names it in its signature (a caller that
+ * substitutes probes has to be able to name the shape it is passing).
+ */
 export interface OrphanProbes {
   readonly killProbe: (pid: number, sig: number | NodeJS.Signals) => void;
   readonly environReader: (pid: number) => Promise<string>;
@@ -176,6 +197,16 @@ export function _awaitLastPidTablePersistForTest(): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * Dependencies the spawn path takes from its caller. Both default to the
+ * production implementation; tests supply their own instead of rewriting
+ * module state.
+ */
+export interface SpawnDeps {
+  readonly spawnImpl?: typeof spawn;
+  readonly dispatchId?: () => string;
+}
+
+/**
  * EXEC-05 / HOOK-06 / D-62-01 spawn + register seam. Resolves once the
  * in-memory entry is recorded AND the PID-table write has been issued;
  * the child's exit is observed asynchronously by the per-child handler
@@ -189,16 +220,6 @@ export function _awaitLastPidTablePersistForTest(): Promise<void> {
  * close over `pi.sendMessage` while keeping `notifyAsyncRewakeSummary`
  * (the IL-2-exempt notify seam) and `ctx.isIdle()` available on `ctx`.
  */
-/**
- * Dependencies the spawn path takes from its caller. Both default to the
- * production implementation; tests supply their own instead of rewriting
- * module state.
- */
-export interface SpawnDeps {
-  readonly spawnImpl?: typeof spawn;
-  readonly dispatchId?: () => string;
-}
-
 export async function spawnAndRegister(
   entry: RoutingEntry,
   event: unknown,
@@ -509,6 +530,11 @@ export function shutdownInMemoryChildren(): void {
  * On non-Linux, soft-skips every alive PID (the conservative path --
  * NEVER kill a stranger). Always unlinks the PID table at the end so
  * the next process starts from a clean slate.
+ *
+ * `probes` is the injection point for that walk (see `OrphanProbes`): the
+ * production caller in `event-router.ts` passes nothing and gets
+ * `DEFAULT_ORPHAN_PROBES`, while a test supplies recording stubs so the
+ * kill / marker-match / soft-skip arms are observable without a real child.
  */
 export async function reapOrphans(
   loc: ScopedLocations,

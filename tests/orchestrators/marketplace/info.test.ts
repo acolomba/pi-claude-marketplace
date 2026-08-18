@@ -18,8 +18,6 @@
 //   (h) absent from both scopes, no `--scope` -> bare row, no [scope]
 //   (i) NFR-5 grep-gate: no `platform/git` / `DEFAULT_GIT_OPS` /
 //       `refreshGitHubClone` imports in `info.ts`
-//   (j) barrel re-export: `orchestrators/marketplace/index.ts` exposes
-//       `getMarketplaceInfo`
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

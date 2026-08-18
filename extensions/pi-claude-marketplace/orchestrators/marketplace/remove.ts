@@ -102,8 +102,7 @@ export type RemoveMarketplaceNotifications =
  * per-row `(uninstalled)` plugin lines. Cleanup-leak warnings are dropped
  * per D-18-01 -- the orchestrated outcome surface mirrors standalone's
  * silence on post-state cleanup hiccups.
- */
-/**
+ *
  * `reason` is typed as `Reason` (not `ContentReason`) so the orchestrated
  * `"not added"` arm (missing marketplace, MarketplaceNotFoundError) can
  * surface its structural sentinel through the same field. Mirrors the
@@ -629,10 +628,6 @@ function surfaceCfgInvalid(args: {
 }
 
 /**
- * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
- * `undefined` in standalone mode.
- */
-/**
  * POST-STATE cleanup (MR-5 / MR-6 / MR-7), run OUTSIDE the guard once
  * state.json has already saved. Every arm is hygienic, never a contract: per
  * D-18-01 individual failures are swallowed by `removePath` and the `rm()`
@@ -696,6 +691,10 @@ async function runPostRemoveCleanup(args: {
   }
 }
 
+/**
+ * RECON-03: returns `RemoveMarketplaceOutcome` in orchestrated mode and
+ * `undefined` in standalone mode.
+ */
 export async function removeMarketplace(
   opts: RemoveMarketplaceOptions,
 ): Promise<RemoveMarketplaceOutcome | undefined> {

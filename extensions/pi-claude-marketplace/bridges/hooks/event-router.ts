@@ -1,7 +1,7 @@
 // bridges/hooks/event-router.ts
 //
 // Hooks-bridge dispatch core: the central routing layer the Pi runtime
-// hands events to. It populates and drives three pieces of shared module
+// hands events to. It populates and drives four pieces of shared module
 // state, though the cells themselves live in `routing-state.ts` so the
 // dispatch chain can read them without importing back into this hub:
 //
@@ -21,12 +21,19 @@
 //     pluginId under two different marketplaces in the same scope occupies
 //     two distinct entries.
 //
-//   - `routingTable`: `Map<BucketAEvent, ReadonlyArray<RoutingEntry>>` with
-//     all eight Claude-event buckets pre-populated to `[]` after every
-//     rebuild. Cross-plugin entries are sorted by `compareByNameThenScope`
-//     (project before user, alphabetical by pluginId); within-plugin entries
-//     preserve declaration order via the monotonic `declarationIndex` carried
-//     on RoutingEntry (DISP-04).
+//   - `routingTable`: `Map<BucketAEvent, ReadonlyArray<RoutingEntry>>` whose
+//     keyset stays pinned to `BUCKET_A_EVENTS` -- every bucket is pre-
+//     populated to `[]` after each rebuild rather than appearing and
+//     disappearing with the cache. Cross-plugin entries are sorted by
+//     `compareByNameThenScope` (project before user, alphabetical by
+//     pluginId); within-plugin entries preserve declaration order via the
+//     monotonic `declarationIndex` carried on RoutingEntry (DISP-04).
+//
+//   - `pendingSessionStartContext`: the one-shot buffer holding each
+//     SessionStart handler's `additionalContext` until the
+//     `before_agent_start` closure drains it into the turn's system prompt.
+//     Cleared at every factory entry so a `/reload` cannot leak the prior
+//     session's primer.
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
@@ -326,12 +333,6 @@ function collectAllCachedPlugins(): CacheEntry[] {
 }
 
 /**
- * Flatten a single plugin's HooksConfig into the per-event buckets.
- * declarationIndex is monotonic across the (event, group, handler) walk so
- * within-plugin source order is preserved when the bridge merges multiple
- * plugins' entries into the same bucket.
- */
-/**
  * Push one matcher group's handlers into its event bucket, in declaration
  * order. Returns the next `declarationIndex` so the caller's running counter
  * stays continuous across every group and event of one plugin.
@@ -376,6 +377,12 @@ function pushGroupHandlers(
   return declarationIndex;
 }
 
+/**
+ * Flatten a single plugin's HooksConfig into the per-event buckets.
+ * declarationIndex is monotonic across the (event, group, handler) walk so
+ * within-plugin source order is preserved when the bridge merges multiple
+ * plugins' entries into the same bucket.
+ */
 function flattenPluginIntoBuckets(
   cacheEntry: CacheEntry,
   buckets: Map<BucketAEvent, RoutingEntry[]>,
@@ -689,6 +696,17 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *      are driven off `agent_settled` rather than a per-Pi-event surface. The
  *      locked Pi event-name SET stays 10 (`input` appears twice) -- only the
  *      call COUNT grows to 11.
+ *
+ * `opts.executor` is the hook-execution injection point, forwarded verbatim
+ * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
+ * `settleHandlerFor` closure registered in step 4. The sole production caller
+ * -- the extension factory in `index.ts` -- does NOT pass it, so production
+ * always runs on the `dispatchHookExec` default; it exists so a test can
+ * register the real bridge against a spy and assert on routing without
+ * spawning a child process. Per CONVENTIONS.md, injecting the dependency is
+ * the sanctioned form: it makes the executor part of this function's public
+ * interface, where a `_setExecutorForTest` module seam would instead reach
+ * inside `dispatch.ts`.
  */
 export async function registerHooksBridge(
   pi: ExtensionAPI,

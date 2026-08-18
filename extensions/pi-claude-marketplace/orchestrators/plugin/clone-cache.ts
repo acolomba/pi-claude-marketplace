@@ -537,8 +537,9 @@ export async function resolvePluginPin(args: {
 
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` now lives in shared/fs-utils.ts
 // so the network-free presence probe can share it without pulling this seam's git
-// surface. Re-exported here under the same name to keep install / update / reinstall
-// import sites unbroken.
+// surface. Re-exported here under the same name to keep the update / reinstall
+// import sites unbroken. `install.ts` no longer imports it -- it calls this
+// file's `resolveGitPluginRootWithSubdir`, which wraps it.
 export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 
 // D-77-06 / PURL-07: `canonicalCloneUrl` now lives in domain/clone-key.ts (the

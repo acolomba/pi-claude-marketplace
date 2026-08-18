@@ -61,20 +61,6 @@ interface CatalogExample {
 }
 
 /**
- * Walk catalog lines, tracking the current per-command H2 section, and
- * pair each `<!-- catalog-state: STATE -->` annotation with the body of
- * the next fenced block.
- *
- * Per-command H2 sections:
- *   - Backtick-wrapped command tokens: `` ## `/claude:plugin <verb>` ``
- *   - Plain heading: `## Manual recovery anchors`
- *
- * Non-command H2 sections (Conventions, Severity routing, etc.) reset
- * `currentSection` to `null`; any subsequent fenced block in those
- * sections is skipped because no `catalog-state:` discriminator can
- * appear under a null section.
- */
-/**
  * Resolve the catalog section identifier from a heading match.
  *
  * Group 2 is the backtick-wrapped `/claude:plugin ...` capture, present only
@@ -163,6 +149,20 @@ function scanOutsideFence(line: string, st: CatalogScanState): void {
   }
 }
 
+/**
+ * Walk catalog lines, tracking the current per-command H2 section, and
+ * pair each `<!-- catalog-state: STATE -->` annotation with the body of
+ * the next fenced block.
+ *
+ * Per-command H2 sections:
+ *   - Backtick-wrapped command tokens: `` ## `/claude:plugin <verb>` ``
+ *   - Plain heading: `## Manual recovery anchors`
+ *
+ * Non-command H2 sections (Conventions, Severity routing, etc.) reset
+ * `currentSection` to `null`; any subsequent fenced block in those
+ * sections is skipped because no `catalog-state:` discriminator can
+ * appear under a null section.
+ */
 function loadCatalogExamples(catalog: string): readonly CatalogExample[] {
   const examples: CatalogExample[] = [];
   const st: CatalogScanState = {

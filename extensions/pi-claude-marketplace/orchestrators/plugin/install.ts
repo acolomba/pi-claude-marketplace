@@ -13,9 +13,10 @@
 //       PI-2:                cached manifest read ONLY (no network)
 //       PI-4:                resolveStrict + requireInstallable
 //       PI-6:                assertNoCrossPluginConflicts(scope, names, state)
-//       PI-7:                resolvePluginVersion -- 3-tier precedence
-//                            (plugin.json > entry.version > hash); see
-//                            `shared.ts::resolvePluginVersion`
+//       PI-7:                deriveInstallVersion -- pin override, then the
+//                            git-source sha, then the 3-tier precedence
+//                            (plugin.json > entry.version > hash) delegated
+//                            to `shared.ts::resolvePluginVersion`
 //       runPhases(phases, ctx)                             // D-01 5-phase ledger
 //       capture rollbackPartials, throw raw error          // D-02 PI-14 bypass
 //   })
@@ -321,7 +322,7 @@ export interface InstallPluginOptions {
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   /**
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
-   * The git-source clone probe passes it to `buildAuthForHost` so a provider
+   * The git-source clone probe passes it to `buildCloneAuth` so a provider
    * host authenticates host-keyed; tests inject makeMockCredentialOps().
    */
   readonly credentialOps?: CredentialOps;
@@ -442,7 +443,7 @@ export interface InstallCloneCacheSeam {
  */
 export interface InstallLedgerOptions {
   /**
-   * PROV-03: passed to the git-source clone probe's `buildAuthForHost` so a
+   * PROV-03: passed to the git-source clone probe's `buildCloneAuth` so a
    * Device Flow prompt reaches the user's UI. The ledger never notifies success
    * / failure itself (that is the caller's concern); `ctx` is here solely to
    * wire the auth notify seam for the clone probe.
@@ -621,28 +622,6 @@ async function deriveInstallVersion(args: {
 }
 
 /**
- * CR-01: the guard-FREE install ledger body -- the
- * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
- * sequence that previously lived inline in `installPlugin`'s
- * `withStateGuard` closure.
- *
- * Locking contract: the CALLER owns the per-scope state lock and the
- * load/save lifecycle. This function performs NO `withStateGuard` /
- * `withLockedStateTransaction` / `saveState` of its own -- `proper-lockfile`
- * (`retries: 0`) is NOT re-entrant, so nesting a second guard on the same
- * `stateLockFile` self-deadlocks (ELOCKED -> StateLockHeldError; the defect
- * that made the fresh-enable path unreachable). `installPlugin` and
- * `setPluginEnabled` (orchestrators/plugin/enable-disable.ts) each call
- * this inside their own `withLockedStateTransaction` so the OUTER snapshot
- * receives the state mutation and exactly one explicit save persists it
- * (single-writer, ST-7 / D-06).
- *
- * Failure contract: throws the raw orchestration error (PI-14 bypass
- * preserved). When `capture` is provided, `capture.rollbackPartials` /
- * `capture.version` are populated BEFORE the rethrow so the caller's catch
- * can compose rollback-partial rows.
- */
-/**
  * The PI-15 / PI-3 / PI-2 / PI-4 preflight: resolve the source marketplace,
  * gate on the early-sanity record check, read the cached manifest, validate
  * the chosen entry, and run `resolveStrict` behind the correct
@@ -771,6 +750,28 @@ async function preflightInstallResolve(
   return { kind: "ready", entry, installable: resolved, resolvedSha: clone.resolvedSha() };
 }
 
+/**
+ * CR-01: the guard-FREE install ledger body -- the
+ * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
+ * sequence that previously lived inline in `installPlugin`'s
+ * `withStateGuard` closure.
+ *
+ * Locking contract: the CALLER owns the per-scope state lock and the
+ * load/save lifecycle. This function performs NO `withStateGuard` /
+ * `withLockedStateTransaction` / `saveState` of its own -- `proper-lockfile`
+ * (`retries: 0`) is NOT re-entrant, so nesting a second guard on the same
+ * `stateLockFile` self-deadlocks (ELOCKED -> StateLockHeldError; the defect
+ * that made the fresh-enable path unreachable). `installPlugin` and
+ * `setPluginEnabled` (orchestrators/plugin/enable-disable.ts) each call
+ * this inside their own `withLockedStateTransaction` so the OUTER snapshot
+ * receives the state mutation and exactly one explicit save persists it
+ * (single-writer, ST-7 / D-06).
+ *
+ * Failure contract: throws the raw orchestration error (PI-14 bypass
+ * preserved). When `capture` is provided, `capture.rollbackPartials` /
+ * `capture.version` are populated BEFORE the rethrow so the caller's catch
+ * can compose rollback-partial rows.
+ */
 export async function runInstallLedger(
   state: ExtensionState,
   locations: ScopedLocations,
@@ -996,7 +997,8 @@ export async function runInstallLedger(
   // returns. The parse is unconditional (no executor judgement); a fresh
   // parse failure here is a defensive guard (the resolver already validated
   // the file at install-entry under D-57-04) and unwinds the ledger.
-  // Mirrors the post-state-commit hydrate at lines 340-360 of this file.
+  // Mirrors the post-state-commit `readAndCachePluginHooks` hydrate in
+  // `installPlugin`.
   const hooksPhase: Phase<InstallCtx> = {
     name: "hooks",
     do: async (c) => {
@@ -1223,33 +1225,6 @@ function buildInstallLedgerOptions(
   };
 }
 
-/**
- * PI-1..15 entrypoint. The function never re-throws -- failures surface
- * via a single `notify()` call carrying a `PluginFailedMessage`
- * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
- * exactly one notification per orchestration arm; orchestrated-mode emits
- * none and returns the typed outcome.
- *
- * Failure modes funnel through three paths inside the single catch
- * site:
- *   1. Guard-closure throw (PI-3 / PI-4 / PI-5 / PI-6 / PI-7 errors,
- *      ConcurrentInstallError from PI-15 layer (a), and the rolled-up
- *      ledger error captured as failureRollbackPartials) -> notify()
- *      with `PluginFailedMessage` carrying the typed `cause` and
- *      (when rollback partials are present) the
- *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
- *      handles all indentation + cause-chain rendering automatically
- * .
- *   2. PathContainmentError originating in a bridge prepare or undo path
- *      propagates VERBATIM: its message becomes `cause` on the
- *      `PluginFailedMessage` and never surfaces as a rollback-partial
- *      (PI-14 bypass).
- *   3. Post-state-commit pluginDataDir mkdir failure / cache-refresh
- *      failure / agentForeignFailures rows / bridgeWarnings rows /
- *      PI-13 deps note are DROPPED in standalone mode per D-19-01.
- *      Orchestrated-mode collects them in
- *      `InstallOutcome.postCommitWarnings` for the cascade caller.
- */
 /**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
  * AS-7 / WARN-01). The state record is already committed, so every arm is
@@ -1531,8 +1506,38 @@ function handleInstallThrow(args: {
   return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
 }
 
-// Install sequencing intentionally keeps the state guard, failure routing,
-// and post-commit/notification logic in one audited flow matching PI-1..15.
+/**
+ * PI-1..15 entrypoint. The function never re-throws -- failures surface
+ * via a single `notify()` call carrying a `PluginFailedMessage`
+ * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
+ * exactly one notification per orchestration arm; orchestrated-mode emits
+ * none and returns the typed outcome.
+ *
+ * Failure modes funnel through three paths inside the single catch
+ * site:
+ *   1. Guard-closure throw (PI-3 / PI-4 / PI-5 / PI-6 / PI-7 errors,
+ *      ConcurrentInstallError from PI-15 layer (a), and the rolled-up
+ *      ledger error captured as failureRollbackPartials) -> notify()
+ *      with `PluginFailedMessage` carrying the typed `cause` and
+ *      (when rollback partials are present) the
+ *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
+ *      handles all indentation + cause-chain rendering automatically
+ * .
+ *   2. PathContainmentError originating in a bridge prepare or undo path
+ *      propagates VERBATIM: its message becomes `cause` on the
+ *      `PluginFailedMessage` and never surfaces as a rollback-partial
+ *      (PI-14 bypass).
+ *   3. Post-state-commit pluginDataDir mkdir failure / cache-refresh
+ *      failure / agentForeignFailures rows / bridgeWarnings rows /
+ *      PI-13 deps note are DROPPED in standalone mode per D-19-01.
+ *      Orchestrated-mode collects them in
+ *      `InstallOutcome.postCommitWarnings` for the cascade caller.
+ */
+// Install sequencing walks the PI-1..15 flow: the state guard, the ledger
+// call, failure routing, and post-commit/notification composition. The
+// order of those steps stays visible here; the step bodies themselves are
+// extracted above (`buildInstallLedgerOptions`, `collectPostCommitWarnings`,
+// `composeInstalledRow`, `buildInstalledOutcome`, `handleInstallThrow`).
 export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
@@ -1549,7 +1554,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
   // arms and the contrasting "Failure with rollback-partial children" arm
   // in `docs/output-catalog.md`. `capture.version` is the resolved
   // version at throw time (undefined when the throw pre-dated
-  // `resolvePluginVersion`).
+  // `deriveInstallVersion`).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   // ATTR-01 / ATTR-08 / M1: marketplace-existence is a PRECONDITION, not a
   // plugin-row property. When the CMP-2..4 source resolution misses (the
@@ -2176,46 +2181,6 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
 }
 
 /**
- * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
- * for renderer consumption. Classification order:
- *   0. four `hooks.json` prefix families
- *      (`hooks.json is not valid JSON:` / `hooks.json failed schema validation:` /
- *      `unsupported hooks:` / `malformed hooks.json:`) -> `unsupported hooks`
- *      -- mirrors `shared/probe-classifiers.ts::narrowResolverNotes` for
- *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
- *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
- *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
- *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) is arm-
- *      dependent: on the partially-available arm (`partialable`) it routes its
- *      bare token through the shared `narrowUnsupportedKinds` helper so the
- *      install surface emits the same per-kind `unsupported component` marker
- *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
- *      `unavailable` arm it stays on the source axis as `unsupported source`,
- *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
- *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
- *   4. permissive fallback: `unsupported source`
- * Steps 3-4 are defensive for notes already serialised by deeper helpers;
- * the preferred path is typed errno-bearing Errors dispatched at the
- * orchestrator catch site via `.code`.
- *
- * IN-02 / RSTATE-05: `unsupportedKinds` is the resolver's typed `unsupported[]`
- * component-kind list (carried on the thrown `PluginShapeError`). It is narrowed
- * FIRST, through the shared `narrowUnsupportedKinds` helper, so the failure row
- * renders the same per-kind markers `list`/`info` do. This is the ONLY reason
- * source for a `hooks`-only partially-available plugin (which carries no `contains hooks`
- * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
- * plugin yields one `lsp`, sourced from both the note and the typed kind). The
- * permissive `unsupported source` fallback fires only when BOTH sources are empty.
- *
- * SURF-01 / WR-01 / D-64-07: `partialable` is the resolver arm discriminant
- * (`err.shape.partialable`). It defaults to the structural `unavailable` arm
- * (`false`) and only affects the non-carve-out `contains <kind>` note handler
- * (step 1b) -- the component-axis `unsupported component` token is emitted for
- * such a note ONLY on the partially-available arm; the structural arm keeps it on
- * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
- */
-/**
  * Cross-surface parity with `shared/probe-classifiers.ts::narrowResolverNotes`.
  * The resolver emits four `hooks.json`-prefix families when `parseHooksConfig`
  * rejects an on-disk hooks config (HOOK-03 / LIFE-01); both this install-side
@@ -2310,6 +2275,46 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
   return errnoReason === undefined ? [] : [errnoReason];
 }
 
+/**
+ * Narrow resolver `r.notes` (free-form strings) to the closed `Reason` set
+ * for renderer consumption. Classification order:
+ *   0. four `hooks.json` prefix families
+ *      (`hooks.json is not valid JSON:` / `hooks.json failed schema validation:` /
+ *      `unsupported hooks:` / `malformed hooks.json:`) -> `unsupported hooks`
+ *      -- mirrors `shared/probe-classifiers.ts::narrowResolverNotes` for
+ *      cross-surface parity (HOOK-03 / LIFE-01 / SURF-01)
+ *   1. manifest-field carve-out (`contains lspServers`) -- HOOK-04 / D-58-02
+ *      dropped the dead `contains hooks` half (hooks is supported under v1.13)
+ *   1b. any other `contains <kind>` note (e.g. `monitors`, `themes`) is arm-
+ *      dependent: on the partially-available arm (`partialable`) it routes its
+ *      bare token through the shared `narrowUnsupportedKinds` helper so the
+ *      install surface emits the same per-kind `unsupported component` marker
+ *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
+ *      `unavailable` arm it stays on the source axis as `unsupported source`,
+ *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
+ *   2. "source" substring -> `unsupported source`
+ *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
+ *   4. permissive fallback: `unsupported source`
+ * Steps 3-4 are defensive for notes already serialised by deeper helpers;
+ * the preferred path is typed errno-bearing Errors dispatched at the
+ * orchestrator catch site via `.code`.
+ *
+ * IN-02 / RSTATE-05: `unsupportedKinds` is the resolver's typed `unsupported[]`
+ * component-kind list (carried on the thrown `PluginShapeError`). It is narrowed
+ * FIRST, through the shared `narrowUnsupportedKinds` helper, so the failure row
+ * renders the same per-kind markers `list`/`info` do. This is the ONLY reason
+ * source for a `hooks`-only partially-available plugin (which carries no `contains hooks`
+ * note), and it is deduped against the note-derived markers (e.g. a `lspServers`
+ * plugin yields one `lsp`, sourced from both the note and the typed kind). The
+ * permissive `unsupported source` fallback fires only when BOTH sources are empty.
+ *
+ * SURF-01 / WR-01 / D-64-07: `partialable` is the resolver arm discriminant
+ * (`err.shape.partialable`). It defaults to the structural `unavailable` arm
+ * (`false`) and only affects the non-carve-out `contains <kind>` note handler
+ * (step 1b) -- the component-axis `unsupported component` token is emitted for
+ * such a note ONLY on the partially-available arm; the structural arm keeps it on
+ * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
+ */
 function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],

@@ -87,10 +87,6 @@ export interface MockGitOpsHandle {
 }
 
 /**
- * Build a fresh mock GitOps + bookkeeping state. Tests pass `state`
- * to assertions and mutate it between orchestrator calls.
- */
-/**
  * The optional behavior knobs a caller may seed. They are carried as DATA so
  * the copy below stays one loop instead of one conditional spread per knob.
  */
@@ -140,6 +136,10 @@ function buildMockGitState(initial?: Partial<MockGitState>): MockGitState {
   };
 }
 
+/**
+ * Build a fresh mock GitOps + bookkeeping state. Tests pass `state`
+ * to assertions and mutate it between orchestrator calls.
+ */
 export function makeMockGitOps(initial?: Partial<MockGitState>): MockGitOpsHandle {
   const state = buildMockGitState(initial);
 

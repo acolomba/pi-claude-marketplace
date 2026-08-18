@@ -1883,6 +1883,10 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 // list failures (loadState / cross-scope walk throws). Distinct from
 // narrowProbeError (per-row resolver probe failures). Mirrors the same
 // classifier ladder so the test ergonomics carry over.
+//
+// Its ladder tests live in tests/shared/probe-classifiers.test.ts, beside
+// the shared classifiers this wrapper delegates to -- the same move the
+// probe-error note above records. Nothing is asserted here.
 // ──────────────────────────────────────────────────────────────────────────
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -430,22 +430,6 @@ function dropCachedHooks(
  * this module instead of being silenced by an `as never` cast.
  */
 type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
-
-/**
- * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
- * single `notify()` call per IL-2 (standalone) OR a typed outcome per
- * RECON-03 (orchestrated).
- *
- * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
- * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
- * Mirrors the `AddMarketplaceNotifications` discriminant pattern. The
- * standalone arm keeps `| undefined` because it fires its own `notify()` and
- * the caller has nothing to consume. The reconcile cascade
- * (`applyPluginToggles`) used to carry an `if (result === undefined) continue`
- * guard that silently dropped the row -- the overload makes that branch a
- * compile error so the cascade always materialises a row (closes S6's fourth
- * loop in the same edit).
- */
 /**
  * The identity and file targets a config write-back needs, resolved once
  * before the lock so the write helpers stay pure module functions rather than
@@ -562,6 +546,21 @@ function emitMarketplaceAbsent(args: {
   return undefined;
 }
 
+/**
+ * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
+ * single `notify()` call per IL-2 (standalone) OR a typed outcome per
+ * RECON-03 (orchestrated).
+ *
+ * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
+ * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
+ * Mirrors the `AddMarketplaceNotifications` discriminant pattern. The
+ * standalone arm keeps `| undefined` because it fires its own `notify()` and
+ * the caller has nothing to consume. The reconcile cascade
+ * (`applyPluginToggles`) used to carry an `if (result === undefined) continue`
+ * guard that silently dropped the row -- the overload makes that branch a
+ * compile error so the cascade always materialises a row (closes S6's fourth
+ * loop in the same edit).
+ */
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
 ): Promise<EnableDisablePluginOutcome>;
@@ -864,11 +863,6 @@ function sanitizeStateLoadError(err: Error): Error {
 }
 
 /**
- * RECON-03: map the internal `SetEnabledOutcome` sentinel to the typed
- * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
- * standalone `composeOutcomeRow` taxonomy.
- */
-/**
  * The `fresh` arm of the typed-outcome mapping -- the realized enable or
  * disable transition.
  *
@@ -903,6 +897,11 @@ function freshOutcomeToTypedResult(
   };
 }
 
+/**
+ * RECON-03: map the internal `SetEnabledOutcome` sentinel to the typed
+ * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
+ * standalone `composeOutcomeRow` taxonomy.
+ */
 function outcomeToTypedResult(args: {
   plugin: string;
   enable: boolean;
@@ -1048,7 +1047,7 @@ function dispatchOutcome(args: {
  * state was reached, the same stance the `install --partial` success row and
  * the still-degraded `plugin-backfilled` arm take. A MALFORMED component is a
  * different fact: it is a degrade the ledger just produced, not a pre-existing
- * shortfall, so it takes the same `warning` raise `install.ts::successSeverity`
+ * shortfall, so it takes the same `warning` raise `install.ts::composeInstalledRow`
  * applies (WARN-01 / D-86-03) on whichever verb materialized it.
  *
  * SEV-01 / D-98-02: a MISSING companion is the second, independent raise. The

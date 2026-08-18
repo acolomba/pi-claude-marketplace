@@ -3,10 +3,9 @@ import type { Reason } from "../notify.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
- * Owns the closed dependency tuple `DEPENDENCIES`, the derived `Dependency`
- * literal-union, the two soft-dep marker constants, and the pure
- * `softDepMarkers` helper that maps a per-row declares-flags pair + a threaded
- * `SoftDepStatus` probe to the soft-dep markers to append. The central
+ * Owns the `Dependency` literal-union, the two soft-dep marker constants, and
+ * the pure `softDepMarkers` helper that maps a per-row declares-flags pair + a
+ * threaded `SoftDepStatus` probe to the soft-dep markers to append. The central
  * `composeReasons` (which stays in `notify.ts` as shared presentation
  * vocabulary) delegates its soft-dep branch here.
  *
@@ -20,16 +19,13 @@ import type { Reason } from "../notify.ts";
  */
 
 /**
- * Runtime tuple of every dependency literal (SNM-06). 2 entries. Drives the
+ * Closed set of dependency probe targets (SNM-06). 2 members, each driving the
  * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
  * `requires pi-mcp` reason emission).
  *
- * Pattern: closed-set `as const` tuple + `(typeof X)[number]` literal-union.
- */
-
-/**
- * Closed set of dependency probe targets (SNM-06). Derived from
- * `DEPENDENCIES` via indexed access.
+ * Spelled out as a literal union. A runtime `DEPENDENCIES` tuple used to back
+ * it via indexed access, but nothing iterated the tuple, so it was removed and
+ * the union became the sole declaration site.
  */
 export type Dependency = "agents" | "mcp";
 

@@ -96,7 +96,7 @@ export interface PluginInstalledOutcome
   /**
    * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
    * propagated through to the reconcile cascade caller. Mirrors the
-   * `import/execute.ts:699-703` pattern -- post-commit hygiene warnings
+   * `import/execute.ts::installOnePlannedPlugin` pattern -- post-commit hygiene warnings
    * (data-dir mkdir deferred, agent-foreign-content preserved,
    * completion-cache refresh deferred, bridge-side soft warnings) are
    * surfaced to the operator instead of silently dropped. Standalone-mode

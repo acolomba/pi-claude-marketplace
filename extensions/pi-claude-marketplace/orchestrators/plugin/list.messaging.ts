@@ -28,8 +28,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * list.messaging.ts -- the command-local notification vocabulary for
  * `/claude:plugin list` (MOD-01). Co-locates the list surface's private status
  * set, its row message shapes, and a render map total over the list's OWN
- * statuses (D-10) lifting the matching `renderPluginRow` arm bodies VERBATIM.
- * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
+ * statuses (D-10) whose arms DELEGATE to the shared per-row renderers. The
+ * shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
  * and is CALLED here, never duplicated.
  *
  * RLD-04: the list surface's steady-state inventory row uses the `installed`
@@ -80,8 +80,9 @@ export type ListMsg =
 
 /**
  * Render map total over the list surface's OWN statuses (D-10): a missing arm
- * is a TS2741 compile error at the `satisfies` site. Arm bodies are
- * byte-identical to the central `renderPluginRow` switch.
+ * is a TS2741 compile error at the `satisfies` site. The arms call the shared
+ * per-row renderers, so their bytes agree with the central `renderPluginRow`
+ * switch because both call the SAME helper.
  *
  * INV-01: the `installed` inventory arm forwards `p.reasons`. Steady-state
  * inventory rows may state DURABLE facts about a record's relationship to its
@@ -93,8 +94,8 @@ export type ListMsg =
  * claim itself is gated upstream on a SUCCESSFUL manifest read (BOUND-03 /
  * D-95-05).
  *
- * The `available` / `unavailable` arms omit the `[<scope>]` bracket entirely
- * (MSG-PL-6 / SNM-11 carve-out) by passing `undefined` to `renderScopeBracket`.
+ * The `available` / `unavailable` rows omit the `[<scope>]` bracket entirely
+ * (MSG-PL-6 / SNM-11 carve-out); that is a property of their shared helpers.
  */
 const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>> } = {
   installed: (p, probe, mpScope) =>
@@ -110,9 +111,9 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope),
   unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
-  // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. Body cloned from the
-  // `unavailable` arm (same MSG-PL-6 / SNM-11 no-scope carve-out and reasons
-  // composition); only the glyph and token differ.
+  // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. The helper differs
+  // from the `unavailable` one in glyph and token only (same MSG-PL-6 / SNM-11
+  // no-scope carve-out and reasons composition).
   "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
   upgradable: (p, probe, mpScope) => pluginRow(ICON_INSTALLED, p, mpScope, "(upgradable)", probe),
   // FSTAT-02 / D-66-03: dedicated ICON_PARTIALLY_INSTALLED (`◉`) glyph; the reasons
@@ -124,20 +125,18 @@ const LIST_RENDER: { [K in ListStatus]: RenderFn<Extract<ListMsg, { status: K }>
   // clean today -- exactly like the `upgradable` arm above.
   "partially-upgradable": (p, probe, mpScope) =>
     pluginRow(ICON_INSTALLED, p, mpScope, "(partially-upgradable)", probe),
-  // ENBL-16 / D-100-07: the list surface threads the row's `reasons`, and the
+  // ENBL-16 / D-100-07: the shared helper threads the row's `reasons`, and the
   // orchestrator stamps at most `not in manifest` there. Both soft-dep flags
-  // stay hard-coded false, which is what keeps a disabled row free of a
-  // soft-dep marker whatever inventory the record retained (ENBL-15 /
-  // D-100-06). Body otherwise lifted verbatim from the central
-  // `renderPluginRow` disabled arm.
+  // stay hard-coded false inside that helper, which is what keeps a disabled row
+  // free of a soft-dep marker whatever inventory the record retained (ENBL-15 /
+  // D-100-06).
   disabled: (p, probe, mpScope) => renderDisabledRow(p, probe, mpScope),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
   // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
-  // materialized locally. Clones the `available` arm, swapping the glyph
+  // materialized locally. The helper differs from the `available` one in glyph
   // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
-  // `remote` has NO `scope?` field, so the scope bracket is omitted. Bare row --
-  // NO reasons brace (D-80-03), so the `composeReasons` line is dropped. Body
-  // lifted verbatim from the central `renderPluginRow` remote arm.
+  // `remote` has NO `scope?` field, so the scope bracket is omitted, and the row
+  // is bare -- NO reasons brace (D-80-03), which is why it takes no `probe`.
   remote: (p, _probe, mpScope) => renderRemoteRow(p, mpScope),
 };
 

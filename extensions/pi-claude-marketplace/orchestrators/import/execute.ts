@@ -538,12 +538,8 @@ function recordMarketplaceAddFailure(
   }
 }
 
-// The import workflow is intentionally linear: ensure marketplaces, record
-// diagnostics, then install plugins while preserving per-item continuation
-// semantics.
-type ScopePlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][number];
-type PlannedMarketplace = ScopePlan["marketplacesToEnsure"][number];
-type PlannedPlugin = ScopePlan["pluginsToInstall"][number];
+type PlannedMarketplace = ScopedImportPlan["marketplacesToEnsure"][number];
+type PlannedPlugin = ScopedImportPlan["pluginsToInstall"][number];
 
 /**
  * Classify an ALREADY-PRESENT marketplace against the Claude-settings source.
@@ -553,7 +549,7 @@ type PlannedPlugin = ScopePlan["pluginsToInstall"][number];
 function reconcileExistingMarketplace(
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
-  scopePlan: ScopePlan,
+  scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
   existingSource: unknown,
 ): void {
@@ -687,7 +683,7 @@ async function addOnePlannedMarketplace(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
-  scopePlan: ScopePlan,
+  scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
 ): Promise<void> {
   const addMarketplace = addMarketplaceFn(opts.deps);
@@ -731,10 +727,13 @@ async function addOnePlannedMarketplace(
   }
 }
 
+// The import workflow is intentionally linear: ensure marketplaces, record
+// diagnostics, then install plugins while preserving per-item continuation
+// semantics.
 async function executeScopedPlan(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
-  scopePlan: ScopePlan,
+  scopePlan: ScopedImportPlan,
 ): Promise<void> {
   const loadState = stateLoader(opts.deps);
 

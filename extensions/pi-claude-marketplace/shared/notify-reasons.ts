@@ -19,8 +19,10 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * `notify-closed-set-locks.test.ts` pins the length, so the two sentences above
  * cannot drift from the tuple again without a red test.
  *
- * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
- * idiom. Membership of every literal is checked at compile time against the
+ * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
+ * a runtime `Set` to test against; the unsupported and failure groups are
+ * declared straight as literal unions, since nothing ever iterated their
+ * tuples. Membership of every literal is checked at compile time against the
  * closed `Reason` set (each group's element type extends `Reason`), and the
  * `_ReasonsCoverageProof` at the bottom asserts the union of all groups + the
  * command-private reasons + the structural `"not added"` marker is EXACTLY the
@@ -117,7 +119,7 @@ export type FailureReason =
   // MCPR-03 / D-02: a broken `mcpServers` STRING reference (missing file /
   // malformed JSON / wrapper-less / out-of-root). Failure-class, NOT
   // unsupported -- it is a malformation of a SUPPORTED feature the resolver
-  // parses, so it lives here and NOT in UNSUPPORTED_REASONS.
+  // parses, so it lives here and NOT in `UnsupportedReason`.
   | "malformed mcp"
   // CLASS-01 / D-86-01: a skill / command whose source frontmatter could not be
   // parsed by Pi's own `parseFrontmatter`. Failure-class (a malformation of a

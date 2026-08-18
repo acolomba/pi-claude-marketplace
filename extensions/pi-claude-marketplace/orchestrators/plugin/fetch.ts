@@ -12,9 +12,9 @@
 //     helper, no platform-git import), a gate enforced by
 //     tests/architecture/no-orchestrator-network.test.ts's forbidden-targets
 //     set.
-//   - auth: `auth-host.ts` re-exports (`buildAuthForHost` / `hostFromCloneUrl`)
-//     with a single sweep-wide `authMemo` so a bulk sweep triggers each host's
-//     device flow at most once (FTCH-06).
+//   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
+//     `authMemo` so a bulk sweep triggers each host's device flow at most once
+//     (FTCH-06).
 //   - classification: the fs-only `git-source-probe.ts` (`makePresenceProbe`
 //     for the no-op gate, `probeManifestEntry` for the post-fetch row).
 //   - cascade: `notify-context.ts::notifyWithContext` with FETCH_CONTEXT.

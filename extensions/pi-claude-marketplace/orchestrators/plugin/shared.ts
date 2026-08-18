@@ -70,7 +70,7 @@ export interface LedgerDegradationSignals {
    * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
    * be parsed and installed in degraded form. Each kind contributes one
    * `{malformed skill}` / `{malformed command}` token AND raises the row from
-   * `info` to `warning` -- the same raise `install.ts::successSeverity`
+   * `info` to `warning` -- the same raise `install.ts::composeInstalledRow`
    * applies, because a degraded component is carried out but short of ideal
    * whichever verb materialized it.
    */

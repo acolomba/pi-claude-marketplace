@@ -2,8 +2,7 @@
 //
 // The `marketplace add` command's co-located notification vocabulary: its
 // `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits), the mp-status set it owns, and its
-// command-private failure reasons.
+// plugin-child-row statuses it emits) and its command-private failure reasons.
 //
 // D-01 / MOD-01: each command owns the statuses, reasons, and render map of its
 // own notifications. The shared spine in `shared/notify-context.ts` dispatches
@@ -12,9 +11,9 @@
 // `renderMpHeader` seam that `notifyWithContext` -> `emitContextCascade` reuses,
 // so the header bytes stay byte-identical to the legacy path. `marketplace add`
 // always emits `plugins: []` (the marketplace block carries no child rows), so
-// this command's render map is over the empty plugin-status set; the mp-statuses
-// it owns are declared below for the localized vocabulary and route through the
-// central header seam.
+// this command's render map is over the empty plugin-status set; its `(added)`
+// and `(failed) {<reason>}` header forms carry no local status declaration and
+// route through the central header seam.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Reason } from "../../shared/notify.ts";

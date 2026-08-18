@@ -232,43 +232,6 @@ function pushMarketplaceRemoveCascade(
 }
 
 /**
- * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
- * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
- * statically pinned to the pending render map's status set -- the consumer
- * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
- *
- * Every plan action is folded into its `(scope, marketplace)` block. The
- * mapping is:
- *
- *   - marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
- *                              D-65.1-02). Child installs still build a
- *                              bare-header block via pluginsToInstall.
- *   - marketplacesToRemove  -> per-recorded-plugin child row
- *                              { status: "will uninstall" } under a bare
- *                              list-arm header (status undefined). De-
- *                              registration is immediate; only the plugin-
- *                              uninstall cascade is reload-deferred (WILL-03 /
- *                              D-65.1-03). Names come from the plan DTO's
- *                              `plugins` field, NOT pluginsToUninstall (which
- *                              deliberately omits removed-marketplace plugins
- *                              to avoid double-billing the apply cascade).
- *   - sourceMismatches      -> block.status = "failed", reasons:
- *                              ["dangling reference"] for the dangling-reference
- *                              cause (PURL-06), ["source mismatch"] for the
- *                              other three causes
- *   - pluginsToInstall      -> child row { status: "will install" }
- *   - pluginsToUninstall    -> child row { status: "will uninstall" }
- *   - pluginsToDisable      -> child row { status: "will disable" }
- *   - pluginsToEnable       -> child row { status: "will enable" }
- *                              (recorded-but-disabled detection via the
- *                              empty-resources marker)
- *
- * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
- * case-insensitive, project-before-user secondary). Plugin rows within a
- * block preserve insertion order per their owning bucket -- the apply path
- * will re-order at execution time if needed.
- */
-/**
  * FSTAT-06 / D-66-04: the no-network resolve inputs for a planned install
  * candidate -- the candidate manifest entry plus the marketplace clone root it
  * resolves against. Located by the caller (`pendingReconcile`) from the
@@ -348,6 +311,43 @@ export async function resolvePendingForceInstalls(
   return keys;
 }
 
+/**
+ * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
+ * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
+ * statically pinned to the pending render map's status set -- the consumer
+ * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
+ *
+ * Every plan action is folded into its `(scope, marketplace)` block. The
+ * mapping is:
+ *
+ *   - marketplacesToAdd     -> dropped; marketplace add is immediate (WILL-01 /
+ *                              D-65.1-02). Child installs still build a
+ *                              bare-header block via pluginsToInstall.
+ *   - marketplacesToRemove  -> per-recorded-plugin child row
+ *                              { status: "will uninstall" } under a bare
+ *                              list-arm header (status undefined). De-
+ *                              registration is immediate; only the plugin-
+ *                              uninstall cascade is reload-deferred (WILL-03 /
+ *                              D-65.1-03). Names come from the plan DTO's
+ *                              `plugins` field, NOT pluginsToUninstall (which
+ *                              deliberately omits removed-marketplace plugins
+ *                              to avoid double-billing the apply cascade).
+ *   - sourceMismatches      -> block.status = "failed", reasons:
+ *                              ["dangling reference"] for the dangling-reference
+ *                              cause (PURL-06), ["source mismatch"] for the
+ *                              other three causes
+ *   - pluginsToInstall      -> child row { status: "will install" }
+ *   - pluginsToUninstall    -> child row { status: "will uninstall" }
+ *   - pluginsToDisable      -> child row { status: "will disable" }
+ *   - pluginsToEnable       -> child row { status: "will enable" }
+ *                              (recorded-but-disabled detection via the
+ *                              empty-resources marker)
+ *
+ * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
+ * case-insensitive, project-before-user secondary). Plugin rows within a
+ * block preserve insertion order per their owning bucket -- the apply path
+ * will re-order at execution time if needed.
+ */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),

@@ -44,12 +44,6 @@ type InstallStatus =
   "installed" | "partially-installed" | "failed" | "unavailable" | "partially-available";
 
 /**
- * install's row message union -- the subset of the central plugin message
- * shapes whose status install actually emits. `dependencies` stays REQUIRED on
- * the `installed` arm so the soft-dep marker injection in `composeReasons`
- * fires for exactly that arm (D-06 / TYPE-04 gating).
- */
-/**
  * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
  * classified-error return shape for `classifyEntityShapeError` and the
  * install.ts error-routing path. It lives here beside `InstallMsg` because
@@ -72,6 +66,12 @@ export interface EntityErrorRow {
   readonly partialable?: boolean;
 }
 
+/**
+ * install's row message union -- the subset of the central plugin message
+ * shapes whose status install actually emits. `dependencies` stays REQUIRED on
+ * the `installed` arm so the soft-dep marker injection in `composeReasons`
+ * fires for exactly that arm (D-06 / TYPE-04 gating).
+ */
 export type InstallMsg =
   | PluginInstalledMessage
   | PluginPartiallyInstalledMessage

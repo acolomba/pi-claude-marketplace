@@ -192,9 +192,11 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
  * D-11: the ledger modules of `orchestrators/plugin/` and
  * `orchestrators/marketplace/` must not statically import each other.
  *
- * `import-x/no-cycle` cannot cover this. It reports a cycle only once the graph
- * is ALREADY circular, so the first of the two edges lands green and the rule
- * fires on whoever adds the second. The edge that matters here is preventive:
+ * Cycle detection cannot cover this -- not `fallow dead-code`'s, and not the
+ * `import-x/no-cycle` rule retired above. A cycle is reported only once the
+ * graph is ALREADY circular, so the first of the two edges lands green and the
+ * gate fires on whoever adds the second. The edge that matters here is
+ * preventive:
  * a marketplace ledger reaching a plugin ledger drags that ledger's whole graph
  * in, and `orchestrators/types.ts` plus the leaf row composers exist precisely
  * so it does not have to.

@@ -187,6 +187,15 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
 }
 
 /**
+ * Selects the command context for the shared autoupdate orchestrator: the
+ * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
+ * context when disabling. Mirrors the enable/disable boolean-flag split.
+ */
+function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
+  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
+}
+
+/**
  * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
  *
  * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
@@ -199,15 +208,6 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
-/**
- * Selects the command context for the shared autoupdate orchestrator: the
- * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
- * context when disabling. Mirrors the enable/disable boolean-flag split.
- */
-function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
-  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
-}
-
 function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
   const failureName = opts.name ?? "(unknown)";
 
@@ -237,27 +237,6 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
   notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
 }
 
-/**
- * WB-01: execute a single-scope autoupdate
- * flip inside `withLockedStateTransaction` so the config write-back happens
- * under the per-scope lock (serialized against concurrent state mutators).
- *
- * WR-05: the flip never writes state.json --
- * `classifyAutoupdateFlip` is classify-only and the closure has no
- * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
- * write-back IS the flip.
- *
- * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
- * (already-matching) return BEFORE the write-back call so the targeted config
- * file's mtime is byte-stable (RECON-05 fixed-point preserved).
- *
- * WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back so a reconcile-
- * driven flip never copies a `claude-plugins.local.json` override back into
- * the shared base file.
- *
- * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
- * message via the synthetic `Error` -- no absolute path leak.
- */
 /**
  * Reclassify both state-side `changed` AND state-side `unchanged` names
  * against the CONFIG-side `autoupdate` truth (SPLIT-01). The
@@ -389,6 +368,27 @@ async function writeAutoupdateBack(
   return { skipped };
 }
 
+/**
+ * WB-01: execute a single-scope autoupdate
+ * flip inside `withLockedStateTransaction` so the config write-back happens
+ * under the per-scope lock (serialized against concurrent state mutators).
+ *
+ * WR-05: the flip never writes state.json --
+ * `classifyAutoupdateFlip` is classify-only and the closure has no
+ * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
+ * write-back IS the flip.
+ *
+ * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
+ * (already-matching) return BEFORE the write-back call so the targeted config
+ * file's mtime is byte-stable (RECON-05 fixed-point preserved).
+ *
+ * WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back so a reconcile-
+ * driven flip never copies a `claude-plugins.local.json` override back into
+ * the shared base file.
+ *
+ * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
+ * message via the synthetic `Error` -- no absolute path leak.
+ */
 async function flipOneScope(
   opts: AutoupdateOptions,
   scope: Scope,

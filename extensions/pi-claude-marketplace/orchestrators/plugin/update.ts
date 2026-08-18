@@ -250,21 +250,6 @@ export interface UpdatePluginsOptions {
   /** D-79-02 once-per-host memo shared across a bulk update. */
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
-
-/**
- * PUP-1..9 direct entrypoint. Enumerates targets per PUP-1 three forms,
- * runs PUP-2 syncCloneOnce per (scope, marketplace) pair, then drives each
- * plugin through the shared 3-phase swap. Partitions outcomes and renders
- * a single cascade notification per orchestration arm.
- *
- * PUP-9 direct routing: phase-2-or-earlier throws from `runThreePhaseUpdate`
- * surface via a synthetic `PluginFailedMessage` carrying the typed `cause`
- * (Option B); the renderer composes the 4-space cause-chain
- * trailer. Phase-3a aggregate failures land in
- * `partition='failed'` outcomes and also fire a direct-path notification
- * BEFORE the cascade is built (the cascade body still names them via the
- * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
- */
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
@@ -340,6 +325,20 @@ function buildDirectThreePhaseArgs(
   };
 }
 
+/**
+ * PUP-1..9 direct entrypoint. Enumerates targets per PUP-1 three forms,
+ * runs PUP-2 syncCloneOnce per (scope, marketplace) pair, then drives each
+ * plugin through the shared 3-phase swap. Partitions outcomes and renders
+ * a single cascade notification per orchestration arm.
+ *
+ * PUP-9 direct routing: phase-2-or-earlier throws from `runThreePhaseUpdate`
+ * surface via a synthetic `PluginFailedMessage` carrying the typed `cause`
+ * (Option B); the renderer composes the 4-space cause-chain
+ * trailer. Phase-3a aggregate failures land in
+ * `partition='failed'` outcomes and also fire a direct-path notification
+ * BEFORE the cascade is built (the cascade body still names them via the
+ * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
+ */
 export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
 
@@ -1398,35 +1397,6 @@ async function markUpdateInProgress(
 }
 
 /**
- * TR-04: post-commit finalize.
- *
- * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
- * has TWO distinct failure semantics:
- *
- * 1. PER-BRIDGE (independent across bridges): for each of skills /
- *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
- *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. SC#2: do NOT
- *    gate per-bridge writes on `phase3aFailures.length === 0`; the
- *    independent per-bridge gate is the load-bearing structural contract.
- *
- *    Bridge -> schema-field mapping (locked, per TR-03):
- *      skills    -> resources.skills
- *      commands  -> resources.prompts   (asymmetric, schema-locked)
- *      agents    -> resources.agents
- *      mcp       -> resources.mcpServers
- *
- * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
- *    only when `phase3aFailures.length === 0`. On any failure the
- *    `compatibility` block stays at the intent-mark values
- *    (`installable: false`, `notes: [UPDATE_IN_PROGRESS_NOTE]`),
- *    `version` stays at `fromVersion`, and `resolvedSource` stays at
- *    the pre-update install path.
- *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
- */
-/**
  * D-99-05a: the slice of a disabled record that {@link refreshDisabledRecord}
  * owns, normalized to one string so two snapshots compare with `===` rather
  * than through a hand-rolled recursive walk. Positional, so no key ordering can
@@ -1827,6 +1797,35 @@ async function refreshHooksCacheAfterUpdate(
   rebuildRoutingTables();
 }
 
+/**
+ * TR-04: post-commit finalize.
+ *
+ * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
+ * has TWO distinct failure semantics:
+ *
+ * 1. PER-BRIDGE (independent across bridges): for each of skills /
+ *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
+ *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
+ *    .map(r => r.generatedName)`. SC#2: do NOT
+ *    gate per-bridge writes on `phase3aFailures.length === 0`; the
+ *    independent per-bridge gate is the load-bearing structural contract.
+ *
+ *    Bridge -> schema-field mapping (locked, per TR-03):
+ *      skills    -> resources.skills
+ *      commands  -> resources.prompts   (asymmetric, schema-locked)
+ *      agents    -> resources.agents
+ *      mcp       -> resources.mcpServers
+ *
+ * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
+ *    only when `phase3aFailures.length === 0`. On any failure the
+ *    `compatibility` block stays at the intent-mark values
+ *    (`installable: false`, `notes: [UPDATE_IN_PROGRESS_NOTE]`),
+ *    `version` stays at `fromVersion`, and `resolvedSource` stays at
+ *    the pre-update install path.
+ *
+ * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
+ * is a truthful "we touched this record" stamp.
+ */
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,

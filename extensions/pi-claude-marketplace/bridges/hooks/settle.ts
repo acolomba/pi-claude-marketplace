@@ -154,6 +154,13 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
  * the agent loop on a blocking hook (STOP-03); `error` / `length` route to the
  * StopFailure observation-only arm (SFAIL-01); `aborted` / `toolUse` are a
  * defensive no-op. No-ops on a stale epoch or an empty cache.
+ *
+ * `executor` is optional and threaded down to `collectBucketOutcomes`, which
+ * defaults it to `dispatchHookExec`. Production omits it -- the one
+ * `settleHandlerFor` call, in `registerHooksBridge`, forwards that factory's
+ * own optional `executor`, which its sole production caller never sets. It is
+ * there so a test can drive the Stop / StopFailure arms against a spy instead
+ * of a real child process (see `HookExecutor` in `dispatch.ts`).
  */
 export function settleHandlerFor(
   capturedEpoch: number,

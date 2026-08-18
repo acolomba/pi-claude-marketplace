@@ -6,9 +6,11 @@
 // Only the parts that are IDENTICAL across those suites live here. The
 // per-plugin `resources` defaults deliberately do NOT: `list.test.ts` pins the
 // ENBL-18 semantics (disable preserves every array, `hooksOnly` seeds the
-// hooks axis alone), while `info.test.ts` seeds an empty inventory for a
-// disabled record. Those are different fixture contracts, so each caller
-// computes its own `resources` and passes the result in.
+// hooks axis alone), `info.test.ts` seeds an empty inventory for a disabled
+// record, and `info-manifest-absent.test.ts` gives a disabled record the same
+// populated arrays an enabled one carries so the INFO-11 name lists have
+// something to render. Those are three different fixture contracts, so each
+// caller computes its own `resources` and passes the result in.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
