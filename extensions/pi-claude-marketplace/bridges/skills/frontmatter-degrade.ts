@@ -16,6 +16,8 @@
 // the ~99% happy path. `setDescriptionScalar` instead replaces exactly the
 // `description` node span and leaves every sibling key byte-identical.
 
+import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
+
 /**
  * SKILL-01 / D-86-02 / A4: the fixed placeholder description synthesized onto an
  * unparseable skill. A short YAML-safe constant -- NOT interpolated with plugin
@@ -152,51 +154,6 @@ function emitSafeDoubleQuotedScalar(value: string): string {
 /** The top-level frontmatter `description` key token (including its colon). */
 const DESCRIPTION_KEY = "description:";
 
-/** Index of the closing `---` fence (frontmatter block end), or `lines.length`. */
-function frontmatterBlockEnd(lines: readonly string[]): number {
-  for (let i = 1; i < lines.length; i++) {
-    if ((lines[i] ?? "").trim() === "---") {
-      return i;
-    }
-  }
-
-  return lines.length;
-}
-
-/**
- * Given the `description` key line at `keyIndex`, return the index of the LAST
- * line its value spans. A scalar value continues onto later lines for EVERY
- * multi-line form -- block (`>` / `|`, optionally with a chomp / indent
- * modifier), multi-line plain, and multi-line single/double-quoted -- and in all
- * of them the continuation lines are indented deeper than the column-0 key.
- * Absorb every indented (non-blank) continuation line up to `blockEnd`, stopping
- * at the first line that returns to column 0 (the next top-level key or the
- * closing fence). An inline scalar has no continuation, so the first following
- * line is already at column 0 and the key line itself is returned. Detecting the
- * FULL node span for all multi-line forms -- not just block scalars (CR-01) --
- * prevents orphaned continuation lines that would make gate-2 reject the staged
- * bytes. Trailing blank lines are NOT absorbed so inter-key blank spacing is
- * preserved byte-for-byte.
- */
-function descriptionValueEnd(lines: readonly string[], keyIndex: number, blockEnd: number): number {
-  let lastReplaced = keyIndex;
-  for (let i = keyIndex + 1; i < blockEnd; i++) {
-    const line = lines[i] ?? "";
-    if (line.trim() === "") {
-      continue;
-    }
-
-    if (/^\s/.test(line)) {
-      lastReplaced = i;
-      continue;
-    }
-
-    break;
-  }
-
-  return lastReplaced;
-}
-
 /**
  * SKILL-03 class: set the frontmatter `description` to `value` by replacing the
  * FULL `description` node span -- including any multi-line scalar (block `>-` /
@@ -240,7 +197,7 @@ export function setDescriptionScalar(content: string, value: string): string {
     return rebuilt.join("\n");
   }
 
-  const lastReplaced = descriptionValueEnd(lines, keyIndex, blockEnd);
+  const lastReplaced = keyValueEnd(lines, keyIndex, blockEnd);
   const rebuilt = [...lines.slice(0, keyIndex), replacement, ...lines.slice(lastReplaced + 1)];
   return rebuilt.join("\n");
 }

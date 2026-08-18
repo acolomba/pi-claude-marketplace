@@ -18,39 +18,6 @@ export {
 } from "./stage.ts";
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
-export {
-  assertNoAgentCollisions,
-  convertAgent,
-  generatedAgentName,
-  MODEL_MAP,
-  THINKING_VALUES,
-  TOOL_MAP,
-} from "./convert.ts";
-export {
-  emitGeneratedAgentFile,
-  parseFrontmatter,
-  emitYamlScalar,
-  sanitizeProvenanceValue,
-} from "./frontmatter.ts";
-export {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_MARKER_LEGACY,
-  GENERATED_AGENT_PREFIX,
-  isOwnedAgentFile,
-} from "./marker.ts";
-export { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
+export { GENERATED_AGENT_MARKER, GENERATED_AGENT_MARKER_LEGACY } from "./marker.ts";
 
-export type {
-  AgentsReplacement,
-  ConvertedAgent,
-  DiscoveredAgent,
-  PreparedAgentsStaging,
-  ReplacePreparedAgentsOptions,
-  RawAgentFrontmatter,
-  StageAgentsCommitResult,
-  StageAgentsInput,
-  StagedAgentRecord,
-  UnstageAgentFailure,
-  UnstageAgentsInput,
-  UnstageAgentsResult,
-} from "./types.ts";
+export type { AgentsReplacement, PreparedAgentsStaging } from "./types.ts";

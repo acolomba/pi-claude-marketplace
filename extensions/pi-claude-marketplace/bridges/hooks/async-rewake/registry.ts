@@ -40,16 +40,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { assertNever, errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
-import { assertPathInside } from "../../../shared/path-safety.ts";
-import { claudeSessionEnvFor } from "../../../shared/session-env.ts";
-import { currentEpoch, type RoutingEntry } from "../event-router.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
+import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
 import { translate as translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translate as translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -60,6 +57,7 @@ import { translate as translateSessionStart } from "../payloads/session-start.ts
 import { translate as translateStopFailure } from "../payloads/stop-failure.ts";
 import { translate as translateStop } from "../payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
+import { currentEpoch, type RoutingEntry } from "../routing-state.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
@@ -141,17 +139,33 @@ export interface AsyncRewakeEntry {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Module-state cells + test seams (mirrors dispatch-exec.ts:116-131)
+// Module state
+//
+// The registry Map and the default orphan probes are the only module-level
+// cells left here. The `spawn` implementation and the dispatchId generator
+// used to be mutable cells behind `_set*ForTest` / `_reset*ForTest` setters;
+// both are now parameters (`SpawnDeps` below), which `dispatchHookExec` in
+// `dispatch-exec.ts` threads through from its own `deps` argument. The two
+// surviving `_*ForTest` exports are read-only observers, not seams: they let a
+// test assert on the Map and drain the in-flight pid-table persist without
+// reaching into module scope.
 // ──────────────────────────────────────────────────────────────────────────
 
 const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
 
-type SpawnImpl = typeof spawn;
-let activeSpawn: SpawnImpl = spawn;
-
-let dispatchIdGenerator: () => string = () => randomUUID();
-
-interface OrphanProbes {
+/**
+ * The two process probes the orphan reap needs: a liveness/kill signal and a
+ * `/proc/<pid>/environ` reader. Injected rather than called directly so a test
+ * can drive the D-62-05 reap deterministically -- SIGKILL against a live
+ * stranger pid, and a `/proc` read on a non-Linux host, are both unavailable
+ * to a unit test. Production never passes them: `reapOrphans`, `isPidAlive`
+ * and `readProcEnvironMarker` all default to `DEFAULT_ORPHAN_PROBES`, and
+ * `event-router.ts`'s sole `reapOrphans(loc)` call takes that default.
+ *
+ * Exported because `reapOrphans` names it in its signature (a caller that
+ * substitutes probes has to be able to name the shape it is passing).
+ */
+export interface OrphanProbes {
   readonly killProbe: (pid: number, sig: number | NodeJS.Signals) => void;
   readonly environReader: (pid: number) => Promise<string>;
 }
@@ -162,38 +176,6 @@ const DEFAULT_ORPHAN_PROBES: OrphanProbes = {
   },
   environReader: (pid) => readFile(`/proc/${pid}/environ`, "utf8"),
 };
-
-let orphanProbes: OrphanProbes = DEFAULT_ORPHAN_PROBES;
-
-/** Substitute the `spawn` implementation for the duration of a unit test. */
-export function _setSpawnForTest(impl: SpawnImpl): void {
-  activeSpawn = impl;
-}
-
-/** Reset `spawn` to the production binding. */
-export function _resetSpawnForTest(): void {
-  activeSpawn = spawn;
-}
-
-/** Substitute the dispatchId generator for deterministic tests. */
-export function _setDispatchIdGeneratorForTest(gen: () => string): void {
-  dispatchIdGenerator = gen;
-}
-
-/** Reset the dispatchId generator to `randomUUID`. */
-export function _resetDispatchIdGeneratorForTest(): void {
-  dispatchIdGenerator = () => randomUUID();
-}
-
-/** Substitute the orphan probes for deterministic reap tests. */
-export function _setOrphanProbesForTest(probes: OrphanProbes): void {
-  orphanProbes = probes;
-}
-
-/** Reset the orphan probes to the production bindings. */
-export function _resetOrphanProbesForTest(): void {
-  orphanProbes = DEFAULT_ORPHAN_PROBES;
-}
 
 /** Read-only view of the in-memory registry for unit-test assertions. */
 export function _getRegistryForTest(): ReadonlyMap<string, AsyncRewakeEntry> {
@@ -215,6 +197,16 @@ export function _awaitLastPidTablePersistForTest(): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * Dependencies the spawn path takes from its caller. Both default to the
+ * production implementation; tests supply their own instead of rewriting
+ * module state.
+ */
+export interface SpawnDeps {
+  readonly spawnImpl?: typeof spawn;
+  readonly dispatchId?: () => string;
+}
+
+/**
  * EXEC-05 / HOOK-06 / D-62-01 spawn + register seam. Resolves once the
  * in-memory entry is recorded AND the PID-table write has been issued;
  * the child's exit is observed asynchronously by the per-child handler
@@ -234,7 +226,10 @@ export async function spawnAndRegister(
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   loc: ScopedLocations,
+  deps: SpawnDeps = {},
 ): Promise<void> {
+  const spawnImpl = deps.spawnImpl ?? spawn;
+  const makeDispatchId = deps.dispatchId ?? (() => randomUUID());
   // D-87-04: narrow the admitted event to the dispatchable subset before
   // indexing the translator table. `Stop` / `StopFailure` never reach this
   // path -- no Pi event routes them to an async-rewake spawn (their entries in
@@ -248,7 +243,7 @@ export async function spawnAndRegister(
   }
 
   try {
-    const dispatchId = dispatchIdGenerator();
+    const dispatchId = makeDispatchId();
     const capturedEpoch = currentEpoch();
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
@@ -260,7 +255,7 @@ export async function spawnAndRegister(
 
     let child: ChildProcess;
     try {
-      child = activeSpawn(planValue.command, [...planValue.args], {
+      child = spawnImpl(planValue.command, [...planValue.args], {
         cwd: env.CLAUDE_PROJECT_DIR,
         env,
         stdio: ["pipe", "pipe", "pipe"],
@@ -535,16 +530,24 @@ export function shutdownInMemoryChildren(): void {
  * On non-Linux, soft-skips every alive PID (the conservative path --
  * NEVER kill a stranger). Always unlinks the PID table at the end so
  * the next process starts from a clean slate.
+ *
+ * `probes` is the injection point for that walk (see `OrphanProbes`): the
+ * production caller in `event-router.ts` passes nothing and gets
+ * `DEFAULT_ORPHAN_PROBES`, while a test supplies recording stubs so the
+ * kill / marker-match / soft-skip arms are observable without a real child.
  */
-export async function reapOrphans(loc: ScopedLocations): Promise<void> {
+export async function reapOrphans(
+  loc: ScopedLocations,
+  probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
+): Promise<void> {
   const entries = await readPidTable(loc);
   for (const tableEntry of entries) {
-    if (!isPidAlive(tableEntry.pid)) {
+    if (!isPidAlive(tableEntry.pid, probes)) {
       continue;
     }
 
     if (process.platform === "linux") {
-      const marker = await readProcEnvironMarker(tableEntry.pid);
+      const marker = await readProcEnvironMarker(tableEntry.pid, probes);
       if (marker !== tableEntry.dispatchId) {
         hookDebugLog(
           `async-rewake: orphan ${tableEntry.pid} marker mismatch -- skipping ` +
@@ -560,7 +563,7 @@ export async function reapOrphans(loc: ScopedLocations): Promise<void> {
     }
 
     try {
-      orphanProbes.killProbe(tableEntry.pid, "SIGKILL");
+      probes.killProbe(tableEntry.pid, "SIGKILL");
     } catch (err) {
       hookDebugLog(`async-rewake: orphan ${tableEntry.pid} kill failed: ${errorMessage(err)}`);
     }
@@ -598,35 +601,9 @@ async function prepareAsyncEnv(
   loc: ScopedLocations,
   dispatchId: string,
 ): Promise<NodeJS.ProcessEnv> {
-  // CLAUDE_PLUGIN_ROOT mirrors dispatch-exec.ts::prepareEnv: source of truth
-  // is `RoutingEntry.resolvedSource` (hydrated from state.json's
-  // `resolvedSource` field). Async-rewake re-dispatches the same handler
-  // declaration, so the env contract must match.
-  const pluginRoot = entry.resolvedSource;
-
-  const pluginData = path.join(loc.dataRoot, entry.pluginId);
-  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_PROJECT_DIR: transCtx.cwd,
-    CLAUDE_PLUGIN_ROOT: pluginRoot,
-    CLAUDE_PLUGIN_DATA: pluginData,
-    [MARKER_ENV]: dispatchId,
-    // HENV-02: session env from the shared producer, identical to the sync
-    // dispatch-exec lane by construction (WR-01). Spread after the
-    // `...process.env` spread so the authoritative per-dispatch snapshot wins
-    // (D-91-02).
-    ...claudeSessionEnvFor(transCtx.sessionId),
-  };
-
-  if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
-    await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
-    env.CLAUDE_ENV_FILE = envFile;
-  }
-
-  return env;
+  // The MARKER_ENV stamp is the only per-lane addition: async-rewake tags the
+  // spawned child so a later reap can recognise its own dispatch.
+  return prepareHookEnv(entry, transCtx, loc, { [MARKER_ENV]: dispatchId });
 }
 
 /**
@@ -666,9 +643,9 @@ async function persistPidTableForLoc(loc: ScopedLocations): Promise<void> {
  * because the marker-check step downstream will refuse to SIGKILL a
  * stranger anyway -- the net effect is "alive but won't be touched".
  */
-function isPidAlive(pid: number): boolean {
+function isPidAlive(pid: number, probes: OrphanProbes = DEFAULT_ORPHAN_PROBES): boolean {
   try {
-    orphanProbes.killProbe(pid, 0);
+    probes.killProbe(pid, 0);
     return true;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -692,13 +669,16 @@ function isPidAlive(pid: number): boolean {
  * (defense against pid recycling -- the OS may reuse a numeric pid for
  * an unrelated process between the table write and the reap).
  */
-async function readProcEnvironMarker(pid: number): Promise<string | undefined> {
+async function readProcEnvironMarker(
+  pid: number,
+  probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
+): Promise<string | undefined> {
   if (process.platform !== "linux") {
     return undefined;
   }
 
   try {
-    const raw = await orphanProbes.environReader(pid);
+    const raw = await probes.environReader(pid);
     for (const pair of raw.split("\0")) {
       const eq = pair.indexOf("=");
       if (eq === -1) {

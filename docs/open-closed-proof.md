@@ -53,7 +53,7 @@ The catalog (`docs/output-catalog.md`) stays hand-authored: one central H2 secti
 
 **What LEFT** `notify.ts` this milestone:
 
-- the soft-dep marker injection concern -> `shared/concerns/soft-dep.ts` (`DEPENDENCIES`, the `Dependency` type, the marker constants, and the pure `softDepMarkers` helper); `composeReasons` stays central and delegates its soft-dep branch to it,
-- the hooks-summary concern -> `shared/concerns/hooks.ts` (`appendHooksBlock` plus the `ClaudeHookEvent` / `HookSummaryEntry` / `HookSummary` types); the info renderer calls into it.
+- the soft-dep marker injection concern -> `shared/concerns/soft-dep.ts` (the `Dependency` type, the marker constants, and the pure `softDepMarkers` helper); `composeReasons` stays central and delegates its soft-dep branch to it. The `DEPENDENCIES` runtime tuple that `Dependency` was originally derived from was deleted once the dead-code gate landed -- nothing consumed the array, so the type is now written as the literal union directly.
+- the hooks-summary concern -> `shared/concerns/hooks.ts` (`appendHooksBlock` plus the `ClaudeHookEvent` / `HookSummaryEntry` types); the info renderer calls into it. The `HookSummary` wrapper interface that moved with them was deleted once the dead-code gate landed -- no caller ever read it.
 
 **What STAYS central** in `notify.ts` (envelope + reducer spine + shared vocabulary): the `NotificationMessage` envelope and the `notify()` dispatcher; the reducer spine (severity max-reduce, OR-needsReload, tally, summary line); `isInfoKind`; the shared presentation vocabulary (`ICON_*`, `renderScopeBracket`, `renderVersion`, `composeVersionArrow`, the core `composeReasons`, `pluginRow`, `joinTokens`); `RELOAD_HINT_TRAILER`; and the `redactAbsolutePaths` path-redaction security primitive (NFR-9), which is deliberately NOT a concern to extract.

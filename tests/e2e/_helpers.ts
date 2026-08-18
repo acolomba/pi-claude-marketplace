@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -34,11 +34,11 @@ export interface E2EEnvironment {
   marketplaceAdded: boolean;
 }
 
-interface RegisteredCommand {
+export interface RegisteredCommand {
   readonly handler: (args: string, ctx: ExtensionContext) => Promise<void>;
 }
 
-interface ResourceDiscoverResult {
+export interface ResourceDiscoverResult {
   readonly skillPaths: readonly string[];
   readonly promptPaths: readonly string[];
 }
@@ -219,11 +219,4 @@ export async function runPiRuntimeSmoke(): Promise<{
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}
-
-export async function readPinnedMarketplaceSnapshot(): Promise<string> {
-  return readFile(
-    path.join(REPO_ROOT, "tests/e2e/_fixtures", PINNED_SHA, "marketplace.json"),
-    "utf8",
-  );
 }

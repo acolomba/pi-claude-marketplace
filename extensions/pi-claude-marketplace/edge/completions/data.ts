@@ -109,7 +109,7 @@ const FETCH_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "unavailable",
 ]);
 
-type PluginRefCompletionMode =
+export type PluginRefCompletionMode =
   "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
 // ---------------------------------------------------------------------------
@@ -237,20 +237,6 @@ export function extractScope(tokens: readonly string[]): Scope | undefined {
   return undefined;
 }
 
-/** Emits `--scope user` / `--scope project` suggestions. */
-export function getScopeCompletions(argumentTextPrefix: string): AutocompleteItem[] {
-  return [
-    {
-      ...buildItem(argumentTextPrefix, "--scope user", true),
-      description: "User scope (Pi agent dir; defaults to ~/.pi/agent)",
-    },
-    {
-      ...buildItem(argumentTextPrefix, "--scope project", true),
-      description: "Project scope (.pi/)",
-    },
-  ];
-}
-
 /** Filters names by `currentPrefix` and emits trailing-space terminals. */
 export function getMarketplaceCompletions(
   names: readonly string[],
@@ -312,7 +298,7 @@ export async function getMarketplaceNamesAcrossScopes(
   return Array.from(new Set(perScope.flat()));
 }
 
-interface PluginMapOptions {
+export interface PluginMapOptions {
   /** Install target scope, or explicit uninstall/update scope. */
   readonly targetScope?: Scope;
   /**

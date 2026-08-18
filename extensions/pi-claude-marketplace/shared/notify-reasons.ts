@@ -23,8 +23,10 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * length, so the two sentences above cannot drift from the tuple again without
  * a red test.
  *
- * Each group uses the `as const` tuple + `(typeof X)[number]` literal-union
- * idiom. Membership of every literal is checked at compile time against the
+ * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
+ * a runtime `Set` to test against; the unsupported and failure groups are
+ * declared straight as literal unions, since nothing ever iterated their
+ * tuples. Membership of every literal is checked at compile time against the
  * closed `Reason` set (each group's element type extends `Reason`), and the
  * `_ReasonsCoverageProof` at the bottom asserts the union of all groups + the
  * command-private reasons + the structural `"not added"` marker is EXACTLY the
@@ -38,7 +40,7 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * benign-skip reasons; the benign-skip SET itself is a later-phase concern --
  * only the reason literals are grouped here.)
  */
-export const IDEMPOTENT_REASONS = [
+const IDEMPOTENT_REASONS = [
   "up-to-date",
   "already installed",
   "already autoupdate",
@@ -46,7 +48,7 @@ export const IDEMPOTENT_REASONS = [
   "already enabled",
   "already disabled",
 ] as const;
-export type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
+type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
 
 const IDEMPOTENT_REASON_SET: ReadonlySet<Reason> = new Set(IDEMPOTENT_REASONS);
 
@@ -92,59 +94,55 @@ export function companionSeverity(
  * named explicitly (hooks / LSP / companion-extension soft deps / unsupported
  * source / no-longer-installable).
  */
-export const UNSUPPORTED_REASONS = [
-  "unsupported hooks",
-  "lsp",
-  "requires pi-subagents",
-  "requires pi-mcp",
-  "unsupported source",
+type UnsupportedReason =
+  | "unsupported hooks"
+  | "lsp"
+  | "requires pi-subagents"
+  | "requires pi-mcp"
+  | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
-  "unsupported component",
-  "no longer installable",
-] as const;
-export type UnsupportedReason = (typeof UNSUPPORTED_REASONS)[number];
+  | "unsupported component"
+  | "no longer installable";
 
 /**
  * D-09: failure-class reasons -- an operation could not complete (permission /
  * source / network / manifest / lock / concurrency / rollback failures).
  */
-export const FAILURE_REASONS = [
-  "permission denied",
-  "source missing",
-  "network unreachable",
+export type FailureReason =
+  | "permission denied"
+  | "source missing"
+  | "network unreachable"
   // D-76-08: HTTP auth challenge (401/403) on a marketplace clone. A distinct
   // failure-class member -- truthful attribution keeps it out of `network
   // unreachable`.
-  "authentication required",
-  "unreadable",
-  "unparseable",
-  "unreadable manifest",
-  "invalid manifest",
+  | "authentication required"
+  | "unreadable"
+  | "unparseable"
+  | "unreadable manifest"
+  | "invalid manifest"
   // MCPR-03 / D-02: a broken `mcpServers` STRING reference (missing file /
   // malformed JSON / wrapper-less / out-of-root). Failure-class, NOT
   // unsupported -- it is a malformation of a SUPPORTED feature the resolver
-  // parses, so it lives here and NOT in UNSUPPORTED_REASONS.
-  "malformed mcp",
+  // parses, so it lives here and NOT in `UnsupportedReason`.
+  | "malformed mcp"
   // CLASS-01 / D-86-01: a skill / command whose source frontmatter could not be
   // parsed by Pi's own `parseFrontmatter`. Failure-class (a malformation of a
   // SUPPORTED component the skills/commands bridges stage), NOT unsupported --
   // the exact `malformed mcp` classification precedent, split per-kind for
   // truthful attribution.
-  "malformed skill",
-  "malformed command",
-  "not in manifest",
-  "rollback partial",
-  "lock held",
-  "source mismatch",
+  | "malformed skill"
+  | "malformed command"
+  | "not in manifest"
+  | "rollback partial"
+  | "lock held"
+  | "source mismatch"
   // PURL-06: an orphaned plugin declaration whose `@<marketplace>` is not
   // declared in the merged config. A distinct failure-class member so the
   // reconcile dangling-reference diagnostic names the real problem instead of
   // reusing `source mismatch`.
-  "dangling reference",
-  "concurrently uninstalled",
-  "concurrently updated",
-] as const;
-export type FailureReason = (typeof FAILURE_REASONS)[number];
+  | "dangling reference"
+  | "concurrently uninstalled"
+  | "concurrently updated";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN
@@ -167,7 +165,7 @@ export type FailureReason = (typeof FAILURE_REASONS)[number];
  * unreferenced runtime value. Add a member by extending the union; convert back
  * to a tuple if and when a runtime consumer appears.
  */
-export type DeclaredStateReason =
+type DeclaredStateReason =
   // OUT-01 / DFEN-04: the install completed and left the plugin inert because
   // the plugin declared `defaultEnabled` false.
   "installs disabled";
@@ -225,7 +223,7 @@ export function malformedReasonsForKinds(
  * structural `"not added"` marketplace-absent marker is likewise not a shared
  * topic reason (it is excluded from `ContentReason` in `notify.ts`).
  */
-export type SharedTopicReason =
+type SharedTopicReason =
   IdempotentReason | UnsupportedReason | FailureReason | DeclaredStateReason;
 
 /**
@@ -256,4 +254,5 @@ type CommandPrivateReason =
 type _AssertNever<T extends never> = T;
 type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
 type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
+// fallow-ignore-next-line unused-type, private-type-leak -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredReason` / `_ExtraReason` are the proof's own internals, meaningless to a caller.
 export type _ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];

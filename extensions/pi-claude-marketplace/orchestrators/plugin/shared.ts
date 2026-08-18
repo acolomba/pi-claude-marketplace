@@ -24,7 +24,12 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
-import { CrossPluginConflictError } from "../../shared/errors.ts";
+import {
+  CrossPluginConflictError,
+  errorMessage,
+  MarketplaceNotFoundError,
+} from "../../shared/errors.ts";
+import { notify } from "../../shared/notify.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
@@ -35,6 +40,7 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -77,7 +83,7 @@ export interface LedgerDegradationSignals {
    * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
    * be parsed and installed in degraded form. Each kind contributes one
    * `{malformed skill}` / `{malformed command}` token AND raises the row from
-   * `info` to `warning` -- the same raise `install.ts::successSeverity`
+   * `info` to `warning` -- the same raise `install.ts::composeInstalledRow`
    * applies, because a degraded component is carried out but short of ideal
    * whichever verb materialized it.
    */
@@ -385,7 +391,7 @@ export function cloneMarketplaceRecordForTargetScope(
  * widen the return to a discriminated result so callers can route the
  * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
  */
-export function synthesizeUndeclaredMarketplaceSource(
+function synthesizeUndeclaredMarketplaceSource(
   scopeConfigs: readonly ScopeConfig[],
   state: ExtensionState,
   marketplace: string,
@@ -1116,4 +1122,49 @@ export function applyPartialCascadeFold(
   // must subtract them so a disable / uninstall partial-cascade failure
   // does not leave a stale hooks entry in the in-memory record.
   installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
+}
+
+/**
+ * The marketplace is not added in the target scope -- either absent entirely,
+ * or recorded only in the sibling scope.
+ *
+ * RECON-03 / D-47-A: orchestrated callers get the typed failure carrying the
+ * structural `not added` sentinel; standalone callers get the canonical
+ * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
+ * outcome on that path.
+ *
+ * `uninstall.ts` and `enable-disable.ts` both reach this state and previously
+ * carried byte-identical copies of it under two different names. The routing
+ * policy is one decision, so it lives here once; the return shape is the
+ * `failed` arm both `UninstallPluginOutcome` and `EnableDisablePluginOutcome`
+ * already declare, so neither union is widened by sharing it.
+ */
+export function emitMarketplaceNotAdded(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly requestedScope: Scope | undefined;
+  readonly orchestrated: boolean;
+}):
+  | {
+      readonly status: "failed";
+      readonly reason: "not added";
+      readonly error: Error;
+      readonly cause: string;
+    }
+  | undefined {
+  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  if (orchestrated) {
+    const scopeList: readonly Scope[] =
+      requestedScope === undefined ? ["project", "user"] : [requestedScope];
+    const err = new MarketplaceNotFoundError(marketplace, scopeList);
+    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
+  }
+
+  notify(ctx, pi, {
+    kind: "marketplace-not-added",
+    name: marketplace,
+    ...(requestedScope !== undefined && { scope: requestedScope }),
+  });
+  return undefined;
 }

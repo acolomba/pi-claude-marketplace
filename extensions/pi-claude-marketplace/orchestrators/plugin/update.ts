@@ -250,50 +250,17 @@ export interface UpdatePluginsOptions {
   /** D-79-02 once-per-host memo shared across a bulk update. */
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
-
 /**
- * PUP-1..9 direct entrypoint. Enumerates targets per PUP-1 three forms,
- * runs PUP-2 syncCloneOnce per (scope, marketplace) pair, then drives each
- * plugin through the shared 3-phase swap. Partitions outcomes and renders
- * a single cascade notification per orchestration arm.
- *
- * PUP-9 direct routing: phase-2-or-earlier throws from `runThreePhaseUpdate`
- * surface via a synthetic `PluginFailedMessage` carrying the typed `cause`
- * (Option B); the renderer composes the 4-space cause-chain
- * trailer. Phase-3a aggregate failures land in
- * `partition='failed'` outcomes and also fire a direct-path notification
- * BEFORE the cascade is built (the cascade body still names them via the
- * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
+ * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
+ * pair. Path-source marketplaces are noops (NFR-5: no network for path
+ * sources); GitHub-source marketplaces refresh via gitOps.fetch +
+ * forceUpdateRef + checkout (the D-14 sequence). Throws on git-side failures.
  */
-export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
-  const { ctx, pi, cwd } = opts;
-  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-
-  let targets: readonly ResolvedTarget[];
-  try {
-    targets = await enumerateTargets(opts);
-  } catch (err) {
-    handleEnumerateFailure(opts, err);
-    return;
-  }
-
-  if (targets.length === 0) {
-    // empty-targets success: `marketplaces: []` round-trips through notify
-    // to the (no marketplaces) sentinel. Severity: undefined. No reload-hint.
-    notify(ctx, pi, { marketplaces: [] });
-    return;
-  }
-
-  // PUP-2 syncCloneOnce memoization -- per (scope, marketplace) pair.
-  // Path-source marketplaces are noops (NFR-5: no network for path sources).
-  // GitHub-source marketplaces refresh via gitOps.fetch + forceUpdateRef + checkout
-  // (D-14 sequence). syncCloneOnce throws on git-side failures.
+function makeSyncCloneOnce(
+  gitOps: GitOps,
+): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const synced = new Set<string>();
-  const syncCloneOnce = async (
-    scope: Scope,
-    mpName: string,
-    locations: ScopedLocations,
-  ): Promise<void> => {
+  return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
     if (synced.has(key)) {
       return;
@@ -312,8 +279,85 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       const cloneDir = await locations.sourceCloneDir(mpName);
       await refreshGitHubClone(cloneDir, source.ref, gitOps);
     }
-    // path-source: NFR-5 noop. The manifest is re-read per-plugin below.
+    // path-source: NFR-5 noop. The manifest is re-read per-plugin.
   };
+}
+
+/**
+ * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
+ * update path. Every optional seam is spread only when set, so the cascade
+ * entrypoint (`updateSinglePlugin`) and the direct path stay distinguishable
+ * by argument shape rather than by a flag.
+ */
+function buildDirectThreePhaseArgs(
+  opts: UpdatePluginsOptions,
+  target: ResolvedTarget,
+): ThreePhaseArgs {
+  return {
+    plugin: target.plugin,
+    marketplace: target.marketplace,
+    scope: target.scope,
+    cwd: opts.cwd,
+    locations: target.locations,
+    cascade: false,
+    ctx: opts.ctx,
+    // `pi` threads the phase-3a aggregate direct-path notify inside
+    // runThreePhaseUpdate. Cascade mode leaves it undefined -- the cascade
+    // orchestrator owns its own notify call.
+    pi: opts.pi,
+    // AG-7 opt-in: `--map-model`. The cascade entrypoint never sets it, so
+    // cascade re-installs always omit `model:`.
+    mapModel: opts.mapModel ?? false,
+    // FORCE-02: `--partial` feeds the per-plugin candidate gate (D-65-04).
+    // The cascade entrypoint never sets it, so cascade re-installs keep the
+    // `requireInstallable` block.
+    partial: opts.partial ?? false,
+    // WB-01: `--local` selects the direct-path write-back target.
+    ...(opts.local === true && { local: true }),
+    // PURL-06: the test-only clone-cache seam for the git-source candidate
+    // probe. Undefined in production, which selects the real imports.
+    ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
+    // PROV-03 / D-79-02: auth seams so a git-source update on a provider host
+    // authenticates host-keyed at pin-resolution and re-clone.
+    ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  };
+}
+
+/**
+ * PUP-1..9 direct entrypoint. Enumerates targets per PUP-1 three forms,
+ * runs PUP-2 syncCloneOnce per (scope, marketplace) pair, then drives each
+ * plugin through the shared 3-phase swap. Partitions outcomes and renders
+ * a single cascade notification per orchestration arm.
+ *
+ * PUP-9 direct routing: phase-2-or-earlier throws from `runThreePhaseUpdate`
+ * surface via a synthetic `PluginFailedMessage` carrying the typed `cause`
+ * (Option B); the renderer composes the 4-space cause-chain
+ * trailer. Phase-3a aggregate failures land in
+ * `partition='failed'` outcomes and also fire a direct-path notification
+ * BEFORE the cascade is built (the cascade body still names them via the
+ * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
+ */
+export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
+  const { ctx, pi } = opts;
+
+  let targets: readonly ResolvedTarget[];
+  try {
+    targets = await enumerateTargets(opts);
+  } catch (err) {
+    handleEnumerateFailure(opts, err);
+    return;
+  }
+
+  if (targets.length === 0) {
+    // empty-targets success: `marketplaces: []` round-trips through notify
+    // to the (no marketplaces) sentinel. Severity: undefined. No reload-hint.
+    notify(ctx, pi, { marketplaces: [] });
+    return;
+  }
+
+  const syncCloneOnce = makeSyncCloneOnce(opts.gitOps ?? DEFAULT_GIT_OPS);
 
   // Pair each outcome with its target so the cascade renderer can group
   // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
@@ -351,42 +395,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
 
     let outcome: PluginUpdateOutcome;
     try {
-      outcome = await runThreePhaseUpdate({
-        plugin: t.plugin,
-        marketplace: t.marketplace,
-        scope: t.scope,
-        cwd,
-        locations: t.locations,
-        cascade: false,
-        ctx,
-        // thread `pi` for the phase-3a aggregate
-        // direct-path notify invocation inside runThreePhaseUpdate.
-        // Cascade mode leaves `pi` undefined (the cascade orchestrator
-        // owns its own notify call).
-        pi,
-        // AG-7 opt-in: thread `--map-model` from the user-facing options
-        // bag into the per-plugin 3-phase swap. The cascade entrypoint
-        // (`updateSinglePlugin`) intentionally never sets this -- it
-        // resolves to false at the bridge call site so cascade re-installs
-        // always omit `model:`.
-        mapModel: opts.mapModel ?? false,
-        // FORCE-02: thread `--partial` from the user-facing options bag into
-        // the per-plugin candidate gate (D-65-04). The cascade entrypoint
-        // (`updateSinglePlugin`) never sets this, so cascade re-installs
-        // resolve to false and keep the `requireInstallable` block.
-        partial: opts.partial ?? false,
-        // WB-01: thread `--local` for the direct-path
-        // write-back target selection.
-        ...(opts.local === true && { local: true }),
-        // PURL-06: thread the test-only clone-cache seam into the git-source
-        // candidate probe. Undefined in production -> the real imports.
-        ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
-        // PROV-03 / D-79-02: thread the auth seams so a git-source update on a
-        // provider host authenticates host-keyed at pin-resolution + re-clone.
-        ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-      });
+      outcome = await runThreePhaseUpdate(buildDirectThreePhaseArgs(opts, t));
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
@@ -996,6 +1005,93 @@ function widensPartialGate(
   return isRecordedButDisabled(record) && !record.compatibility.installable;
 }
 
+/**
+ * A static preflight verdict -- one the update reaches without resolving a
+ * candidate. Reasons are pre-narrowed to the closed set so the cascade
+ * consumer reads `reasons[0]` directly instead of regex-parsing `notes`.
+ *
+ * declaresAgents / declaresMcp are required `boolean` predicates, and neither
+ * a skipped nor a failed row renders the soft-dep marker (MSG-SD-3), so both
+ * are always false here.
+ */
+function staticPreflightRow(args: {
+  readonly partition: "skipped" | "failed";
+  readonly plugin: string;
+  readonly notes: readonly string[];
+  readonly reason: ContentReason;
+  readonly fromVersion?: string;
+}): PluginUpdateOutcome {
+  return {
+    partition: args.partition,
+    name: args.plugin,
+    ...(args.fromVersion !== undefined && { fromVersion: args.fromVersion }),
+    notes: [...args.notes],
+    reasons: [args.reason],
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+}
+
+/**
+ * UXG-08 / D-29-08/09 membership triage, asked of BOTH the install record and
+ * the refreshed manifest before any candidate resolution.
+ *
+ * Manifest membership is consulted BEFORE concluding "not installed": a
+ * plugin absent from both state and manifest is a typo or a nonexistent name,
+ * so it classifies as `(failed) {not in manifest}` like `install` rather than
+ * the misleading `(skipped) {not installed}` the installed-state-first
+ * ordering produced.
+ */
+function triageUpdateMembership(
+  plugin: string,
+  record: PluginStateRecord | undefined,
+  lookup: ReturnType<typeof lookupDeclaredPlugin>,
+): PluginUpdateOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+  if (record === undefined) {
+    return lookup.kind === "absent"
+      ? // Not installed AND absent from the manifest. No `fromVersion` --
+        // there is no install record to read a version from.
+        staticPreflightRow({
+          partition: "failed",
+          plugin,
+          notes: ["not in manifest"],
+          reason: "not in manifest",
+        })
+      : // Declared but not installed. No manifest-entry validation is needed
+        // because this returns before the entry is resolved.
+        staticPreflightRow({
+          partition: "skipped",
+          plugin,
+          notes: ["not installed"],
+          reason: "not installed",
+        });
+  }
+
+  if (lookup.kind === "absent") {
+    // Installed but no longer listed in the refreshed manifest.
+    return staticPreflightRow({
+      partition: "skipped",
+      plugin,
+      notes: ["not in manifest"],
+      reason: "not in manifest",
+      fromVersion: record.version,
+    });
+  }
+
+  const entryRaw = lookup.entry;
+  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
+    return staticPreflightRow({
+      partition: "skipped",
+      plugin,
+      notes: ["entry failed schema validation"],
+      reason: "invalid manifest",
+      fromVersion: record.version,
+    });
+  }
+
+  return { record, entry: entryRaw };
+}
+
 async function preflightUpdate(
   args: ThreePhaseArgs,
 ): Promise<PluginPreflight | PluginUpdateOutcome> {
@@ -1003,94 +1099,29 @@ async function preflightUpdate(
   const state = await loadState(locations.extensionRoot);
   const mp = state.marketplaces[marketplace];
   if (mp === undefined) {
-    // Pre-narrow to a closed-set Reason so the cascade consumer reads it
-    // directly instead of regex-parsing `notes`.
-    //
-    // declaresAgents / declaresMcp are required `boolean` predicates --
-    // skipped outcomes do NOT render the soft-dep marker (MSG-SD-3), so the
-    // value is `false`. Repeated on every static-skipped return below.
-    return {
+    return staticPreflightRow({
       partition: "skipped",
-      name: plugin,
+      plugin,
       notes: [`marketplace "${marketplace}" not found in ${scope} scope`],
-      reasons: ["not in manifest"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
+      reason: "not in manifest",
+    });
   }
 
-  // UXG-08 / D-29-08/09: consult the marketplace manifest BEFORE concluding
-  // "not installed". `loadCachedMarketplaceManifest` is the cached path (also
-  // used below for the installed-but-absent case), so moving the load up adds
-  // no net I/O. A plugin absent from BOTH state and manifest is a typo /
-  // nonexistent name -- it must classify as `(failed) {not in manifest}` like
-  // `install`, not the misleading `(skipped) {not installed}` that the
-  // installed-state-first ordering produced.
-  //
-  // The read is unguarded on purpose: a manifest this verb cannot read is a
-  // throw, not a row, so the membership question is asked only of a manifest
-  // that was actually parsed. `lookupDeclaredPlugin` (D-99-02a) is the one
-  // writing of that question, shared with `list` and `info`.
+  // The manifest read is unguarded on purpose: a manifest this verb cannot
+  // read is a throw, not a row, so the membership question is asked only of a
+  // manifest that was actually parsed. `lookupDeclaredPlugin` (D-99-02a) is
+  // the one writing of that question, shared with `list` and `info`.
   const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
-  const lookup = lookupDeclaredPlugin(manifest, plugin);
-
-  const record = mp.plugins[plugin];
-  if (record === undefined) {
-    if (lookup.kind === "absent") {
-      // Not installed AND absent from the manifest -> failed {not in manifest}
-      // (matches install.ts's `not-in-manifest` arm). No `fromVersion` since
-      // there is no install record to read a version from.
-      return {
-        partition: "failed",
-        name: plugin,
-        notes: ["not in manifest"],
-        reasons: ["not in manifest"] as const,
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-    }
-
-    // In the manifest but not installed -> skipped {not installed}
-    // (preserved behavior). No manifest-entry validation is needed here
-    // because we return early without resolving the entry.
-    return {
-      partition: "skipped",
-      name: plugin,
-      notes: ["not installed"],
-      reasons: ["not installed"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
+  const triaged = triageUpdateMembership(
+    plugin,
+    mp.plugins[plugin],
+    lookupDeclaredPlugin(manifest, plugin),
+  );
+  if ("partition" in triaged) {
+    return triaged;
   }
 
-  if (lookup.kind === "absent") {
-    // Installed but no longer listed in the refreshed manifest -> skipped
-    // {not in manifest} with the recorded `fromVersion` (preserved behavior).
-    return {
-      partition: "skipped",
-      name: plugin,
-      fromVersion: record.version,
-      notes: ["not in manifest"],
-      reasons: ["not in manifest"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-
-  const entryRaw = lookup.entry;
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    return {
-      partition: "skipped",
-      name: plugin,
-      fromVersion: record.version,
-      notes: ["entry failed schema validation"],
-      reasons: ["invalid manifest"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-
-  const entry: PluginEntry = entryRaw;
+  const { record, entry } = triaged;
 
   // PURL-06 / D-78-05: a git source (url / git-subdir / github) resolves its
   // pluginRoot through the clone-materializing probe -- pinned entries pin
@@ -1365,35 +1396,6 @@ async function markUpdateInProgress(
   });
 }
 
-/**
- * TR-04: post-commit finalize.
- *
- * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
- * has TWO distinct failure semantics:
- *
- * 1. PER-BRIDGE (independent across bridges): for each of skills /
- *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
- *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. SC#2: do NOT
- *    gate per-bridge writes on `phase3aFailures.length === 0`; the
- *    independent per-bridge gate is the load-bearing structural contract.
- *
- *    Bridge -> schema-field mapping (locked, per TR-03):
- *      skills    -> resources.skills
- *      commands  -> resources.prompts   (asymmetric, schema-locked)
- *      agents    -> resources.agents
- *      mcp       -> resources.mcpServers
- *
- * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
- *    only when `phase3aFailures.length === 0`. On any failure the
- *    `compatibility` block stays at the intent-mark values
- *    (`installable: false`, `notes: [UPDATE_IN_PROGRESS_NOTE]`),
- *    `version` stays at `fromVersion`, and `resolvedSource` stays at
- *    the pre-update install path.
- *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
- */
 /**
  * D-99-05a: the slice of a disabled record that {@link refreshDisabledRecord}
  * owns, normalized to one string so two snapshots compare with `===` rather
@@ -1681,6 +1683,149 @@ async function runDisabledRecordRefresh(
   };
 }
 
+/** The persisted per-plugin install record the finalize window mutates. */
+type PluginStateRecord = PluginPreflight["record"];
+
+/**
+ * SC#2 per-bridge orthogonality: each successful bridge writes its new
+ * generated names INDEPENDENTLY of every other bridge's outcome, so one
+ * failed slot never rolls back a sibling's inventory. The commands ->
+ * prompts asymmetry is per TR-03.
+ *
+ * LIFE-01 / WR-03: the hooks slug is gated the same way. On hooks success
+ * the slug follows version B's declaration (present when
+ * `hooksConfigPath !== undefined`, empty when version B dropped hooks); on
+ * hooks failure neither the slug nor the description moves, because the
+ * truthful view is "we did not complete the swap".
+ *
+ * D-100-01 / ENBL-10: the record's hook description moves with the slug,
+ * under the same guard and in the same direction, so the record never names
+ * hooks the current version no longer declares.
+ */
+function applyPerBridgeResources(
+  sRecord: PluginStateRecord,
+  args: {
+    readonly plugin: string;
+    readonly handles: PrepHandles;
+    readonly failedPhases: ReadonlySet<Phase3Phase>;
+    readonly installable: MaterializablePlugin;
+    readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+  },
+): void {
+  const { plugin, handles, failedPhases, installable, hookEntries } = args;
+
+  if (!failedPhases.has("skills")) {
+    sRecord.resources.skills = handles.skills.result.recorded.map((r) => r.generatedName);
+  }
+
+  if (!failedPhases.has("commands")) {
+    sRecord.resources.prompts = handles.commands.result.recorded.map((r) => r.generatedName);
+  }
+
+  if (!failedPhases.has("agents")) {
+    sRecord.resources.agents = handles.agents.result.recorded.map((r) => r.generatedName);
+  }
+
+  if (!failedPhases.has("mcp")) {
+    sRecord.resources.mcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
+  }
+
+  if (!failedPhases.has("hooks")) {
+    sRecord.resources.hooks = installable.hooksConfigPath === undefined ? [] : [plugin];
+    if (hookEntries === undefined) {
+      delete sRecord.hookEntries;
+    } else {
+      sRecord.hookEntries = [...hookEntries];
+    }
+  }
+}
+
+/**
+ * SC#2 all-or-nothing: the version bump, `installable: true` and
+ * `resolvedSource` happen ONLY when every bridge succeeded. On failure the
+ * intent-mark `compatibility` set by `markUpdateInProgress` carries forward,
+ * which is the truthful "we did not complete the swap" view.
+ */
+function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
+  const { installable, toVersion, resolvedSha } = preflight;
+  sRecord.version = toVersion;
+  sRecord.compatibility = {
+    installable: true,
+    notes: [...installable.notes],
+    supported: [...installable.supported],
+    unsupported: [...installable.unsupported],
+  };
+  sRecord.resolvedSource = installable.pluginRoot;
+  // PURL-06 / D-78-01: write the git-source commit identity so the
+  // post-commit GC and the next update read the swapped sha. Undefined for
+  // path / github-name sources (they have no clone and protect none).
+  if (resolvedSha !== undefined) {
+    sRecord.resolvedSha = resolvedSha;
+  }
+}
+
+/**
+ * WR-06 + WR-03 + D-60-05: update does NOT delegate to install/uninstall, so
+ * without an explicit cache+rebuild step the parsed-config cache would still
+ * hold the PRE-update hooks config and dispatch would fire the old command
+ * paths until `/reload`. Mirrors the install / uninstall pattern inside the
+ * existing per-plugin lock: drop the old cache entry, repopulate from the
+ * just-staged `hooks.json` when present, then rebuild the routing table once.
+ *
+ * Runs on the all-success arm only; an aggregated phase-3 failure leaves the
+ * OLD config in place, mirroring the SC#2 compatibility/resolvedSource
+ * decision.
+ */
+async function refreshHooksCacheAfterUpdate(
+  args: ThreePhaseArgs,
+  installable: MaterializablePlugin,
+): Promise<void> {
+  const { plugin, marketplace } = args;
+  removePluginConfigFromCache(args.scope, marketplace, plugin);
+  if (installable.hooksConfigPath !== undefined) {
+    await readAndCachePluginHooks({
+      scope: args.scope,
+      marketplace,
+      plugin,
+      resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+      hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+      cwd: args.cwd,
+      logPrefix: "update",
+    });
+  }
+
+  rebuildRoutingTables();
+}
+
+/**
+ * TR-04: post-commit finalize.
+ *
+ * Runs INSIDE a SECOND `withStateGuard` AFTER phase-3a. Mutation policy
+ * has TWO distinct failure semantics:
+ *
+ * 1. PER-BRIDGE (independent across bridges): for each of skills /
+ *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
+ *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
+ *    .map(r => r.generatedName)`. SC#2: do NOT
+ *    gate per-bridge writes on `phase3aFailures.length === 0`; the
+ *    independent per-bridge gate is the load-bearing structural contract.
+ *
+ *    Bridge -> schema-field mapping (locked, per TR-03):
+ *      skills    -> resources.skills
+ *      commands  -> resources.prompts   (asymmetric, schema-locked)
+ *      agents    -> resources.agents
+ *      mcp       -> resources.mcpServers
+ *
+ * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
+ *    only when `phase3aFailures.length === 0`. On any failure the
+ *    `compatibility` block stays at the intent-mark values
+ *    (`installable: false`, `notes: [UPDATE_IN_PROGRESS_NOTE]`),
+ *    `version` stays at `fromVersion`, and `resolvedSource` stays at
+ *    the pre-update install path.
+ *
+ * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
+ * is a truthful "we touched this record" stamp.
+ */
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
@@ -1689,14 +1834,10 @@ async function finalizeUpdateRecord(
   hookEntries: readonly HookSummaryEntry[] | undefined,
 ): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
-  const { installable, toVersion, resolvedSha } = preflight;
+  const { installable } = preflight;
+  const allSucceeded = phase3aFailures.length === 0;
   let invalidConfigWriteBack = false;
-  // Per-bridge finalize is a sequence of independent `failedPhases.has(...)`
-  // guards (one per cascade slot); the cognitive-complexity counter sums
-  // each guard arm but the body is intentionally flat -- a helper extraction
-  // would obscure the per-bridge orthogonality the SC#2 contract requires.
-  // Mirrors the install.ts cognitive-complexity disable on installPlugin.
-  // eslint-disable-next-line sonarjs/cognitive-complexity
+
   await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
@@ -1711,87 +1852,35 @@ async function finalizeUpdateRecord(
     }
 
     // Anchor the per-bridge gating against the runtime tuple of known
-    // phases. The Set is initialized from PHASE3_FAILURE_PHASES so a
-    // future fifth bridge would force an explicit tuple update before
-    // landing here.
+    // phases, so a future fifth bridge forces an explicit tuple update
+    // before landing here.
     const failedPhases = new Set<Phase3Phase>(
       phase3aFailures.map((f) => f.phase).filter((p) => PHASE3_FAILURE_PHASES.includes(p)),
     );
 
-    // SC#2 per-bridge orthogonality: each successful bridge writes its
-    // new generated names INDEPENDENTLY of other bridges' outcomes.
-    // The commands -> prompts asymmetry is per TR-03.
-    if (!failedPhases.has("skills")) {
-      sRecord.resources.skills = handles.skills.result.recorded.map((r) => r.generatedName);
-    }
+    applyPerBridgeResources(sRecord, {
+      plugin,
+      handles,
+      failedPhases,
+      installable,
+      hookEntries,
+    });
 
-    if (!failedPhases.has("commands")) {
-      sRecord.resources.prompts = handles.commands.result.recorded.map((r) => r.generatedName);
-    }
-
-    if (!failedPhases.has("agents")) {
-      sRecord.resources.agents = handles.agents.result.recorded.map((r) => r.generatedName);
-    }
-
-    if (!failedPhases.has("mcp")) {
-      sRecord.resources.mcpServers = handles.mcp.result.recorded.map((r) => r.generatedName);
-    }
-
-    // LIFE-01 / WR-03: hooks-inventory toggle mirrors install.ts /
-    // reinstall.ts but is now gated on hooks-phase success (per-bridge
-    // orthogonality, matching the skills / commands / agents / mcp slots
-    // above). When the hooks commit slot succeeded, write the slug based on
-    // version B's hooks declaration (slug appears when installable.hooksConfigPath
-    // !== undefined, empty when version B dropped hooks). When the hooks
-    // commit failed (entry in phase3aFailures for "hooks"), do NOT update
-    // the inventory -- the failed-state truthful view is "we did not complete
-    // the swap" and the existing slug stays.
-    if (!failedPhases.has("hooks")) {
-      sRecord.resources.hooks = installable.hooksConfigPath === undefined ? [] : [plugin];
-      // D-100-01 / ENBL-10: the record's hook description moves with the
-      // inventory slug, under the same guard and in the same direction. When
-      // version B declares no hooks the description is dropped, so the record
-      // never names hooks the current version no longer declares; when the
-      // hooks commit failed neither fact moves and both keep version A's value.
-      if (hookEntries === undefined) {
-        delete sRecord.hookEntries;
-      } else {
-        sRecord.hookEntries = [...hookEntries];
-      }
-    }
-
-    // SC#2 all-or-nothing: version bump + installable=true + resolvedSource
-    // happen ONLY on the all-success path. On failure the intent-mark
-    // `compatibility` set by `markUpdateInProgress` carries forward
-    // (the truthful "we did not complete the swap" view).
-    if (phase3aFailures.length === 0) {
-      sRecord.version = toVersion;
-      sRecord.compatibility = {
-        installable: true,
-        notes: [...installable.notes],
-        supported: [...installable.supported],
-        unsupported: [...installable.unsupported],
-      };
-      sRecord.resolvedSource = installable.pluginRoot;
-      // PURL-06 / D-78-01: write the git-source commit identity so the
-      // post-commit GC and the next update read the swapped sha. Undefined for
-      // path / github-name sources (they have no clone and protect none).
-      if (resolvedSha !== undefined) {
-        sRecord.resolvedSha = resolvedSha;
-      }
+    if (allSucceeded) {
+      applyAllSuccessRecordFields(sRecord, preflight);
     }
 
     sRecord.updatedAt = new Date().toISOString();
 
-    // WB-01 / A7: deep-equal short-circuited config write-back
-    // on the all-success arm. SKIPPED in cascade mode (the marketplace
-    // autoupdate cascade owns its own writes; mirrors WR-09 orchestrated-
-    // mode semantics). The deep-equal gate compares the prospective
+    // WB-01 / A7: deep-equal short-circuited config write-back on the
+    // all-success arm. SKIPPED in cascade mode (the marketplace autoupdate
+    // cascade owns its own writes; mirrors WR-09 orchestrated-mode
+    // semantics). The deep-equal gate compares the prospective
     // `{...existing, ...patch}` shape against the existing entry; the
-    // current plugin entry shape carries no version field, so the patch
-    // is `{}` and a CHANGED update with a byte-stable existing entry
-    // produces a no-op (preserving RECON-05 mtime stability).
-    if (!args.cascade && phase3aFailures.length === 0) {
+    // current plugin entry shape carries no version field, so the patch is
+    // `{}` and a CHANGED update with a byte-stable existing entry produces a
+    // no-op, preserving RECON-05 mtime stability.
+    if (!args.cascade && allSucceeded) {
       const writeResult = await maybeWritePluginConfigBack({
         locations,
         marketplace,
@@ -1803,50 +1892,239 @@ async function finalizeUpdateRecord(
       }
     }
 
-    // WR-06 + WR-03 + D-60-05: update does NOT delegate to install/
-    // uninstall, so without an explicit cache+rebuild step the parsed-
-    // config cache would still hold the PRE-update hooks config and
-    // dispatch would fire the old command paths until `/reload`. Mirror
-    // the install / uninstall pattern explicitly inside the existing
-    // per-plugin lock: drop the old cache entry, repopulate from the
-    // just-staged `hooks.json` (when present), then rebuild the routing
-    // table once. The cache step ONLY runs on the all-success arm; an
-    // aggregated phase-3 failure leaves the OLD config in place
-    // (truthful "we did not complete the swap" view that mirrors the
-    // SC#2 compatibility/resolvedSource decision above).
-    //
-    // Moved AFTER `maybeWritePluginConfigBack` so a write-back throw
-    // aborts BEFORE the cache mutates -- tightens the WR-06 strand
-    // window to just the `withStateGuard` auto-save tail.  A full close
-    // would require exposing `tx.save()` from `withStateGuard` (a
-    // larger refactor); a future phase can complete the restructure if
-    // tx.save throws become observable in practice.
-    if (phase3aFailures.length === 0) {
-      removePluginConfigFromCache(args.scope, marketplace, plugin);
-      if (installable.hooksConfigPath !== undefined) {
-        await readAndCachePluginHooks({
-          scope: args.scope,
-          marketplace,
-          plugin,
-          resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
-          hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
-          cwd: args.cwd,
-          logPrefix: "update",
-        });
-      }
-
-      rebuildRoutingTables();
+    // Ordered AFTER `maybeWritePluginConfigBack` so a write-back throw
+    // aborts BEFORE the cache mutates, tightening the WR-06 strand window to
+    // just the `withStateGuard` auto-save tail. A full close would require
+    // exposing `tx.save()` from `withStateGuard`.
+    if (allSucceeded) {
+      await refreshHooksCacheAfterUpdate(args, installable);
     }
   });
   return { invalidConfigWriteBack };
 }
 
+/**
+ * LIFE-01 / D-63-01 hooks slot of phase 3a. The hooks bridge has NO staging
+ * dir (D-63-02) so the prepare/commit split does not apply --
+ * `writeHookConfig` IS the atomic write.
+ *
+ * WR-01: `removeHookConfig()` (version B drops hooks) is non-atomic --
+ * `rm({recursive, force})` can throw partway and leave the hooks subtree
+ * partially deleted. The `failedPhases.has("hooks")` guard at finalize
+ * preserves the OLD `resources.hooks` inventory in state.json, keeping the
+ * truthful "swap incomplete" view. The /reload routing table points at the
+ * partially-deleted file until the user runs reinstall
+ * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint). Same recovery contract as
+ * `reinstall.ts::commitHooks` (WR-05).
+ *
+ * Returns the supported hook entries version B materialized (D-100-01 /
+ * ENBL-10), or undefined when version B declares no hooks -- which is the
+ * signal to clear the record's description.
+ */
+async function commitUpdateHooks(
+  args: ThreePhaseArgs,
+  installable: PluginPreflight["installable"],
+): Promise<readonly HookSummaryEntry[] | undefined> {
+  if (installable.hooksConfigPath === undefined) {
+    // Version B has no hooks: remove any stale file from version A.
+    await removeHookConfig({ locations: args.locations, pluginName: args.plugin });
+    return undefined;
+  }
+
+  const raw = await readFile(
+    path.join(installable.pluginRoot, installable.hooksConfigPath),
+    "utf8",
+  );
+  const ifCtx = { homedir: homedir(), cwd: args.cwd, projectRoot: args.cwd };
+  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
+  if (!parsed.ok) {
+    throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
+  }
+
+  await writeHookConfig({
+    locations: args.locations,
+    pluginName: args.plugin,
+    pluginRoot: installable.pluginRoot,
+    hooksValue: parsed.value,
+  });
+  // D-100-02 / ENBL-11: `parsed.value` is the supported subset already.
+  return projectHookSummaryEntries(parsed.value);
+}
+
+/**
+ * Phase 3a: physical replace, aggregating failures across bridges.
+ *
+ * D-03 discipline: CONTINUE across bridge-commit failures (not fail-fast) so
+ * the partial-replace state is fully observed. `Phase3Failure` entries carry
+ * per-bridge cause references; the caller wraps them in the aggregate error.
+ *
+ * The five commits run in skills -> commands -> agents -> hooks -> mcp order,
+ * matching install's PI-9 ledger order. Each commit is independently atomic
+ * at the OS level (rename for skills/commands/agents, atomicWriteJson for
+ * mcp, write-or-remove for hooks).
+ */
+async function commitUpdatePhase3a(
+  args: ThreePhaseArgs,
+  preflight: PluginPreflight,
+  handles: PrepHandles,
+): Promise<{
+  readonly failures: Phase3Failure[];
+  readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+}> {
+  const failures: Phase3Failure[] = [];
+
+  try {
+    const leak = await commitPreparedSkills(handles.skills);
+    if (leak !== undefined) {
+      failures.push({
+        phase: "skills",
+        msg: `skills staging cleanup leak: ${leak}`,
+        cause: new Error(leak),
+      });
+    }
+  } catch (err) {
+    failures.push({ phase: "skills", msg: errorMessage(err), cause: err });
+  }
+
+  try {
+    await commitPreparedCommands(handles.commands);
+  } catch (err) {
+    failures.push({ phase: "commands", msg: errorMessage(err), cause: err });
+  }
+
+  try {
+    const leak = await commitPreparedAgents(handles.agents);
+    if (leak !== undefined) {
+      failures.push({
+        phase: "agents",
+        msg: `agents staging cleanup leak: ${leak}`,
+        cause: new Error(leak),
+      });
+    }
+  } catch (err) {
+    failures.push({ phase: "agents", msg: errorMessage(err), cause: err });
+  }
+
+  let hookEntries: readonly HookSummaryEntry[] | undefined;
+  try {
+    hookEntries = await commitUpdateHooks(args, preflight.installable);
+  } catch (err) {
+    failures.push({ phase: "hooks", msg: errorMessage(err), cause: err });
+  }
+
+  try {
+    await commitPreparedMcp(handles.mcp);
+  } catch (err) {
+    failures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
+  }
+
+  return { failures, hookEntries };
+}
+
+/**
+ * Phase 3b aggregate error path. Composes the typed aggregate, emits the
+ * direct-path failure row, and returns the cascade-shaped failed outcome.
+ *
+ * PUP-9: the direct path surfaces one notify with a synthetic
+ * PluginFailedMessage carrying the typed cause; the renderer composes the
+ * 4-space cause-chain trailer beneath the failed plugin row. The cascade is
+ * NOT re-rendered here -- aborting before the cascade walk means there is
+ * exactly one row to surface.
+ */
+function composePhase3FailureOutcome(
+  args: ThreePhaseArgs,
+  failures: readonly Phase3Failure[],
+  versions: { readonly fromVersion: string; readonly toVersion: string },
+): PluginUpdateOutcome {
+  const { plugin } = args;
+  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
+  const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
+  const aggregate = new PluginUpdatePhase3Error(
+    aggregateMsg,
+    failures,
+    aggregateCause(failures[0]?.cause),
+  );
+
+  if (isDirectUpdate(args) && args.ctx !== undefined && args.pi !== undefined) {
+    notifyDirectFailure({
+      ctx: args.ctx,
+      pi: args.pi,
+      marketplace: args.marketplace,
+      scope: args.scope,
+      pluginName: args.plugin,
+      err: aggregate,
+      // Phase-3a aggregate failures map to the catalog "rollback partial"
+      // reason form. Thread the per-phase rollback children structurally so
+      // the renderer emits the indented 4-space child rows plus 6-space
+      // per-phase cause-chains.
+      reasonOverride: "rollback partial" as const,
+      rollbackPartial: failures,
+    });
+  }
+
+  // CMC-17 / MSG-RP-1: surface phaseFailures structurally so the cascade
+  // renderer can build the rollback-partial parent plus indented children
+  // block. notes[] is retained for outcome-level text aggregation.
+  return {
+    partition: "failed",
+    name: plugin,
+    fromVersion: versions.fromVersion,
+    toVersion: versions.toVersion,
+    notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
+    // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
+    // {rollback partial}` per docs/output-catalog.md. The local
+    // `outcomeToCascadePluginMessage` short-circuits on
+    // `phaseFailures.length > 0` and ignores `reasons`; the marketplace
+    // cascade consumer reads `reasons[0]` directly.
+    reasons: ["rollback partial"] as const,
+    phaseFailures: failures.map((f) => ({ phase: f.phase, msg: f.msg })),
+    // declaresAgents / declaresMcp are required `boolean`. `(failed)` rows
+    // do not render the soft-dep marker.
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+}
+
+/**
+ * S5: an invalid config file silently skipped the write-back while the
+ * success notify proceeded. Direct-path callers surface the abort as a
+ * separate warning AFTER the success row, so the user knows the on-disk
+ * artifacts were updated but the config entry was not written. The cascade
+ * path never calls the write-back (gated by `!args.cascade`), so it is
+ * structurally unaffected.
+ */
+function notifyInvalidConfigWriteBack(args: ThreePhaseArgs): void {
+  if (!isDirectUpdate(args) || args.ctx === undefined || args.pi === undefined) {
+    return;
+  }
+
+  const targetBasename = path.basename(
+    args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
+  );
+  notifyWithContext(args.ctx, args.pi, UPDATE_CONTEXT, [
+    {
+      name: args.marketplace,
+      scope: args.scope,
+      plugins: [
+        {
+          status: "failed",
+          name: args.plugin,
+          reasons: ["invalid manifest"] as const,
+          cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+          // D-03/D-06: invalid-config abort -> error, no reload.
+          severity: "error" as const,
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+}
+
 // The three-phase update body sequences preflight, the D-UPD disabled-record
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
 // commits, finalize, the phase-3b aggregate error path, and the S5
-// invalid-config write-back warning -- splitting it would require additional
-// state-snapshot threading and obscure the per-phase save-vs-throw discipline.
-// eslint-disable-next-line sonarjs/cognitive-complexity
+// invalid-config write-back warning. The per-phase save-vs-throw discipline
+// stays visible here; the phase bodies themselves are extracted above.
 async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOutcome> {
   const { plugin, marketplace, scope } = args;
 
@@ -1911,104 +2189,12 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   }
 
   // ─── Phase 3a: physical replace; aggregate failures across bridges ────────
-  //
-  // D-03 discipline: CONTINUE across bridge-commit failures (not fail-fast)
-  // so the partial-replace state is fully observed. Phase3Failure entries
-  // carry per-bridge cause references; the aggregate error wraps them.
-  //
-  // The four commits run in skills -> commands -> agents -> mcp order
-  // (matching install's PI-9 order). Each commit is independently atomic
-  // at the OS level (rename for skills/commands/agents; atomicWriteJson
-  // for mcp).
 
-  const phase3aFailures: Phase3Failure[] = [];
-
-  try {
-    const leak = await commitPreparedSkills(handles.skills);
-    if (leak !== undefined) {
-      phase3aFailures.push({
-        phase: "skills",
-        msg: `skills staging cleanup leak: ${leak}`,
-        cause: new Error(leak),
-      });
-    }
-  } catch (err) {
-    phase3aFailures.push({ phase: "skills", msg: errorMessage(err), cause: err });
-  }
-
-  try {
-    await commitPreparedCommands(handles.commands);
-  } catch (err) {
-    phase3aFailures.push({ phase: "commands", msg: errorMessage(err), cause: err });
-  }
-
-  try {
-    const leak = await commitPreparedAgents(handles.agents);
-    if (leak !== undefined) {
-      phase3aFailures.push({
-        phase: "agents",
-        msg: `agents staging cleanup leak: ${leak}`,
-        cause: new Error(leak),
-      });
-    }
-  } catch (err) {
-    phase3aFailures.push({ phase: "agents", msg: errorMessage(err), cause: err });
-  }
-
-  // LIFE-01 / D-63-01: 5th cascade slot. The hooks bridge has NO staging
-  // dir (D-63-02) so the prepare/commit split does not apply -- writeHookConfig
-  // IS the atomic write. Lives BETWEEN agents and mcp to mirror the install
-  // Phase ledger order. D-03 fail-continue: a throw here lands in
-  // phase3aFailures and the loop continues; recovery is via the
-  // RECOVERY_PLUGIN_REINSTALL_PREFIX hint -- there is no in-process restore.
-  //
-  // WR-01: removeHookConfig() (version B drops hooks) is non-atomic --
-  // `rm({recursive,force})` can throw partway and leave the hooks
-  // subtree partially deleted. The `failedPhases.has("hooks")` guard at
-  // finalize preserves the OLD `resources.hooks` inventory in
-  // state.json, keeping the truthful "swap incomplete" view. The
-  // /reload routing table will point at the partially-deleted file
-  // until the user runs reinstall (RECOVERY_PLUGIN_REINSTALL_PREFIX
-  // hint). Same recovery contract as reinstall.ts::commitHooks (see
-  // WR-05).
-  // D-100-01 / ENBL-10: the supported hook entries version B materialized,
-  // captured at parse time and written by finalize under the same
-  // hooks-success guard as the inventory slug. Stays undefined when version B
-  // declares no hooks, which is the signal to clear the record's description.
-  let hookEntries: readonly HookSummaryEntry[] | undefined;
-  try {
-    if (preflight.installable.hooksConfigPath === undefined) {
-      // Version B has no hooks: remove any stale file from version A.
-      await removeHookConfig({ locations: args.locations, pluginName: plugin });
-    } else {
-      const raw = await readFile(
-        path.join(preflight.installable.pluginRoot, preflight.installable.hooksConfigPath),
-        "utf8",
-      );
-      const ifCtx = { homedir: homedir(), cwd: args.cwd, projectRoot: args.cwd };
-      const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
-      if (!parsed.ok) {
-        throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
-      }
-
-      await writeHookConfig({
-        locations: args.locations,
-        pluginName: plugin,
-        pluginRoot: preflight.installable.pluginRoot,
-        hooksValue: parsed.value,
-      });
-      // D-100-02 / ENBL-11: `parsed.value` is the supported subset already.
-      hookEntries = projectHookSummaryEntries(parsed.value);
-    }
-  } catch (err) {
-    phase3aFailures.push({ phase: "hooks", msg: errorMessage(err), cause: err });
-  }
-
-  try {
-    await commitPreparedMcp(handles.mcp);
-  } catch (err) {
-    phase3aFailures.push({ phase: "mcp", msg: errorMessage(err), cause: err });
-  }
+  const { failures: phase3aFailures, hookEntries } = await commitUpdatePhase3a(
+    args,
+    preflight,
+    handles,
+  );
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
@@ -2051,67 +2237,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
 
   if (phase3aFailures.length > 0) {
-    const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
-    const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
-    const firstCause = phase3aFailures[0]?.cause;
-    const aggregate = new PluginUpdatePhase3Error(
-      aggregateMsg,
-      phase3aFailures,
-      aggregateCause(firstCause),
-    );
-    // PUP-9 direct path: surface the aggregate failure via a single
-    // notify with a synthetic PluginFailedMessage carrying the typed
-    // cause (Option B). Per the catalog UAT fixture
-    // `failed-with-rollback-partial` (docs/output-catalog.md:510-522) the
-    // renderer composes the 4-space cause-chain trailer beneath the
-    // failed plugin row. The cascade is NOT re-rendered here -- aborting
-    // before the cascade walk means there's exactly one row to surface.
-    // NB: the renderer does NOT walk phase3aFailures structurally here
-    // (rollbackPartial is the structural channel for that, but the
-    // direct-path aggregate is itself a single failure summary; the
-    // returned `partition: "failed"` outcome below provides the cascade
-    // shape when reached through the cascade pathway).
-    if (isDirectUpdate(args) && args.ctx !== undefined && args.pi !== undefined) {
-      notifyDirectFailure({
-        ctx: args.ctx,
-        pi: args.pi,
-        marketplace: args.marketplace,
-        scope: args.scope,
-        pluginName: args.plugin,
-        err: aggregate,
-        // Phase-3a aggregate failures map to the catalog "rollback partial"
-        // reason form. Thread the per-phase rollback children structurally
-        // so the renderer emits the indented 4-space child rows + 6-space
-        // per-phase cause-chains.
-        reasonOverride: "rollback partial" as const,
-        rollbackPartial: phase3aFailures,
-      });
-    }
-
-    // CMC-17 / MSG-RP-1: surface phaseFailures structurally
-    // so the cascade renderer can build the rollback-partial parent +
-    // indented children block. notes[] is retained for outcome-level text
-    // aggregation (consumed by outcomeOnly callers and the cascade
-    // post-render trailer).
-    return {
-      partition: "failed",
-      name: plugin,
-      fromVersion,
-      toVersion,
-      notes: [aggregateMsg, ...phase3aFailures.map((f) => `${f.phase}: ${f.msg}`)],
-      // Pre-narrow to `{rollback partial}` -- phase-3 aggregate failures
-      // always render as `(failed) {rollback partial}` per the catalog
-      // (docs/output-catalog.md). The local `outcomeToCascadePluginMessage`
-      // short-circuits on `phaseFailures.length
-      // > 0` and ignores `reasons`; the marketplace cascade consumer
-      // reads `reasons[0]` directly.
-      reasons: ["rollback partial"] as const,
-      phaseFailures: phase3aFailures.map((f) => ({ phase: f.phase, msg: f.msg })),
-      // declaresAgents / declaresMcp are required `boolean`. `(failed)`
-      // rows do not render the soft-dep marker.
-      declaresAgents: false,
-      declaresMcp: false,
-    };
+    return composePhase3FailureOutcome(args, phase3aFailures, { fromVersion, toVersion });
   }
 
   // PURL-06 / D-78-01: GC-after-swap. The finalize withStateGuard has committed
@@ -2147,38 +2273,8 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<PluginUpdateOu
   // claimed a clean update.
   const degradedKinds = collectDegradedKinds(handles);
   await dropPluginCompletionCache(args);
-  // S5: an invalid config file silently skipped the write-back while the
-  // success notify proceeded. Direct-path callers now surface the abort as a
-  // separate warning notification AFTER the success row so the user knows
-  // the on-disk artifacts were updated but the config entry was not written.
-  // The cascade path never calls the write-back (gated by `!args.cascade`),
-  // so it is structurally unaffected.
-  if (
-    invalidConfigWriteBack &&
-    isDirectUpdate(args) &&
-    args.ctx !== undefined &&
-    args.pi !== undefined
-  ) {
-    const targetBasename = path.basename(
-      args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
-    );
-    notifyWithContext(args.ctx, args.pi, UPDATE_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            // D-03/D-06: invalid-config abort -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ]);
+  if (invalidConfigWriteBack) {
+    notifyInvalidConfigWriteBack(args);
   }
 
   return {

@@ -28,12 +28,12 @@ import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 
-interface OutcomeBase {
+export interface OutcomeBase {
   readonly scope: Scope;
   readonly marketplace: string;
 }
 
-interface PluginOutcomeBase extends OutcomeBase {
+export interface PluginOutcomeBase extends OutcomeBase {
   readonly plugin: string;
 }
 
@@ -96,7 +96,7 @@ export interface PluginInstalledOutcome
   /**
    * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
    * propagated through to the reconcile cascade caller. Mirrors the
-   * `import/execute.ts:699-703` pattern -- post-commit hygiene warnings
+   * `import/execute.ts::installOnePlannedPlugin` pattern -- post-commit hygiene warnings
    * (data-dir mkdir deferred, agent-foreign-content preserved,
    * completion-cache refresh deferred, bridge-side soft warnings) are
    * surfaced to the operator instead of silently dropped. Standalone-mode

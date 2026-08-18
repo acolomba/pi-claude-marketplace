@@ -6,8 +6,8 @@
 // `agent_end.messages` and gates dispatch on its `stopReason` (STOP-01):
 // `stop` runs the Stop bucket with full decision control (STOP-03 block
 // re-entry); `error` / `length` route to StopFailure (observation-only --
-// the bucket runs but its result is discarded, SFAIL-01); `aborted` and
-// `toolUse` dispatch nothing.
+// the bucket runs but its result is discarded, SFAIL-01); `pending`,
+// `aborted`, `toolUse` and `deferred` dispatch nothing.
 //
 // Both handlers carry the `capturedEpoch` guard so a stale closure from a
 // prior `/reload` cannot fire against rebuilt routing tables;
@@ -19,9 +19,10 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
-import { currentEpoch, getRoutingBucket } from "./event-router.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
+import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
 
+import type { HookExecutor } from "./dispatch.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
@@ -151,12 +152,21 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
  * `agent_settled` dispatcher: reads the cached last assistant message and
  * gates on `stopReason` (STOP-01). `stop` runs the Stop bucket and re-enters
  * the agent loop on a blocking hook (STOP-03); `error` / `length` route to the
- * StopFailure observation-only arm (SFAIL-01); `aborted` / `toolUse` are a
- * defensive no-op. No-ops on a stale epoch or an empty cache.
+ * StopFailure observation-only arm (SFAIL-01); `pending` / `aborted` /
+ * `toolUse` / `deferred` are a defensive no-op. No-ops on a stale epoch or an
+ * empty cache.
+ *
+ * `executor` is optional and threaded down to `collectBucketOutcomes`, which
+ * defaults it to `dispatchHookExec`. Production omits it -- the one
+ * `settleHandlerFor` call, in `registerHooksBridge`, forwards that factory's
+ * own optional `executor`, which its sole production caller never sets. It is
+ * there so a test can drive the Stop / StopFailure arms against a spy instead
+ * of a real child process (see `HookExecutor` in `dispatch.ts`).
  */
 export function settleHandlerFor(
   capturedEpoch: number,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void> {
   return async (_event, ctx) => {
     if (capturedEpoch !== currentEpoch()) {
@@ -175,7 +185,7 @@ export function settleHandlerFor(
 
     switch (last.stopReason) {
       case "stop":
-        await runStopBucket(last, capturedEpoch, ctx, pi);
+        await runStopBucket(last, capturedEpoch, ctx, pi, executor);
         return;
       case "error":
       case "length":
@@ -184,11 +194,19 @@ export function settleHandlerFor(
           classifyStopFailure(last.errorMessage ?? "", last.stopReason),
           ctx,
           pi,
+          executor,
         );
         return;
+      // Defensive no-op group (STOP-01): none of these is a turn ending the
+      // Stop bucket may observe. `deferred` means the provider request was
+      // handed to a batch or asynchronous lane and the message carries a
+      // `DeferredHandle` to poll for the real response later, so it is an
+      // in-flight state like `pending`; dispatching Stop on it would fire
+      // turn-boundary hooks on a turn that has not ended.
       case "pending":
       case "aborted":
       case "toolUse":
+      case "deferred":
         return;
       default: {
         // Compile-time exhaustiveness pin (NFR-7): a peer-dep bump that widens
@@ -249,6 +267,7 @@ async function runStopBucket(
   capturedEpoch: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): Promise<void> {
   const bucket = getRoutingBucket("Stop");
   if (bucket.length === 0) {
@@ -262,7 +281,7 @@ async function runStopBucket(
     // bridge-driven continuation loop.
     stop_hook_active: stopHookActive,
   };
-  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true);
+  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true, executor);
 
   // A /reload while the bucket's hooks were running bumped the epoch and reset
   // the settle state; bail before any loop-state mutation or re-entry.
@@ -324,6 +343,7 @@ async function runStopFailure(
   classifiedError: StopFailureErrorType,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  executor?: HookExecutor,
 ): Promise<void> {
   const bucket = getRoutingBucket("StopFailure");
   if (bucket.length === 0) {
@@ -345,8 +365,13 @@ async function runStopFailure(
   // exact members of the closed error-type vocabulary, so the dispatch filter
   // is literal equality against the classified error (the shared
   // `matcherFiresOnClosedSetValue` predicate).
-  await collectBucketOutcomes(bucket, event, ctx, pi, (entry) =>
-    matcherFiresOnClosedSetValue(entry, classifiedError),
+  await collectBucketOutcomes(
+    bucket,
+    event,
+    ctx,
+    pi,
+    (entry) => matcherFiresOnClosedSetValue(entry, classifiedError),
+    executor,
   );
 }
 

@@ -23,7 +23,7 @@ import type { Scope } from "../../../shared/types.ts";
  * adds an OPTIONAL `cascade?` field, which a caller omitting `cascade`
  * structurally satisfies.
  */
-type SingleNameMarketplaceRun = (opts: {
+export type SingleNameMarketplaceRun = (opts: {
   ctx: ExtensionCommandContext;
   pi: ExtensionAPI;
   name: string;

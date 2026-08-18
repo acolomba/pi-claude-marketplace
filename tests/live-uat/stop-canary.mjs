@@ -1,5 +1,29 @@
 // tests/live-uat/stop-canary.mjs
 //
+// Standalone operator-run UAT driver: an engineer invokes it from the command
+// line and no module ever imports it, so being unreachable from the import
+// graph is its intended shape, not a defect.
+// fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
+//
+// Two `duplicates.ignoredClones` entries in `.fallowrc.json` are retained
+// against this file and `manifest-absence-canary.mjs`. Fallow types `ignoredClones` as
+// `string[]`, so the per-clone justification the conventions require cannot
+// live in the JSON and lives here instead:
+//   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
+//     at the foot of both drivers.
+//   - `dup:6d8c002d:2` -- the module preamble that resolves `execFileAsync`,
+//     `HERE`, `REPO_ROOT` and `EXTENSION_ENTRY`.
+// Both are retained for the same reason: each driver must stay independently
+// runnable as `node tests/live-uat/<file>.mjs` with nothing imported from a
+// sibling. Extracting a shared helper module would create exactly the import
+// edge that the standalone-driver shape exists to avoid, and would make the
+// two canaries fail together on one bad edit. The duplicated text is 23 lines
+// of boilerplate -- a process-exit epilogue and four path constants -- with no
+// assertion logic in it, so the copies cannot drift in a way that changes what
+// either canary proves. Line numbers are deliberately omitted; run
+// `fallow dupes --trace dup:<fingerprint>` with the entries temporarily
+// cleared to locate them.
+//
 // Live runtime UAT (D-88-03b item 4): a scripted "ralph-wiggum" canary that
 // drives a REAL Pi session against an always-blocking Stop hook to prove, on
 // real pi, the settle-time observables the mocked settle tests only approximate.

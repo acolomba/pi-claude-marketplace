@@ -126,8 +126,7 @@ export type AddMarketplaceNotifications =
  *
  * `cause` carries the formatted user-visible text for orchestrated callers
  * that surface it directly.
- */
-/**
+ *
  * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
  * caller can dispatch on the broader closed set, including the
  * structural `"not added"` sentinel surfaced by the `remove` sibling. This

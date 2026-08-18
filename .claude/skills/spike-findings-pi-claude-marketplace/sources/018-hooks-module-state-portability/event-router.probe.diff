@@ -1,0 +1,225 @@
+diff --git a/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts b/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
+index e4bbae89..b250d2c1 100644
+--- a/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
++++ b/extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
+@@ -37,9 +37,7 @@ import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook
+ import {
+   parseHooksConfig,
+   parseMatcher,
+-  type HookHandlerEntry,
+   type HooksConfig,
+-  type ParsedMatcher,
+ } from "../../domain/components/hooks.ts";
+ import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+ import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
+@@ -58,6 +56,19 @@ import { SCOPES } from "../../shared/types.ts";
+ import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
+ import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
+ import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
++import {
++  appendPendingSessionStartContext,
++  bumpEpoch,
++  clearPendingSessionStartContext,
++  currentEpoch,
++  parsedConfigCache,
++  pendingSessionStartContextEntries,
++  resetEpoch,
++  routingTable,
++  type CacheEntry,
++  type PendingSessionStartContext,
++  type RoutingEntry,
++} from "./routing-state.ts";
+ import {
+   agentEndCacheHandler,
+   inputResetHandlerFor,
+@@ -92,72 +103,14 @@ import type { Scope } from "../../shared/types.ts";
+  * (event, group, handler) flattening; it preserves intra-plugin source
+  * order across the per-plugin bucket merge (DISP-04).
+  */
+-export interface RoutingEntry {
+-  readonly scope: Scope;
+-  readonly marketplace: string;
+-  readonly pluginId: string;
+-  /**
+-   * Absolute filesystem path of the plugin source dir, mirroring
+-   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Dispatch-exec
+-   * exports this as `CLAUDE_PLUGIN_ROOT` so hook handlers using the standard
+-   * `${CLAUDE_PLUGIN_ROOT}/...` interpolation resolve to a real path on
+-   * disk. Carried on RoutingEntry so dispatch does not have to re-read
+-   * state.json on every event. Branded so the type system blocks
+-   * unvalidated strings flowing to the subprocess env.
+-   */
+-  readonly resolvedSource: AbsolutePluginRoot;
+-  /**
+-   * D-60-01 / D-60-04: the Claude-side bucket this entry was flattened
+-   * into. The translator dispatch in `dispatch-exec.ts` keys on this
+-   * field to pick `./payloads/<event>.ts` without re-deriving the bucket
+-   * from the routing table's outer Map key.
+-   */
+-  readonly claudeEvent: BucketAEvent;
+-  readonly matcher: ParsedMatcher;
+-  readonly rawMatcher: string;
+-  readonly handlerDecl: HookHandlerEntry;
+-  readonly declarationIndex: number;
+-  /**
+-   * MATCH-03 / D-61-02 always-present-with-sentinel: absent or
+-   * malformed `if` resolves to MATCH_ALL_IF so dispatch never observes
+-   * undefined. Populated from the side-Map produced by
+-   * `parseHooksConfig` at parse time -- never recompiled at flatten
+-   * time (mirrors the registration-time-translation stance).
+-   */
+-  readonly ifPredicate: IfPredicate;
+-}
+
+-interface CacheEntry {
+-  readonly scope: Scope;
+-  readonly marketplace: string;
+-  readonly pluginId: string;
+-  /**
+-   * Absolute path of the plugin source dir; flows through to
+-   * `RoutingEntry.resolvedSource` so dispatch-exec can export
+-   * `CLAUDE_PLUGIN_ROOT` to a real path. Mirrors
+-   * `state.json::marketplaces[mp].plugins[id].resolvedSource`. Branded
+-   * so the type system blocks unvalidated strings.
+-   */
+-  readonly resolvedSource: AbsolutePluginRoot;
+-  readonly config: HooksConfig;
+-  /**
+-   * MATCH-03: compiled `if`-field predicates keyed on
+-   * `${claudeEvent}|${groupIndex}|${handlerIndex}`. Carried alongside
+-   * the parsed `config` so `flattenPluginIntoBuckets` can populate
+-   * each `RoutingEntry.ifPredicate` field without re-parsing.
+-   */
+-  readonly ifPredicates: ReadonlyMap<string, IfPredicate>;
+-}
+
+ // ──────────────────────────────────────────────────────────────────────────
+ // Module-state cells (D-59-02 / D-59-03)
+ // ──────────────────────────────────────────────────────────────────────────
+
+-let liveEpoch = 0;
+
+-const parsedConfigCache = new Map<string, CacheEntry>();
+
+-const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
+
+ /**
+  * SessionStart additionalContext capture buffer.
+@@ -183,14 +136,7 @@ const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
+  * string. Provenance is dropped at drain time -- only the joined text
+  * reaches `before_agent_start.systemPrompt`.
+  */
+-export interface PendingSessionStartContext {
+-  readonly context: string;
+-  readonly pluginId: string;
+-  readonly marketplace: string;
+-  readonly scope: Scope;
+-}
+
+-let pendingSessionStartContext: PendingSessionStartContext[] = [];
+
+ // ──────────────────────────────────────────────────────────────────────────
+ // Cache key helper (D-59-02 + marketplace inclusion)
+@@ -303,9 +249,6 @@ export async function readAndCachePluginHooks(opts: {
+  * registerHooksBridge time and compare against `currentEpoch()` on every
+  * event) and by tests that pin the no-op-on-mismatch contract.
+  */
+-export function currentEpoch(): number {
+-  return liveEpoch;
+-}
+
+ // ──────────────────────────────────────────────────────────────────────────
+ // SessionStart additionalContext bridge
+@@ -325,13 +268,6 @@ export function currentEpoch(): number {
+  * required on the argument shape so the call site always carries
+  * attribution -- the skipped-empty arm just discards both.
+  */
+-export function appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
+-  if (entry.context.length === 0) {
+-    return;
+-  }
+-
+-  pendingSessionStartContext.push(entry);
+-}
+
+ /**
+  * Factory: build the `before_agent_start` handler closure registered on
+@@ -367,12 +303,14 @@ export function beforeAgentStartHandlerFor(
+       return Promise.resolve(undefined);
+     }
+
+-    if (pendingSessionStartContext.length === 0) {
++    if (pendingSessionStartContextEntries().length === 0) {
+       return Promise.resolve(undefined);
+     }
+
+-    const buffered = pendingSessionStartContext.map((e) => e.context).join("\n\n");
+-    pendingSessionStartContext = [];
++    const buffered = pendingSessionStartContextEntries()
++      .map((e) => e.context)
++      .join("\n\n");
++    clearPendingSessionStartContext();
+     return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
+   };
+ }
+@@ -821,15 +759,14 @@ export async function registerHooksBridge(
+   pi: ExtensionAPI,
+   opts: { ctx: ExtensionContext; cwd: string },
+ ): Promise<void> {
+-  liveEpoch += 1;
+-  const capturedEpoch = liveEpoch;
++  const capturedEpoch = bumpEpoch();
+
+   // /reload re-enters this factory and must not leak a stale SessionStart
+   // additionalContext entry from the prior session into the new buffer.
+   // Clearing here makes the invariant explicit: each bridge load starts
+   // with an empty pending buffer, which only `adaptObservationResultForEvent`
+   // (via `appendPendingSessionStartContext`) can subsequently populate.
+-  pendingSessionStartContext = [];
++  clearPendingSessionStartContext();
+
+   // Same epoch hygiene for the settle dispatcher's cached last-assistant
+   // message: clear it so a `/reload` cannot leak the prior session's message
+@@ -960,10 +897,10 @@ export function _parsedConfigCacheForTest(): ReadonlyMap<string, CacheEntry> {
+  * from a clean baseline. Not part of the public surface.
+  */
+ export function _resetForTest(): void {
+-  liveEpoch = 0;
++  resetEpoch();
+   parsedConfigCache.clear();
+   routingTable.clear();
+-  pendingSessionStartContext = [];
++  clearPendingSessionStartContext();
+ }
+
+ /**
+@@ -972,7 +909,7 @@ export function _resetForTest(): void {
+  * does not affect the module state. Not part of the public surface.
+  */
+ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingSessionStartContext> {
+-  return Array.from(pendingSessionStartContext);
++  return Array.from(pendingSessionStartContextEntries());
+ }
+
+ /**
+@@ -981,8 +918,7 @@ export function _peekPendingSessionStartContextForTest(): ReadonlyArray<PendingS
+  * registerHooksBridge factory path. Not part of the public surface.
+  */
+ export function _bumpEpochForTest(): number {
+-  liveEpoch += 1;
+-  return liveEpoch;
++  return bumpEpoch();
+ }
+
+ /**
+@@ -997,3 +933,10 @@ export function _setRoutingBucketForTest(
+ ): void {
+   routingTable.set(claudeEvent, entries);
+ }
++
++export {
++  appendPendingSessionStartContext,
++  currentEpoch,
++  type PendingSessionStartContext,
++  type RoutingEntry,
++};

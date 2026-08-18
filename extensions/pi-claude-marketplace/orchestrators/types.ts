@@ -12,9 +12,7 @@ import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
-export type ReinstallPluginPartition = "reinstalled" | "skipped" | "failed";
-
-interface ReinstallOutcomeBase {
+export interface ReinstallOutcomeBase {
   readonly name: string;
   readonly marketplace: string;
   readonly scope: Scope;
@@ -112,9 +110,6 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
 export type ReinstallPluginOutcome =
   ReinstallReinstalledOutcome | ReinstallSkippedOutcome | ReinstallFailedOutcome;
 
-/** MU-7 partition tag. plugin/update.ts returns one outcome per plugin. */
-export type PluginUpdatePartition = "updated" | "unchanged" | "skipped" | "failed";
-
 /**
  * Bridge identifier for `PluginUpdateFailedOutcome.phaseFailures` on the
  * update path. Promoted to a named type so callers and tests don't repeat
@@ -133,7 +128,7 @@ export interface UpdatePhaseFailure {
   readonly msg: string;
 }
 
-interface PluginUpdateBase {
+export interface PluginUpdateBase {
   readonly name: string;
   /**
    * CMC-13: required `boolean` on every partition.

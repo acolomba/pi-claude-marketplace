@@ -110,7 +110,7 @@ export interface ApplyReconcileOptions {
  * is never coerced to an empty desired-state diff, which would render as a
  * mass-uninstall).
  */
-interface ScopeReadResult {
+export interface ScopeReadResult {
   readonly scope: Scope;
   readonly plan: ReconcilePlan | undefined;
   /** CFG-03 + state-load failure rows surfaced from the read pass. */

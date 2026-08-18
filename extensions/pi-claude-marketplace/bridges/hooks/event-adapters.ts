@@ -30,7 +30,7 @@
 //     (SessionStart / SessionEnd / PreCompact / PostCompact) with per-event
 //     narrowing for the SessionStart `additionalContext` bridge. The
 //     SessionStart mutate arm captures `additionalContext` into the
-//     event-router.ts pending buffer (drained by the bridge's
+//     routing-state.ts pending buffer (drained by the bridge's
 //     `before_agent_start` handler on the next agent turn). All other
 //     observation events keep the silent-drop semantics: there is no
 //     downstream Pi surface to thread their payloads through. `block` and
@@ -54,8 +54,8 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-import { appendPendingSessionStartContext } from "./event-router.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
+import { appendPendingSessionStartContext } from "./routing-state.ts";
 
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -97,44 +97,49 @@ export function applyMutationInPlace(
 
   const tagged = event as { type?: unknown };
   if (tagged.type === "tool_call" && result.updatedInput !== undefined) {
-    // CR-01: reject non-object patches (null / array / primitive) early so a
-    // hook returning `updatedInput: null` cannot trip Object.assign's
-    // null-source path or pollute via array index keys. The patch must be a
-    // plain object shape; anything else is silently dropped.
-    if (
-      result.updatedInput === null ||
-      typeof result.updatedInput !== "object" ||
-      Array.isArray(result.updatedInput)
-    ) {
-      return;
-    }
-
-    const target = (event as ToolCallEvent).input as Record<string, unknown>;
-    const patch = result.updatedInput as Record<string, unknown>;
-    Object.assign(target, patch);
+    applyToolCallInputPatch(event as ToolCallEvent, result.updatedInput);
     return;
   }
 
   if (tagged.type === "tool_result" && result.updatedToolOutput !== undefined) {
-    // CR-01: whitelist the documented mutation surface for tool_result --
-    // only `content` (the Pi-side (TextContent | ImageContent)[] array) and
-    // `isError` (boolean) may be written. Anything else in the hook-supplied
-    // patch is silently dropped so a malicious or buggy hook cannot rewrite
-    // the event's discriminator (`type`), `toolName`, or any other
-    // routing-load-bearing field. Reject non-object patches early.
-    if (result.updatedToolOutput === null || typeof result.updatedToolOutput !== "object") {
-      return;
-    }
+    applyToolResultPatch(event as ToolResultEvent, result.updatedToolOutput);
+  }
+}
 
-    const target = event as ToolResultEvent;
-    const patch = result.updatedToolOutput as { content?: unknown; isError?: unknown };
-    if (Array.isArray(patch.content)) {
-      (target as { content: unknown }).content = patch.content;
-    }
+/**
+ * CR-01: reject non-object patches (null, array, primitive) early so a hook
+ * returning `updatedInput: null` cannot trip `Object.assign`'s null-source
+ * path or pollute via array index keys. The patch must be a plain object
+ * shape; anything else is silently dropped.
+ */
+function applyToolCallInputPatch(event: ToolCallEvent, updatedInput: unknown): void {
+  if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
+    return;
+  }
 
-    if (typeof patch.isError === "boolean") {
-      (target as { isError: boolean }).isError = patch.isError;
-    }
+  Object.assign(event.input as Record<string, unknown>, updatedInput as Record<string, unknown>);
+}
+
+/**
+ * CR-01: whitelist the documented mutation surface for `tool_result` -- only
+ * `content` (the Pi-side `(TextContent | ImageContent)[]` array) and `isError`
+ * (boolean) may be written. Everything else in the hook-supplied patch is
+ * silently dropped, so a malicious or buggy hook cannot rewrite the event's
+ * discriminator (`type`), its `toolName`, or any other routing-load-bearing
+ * field. Non-object patches are rejected early.
+ */
+function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown): void {
+  if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
+    return;
+  }
+
+  const patch = updatedToolOutput as { content?: unknown; isError?: unknown };
+  if (Array.isArray(patch.content)) {
+    (event as { content: unknown }).content = patch.content;
+  }
+
+  if (typeof patch.isError === "boolean") {
+    (event as { isError: boolean }).isError = patch.isError;
   }
 }
 
@@ -282,8 +287,9 @@ export function adaptInputResult(
  * `before_agent_start` carries the `systemPrompt` chain Pi extensions use
  * to inject context into the next agent turn. The mutate-arm path here
  * captures `additionalContext` from a SessionStart event into the
- * `event-router.ts` pending buffer; the `beforeAgentStartHandlerFor`
- * closure drains the buffer on the next `before_agent_start` event.
+ * `routing-state.ts` pending buffer; the `beforeAgentStartHandlerFor`
+ * closure in `event-router.ts` drains the buffer on the next
+ * `before_agent_start` event.
  *
  * Per-event semantics:
  *

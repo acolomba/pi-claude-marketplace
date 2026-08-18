@@ -121,12 +121,203 @@ interface SeededPlugin {
 }
 
 /**
+ * Write the plugin's component sources. Skills are directories carrying a
+ * `SKILL.md`; commands and agents are single `.md` files; mcp is a
+ * `.mcp.json` at the plugin root.
+ *
+ * WR-03: the hooks fixture seeds `<pluginRoot>/hooks/hooks.json` so the
+ * resolver populates `installable.hooksConfigPath` and the install ledger's
+ * cache-plus-rebuild path actually executes.
+ */
+async function writePluginComponents(
+  pluginRoot: string,
+  opts: {
+    skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
+    commands?: { sourceName: string; body?: string }[];
+    agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
+    mcpServers?: Record<string, unknown>;
+    hooksJson?: object;
+  },
+): Promise<void> {
+  for (const skill of opts.skills ?? []) {
+    const skillDir = path.join(pluginRoot, "skills", skill.sourceName);
+    await mkdir(skillDir, { recursive: true });
+    const name = skill.frontmatterName ?? skill.sourceName;
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---\nname: ${name}\n---\n\n${skill.body ?? "Body.\n"}`,
+    );
+  }
+
+  for (const command of opts.commands ?? []) {
+    const commandsDir = path.join(pluginRoot, "commands");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(
+      path.join(commandsDir, `${command.sourceName}.md`),
+      command.body ?? `# ${command.sourceName}\nBody.\n`,
+    );
+  }
+
+  for (const agent of opts.agents ?? []) {
+    const agentsDir = path.join(pluginRoot, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    const name = agent.frontmatterName ?? agent.sourceName;
+    const tools = agent.tools ?? "Read,Grep";
+    await writeFile(
+      path.join(agentsDir, `${agent.sourceName}.md`),
+      `---\nname: ${name}\ntools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
+    );
+  }
+
+  if (opts.mcpServers !== undefined) {
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: opts.mcpServers }),
+    );
+  }
+
+  if (opts.hooksJson !== undefined) {
+    const hooksDir = path.join(pluginRoot, "hooks");
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
+  }
+}
+
+/**
+ * PI-6 fixture: a SECOND marketplace whose installed plugin already owns one
+ * of the generated names the plugin under test would produce, so the
+ * cross-plugin conflict guard has something to collide with.
+ */
+function conflictingMarketplaceRecord(
+  cp: {
+    marketplace: string;
+    plugin: string;
+    skillName?: string;
+    commandName?: string;
+    agentName?: string;
+  },
+  scope: "user" | "project",
+  cwd: string,
+): ExtensionState["marketplaces"][string] {
+  return {
+    name: cp.marketplace,
+    scope,
+    source: pathSource("./other-mp"),
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, "other-mp.json"),
+    marketplaceRoot: path.join(cwd, "other-mp"),
+    plugins: {
+      [cp.plugin]: {
+        version: "0.0.1",
+        resolvedSource: "/dev/null",
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        resources: {
+          skills: cp.skillName === undefined ? [] : [cp.skillName],
+          prompts: cp.commandName === undefined ? [] : [cp.commandName],
+          agents: cp.agentName === undefined ? [] : [cp.agentName],
+          mcpServers: [],
+          hooks: [],
+        },
+        enabled: true,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    },
+  };
+}
+
+/**
  * Build a plugin source tree on disk and seed a path-source marketplace
  * pointing at it. Returns the absolute paths for downstream assertions.
  *
  * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
  * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
  */
+/**
+ * The plugin's OWN `.claude-plugin/plugin.json`. SNM-34 fixture knob: its
+ * `version` is distinct from the marketplace `entry.version` (`pluginVersion`)
+ * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
+ * version, and `null` omits the field so the tier-1 read finds none.
+ */
+function buildSeededPluginManifest(
+  pluginName: string,
+  opts: {
+    pluginJsonVersion?: string | null;
+    experimental?: object;
+    pluginJsonDefaultEnabled?: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    name: pluginName,
+    ...(opts.pluginJsonVersion === undefined
+      ? { version: "0.0.1" }
+      : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
+    // D-64-06: declaring experimental kinds drives `resolveStrict` to the
+    // `unsupported` (force-degradable) arm without a structural defect.
+    ...(opts.experimental !== undefined && { experimental: opts.experimental }),
+    ...(opts.pluginJsonDefaultEnabled !== undefined && {
+      defaultEnabled: opts.pluginJsonDefaultEnabled,
+    }),
+  };
+}
+
+/** The plugin's entry in the seeded marketplace manifest. */
+function buildSeededMarketplaceEntry(
+  pluginName: string,
+  opts: {
+    rawSourceOverride?: unknown;
+    pluginVersion?: string;
+    declareDependencies?: boolean;
+    entryDefaultEnabled?: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    name: pluginName,
+    source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
+    ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
+    // PI-13: the exact dependency shape is not validated; presence is.
+    ...(opts.declareDependencies === true && { dependencies: { "some-other-plugin": "*" } }),
+    ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
+  };
+}
+
+/**
+ * DFEN-08: seed each sibling's plugin tree and return its manifest entry.
+ * Siblings share the manifest, the marketplace record and the scope, so the
+ * only thing that can differ between their installs is the declaration under
+ * test.
+ */
+async function seedSiblingPlugins(
+  marketplaceRoot: string,
+  opts: {
+    pluginVersion?: string;
+    siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+  },
+): Promise<Record<string, unknown>[]> {
+  const entries: Record<string, unknown>[] = [];
+  for (const sibling of opts.siblingPlugins ?? []) {
+    const siblingRoot = path.join(marketplaceRoot, "plugins", sibling.name);
+    await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(siblingRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
+    );
+    const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
+    await mkdir(siblingSkillDir, { recursive: true });
+    await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
+    entries.push({
+      name: sibling.name,
+      source: `./plugins/${sibling.name}`,
+      ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
+      ...(sibling.entryDefaultEnabled !== undefined && {
+        defaultEnabled: sibling.entryDefaultEnabled,
+      }),
+    });
+  }
+
+  return entries;
+}
+
 async function seedPathMarketplaceWithPlugin(opts: {
   cwd: string;
   marketplaceRoot: string;
@@ -214,123 +405,19 @@ async function seedPathMarketplaceWithPlugin(opts: {
   const pluginRoot = path.join(marketplaceRoot, "plugins", pluginName);
   await mkdir(pluginRoot, { recursive: true });
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-  // SNM-34 fixture knob: the plugin's OWN plugin.json version, distinct from
-  // the marketplace entry.version (`pluginVersion`). `undefined` preserves the
-  // legacy `0.0.1` shape; a string sets that version; `null` omits the field.
-  const pluginManifest: Record<string, unknown> = { name: pluginName };
-  if (opts.pluginJsonVersion === undefined) {
-    pluginManifest.version = "0.0.1";
-  } else if (opts.pluginJsonVersion !== null) {
-    pluginManifest.version = opts.pluginJsonVersion;
-  }
-
-  // D-64-06: declaring experimental kinds drives `resolveStrict` to the
-  // `unsupported` (force-degradable) arm without a structural defect.
-  if (opts.experimental !== undefined) {
-    pluginManifest.experimental = opts.experimental;
-  }
-
-  if (opts.pluginJsonDefaultEnabled !== undefined) {
-    pluginManifest.defaultEnabled = opts.pluginJsonDefaultEnabled;
-  }
-
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify(pluginManifest),
+    JSON.stringify(buildSeededPluginManifest(pluginName, opts)),
   );
 
-  // Skills
-  for (const skill of opts.skills ?? []) {
-    const skillDir = path.join(pluginRoot, "skills", skill.sourceName);
-    await mkdir(skillDir, { recursive: true });
-    const name = skill.frontmatterName ?? skill.sourceName;
-    const body = skill.body ?? "Body.\n";
-    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${name}\n---\n\n${body}`);
-  }
-
-  // Commands
-  for (const command of opts.commands ?? []) {
-    const commandsDir = path.join(pluginRoot, "commands");
-    await mkdir(commandsDir, { recursive: true });
-    await writeFile(
-      path.join(commandsDir, `${command.sourceName}.md`),
-      command.body ?? `# ${command.sourceName}\nBody.\n`,
-    );
-  }
-
-  // Agents
-  for (const agent of opts.agents ?? []) {
-    const agentsDir = path.join(pluginRoot, "agents");
-    await mkdir(agentsDir, { recursive: true });
-    const name = agent.frontmatterName ?? agent.sourceName;
-    const tools = agent.tools ?? "Read,Grep";
-    await writeFile(
-      path.join(agentsDir, `${agent.sourceName}.md`),
-      `---\nname: ${name}\ntools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
-    );
-  }
-
-  // MCP servers
-  if (opts.mcpServers !== undefined) {
-    await writeFile(
-      path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: opts.mcpServers }),
-    );
-  }
-
-  // Hooks (WR-03): seed `<pluginRoot>/hooks/hooks.json` so the resolver
-  // populates `installable.hooksConfigPath` and the install ledger's
-  // cache+rebuild path actually executes.
-  if (opts.hooksJson !== undefined) {
-    const hooksDir = path.join(pluginRoot, "hooks");
-    await mkdir(hooksDir, { recursive: true });
-    await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(opts.hooksJson));
-  }
-
-  // Marketplace manifest
-  const entry: Record<string, unknown> = {
-    name: pluginName,
-    source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
-  };
-  if (opts.pluginVersion !== undefined) {
-    entry.version = opts.pluginVersion;
-  }
-
-  if (opts.declareDependencies === true) {
-    entry.dependencies = { "some-other-plugin": "*" };
-  }
-
-  if (opts.entryDefaultEnabled !== undefined) {
-    entry.defaultEnabled = opts.entryDefaultEnabled;
-  }
-
-  // DFEN-08: sibling entries share the manifest, the marketplace record and the
-  // scope, so the only thing that can differ between their installs is the
-  // declaration under test.
-  const siblingEntries: Record<string, unknown>[] = [];
-  for (const sibling of opts.siblingPlugins ?? []) {
-    const siblingRoot = path.join(marketplaceRoot, "plugins", sibling.name);
-    await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
-    await writeFile(
-      path.join(siblingRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
-    );
-    const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
-    await mkdir(siblingSkillDir, { recursive: true });
-    await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
-    siblingEntries.push({
-      name: sibling.name,
-      source: `./plugins/${sibling.name}`,
-      ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
-      ...(sibling.entryDefaultEnabled !== undefined && {
-        defaultEnabled: sibling.entryDefaultEnabled,
-      }),
-    });
-  }
+  await writePluginComponents(pluginRoot, opts);
 
   const manifest = {
     name: marketplaceName,
-    plugins: [entry, ...siblingEntries],
+    plugins: [
+      buildSeededMarketplaceEntry(pluginName, opts),
+      ...(await seedSiblingPlugins(marketplaceRoot, opts)),
+    ],
   };
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
@@ -373,37 +460,11 @@ async function seedPathMarketplaceWithPlugin(opts: {
   };
 
   if (opts.conflictingPriorPlugin !== undefined) {
-    const cp = opts.conflictingPriorPlugin;
-    state.marketplaces[cp.marketplace] = {
-      name: cp.marketplace,
+    state.marketplaces[opts.conflictingPriorPlugin.marketplace] = conflictingMarketplaceRecord(
+      opts.conflictingPriorPlugin,
       scope,
-      source: pathSource("./other-mp"),
-      addedFromCwd: cwd,
-      manifestPath: path.join(cwd, "other-mp.json"),
-      marketplaceRoot: path.join(cwd, "other-mp"),
-      plugins: {
-        [cp.plugin]: {
-          version: "0.0.1",
-          resolvedSource: "/dev/null",
-          compatibility: {
-            installable: true,
-            notes: [],
-            supported: [],
-            unsupported: [],
-          },
-          resources: {
-            skills: cp.skillName === undefined ? [] : [cp.skillName],
-            prompts: cp.commandName === undefined ? [] : [cp.commandName],
-            agents: cp.agentName === undefined ? [] : [cp.agentName],
-            mcpServers: [],
-            hooks: [],
-          },
-          enabled: true,
-          installedAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
-      },
-    };
+      cwd,
+    );
   }
 
   await saveState(locations.extensionRoot, state);
@@ -1909,8 +1970,10 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
 // ───────────────────────────────────────────────────────────────────────────
 
 test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
@@ -1961,8 +2024,10 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
 });
 
 test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
@@ -5081,8 +5146,10 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { _resetForTest, getRoutingBucket } =
+  const { _resetForTest } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
+  const { getRoutingBucket } =
+    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));

@@ -28,7 +28,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { cleanupStaging, pathExists, resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
@@ -36,7 +36,13 @@ import {
   type GitOps,
 } from "../marketplace/shared.ts";
 
-import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
+import type { GitPluginRootResult } from "../../domain/resolver.ts";
+import type {
+  GitBackedSource,
+  GitHubSource,
+  GitSubdirSource,
+  UrlSource,
+} from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
@@ -52,6 +58,73 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  */
 function isGitCommitNotFetchedError(err: unknown): boolean {
   return err instanceof Error && err.name === "CommitNotFetchedError";
+}
+
+/**
+ * Promote a staging dir to its final clone root by atomic rename. Both dirs
+ * are siblings under `extensionRoot` (`sources-staging/` and
+ * `plugin-clones/`), so the rename stays on one filesystem.
+ *
+ * Returns `"raced"` when a concurrent materialization of the same key won:
+ * EEXIST / ENOTEMPTY means the winner's tree is already there, and because
+ * the key derives from the content identity that tree is byte-equivalent, so
+ * our staging is cleaned and the caller treats the existing root as valid.
+ *
+ * Any other rename failure is real and rethrows with the cleanup leak
+ * appended (MA-9).
+ */
+async function promoteStagingToClone(
+  stagingDir: string,
+  cloneRoot: string,
+  stagingLabel: string,
+): Promise<"renamed" | "raced"> {
+  try {
+    await mkdir(path.dirname(cloneRoot), { recursive: true });
+    await rename(stagingDir, cloneRoot);
+    return "renamed";
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const leak = await cleanupStaging(stagingDir, stagingLabel);
+    if (code === "EEXIST" || code === "ENOTEMPTY") {
+      return "raced";
+    }
+
+    const wrapped = appendLeakToError(err, leak);
+    throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+  }
+}
+
+/**
+ * Check out the exact pin, recovering from a stale ref hint.
+ *
+ * PURL-04: a `singleBranch` ref-hint clone fetches only that ref's closure.
+ * When the pinned sha moved ahead of a stale hint it sits outside the closure,
+ * so checkout throws `CommitNotFetchedError`. The recovery applies ONLY after
+ * a ref-hint clone -- a no-ref clone already fetched every head, so the same
+ * error there is a genuinely unreachable sha that must fail clean. The clone
+ * left the wildcard fetch refspec, so one full fetch pulls every head and the
+ * retry succeeds; a still-unreachable sha throws the same class again and
+ * falls through to the caller's fail-clean fold.
+ */
+async function checkoutPinWithRefetch(
+  gitOps: GitOps,
+  stagingDir: string,
+  args: { readonly pin: string; readonly ref?: string; readonly auth?: GitAuthBundle },
+): Promise<void> {
+  try {
+    await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+  } catch (checkoutErr) {
+    if (args.ref === undefined || !isGitCommitNotFetchedError(checkoutErr)) {
+      throw checkoutErr;
+    }
+
+    await gitOps.fetch({
+      dir: stagingDir,
+      remote: "origin",
+      ...(args.auth !== undefined && { auth: args.auth }),
+    });
+    await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+  }
 }
 
 /**
@@ -114,55 +187,15 @@ export async function materializePluginClone(args: {
       ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
       ...(args.auth !== undefined && { auth: args.auth }),
     });
-    try {
-      await gitOps.checkout({ dir: stagingDir, ref: args.pin });
-    } catch (checkoutErr) {
-      // PURL-04: a singleBranch ref-hint clone fetches only the ref's closure.
-      // When the pinned sha moved ahead of a stale ref hint it sits outside
-      // that closure, so checkout throws CommitNotFetchedError. The recovery
-      // only applies after a ref-hint clone -- a no-ref clone already fetched
-      // every head, so a CommitNotFetchedError there is a genuinely unreachable
-      // sha that must fail clean. The clone left the wildcard fetch refspec, so
-      // one full fetch (no ref) pulls every head; the pinned commit is then
-      // present and the checkout retry succeeds. A still-unreachable sha throws
-      // the same class on the retry and falls through to the fail-clean fold.
-      if (args.ref === undefined || !isGitCommitNotFetchedError(checkoutErr)) {
-        throw checkoutErr;
-      }
-
-      await gitOps.fetch({
-        dir: stagingDir,
-        remote: "origin",
-        ...(args.auth !== undefined && { auth: args.auth }),
-      });
-      await gitOps.checkout({ dir: stagingDir, ref: args.pin });
-    }
+    await checkoutPinWithRefetch(gitOps, stagingDir, args);
   } catch (err) {
     const leak = await cleanupStaging(stagingDir, "plugin clone staging");
     throw appendLeakToError(err, leak);
   }
 
-  // Atomic rename (same FS: sources-staging/ and plugin-clones/ are siblings
-  // under extensionRoot).
-  try {
-    await mkdir(path.dirname(cloneRoot), { recursive: true });
-    await rename(stagingDir, cloneRoot);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EEXIST" || code === "ENOTEMPTY") {
-      // A concurrent install of the same url+sha won the race. Its tree is
-      // byte-equivalent, so clean our staging and treat cloneRoot as a warm
-      // cache win -- no rethrow.
-      await cleanupStaging(stagingDir, "plugin clone staging");
-      return cloneRoot;
-    }
-
-    // Any other rename failure is real: append-leak-rethrow (MA-9).
-    const leak = await cleanupStaging(stagingDir, "plugin clone staging");
-    const wrapped = appendLeakToError(err, leak);
-    throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
-  }
-
+  // A `raced` promotion means a concurrent install of the same url+sha won;
+  // its tree is byte-equivalent, so the existing root is a warm cache win.
+  await promoteStagingToClone(stagingDir, cloneRoot, "plugin clone staging");
   return cloneRoot;
 }
 
@@ -231,25 +264,10 @@ export async function materializeOrRefreshPluginMirror(args: {
       throw appendLeakToError(err, leak);
     }
 
-    // Atomic rename (same FS: sources-staging/ and plugin-clones/ are siblings
-    // under extensionRoot).
-    try {
-      await mkdir(path.dirname(mirrorRoot), { recursive: true });
-      await rename(stagingDir, mirrorRoot);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EEXIST" || code === "ENOTEMPTY") {
-        // MIRR-03 / D-79.1-03: a concurrent create won the race. Its tree is
-        // byte-equivalent, so clean our staging and fall through to the refresh
-        // path -- the winner's tree still needs an in-place refresh + HEAD read.
-        await cleanupStaging(stagingDir, "plugin mirror staging");
-      } else {
-        // Any other rename failure is real: append-leak-rethrow (MA-9).
-        const leak = await cleanupStaging(stagingDir, "plugin mirror staging");
-        const wrapped = appendLeakToError(err, leak);
-        throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
-      }
-    }
+    // MIRR-03 / D-79.1-03: a `raced` promotion falls through to the refresh
+    // path exactly like a `renamed` one -- the winner's byte-equivalent tree
+    // still needs an in-place refresh plus a HEAD read.
+    await promoteStagingToClone(stagingDir, mirrorRoot, "plugin mirror staging");
   }
 
   // MIRR-02 / D-79.1-02: refresh the mirror in place (marketplace parity). A
@@ -519,8 +537,9 @@ export async function resolvePluginPin(args: {
 
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` now lives in shared/fs-utils.ts
 // so the network-free presence probe can share it without pulling this seam's git
-// surface. Re-exported here under the same name to keep install / update / reinstall
-// import sites unbroken.
+// surface. Re-exported here under the same name to keep the update / reinstall
+// import sites unbroken. `install.ts` no longer imports it -- it calls this
+// file's `resolveGitPluginRootWithSubdir`, which wraps it.
 export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 
 // D-77-06 / PURL-07: `canonicalCloneUrl` now lives in domain/clone-key.ts (the
@@ -529,3 +548,32 @@ export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 // Re-exported here under the same name to keep install / update / reinstall /
 // fetch import sites unbroken.
 export { canonicalCloneUrl } from "../../domain/clone-key.ts";
+
+/**
+ * PURL-03 / NFR-10: anchor a materialized clone to the plugin root the source
+ * actually names, and stamp the resolved sha.
+ *
+ * A `git-subdir` source resolves its pluginRoot UNDER the clone root, and the
+ * `escapes` / `missing-subdir` arms propagate unchanged so the resolver can
+ * surface them as `unavailable` (fail-clean). Every other git kind
+ * materializes at the clone root itself.
+ *
+ * Shared by the pinned and unpinned probe arms of BOTH the install path and
+ * the `info --fetch` path, which previously carried byte-identical copies.
+ */
+export async function resolveGitPluginRootWithSubdir(
+  gitSource: GitBackedSource,
+  cloneRoot: string,
+  resolvedSha: string,
+): Promise<GitPluginRootResult> {
+  if (gitSource.kind === "git-subdir") {
+    const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
+    if (subdirResult.kind !== "materialized") {
+      return subdirResult;
+    }
+
+    return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
+  }
+
+  return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
+}

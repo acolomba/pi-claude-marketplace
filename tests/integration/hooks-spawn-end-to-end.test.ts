@@ -5,10 +5,11 @@
 // process with the right CLAUDE_PLUGIN_ROOT, the handler runs, exits 0,
 // produces an observable side effect".
 //
-// Distinct from `hooks-dispatch-end-to-end.test.ts` (the dispatch-layer
-// gate via the `_setExecutorForTest` seam) -- this one stays on the
-// production executor (`dispatchHookExec`) and asserts via a real
-// `spawn(bash, [...])` invocation whose handler writes a sentinel file.
+// Distinct from `hooks-dispatch-end-to-end.test.ts` (the dispatch-layer gate,
+// which injects its own `executor` into `registerHooksBridge`) -- this one
+// leaves that parameter unset so the production executor (`dispatchHookExec`)
+// runs, and asserts via a real `spawn(bash, [...])` invocation whose handler
+// writes a sentinel file.
 //
 // Pins the CLAUDE_PLUGIN_ROOT regression: a hook command using
 // `${CLAUDE_PLUGIN_ROOT}/...` interpolation must resolve to the plugin's

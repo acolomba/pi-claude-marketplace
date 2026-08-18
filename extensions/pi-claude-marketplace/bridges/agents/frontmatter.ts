@@ -173,7 +173,7 @@ function applyFrontmatterLine(
  * Normalize the body to begin with at most a single leading newline so the
  * generated file's blank-line-before-body is deterministic.
  */
-export function normalizeBody(body: string): string {
+function normalizeBody(body: string): string {
   return body.replace(/^\r?\n+/, "\n");
 }
 

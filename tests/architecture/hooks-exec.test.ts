@@ -31,11 +31,7 @@ import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  _resetSpawnForTest,
-  _setSpawnForTest,
-  dispatchHookExec,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
+import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import {
   _resetForTest,
   registerHooksBridge,
@@ -43,7 +39,7 @@ import {
 import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
@@ -128,15 +124,14 @@ function makeChild(call: SpawnCall): MockChild {
 interface SpawnSpy {
   readonly calls: SpawnCall[];
   readonly children: MockChild[];
+  /** Pass to `dispatchHookExec` as its `spawnImpl` argument. */
+  readonly spawnImpl: typeof import("node:child_process").spawn;
 }
 
-function installSpawnSpy(
-  t: import("node:test").TestContext,
-  configure?: (handle: MockChild) => void,
-): SpawnSpy {
+function installSpawnSpy(configure?: (handle: MockChild) => void): SpawnSpy {
   const calls: SpawnCall[] = [];
   const children: MockChild[] = [];
-  _setSpawnForTest(((
+  const spawnImpl = ((
     command: string,
     args: readonly string[],
     options: SpawnOptions,
@@ -152,11 +147,9 @@ function installSpawnSpy(
     }
 
     return handle.child;
-  }) as unknown as typeof import("node:child_process").spawn);
-  t.after(() => {
-    _resetSpawnForTest();
-  });
-  return { calls, children };
+  }) as unknown as typeof import("node:child_process").spawn;
+
+  return { calls, children, spawnImpl };
 }
 
 function makeEntry(input: {
@@ -253,11 +246,17 @@ function makePiMock(): { pi: ExtensionAPI; calls: string[] } {
 
 test("Block A / EXEC-01: spawn called with options.cwd === ctx.cwd and CLAUDE_* env vars present", async (t) => {
   await relocateAgent(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
-  await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, makeCtx("/tmp/proj"));
+  await dispatchHookExec(
+    makeEntry({}),
+    { toolName: "bash", input: {} },
+    makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
+  );
 
   assert.equal(spy.calls.length, 1);
   const call = spy.calls[0];
@@ -278,7 +277,7 @@ test("Block A / EXEC-01: spawn called with options.cwd === ctx.cwd and CLAUDE_* 
 
 test("Block B / EXEC-02: stdin > 256 KB injects top-level _truncated:true marker", async (t) => {
   await relocateAgent(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -287,6 +286,8 @@ test("Block B / EXEC-02: stdin > 256 KB injects top-level _truncated:true marker
     makeEntry({ claudeEvent: "UserPromptSubmit" }),
     { text: hugeText },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   await new Promise((r) => setImmediate(r));
@@ -296,7 +297,7 @@ test("Block B / EXEC-02: stdin > 256 KB injects top-level _truncated:true marker
 
 test("CR-02 / Block B: stdin truncation accounts for UTF-8 bytes (CJK), not code units", async (t) => {
   await relocateAgent(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -309,6 +310,8 @@ test("CR-02 / Block B: stdin truncation accounts for UTF-8 bytes (CJK), not code
     makeEntry({ claudeEvent: "UserPromptSubmit" }),
     { text: cjk },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   await new Promise((r) => setImmediate(r));
@@ -321,7 +324,7 @@ test("CR-02 / Block B: stdin truncation accounts for UTF-8 bytes (CJK), not code
 
 test("Block B / EXEC-02: stdout > 1 MB triggers SIGTERM + noop", async (t) => {
   await relocateAgent(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     // Push > 1 MB and observe the kill.
     h.emitStdout("x".repeat(1024 * 1024 + 10));
     setImmediate(() => {
@@ -333,6 +336,8 @@ test("Block B / EXEC-02: stdout > 1 MB triggers SIGTERM + noop", async (t) => {
     makeEntry({}),
     { toolName: "bash", input: {} },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   assert.deepEqual(result, { kind: "noop" });
@@ -417,7 +422,7 @@ const EXEC_FORM_FIXTURES: readonly ExecFormFixture[] = [
 for (const fixture of EXEC_FORM_FIXTURES) {
   test(`Block D / EXEC-04: ${fixture.name}`, async (t) => {
     await relocateAgent(t);
-    const spy = installSpawnSpy(t, (h) => {
+    const spy = installSpawnSpy((h) => {
       h.emitClose(0);
     });
 
@@ -434,6 +439,8 @@ for (const fixture of EXEC_FORM_FIXTURES) {
       makeEntry(entryInput),
       { toolName: "bash", input: {} },
       makeCtx("/tmp/proj"),
+      undefined,
+      { spawnImpl: spy.spawnImpl },
     );
 
     assert.equal(spy.calls[0]?.options.shell, fixture.expectShell);
@@ -474,7 +481,7 @@ for (const fixture of ENV_FIXTURES) {
     fixture.expectEnvFile ? "set" : "unset"
   }; CLAUDE_CODE_REMOTE unset`, async (t) => {
     await relocateAgent(t);
-    const spy = installSpawnSpy(t, (h) => {
+    const spy = installSpawnSpy((h) => {
       h.emitClose(0);
     });
 
@@ -482,6 +489,8 @@ for (const fixture of ENV_FIXTURES) {
       makeEntry({ claudeEvent: fixture.claudeEvent }),
       fixture.event,
       makeCtx("/tmp/proj"),
+      undefined,
+      { spawnImpl: spy.spawnImpl },
     );
 
     const env = spy.calls[0]?.options.env ?? {};
@@ -632,7 +641,7 @@ test("registerHooksBridge tolerates a corrupt project-scope state.json (hydrate 
 
 test("Block F / D-60-06: SessionStart CLAUDE_ENV_FILE matches /data/_shared/claude-env-<sid>.env scheme", async (t) => {
   await relocateAgent(t);
-  const spy = installSpawnSpy(t, (h) => {
+  const spy = installSpawnSpy((h) => {
     h.emitClose(0);
   });
 
@@ -640,6 +649,8 @@ test("Block F / D-60-06: SessionStart CLAUDE_ENV_FILE matches /data/_shared/clau
     makeEntry({ claudeEvent: "SessionStart" }),
     { reason: "startup" },
     makeCtx("/tmp/proj"),
+    undefined,
+    { spawnImpl: spy.spawnImpl },
   );
 
   const envFile = spy.calls[0]?.options.env?.CLAUDE_ENV_FILE ?? "";

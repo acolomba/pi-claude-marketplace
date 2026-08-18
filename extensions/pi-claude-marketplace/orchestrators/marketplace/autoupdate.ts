@@ -187,6 +187,15 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
 }
 
 /**
+ * Selects the command context for the shared autoupdate orchestrator: the
+ * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
+ * context when disabling. Mirrors the enable/disable boolean-flag split.
+ */
+function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
+  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
+}
+
+/**
  * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
  *
  * ATTR-05 / D-48-C Shape 1: an explicit-scope `MarketplaceNotFoundError` is a
@@ -199,15 +208,6 @@ function autoupdateFailedRow(name: string, err: unknown): PluginFailedMessage {
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
-/**
- * Selects the command context for the shared autoupdate orchestrator: the
- * `marketplace autoupdate` context when enabling, the `marketplace noautoupdate`
- * context when disabling. Mirrors the enable/disable boolean-flag split.
- */
-function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOAUTOUPDATE_CONTEXT {
-  return enable ? AUTOUPDATE_CONTEXT : NOAUTOUPDATE_CONTEXT;
-}
-
 function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: unknown): void {
   const failureName = opts.name ?? "(unknown)";
 
@@ -237,27 +237,6 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
   notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
 }
 
-/**
- * WB-01: execute a single-scope autoupdate
- * flip inside `withLockedStateTransaction` so the config write-back happens
- * under the per-scope lock (serialized against concurrent state mutators).
- *
- * WR-05: the flip never writes state.json --
- * `classifyAutoupdateFlip` is classify-only and the closure has no
- * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
- * write-back IS the flip.
- *
- * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
- * (already-matching) return BEFORE the write-back call so the targeted config
- * file's mtime is byte-stable (RECON-05 fixed-point preserved).
- *
- * WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back so a reconcile-
- * driven flip never copies a `claude-plugins.local.json` override back into
- * the shared base file.
- *
- * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
- * message via the synthetic `Error` -- no absolute path leak.
- */
 /**
  * Reclassify both state-side `changed` AND state-side `unchanged` names
  * against the CONFIG-side `autoupdate` truth (SPLIT-01). The
@@ -389,6 +368,27 @@ async function writeAutoupdateBack(
   return { skipped };
 }
 
+/**
+ * WB-01: execute a single-scope autoupdate
+ * flip inside `withLockedStateTransaction` so the config write-back happens
+ * under the per-scope lock (serialized against concurrent state mutators).
+ *
+ * WR-05: the flip never writes state.json --
+ * `classifyAutoupdateFlip` is classify-only and the closure has no
+ * tx.save(). SPLIT-01 moved autoupdate truth into the config; the config
+ * write-back IS the flip.
+ *
+ * Write-back fires ONLY on FRESH flips (result.changed). Idempotent flips
+ * (already-matching) return BEFORE the write-back call so the targeted config
+ * file's mtime is byte-stable (RECON-05 fixed-point preserved).
+ *
+ * WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back so a reconcile-
+ * driven flip never copies a `claude-plugins.local.json` override back into
+ * the shared base file.
+ *
+ * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
+ * message via the synthetic `Error` -- no absolute path leak.
+ */
 async function flipOneScope(
   opts: AutoupdateOptions,
   scope: Scope,
@@ -461,6 +461,29 @@ async function flipOneScope(
   });
 }
 
+/**
+ * Fold one scope's flip result into the cascade rows.
+ *
+ * I2 / PR #51: a write-back-skipped name is demoted from a success row (the
+ * `<autoupdate>` fresh marker) to an honest failed row. Such a name appears in
+ * `result.changed` even though its config write never landed, so reporting it
+ * as a success would lie about persistence.
+ */
+function collectFlipRows(
+  rows: AutoupdateFlipRow[],
+  scope: Scope,
+  result: Awaited<ReturnType<typeof flipOneScope>>,
+): void {
+  const skippedSet = new Set(result.skipped);
+  for (const name of result.changed) {
+    rows.push({ name, scope, alreadyMatching: false, writeBackSkipped: skippedSet.has(name) });
+  }
+
+  for (const name of result.unchanged) {
+    rows.push({ name, scope, alreadyMatching: true });
+  }
+}
+
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
@@ -474,25 +497,13 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
 
   for (const scope of scopes) {
     try {
-      const result = await flipOneScope(opts, scope);
-      const skippedSet = new Set(result.skipped);
-      for (const name of result.changed) {
-        // I2 / PR #51: demote write-back-skipped names from success rows
-        // (`<autoupdate>` fresh marker) to honest failed rows. A skipped
-        // name appears in `result.changed` but its config write never
-        // landed, so claiming success would lie about persistence.
-        rows.push({ name, scope, alreadyMatching: false, writeBackSkipped: skippedSet.has(name) });
-      }
-
-      for (const name of result.unchanged) {
-        rows.push({ name, scope, alreadyMatching: true });
-      }
+      collectFlipRows(rows, scope, await flipOneScope(opts, scope));
     } catch (err) {
-      // For single-name flips: classifyAutoupdateFlip throws
-      // MarketplaceNotFoundError when the name is absent from THIS
-      // scope. With SC-6 bare-form, that is expected if the name only
-      // lives in the OTHER scope; we collect and only surface if BOTH
-      // scopes failed AND no flips happened anywhere.
+      // For a single-name flip `classifyAutoupdateFlip` throws
+      // MarketplaceNotFoundError when the name is absent from THIS scope.
+      // Under the SC-6 bare form that is expected when the name lives only in
+      // the OTHER scope, so it is collected and surfaced only if BOTH scopes
+      // failed AND no flip happened anywhere.
       if (!shouldCollectNotFound(opts, err)) {
         notifyAutoupdateScopeFailure(opts, scope, err);
         return;

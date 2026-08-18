@@ -45,7 +45,6 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateOutcome } from "../types.ts";
 
 /**
  * CR-06: AG-5 foreign-content failure carries the structured per-agent
@@ -256,38 +255,6 @@ export async function refreshGitHubClone(
       value: remoteSha,
     });
     await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  }
-}
-
-export function renderPartition(
-  lines: string[],
-  label: string,
-  outcomes: readonly PluginUpdateOutcome[],
-  withVersions: boolean,
-): void {
-  if (outcomes.length === 0) {
-    return;
-  }
-
-  lines.push(`${label}:`);
-  for (const o of [...outcomes].sort((a, b) => a.name.localeCompare(b.name))) {
-    // Narrow on the discriminated partition before reading partition-specific
-    // fields. The renderer's `withVersions`
-    // gate maps to the (updated)/(unchanged) partitions that carry
-    // `fromVersion` + `toVersion`; the notes-bearing branch maps to
-    // (skipped)/(failed). The bare-row fallback is the (updated) +
-    // !withVersions case.
-    if (withVersions && (o.partition === "updated" || o.partition === "unchanged")) {
-      lines.push(`  - ${o.name} (${o.fromVersion} → ${o.toVersion})`);
-      continue;
-    }
-
-    if ((o.partition === "skipped" || o.partition === "failed") && o.notes.length > 0) {
-      lines.push(`  - ${o.name}: ${o.notes.join("; ")}`);
-      continue;
-    }
-
-    lines.push(`  - ${o.name}`);
   }
 }
 
