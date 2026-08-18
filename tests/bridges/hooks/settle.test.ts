@@ -10,7 +10,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {} from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import {
   _bumpEpochForTest,
   _resetForTest,

@@ -4784,9 +4784,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  assert.ok(
-    examples.length >= 30,
-    `Expected at least 30 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost.`,
+  // Exact count, not a floor: 166 is the number of annotated examples in
+  // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
+  // refactor from silently parsing a fraction of the corpus. Update it
+  // deliberately when catalog examples are added or removed.
+  assert.equal(
+    examples.length,
+    166,
+    `Expected exactly 166 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

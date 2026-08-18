@@ -45,7 +45,8 @@ export interface HookEnvContext {
  * the documented absence is the upstream-parity contract.
  *
  * `extra` carries per-lane additions -- the async-rewake lane stamps its
- * dispatch marker through it. It is spread last so a lane can override.
+ * dispatch marker through it. It is spread BEFORE the session env, so a lane
+ * addition can never override a session var (D-91-02).
  */
 export async function prepareHookEnv(
   entry: RoutingEntry,
@@ -61,8 +62,10 @@ export async function prepareHookEnv(
     CLAUDE_PROJECT_DIR: transCtx.cwd,
     CLAUDE_PLUGIN_ROOT: entry.resolvedSource,
     CLAUDE_PLUGIN_DATA: pluginData,
-    ...claudeSessionEnvFor(transCtx.sessionId),
     ...extra,
+    // D-91-02: the session env spreads LAST so the authoritative per-dispatch
+    // snapshot wins over both the live `process.env` and any per-lane `extra`.
+    ...claudeSessionEnvFor(transCtx.sessionId),
   };
 
   if (entry.claudeEvent === "SessionStart") {

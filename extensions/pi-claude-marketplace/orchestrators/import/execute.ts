@@ -12,7 +12,12 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
-import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  assertNever,
+  ConcurrentInstallError,
+  errorMessage,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -634,28 +639,36 @@ async function installOnePlannedPlugin(
     return;
   }
 
-  if (outcome.status === "failed") {
-    // The collapsed `failed` status carries the typed Error directly. Narrow
-    // on `instanceof PluginShapeError` plus `.kind` to recover the specific
-    // failure class; everything else falls through to the unexpected bucket.
-    dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
-    return;
-  }
+  // Switch rather than an `if (failed) ... return` fall-through: a third
+  // `InstallPluginOutcome` arm must become a compile error at `assertNever`,
+  // not get counted as a successful install in the cascade totals.
+  switch (outcome.status) {
+    case "failed":
+      // The collapsed `failed` status carries the typed Error directly. Narrow
+      // on `instanceof PluginShapeError` plus `.kind` to recover the specific
+      // failure class; everything else falls through to the unexpected bucket.
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      return;
+    case "installed":
+      result.installedPlugins.push({
+        kind: "plugin-installed",
+        scope: plugin.scope,
+        plugin: plugin.ref.plugin,
+        marketplace: plugin.ref.marketplace,
+        ref: refLabel(plugin),
+        reason: "installed",
+        resourcesChanged: outcome.resourcesChanged,
+        declaresAgents: outcome.declaresAgents,
+        declaresMcp: outcome.declaresMcp,
+      });
+      result.changedResources ||= outcome.resourcesChanged;
+      for (const w of outcome.postCommitWarnings ?? []) {
+        pushDiagnostic(result, plugin.scope, "post-install-warning", w, { ref: refLabel(plugin) });
+      }
 
-  result.installedPlugins.push({
-    kind: "plugin-installed",
-    scope: plugin.scope,
-    plugin: plugin.ref.plugin,
-    marketplace: plugin.ref.marketplace,
-    ref: refLabel(plugin),
-    reason: "installed",
-    resourcesChanged: outcome.resourcesChanged,
-    declaresAgents: outcome.declaresAgents,
-    declaresMcp: outcome.declaresMcp,
-  });
-  result.changedResources ||= outcome.resourcesChanged;
-  for (const w of outcome.postCommitWarnings ?? []) {
-    pushDiagnostic(result, plugin.scope, "post-install-warning", w, { ref: refLabel(plugin) });
+      return;
+    default:
+      assertNever(outcome);
   }
 }
 

@@ -16,6 +16,8 @@
 // the ~99% happy path. `setDescriptionScalar` instead replaces exactly the
 // `description` node span and leaves every sibling key byte-identical.
 
+import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
+
 /**
  * SKILL-01 / D-86-02 / A4: the fixed placeholder description synthesized onto an
  * unparseable skill. A short YAML-safe constant -- NOT interpolated with plugin
@@ -148,8 +150,6 @@ function emitSafeDoubleQuotedScalar(value: string): string {
   const escaped = oneLine.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
   return `"${escaped}"`;
 }
-
-import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
 
 /** The top-level frontmatter `description` key token (including its colon). */
 const DESCRIPTION_KEY = "description:";

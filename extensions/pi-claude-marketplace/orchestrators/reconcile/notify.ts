@@ -721,6 +721,11 @@ function applyMarketplaceOutcomeToBlock(
       }
 
       return;
+    default:
+      // The caller's own `assertNever` only proves the OUTER union is fully
+      // routed; without this arm a newly-added marketplace-subject kind would
+      // be widened into the `Extract<>` above and silently no-op the row.
+      assertNever(outcome);
   }
 }
 
@@ -818,6 +823,11 @@ function applyPluginOutcomeToBlock(
         needsReload: false,
       });
       return;
+    default:
+      // The caller's own `assertNever` only proves the OUTER union is fully
+      // routed; without this arm a newly-added plugin-subject kind would be
+      // widened into the `Extract<>` above and silently drop the row.
+      assertNever(outcome);
   }
 }
 
