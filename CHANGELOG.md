@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.1] - 2026-08-18
 
 - The development dependency on the Pi host API moved to 0.84.2. That release adds a stop reason for a provider request that Pi deferred to a batch or asynchronous lane, and the turn-boundary hook dispatcher now treats it as an in-flight state that runs no Stop hooks, the same as it already treats a pending request. Nothing in the extension behaves differently on a Pi release that never reports the new reason.
 
