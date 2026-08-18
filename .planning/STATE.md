@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.18
 milestone_name: Manifest-Independent Installed Plugin Info
 status: Awaiting next milestone
-stopped_at: "PR #132 (features/fallow-full-gate) green and awaiting squash-merge; codebase map regenerated 2026-08-18"
-last_updated: "2026-08-18T10:37:21.451Z"
-last_activity: 2026-08-16
-last_activity_desc: "Completed quick task 260816-qov: Make fallow a full uniform static-analysis gate with zero categorical exclusions"
+stopped_at: "Quick task 260818-k7f landed on features/pi-coding-agent-0-84-2 (commit b6414110), awaiting PR; v0.16.0 released"
+last_updated: "2026-08-18T18:45:52.000Z"
+last_activity: 2026-08-18
+last_activity_desc: "Completed quick task 260818-k7f: Bump pi-coding-agent to 0.84.2 and handle the deferred stop reason"
 current_phase: 100
 current_phase_name: disabled-plugin-information-retention
 progress:
@@ -38,7 +38,7 @@ Phase: Milestone v1.18 complete (Phases 95-100 archived to
 .planning/milestones/v1.18-phases/)
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-16 - Completed quick task 260816-qov: Make fallow a full uniform static-analysis gate with zero categorical exclusions
+Last activity: 2026-08-18 - Completed quick task 260818-k7f: Bump pi-coding-agent to 0.84.2 and handle the deferred stop reason
 
 ## Milestone Summary
 
@@ -79,6 +79,7 @@ remain uncovered, each with its unreachability reason recorded in
 | 260815-h7g | Adopt fallow static analysis as a linting gate | 2026-08-15 | 1d4f478b..a93d2be9 | [260815-h7g-adopt-fallow-static-analysis-as-a-lintin](./quick/260815-h7g-adopt-fallow-static-analysis-as-a-lintin/) |
 | 260815-p25 | Remove the bridges/hooks circular-dependency knot and gate cycles locally | 2026-08-15 | cee12150 | [260815-p25-implement-hooks-cycle-removal-from-spike](./quick/260815-p25-implement-hooks-cycle-removal-from-spike/) |
 | 260816-qov | Make fallow a full uniform static-analysis gate with zero categorical exclusions | 2026-08-16 | 345b325e..HEAD (PR #132) | [260816-qov-make-fallow-a-full-uniform-static-analys](./quick/260816-qov-make-fallow-a-full-uniform-static-analys/) |
+| 260818-k7f | Bump pi-coding-agent to 0.84.2 and handle the deferred stop reason | 2026-08-18 | b6414110 | [260818-k7f-bump-pi-coding-agent-to-0-84-2-and-handl](./quick/260818-k7f-bump-pi-coding-agent-to-0-84-2-and-handl/) |
 
 ## Decisions
 
@@ -131,6 +132,6 @@ from 16/18 to 18/18 with no source change.
 
 ## Session
 
-**Last session:** 2026-08-18T10:37:21.444Z
-**Stopped at:** PR #132 (features/fallow-full-gate) green and awaiting squash-merge; codebase map regenerated 2026-08-18
+**Last session:** 2026-08-18T18:45:52.000Z
+**Stopped at:** Quick task 260818-k7f landed on features/pi-coding-agent-0-84-2 (commit b6414110); PR #132 still awaiting squash-merge
 **Resume file:** None
