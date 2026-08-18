@@ -534,6 +534,37 @@ different in kind -- it feeds a real cross-surface drift guard in
 `tests/orchestrators/edge-deps.test.ts`, so it wants a public contract,
 not deletion.
 
+**Update 2026-08-18: the "fallow is quiet about them" claim above is only
+half true, and the half that is false matters.**
+
+Measured with three planted probes under the committed config:
+
+| probe | shape | verdict |
+| --- | --- | --- |
+| exported, referenced by nothing | orphan | REPORTED |
+| exported, referenced only by a module-PRIVATE function | internal-only | REPORTED |
+| exported, named in an EXPORTED function's signature | contract | not reported |
+
+So `unused-types` (default severity `error`, active) does catch an export
+whose only consumer is its own file -- row 2 is exactly the shape this item
+worried was invisible. `ignoreExportsUsedInFile` defaults to `false`
+("suppress nothing"), not true. What fallow does NOT flag is row 3, and that
+is correct rather than a hole: a type named in an exported signature is
+genuinely public API, because a caller needs the name to call the function.
+
+The consequence for this item: a seam is invisible to fallow only while it is
+reachable through an exported signature. That makes the fix directional --
+narrow the signature and the type goes private as a side effect, with no
+suppression and no new gate. `runInstallLedger` is the worked example: it
+returned its mutable `InstallCtx` scratchpad (25 fields, 11 mutable, including
+the four rollback prep handles and a live `stateSnapshot`), which is what
+forced the export. Returning a readonly `InstallLedgerSummary` projection of
+the four fields that actually cross the module boundary made `InstallCtx`
+module-private again (PR #132).
+
+An export-surface pin test was considered and rejected: it would restate what
+`unused-types` already enforces for rows 1-2 and cannot judge row 3.
+
 
 Filed 2026-08-16 alongside the routing-state test repointing (quick task
 260816-qov).
