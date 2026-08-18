@@ -207,7 +207,7 @@ test("STOP-02: last_assistant_message joins text blocks and skips non-text block
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// STOP-01: aborted / toolUse dispatch nothing
+// STOP-01: aborted / toolUse / deferred dispatch nothing
 // ──────────────────────────────────────────────────────────────────────────
 
 test("STOP-01: stopReason aborted dispatches nothing", async () => {
@@ -250,6 +250,31 @@ test("STOP-01: stopReason toolUse is a defensive no-op", async () => {
 
   assert.deepEqual(fired, [], "toolUse must not dispatch the Stop bucket");
   assert.equal(sent.length, 0, "toolUse must not re-enter");
+});
+
+test("STOP-01: stopReason deferred is a defensive no-op", async () => {
+  _resetForTest();
+  resetSettleState();
+
+  const fired: string[] = [];
+  const injectedExecutor: HookExecutor = (entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "go on" });
+  };
+
+  _setRoutingBucketForTest("Stop", [makeStopEntry("p1")]);
+
+  const { pi, sent } = makePi();
+  const epoch = currentEpoch();
+  agentEndCacheHandler(epoch)(makeAgentEnd("deferred"));
+  await settleHandlerFor(epoch, pi, injectedExecutor)(settledEvent, stubCtx);
+
+  assert.deepEqual(
+    fired,
+    [],
+    "a request deferred to a batch lane is still in flight and must run no Stop hook",
+  );
+  assert.equal(sent.length, 0, "a deferred request must not trigger a bridge re-entry");
 });
 
 test("STOP-01: an unknown stopReason is debug-logged and dropped without dispatch or throw", async () => {

@@ -6,8 +6,8 @@
 // `agent_end.messages` and gates dispatch on its `stopReason` (STOP-01):
 // `stop` runs the Stop bucket with full decision control (STOP-03 block
 // re-entry); `error` / `length` route to StopFailure (observation-only --
-// the bucket runs but its result is discarded, SFAIL-01); `aborted` and
-// `toolUse` dispatch nothing.
+// the bucket runs but its result is discarded, SFAIL-01); `pending`,
+// `aborted`, `toolUse` and `deferred` dispatch nothing.
 //
 // Both handlers carry the `capturedEpoch` guard so a stale closure from a
 // prior `/reload` cannot fire against rebuilt routing tables;
@@ -152,8 +152,9 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
  * `agent_settled` dispatcher: reads the cached last assistant message and
  * gates on `stopReason` (STOP-01). `stop` runs the Stop bucket and re-enters
  * the agent loop on a blocking hook (STOP-03); `error` / `length` route to the
- * StopFailure observation-only arm (SFAIL-01); `aborted` / `toolUse` are a
- * defensive no-op. No-ops on a stale epoch or an empty cache.
+ * StopFailure observation-only arm (SFAIL-01); `pending` / `aborted` /
+ * `toolUse` / `deferred` are a defensive no-op. No-ops on a stale epoch or an
+ * empty cache.
  *
  * `executor` is optional and threaded down to `collectBucketOutcomes`, which
  * defaults it to `dispatchHookExec`. Production omits it -- the one
@@ -196,9 +197,16 @@ export function settleHandlerFor(
           executor,
         );
         return;
+      // Defensive no-op group (STOP-01): none of these is a turn ending the
+      // Stop bucket may observe. `deferred` means the provider request was
+      // handed to a batch or asynchronous lane and the message carries a
+      // `DeferredHandle` to poll for the real response later, so it is an
+      // in-flight state like `pending`; dispatching Stop on it would fire
+      // turn-boundary hooks on a turn that has not ended.
       case "pending":
       case "aborted":
       case "toolUse":
+      case "deferred":
         return;
       default: {
         // Compile-time exhaustiveness pin (NFR-7): a peer-dep bump that widens

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- The development dependency on the Pi host API moved to 0.84.2. That release adds a stop reason for a provider request that Pi deferred to a batch or asynchronous lane, and the turn-boundary hook dispatcher now treats it as an in-flight state that runs no Stop hooks, the same as it already treats a pending request. Nothing in the extension behaves differently on a Pi release that never reports the new reason.
+
 ## [0.16.0] - 2026-08-18
 
 - Fixed: an uninstall whose plugin data directory failed the NFR-10 containment check reported plain success while the directory survived. The cleanup step resolves that path through `assertSafeName` twice and `assertPathInside`, and a refactor had moved the call inside the `try` whose `catch` deliberately swallows cleanup leaks, so a refused path became indistinguishable from an `rm` failure. D-19-01 sanctions swallowing the cleanup, not the assertion guarding it. The path is resolved before the guard again, and a test now mounts the data dir as a symlink out of the data root to hold it there.

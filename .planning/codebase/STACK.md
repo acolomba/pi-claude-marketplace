@@ -25,7 +25,7 @@
 
 **Core:**
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
-- `@earendil-works/pi-coding-agent` (peer dep `>=0.80.5`, dev dep `^0.83.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
+- `@earendil-works/pi-coding-agent` (peer dep `>=0.80.5`, dev dep `^0.84.2`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
 - `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.84.1`) - Pi terminal UI primitives
 - `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 
