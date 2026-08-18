@@ -139,7 +139,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { INSTALL_CONTEXT, type InstallMsg } from "./install.messaging.ts";
+import { INSTALL_CONTEXT, type EntityErrorRow, type InstallMsg } from "./install.messaging.ts";
 import {
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
@@ -173,7 +173,6 @@ import type {
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { EntityErrorRow } from "./install.messaging.ts";
 
 /**
  * Parsed (plugin, marketplace) options bundle. PI-1 / RH-1 / RH-2 parse is

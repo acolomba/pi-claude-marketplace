@@ -154,10 +154,36 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
     "`fallow dead-code` must carry --fail-on-issues, or a reported cycle still exits 0",
   );
 
-  for (const filter of ["--circular-deps", "--boundary-violations", "--unused-files"]) {
+  // An ALLOWLIST, not a denylist. `fallow dead-code --help` exposes ~24
+  // only-report filters plus `--file` and `--top`; enumerating the ones we
+  // know about leaves every flag we did not think of free to narrow the run.
+  // Measured: adding `--unused-exports` to the script drops a planted
+  // two-file cycle from exit 1 to exit 0 while a denylist of three flags
+  // stays green. Anything unrecognized here fails until someone proves the
+  // addition still reports cycles.
+  const deadCodeSegment = fallowScript
+    .split(/&&|\|\||;/)
+    .map((segment) => segment.trim())
+    .find((segment) => /^(npx\s+)?fallow\s+dead-code(?![\w-])/.test(segment));
+
+  assert.ok(
+    deadCodeSegment !== undefined,
+    "the `fallow` script has no standalone `fallow dead-code` command; cycles are ungated",
+  );
+
+  const ALLOWED_DEAD_CODE_TOKENS = new Set([
+    "npx",
+    "fallow",
+    "dead-code",
+    "--fail-on-issues",
+    "--format",
+    "human",
+  ]);
+
+  for (const token of deadCodeSegment.split(/\s+/).filter((t) => t.length > 0)) {
     assert.ok(
-      !fallowScript.includes(filter),
-      `the \`fallow\` script must not pass ${filter}. Those flags are only-report FILTERS, not additions: naming one narrows the run to that class and silently stops gating the others.`,
+      ALLOWED_DEAD_CODE_TOKENS.has(token),
+      `unrecognized token \`${token}\` in the \`fallow dead-code\` invocation. fallow's per-issue flags are only-report FILTERS, not additions: naming one narrows the run to that class and silently stops gating cycles. If this token is genuinely safe, add it to ALLOWED_DEAD_CODE_TOKENS after measuring that a planted cycle still exits 1.`,
     );
   }
 });

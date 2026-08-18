@@ -2289,6 +2289,16 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     assert.equal(notifications[0]!.severity, "error");
     // The error message should reference the JSON parse failure.
     assert.match(notifications[0]!.message, /state\.json/);
+    // ...and carry the closed-set reason token. `narrowListFailReason` is a
+    // one-line delegate to `sharedNarrowProbeError`, whose ladder is tested
+    // directly in tests/shared/probe-classifiers.test.ts. This assertion is
+    // what pins the delegate itself: without it, hardcoding either wrapper's
+    // return value leaves the whole suite green.
+    //
+    // `unreadable`, not `unparseable`: loadState wraps the JSON failure, so
+    // the error reaching the classifier is not a bare SyntaxError and lands
+    // on the permissive fallback arm.
+    assert.match(notifications[0]!.message, /\{unreadable\}/);
   });
 });
 

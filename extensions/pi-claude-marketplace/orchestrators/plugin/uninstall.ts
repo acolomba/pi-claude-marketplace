@@ -457,11 +457,15 @@ async function runPostUninstallCleanup(
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
 
+  // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
+  // runs assertSafeName on both segments and assertPathInside on the result,
+  // and a containment failure must propagate rather than be mistaken for an
+  // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
+  // guarding it.
+  const dataDir = await locations.pluginDataDir(marketplace, plugin);
+
   try {
-    await rm(await locations.pluginDataDir(marketplace, plugin), {
-      recursive: true,
-      force: true,
-    });
+    await rm(dataDir, { recursive: true, force: true });
   } catch {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
