@@ -12,9 +12,9 @@
 //     helper, no platform-git import), a gate enforced by
 //     tests/architecture/no-orchestrator-network.test.ts's forbidden-targets
 //     set.
-//   - auth: `auth-host.ts` re-exports (`buildAuthForHost` / `hostFromCloneUrl`)
-//     with a single sweep-wide `authMemo` so a bulk sweep triggers each host's
-//     device flow at most once (FTCH-06).
+//   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
+//     `authMemo` so a bulk sweep triggers each host's device flow at most once
+//     (FTCH-06).
 //   - classification: the fs-only `git-source-probe.ts` (`makePresenceProbe`
 //     for the no-op gate, `probeManifestEntry` for the post-fetch row).
 //   - cascade: `notify-context.ts::notifyWithContext` with FETCH_CONTEXT.
@@ -43,7 +43,7 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
   canonicalCloneUrl,
@@ -371,7 +371,7 @@ async function materializeThroughSeam(
 ): Promise<void> {
   if (gitSource.sha === undefined) {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const auth = buildProbeAuth(cloneUrl, gitSource.kind, deps);
+    const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
     await deps.seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
@@ -382,33 +382,13 @@ async function materializeThroughSeam(
   }
 
   const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({ source: gitSource });
-  const auth = buildProbeAuth(cloneUrl, gitSource.kind, deps);
+  const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
     pin,
     ...(ref !== undefined && { ref }),
     ...(auth !== undefined && { auth }),
-  });
-}
-
-/**
- * Build the host-keyed auth bundle for a resolved cloneUrl (install parity,
- * D-81-05). Returns a bundle for a registered provider host or undefined for a
- * no-provider / public host (T-79-04 cross-host leak guard). The sweep-wide
- * authMemo caps the device flow at once per host (FTCH-06).
- */
-function buildProbeAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  deps: FetchOneDeps,
-) {
-  return buildAuthForHost({
-    host: hostFromCloneUrl(cloneUrl, kind),
-    credentialOps: deps.credentialOps,
-    ctx: deps.ctx,
-    authMemo: deps.authMemo,
-    ...(deps.deviceFlowHttp !== undefined && { deviceFlowHttp: deps.deviceFlowHttp }),
   });
 }
 

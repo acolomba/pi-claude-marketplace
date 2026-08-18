@@ -13,19 +13,14 @@
 // oriented, NOT byte-equality on notify output).
 
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
-
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import {
+  makeNotifyCollectingCtx,
+  makeStubPi,
+  type NotificationRecord,
+} from "../helpers/ipc-child.ts";
 
 interface StartMessage {
   readonly cwd: string;
-}
-
-interface NotificationRecord {
-  readonly message: string;
-  readonly severity?: string;
 }
 
 function isStartMessage(value: unknown): value is StartMessage {
@@ -35,12 +30,6 @@ function isStartMessage(value: unknown): value is StartMessage {
 
   const record = value as Record<string, unknown>;
   return typeof record.cwd === "string";
-}
-
-function makePi(): ExtensionAPI {
-  return {
-    getAllTools: (): unknown[] => [],
-  } as unknown as ExtensionAPI;
 }
 
 function sendResult(result: {
@@ -63,20 +52,12 @@ async function handleMessage(message: unknown): Promise<void> {
     return;
   }
 
-  const notifyArgs: NotificationRecord[] = [];
-  const ctx = {
-    cwd: message.cwd,
-    ui: {
-      notify: (body: string, severity?: string): void => {
-        notifyArgs.push(severity === undefined ? { message: body } : { message: body, severity });
-      },
-    },
-  } as unknown as ExtensionContext;
+  const { ctx, notifications: notifyArgs } = makeNotifyCollectingCtx(message.cwd);
 
   try {
     await applyReconcile({
       ctx,
-      pi: makePi(),
+      pi: makeStubPi(),
       cwd: message.cwd,
       scope: "project",
     });

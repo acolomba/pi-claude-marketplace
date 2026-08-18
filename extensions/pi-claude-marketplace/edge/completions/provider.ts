@@ -333,6 +333,3 @@ export async function getArgumentCompletions(
   // providers).
   return null;
 }
-
-// Re-export buildItem so unit tests of the dispatcher can compare values.
-export { buildItem } from "./data.ts";

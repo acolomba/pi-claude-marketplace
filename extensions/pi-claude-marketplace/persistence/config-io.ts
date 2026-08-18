@@ -42,7 +42,7 @@ import { assertPathInside } from "../shared/path-safety.ts";
  * github/path/url/etc. happens at downstream consume time. `autoupdate` is
  * optional -- defaults are applied by the consumer, NOT at load.
  */
-export const MARKETPLACE_CONFIG_ENTRY_SCHEMA = Type.Object({
+const MARKETPLACE_CONFIG_ENTRY_SCHEMA = Type.Object({
   source: Type.String(),
   autoupdate: Type.Optional(Type.Boolean()),
 });
@@ -52,7 +52,7 @@ export const MARKETPLACE_CONFIG_ENTRY_SCHEMA = Type.Object({
  * applied at consume time). No `version` field per D-06 -- versions are a
  * machine fact owned by `state.json`.
  */
-export const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
+const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
   enabled: Type.Optional(Type.Boolean()),
 });
 
@@ -68,7 +68,7 @@ export const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
  * extra-property-forbidding directive anywhere -- a user-authored typo or a
  * forward-compatible new key does NOT fail validation.
  */
-export const CONFIG_SCHEMA = Type.Object({
+const CONFIG_SCHEMA = Type.Object({
   schemaVersion: Type.Optional(Type.Literal(1)),
   marketplaces: Type.Optional(Type.Record(Type.String(), MARKETPLACE_CONFIG_ENTRY_SCHEMA)),
   plugins: Type.Optional(Type.Record(Type.String(), PLUGIN_CONFIG_ENTRY_SCHEMA)),

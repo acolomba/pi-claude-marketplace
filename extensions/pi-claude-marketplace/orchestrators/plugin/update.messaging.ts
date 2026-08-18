@@ -29,14 +29,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * no-ops), `failed` rows, and -- per XSURF-03 -- a `partially-upgradable` row for a
  * manual no-`--partial` decline of a partially-upgradable plugin.
  */
-export const UPDATE_STATUSES = [
-  "updated",
-  "partially-installed",
-  "skipped",
-  "partially-upgradable",
-  "failed",
-] as const;
-export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
+type UpdateStatus =
+  "updated" | "partially-installed" | "skipped" | "partially-upgradable" | "failed";
 
 /**
  * update's row message union -- the subset of central plugin shapes whose

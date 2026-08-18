@@ -70,6 +70,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { isScopeBearingListRow } from "../../shared/notify.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
@@ -140,7 +141,7 @@ type PluginRenderStatus =
  * not resolver-classified here -- they carry the `installed-inventory` bucket
  * and the filter keys on their render status instead.
  */
-type FilterBucket =
+export type FilterBucket =
   | "installed-inventory"
   | "available"
   | "partially-available"
@@ -350,6 +351,48 @@ function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessag
 }
 
 /**
+ * D-66-02 / FSTAT-04 / FSTAT-05: resolve the upgrade CANDIDATE so an
+ * upgradable clean record can split `(upgradable)` from
+ * `(partially-upgradable)`. `resolveStrict` is the cache/no-network resolver
+ * (NFR-5), guarded by the no-orchestrator-network architecture test.
+ *
+ * CR-01: the resolve MUST be wrapped. `resolveStrict` propagates disk-I/O
+ * failures (EACCES/EIO/ENOTDIR, and the malformed plugin.json the lenient path
+ * rethrows) rather than folding them into a not-installable variant. A probe
+ * failure on the candidate of a SINGLE upgradable plugin must never escape the
+ * row builder -- unguarded it bubbles to the top-level `listPlugins` catch,
+ * which blanks the ENTIRE list into one synthetic `(list) (failed)` row and
+ * hides every other plugin. Returning undefined degrades to the plain
+ * `(upgradable)` row, the truthful "could not assert a degrade" default, at
+ * parity with every sibling force-resolve site (`availableRowMessage`,
+ * `info.ts`, `resolvePendingForceInstalls`).
+ *
+ * PURL-08 / D-78-04 / NFR-5: the fs-only presence probe lets a git-source
+ * candidate resolve against the WARM clone cache without cloning. A cold cache
+ * yields `not-cached`, the resolver's git arm maps that to
+ * `unavailable{not installed}`, and the classifier's CR-01 degrade folds it
+ * back to the plain `(upgradable)` row -- so an installed git plugin with a
+ * missing clone never regresses to `(unavailable)`. The probe never touches
+ * gitOps or the network.
+ */
+async function probeUpgradeCandidate(
+  manifestEntry: Parameters<typeof resolveStrict>[0],
+  marketplaceRoot: string,
+  pluginScope: Scope,
+  cwd: string,
+): Promise<Awaited<ReturnType<typeof resolveStrict>> | undefined> {
+  const resolveCtx: ResolveContext = {
+    marketplaceRoot,
+    resolveGitPluginRoot: makePresenceProbe(locationsFor(pluginScope, cwd)),
+  };
+  try {
+    return await resolveStrict(manifestEntry, resolveCtx);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Build a `PluginInstalledMessage` (or `PluginUpgradableMessage` when the
  * manifest version differs from the installed record's version per PL-5
  * string compare) for an INSTALLED plugin record. `dependencies` derives
@@ -484,18 +527,9 @@ async function installedRowMessage(
   // (as an `undefined`-equivalent) back to the plain `(upgradable)` row -- an
   // installed git plugin with a missing clone never regresses to `(unavailable)`.
   // The probe never touches gitOps/network (no-orchestrator-network gate).
-  let candidateResolved: Awaited<ReturnType<typeof resolveStrict>> | undefined;
-  if (upgradable) {
-    const resolveCtx: ResolveContext = {
-      marketplaceRoot,
-      resolveGitPluginRoot: makePresenceProbe(locationsFor(pluginScope, cwd)),
-    };
-    try {
-      candidateResolved = await resolveStrict(manifestEntry, resolveCtx);
-    } catch {
-      candidateResolved = undefined;
-    }
-  }
+  const candidateResolved = upgradable
+    ? await probeUpgradeCandidate(manifestEntry, marketplaceRoot, pluginScope, cwd)
+    : undefined;
 
   const status = classifyInstalledRecord(
     record,
@@ -968,6 +1002,76 @@ interface BuiltMarketplace {
   readonly emitScope: Scope;
 }
 
+/** The project-scope rows folded under a user-scope marketplace header. */
+interface OrphanFold {
+  readonly folded: readonly ListMsg[];
+  readonly foldedNames: ReadonlySet<string>;
+}
+
+const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
+
+/**
+ * D-13-17 / D-13-18 orphan fold: carry the project-scope installed rows under
+ * the user-scope marketplace header when the project record is a CLONE of the
+ * user record. Each folded row keeps `scope: "project"` -- its ACTUAL install
+ * scope -- which the renderer's orphan-fold rule surfaces as the `[project]`
+ * bracket when `p.scope !== mp.scope`.
+ *
+ * BOUND-03 / D-95-04: the WHOLE manifest load result is bound, not just
+ * `manifest`. Taking `manifest` alone dropped the load-failure state and let a
+ * folded row claim an absence about a project-side manifest that never parsed.
+ * INV-01: the project record's OWN manifest is the authority for its rows'
+ * absence claims, because the folded row is a statement about that record.
+ *
+ * WR-02: the carry-over is filtered to installed-inventory rows only. The
+ * project-side enumeration also returns `available` and `unavailable` bucket
+ * rows from the same shared manifest (cloned `marketplaceRoot`), and folding
+ * those into the user-scope block would duplicate every manifest-listed plugin
+ * not installed in either scope -- one row from each side's enumeration. The
+ * documented fold semantic is "fold installed records from the other scope".
+ *
+ * RLD-04 / CR-01: the filter discriminates on `installed` (which
+ * `installedRowMessage` emits with `needsReload: false` for steady-state
+ * inventory) plus `upgradable` and the ENBL-04 `disabled` arm, so orphan-folded
+ * rows survive. A disabled record IS an installed record -- dropping it would
+ * both hide the row and let the user-side enumeration re-emit the plugin as a
+ * duplicate `(available)`. FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived
+ * `partially-installed` / `partially-upgradable` rows are recorded-installed
+ * inventory and join for the same reason. Regressions:
+ * tests/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
+ * fold-carryover" case in tests/orchestrators/plugin/list.test.ts.
+ */
+async function computeOrphanFold(
+  opts: ListPluginsOptions,
+  projectMp: ExtensionState["marketplaces"][string] | undefined,
+): Promise<OrphanFold> {
+  if (projectMp === undefined) {
+    return EMPTY_ORPHAN_FOLD;
+  }
+
+  const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
+  const projectSideRows = await enumerateMarketplacePlugins(
+    opts,
+    projectMp,
+    "project",
+    "user",
+    projectScopedManifest,
+  );
+  const folded = projectSideRows.filter(
+    (r) =>
+      r.status === "installed" ||
+      r.status === "upgradable" ||
+      r.status === "disabled" ||
+      r.status === "partially-installed" ||
+      r.status === "partially-upgradable",
+  );
+  // The folded names let the user-scope manifest's available-bucket
+  // enumeration skip them, so the catalog `project-orphan-folded` state shows
+  // a single `● alpha [project] ... (installed)` row and no duplicate
+  // `○ alpha (available)` row under the same header.
+  return { folded, foldedNames: new Set(folded.map((r) => r.name)) };
+}
+
 async function buildMarketplaceMessage(args: {
   opts: ListPluginsOptions;
   mpName: string;
@@ -1098,65 +1202,9 @@ export async function loadPluginListPayload(
     // Fold orphan project plugins iff the matching project-scope record
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
-    const isProjectMpClone = isCloneOfUserMarketplace(projectMp, mpRecord);
-    let folded: readonly ListMsg[] = [];
-    let foldedNames: ReadonlySet<string> = new Set();
-    if (isProjectMpClone && projectMp !== undefined) {
-      // Each folded row carries scope: "project" (D-13-18 actual install
-      // scope), surfaced via the renderer's orphan-fold rule when
-      // `p.scope !== mp.scope`.
-      // BOUND-03 / D-95-04: bind the WHOLE result. Taking `manifest` alone
-      // here dropped the load-failure state, which let a folded row claim an
-      // absence about a project-side manifest that never parsed. INV-01: the
-      // project record's OWN manifest is the authority for its rows' absence
-      // claims -- the folded row is a statement about that record.
-      const projectScopedManifest = await loadMarketplaceManifestSoftly(projectMp);
-      // WR-02: filter to ONLY installed/upgradable rows. The project-side
-      // enumeration also returns `available` and `unavailable` bucket rows
-      // from the same shared manifest (cloned `marketplaceRoot`); folding
-      // those into the user-scope block would duplicate every manifest-
-      // listed plugin that is not installed in either scope (one row from
-      // the project-side enumeration, one from the user-side's own
-      // enumeration). The documented fold semantic is "fold installed
-      // records from the other scope" -- restrict the carry-over set
-      // accordingly.
-      const projectSideRows = await enumerateMarketplacePlugins(
-        opts,
-        projectMp,
-        "project",
-        "user",
-        projectScopedManifest,
-      );
-      // RLD-04: `installedRowMessage` emits `status: "installed"` with
-      // `needsReload: false` for the steady-state inventory row. The
-      // carry-over filter MUST discriminate on `"installed"` (plus the
-      // `"upgradable"` and ENBL-04 `"disabled"` arms) so orphan-folded rows
-      // survive (CR-01). A disabled record IS an installed record -- dropping
-      // it here would both hide the row and let the user-side enumeration
-      // re-emit the plugin as a duplicate `(available)`. FSTAT-02 / FSTAT-04 /
-      // D-66-01 / D-66-02: the derived `partially-installed` / `partially-upgradable`
-      // rows are likewise recorded-installed inventory and join the carry-over
-      // set for the same reason (a partially-installed orphan would otherwise vanish
-      // AND duplicate as `(available)`). The integration regression for this
-      // fold lives at tests/integration/fold-adoption.test.ts; the
-      // orchestrator-level reproduction is in
-      // tests/orchestrators/plugin/list.test.ts
-      // ("CR-01 / G-21-01 fold-carryover...").
-      folded = projectSideRows.filter(
-        (r) =>
-          r.status === "installed" ||
-          r.status === "upgradable" ||
-          r.status === "disabled" ||
-          r.status === "partially-installed" ||
-          r.status === "partially-upgradable",
-      );
-      // Record the folded plugin names so the user-scope manifest's
-      // available-bucket enumeration skips them (catalog
-      // `project-orphan-folded` state shows a single
-      // `● alpha [project] ... (installed)` row -- no duplicate
-      // `○ alpha (available)` row under the same header).
-      foldedNames = new Set(folded.map((r) => r.name));
-    }
+    const { folded, foldedNames } = isCloneOfUserMarketplace(projectMp, mpRecord)
+      ? await computeOrphanFold(opts, projectMp)
+      : EMPTY_ORPHAN_FOLD;
 
     const built = await buildMarketplaceMessage({
       opts,
@@ -1225,61 +1273,17 @@ function sortPluginsInBlock<M extends PluginNotificationMessage>(
     return plugins;
   }
 
-  // SNM-11: `available` / `unavailable` variants have no `scope` field by
-  // construction; the other list-surface variants (`installed` /
-  // `upgradable`) carry an optional `scope`. The status-narrowing switch
-  // is the only safe access path under TS strict. RLD-04: the list orchestrator
+  // SNM-11 / D-13-18: the fold reads the row's own `scope` when it has one, so
+  // a cross-scope orphan-folded row keeps its scope instead of being silently
+  // overwritten with `marketplaceScope`. RLD-04: the list orchestrator
   // emits the steady-state inventory row as `installed` (with
   // `needsReload: false`); the same `installed` token also carries the cascade
   // transition. The body
   // `return p.scope ?? marketplaceScope` preserves the cross-scope orphan-fold
   // scope on a `PluginInstalledMessage` (SNM-11 / D-13-18) instead of silently
   // overwriting it with `marketplaceScope`.
-  const scopeOf = (p: PluginNotificationMessage): Scope => {
-    switch (p.status) {
-      // FSTAT-02 / FSTAT-04 / D-66-03: the derived partial states are
-      // scope-bearing list-surface variants and join the orphan-fold arm.
-      case "upgradable":
-      case "installed":
-      case "disabled":
-      case "partially-installed":
-      case "partially-upgradable":
-        // D-54-01 / ENBL-04: disabled rows carry an explicit `scope?` and
-        // join the scope-bearing list-surface variants. The SNM-11 carve-out
-        // applies only to `available` / `unavailable`.
-        return p.scope ?? marketplaceScope;
-      case "available":
-      case "remote":
-      case "unavailable":
-      case "partially-available":
-        // USTAT-01 / SNM-11 / RSTA-01: `available` / `remote` / `unavailable` /
-        // `partially-available` have no `scope` field (the SNM-11 carve-out
-        // family), so they fall back to the marketplace scope.
-        return marketplaceScope;
-      case "updated":
-      case "reinstalled":
-      case "uninstalled":
-      case "failed":
-      case "skipped":
-      case "manual recovery":
-      case "will install":
-      case "will uninstall":
-      case "will enable":
-      case "will disable":
-        // Unreachable on the list surface; renderer-as-spec guard. The
-        // DIFF-02 will-* pending variants are emitted only by
-        // `/claude:plugin pending`, which does not flow through this list
-        // orchestrator.
-        return marketplaceScope;
-      default:
-        // Exhaustiveness guard (matches `assertNever(resolved)` at list.ts:572):
-        // when the switch is total, `p` narrows to `never` here and compiles; a
-        // future PluginNotificationMessage status variant that is not handled
-        // above makes `p` non-`never` and fails `npm run check`, instead of
-        // silently relying on noImplicitReturns.
-        return assertNever(p);
-    }
-  };
+  const scopeOf = (p: PluginNotificationMessage): Scope =>
+    isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
 
   return [...plugins].sort((a, b) => {
     const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -1402,17 +1406,9 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
 const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 
-// Test-only re-export. Mirrors the `__test_classifyEntityShapeError` /
-// `__test_classifyInstallFailure` precedent in `install.ts`: the helper
-// is file-private but its classification table is the load-bearing
-// contract that callers (and the user) rely on.
-export { narrowProbeError as __test_narrowProbeError };
-export { narrowListFailReason as __test_narrowListFailReason };
-
 // PURL-08 / D-78-03: test-only re-export of the not-installed row builder. The
 // output-parity drift-guard (tests/orchestrators/edge-deps.test.ts) feeds the
 // SAME git-source manifest through this list-surface builder and the completion
 // bucketizer and asserts identical status buckets, guarding the list
-// `(available)` vs completion `unavailable` divergence class. Mirrors the
-// `__test_narrowProbeError` re-export precedent.
+// `(available)` vs completion `unavailable` divergence class.
 export { availableRowMessage as __test_availableRowMessage };

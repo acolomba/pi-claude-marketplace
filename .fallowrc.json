@@ -1,9 +1,26 @@
 {
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
-  "production": true,
+  "production": false,
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    "maxUnitSize": 60,
+    "maxCrap": 0
+  },
   "boundaries": {
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": ["eslint.config.js", "tests/**"]
+    },
     "zones": [
-      { "name": "edge", "patterns": ["extensions/pi-claude-marketplace/edge/**"] },
+      {
+        "name": "entry",
+        "patterns": ["extensions/pi-claude-marketplace/index.ts"]
+      },
+      {
+        "name": "edge",
+        "patterns": ["extensions/pi-claude-marketplace/edge/**"]
+      },
       {
         "name": "orchestrators",
         "patterns": ["extensions/pi-claude-marketplace/orchestrators/**"]
@@ -16,7 +33,10 @@
         "name": "bridges-commands",
         "patterns": ["extensions/pi-claude-marketplace/bridges/commands/**"]
       },
-      { "name": "bridges-mcp", "patterns": ["extensions/pi-claude-marketplace/bridges/mcp/**"] },
+      {
+        "name": "bridges-mcp",
+        "patterns": ["extensions/pi-claude-marketplace/bridges/mcp/**"]
+      },
       {
         "name": "bridges-skills",
         "patterns": ["extensions/pi-claude-marketplace/bridges/skills/**"]
@@ -25,7 +45,10 @@
         "name": "bridges-hooks",
         "patterns": ["extensions/pi-claude-marketplace/bridges/hooks/**"]
       },
-      { "name": "domain", "patterns": ["extensions/pi-claude-marketplace/domain/**"] },
+      {
+        "name": "domain",
+        "patterns": ["extensions/pi-claude-marketplace/domain/**"]
+      },
       {
         "name": "transaction",
         "patterns": ["extensions/pi-claude-marketplace/transaction/**"]
@@ -34,10 +57,20 @@
         "name": "persistence",
         "patterns": ["extensions/pi-claude-marketplace/persistence/**"]
       },
-      { "name": "platform", "patterns": ["extensions/pi-claude-marketplace/platform/**"] },
-      { "name": "shared", "patterns": ["extensions/pi-claude-marketplace/shared/**"] }
+      {
+        "name": "platform",
+        "patterns": ["extensions/pi-claude-marketplace/platform/**"]
+      },
+      {
+        "name": "shared",
+        "patterns": ["extensions/pi-claude-marketplace/shared/**"]
+      }
     ],
     "rules": [
+      {
+        "from": "entry",
+        "allow": ["edge", "orchestrators", "bridges-hooks", "persistence", "platform", "shared"]
+      },
       {
         "from": "edge",
         "allow": ["orchestrators", "domain", "shared", "platform"]
@@ -57,16 +90,110 @@
           "shared"
         ]
       },
-      { "from": "bridges-agents", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-commands", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-mcp", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-skills", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "bridges-hooks", "allow": ["domain", "persistence", "shared", "platform"] },
-      { "from": "domain", "allow": ["shared", "platform"] },
-      { "from": "transaction", "allow": ["persistence", "shared", "platform"] },
-      { "from": "persistence", "allow": ["domain", "shared", "platform"] },
-      { "from": "platform", "allow": ["shared"] },
-      { "from": "shared", "allow": ["platform"] }
-    ]
+      {
+        "from": "bridges-agents",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-commands",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-mcp",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-skills",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "bridges-hooks",
+        "allow": ["domain", "persistence", "shared", "platform"]
+      },
+      {
+        "from": "domain",
+        "allow": ["shared", "platform"]
+      },
+      {
+        "from": "transaction",
+        "allow": ["persistence", "shared", "platform"]
+      },
+      {
+        "from": "persistence",
+        "allow": ["domain", "shared", "platform"]
+      },
+      {
+        "from": "platform",
+        "allow": ["shared"]
+      },
+      {
+        "from": "shared",
+        "allow": ["platform"]
+      }
+    ],
+    "calls": {
+      "forbidden": [
+        {
+          "from": "entry",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "edge",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "orchestrators",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-agents",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-commands",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-mcp",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-skills",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "bridges-hooks",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "domain",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "transaction",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "persistence",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "platform",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        },
+        {
+          "from": "shared",
+          "callee": ["process.stdout.*", "process.stderr.*"]
+        }
+      ]
+    }
+  },
+  "duplicates": {
+    "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"],
+    "threshold": 3
+  },
+  "includeEntryExports": true,
+  "rules": {
+    "private-type-leaks": "error"
   }
 }

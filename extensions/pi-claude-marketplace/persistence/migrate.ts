@@ -109,32 +109,34 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
       continue;
     }
 
-    const pl = plRaw as Record<string, unknown>;
-    const resources =
-      typeof pl.resources === "object" && pl.resources !== null
-        ? (pl.resources as Record<string, unknown>)
-        : {};
-    if (pl.resources !== resources) {
-      pl.resources = resources;
-      mutated = true;
-    }
+    mutated = ensureOneRecordResources(plRaw as Record<string, unknown>) || mutated;
+  }
 
-    if (resources.agents === undefined) {
-      resources.agents = [];
-      mutated = true;
-    }
+  return mutated;
+}
 
-    if (resources.mcpServers === undefined) {
-      resources.mcpServers = [];
-      mutated = true;
-    }
+/**
+ * ST-4 / ST-5 / HOOK-02 / D-57-01 default-fill for ONE plugin record.
+ *
+ * `resources.agents`, `resources.mcpServers` and `resources.hooks` are
+ * required by `STATE_VALIDATOR.Check`, so a legacy record missing any of them
+ * must be filled BEFORE validation runs. Returns whether anything changed, so
+ * the caller only rewrites state.json when a migration actually happened.
+ */
+function ensureOneRecordResources(pl: Record<string, unknown>): boolean {
+  let mutated = false;
+  const resources =
+    typeof pl.resources === "object" && pl.resources !== null
+      ? (pl.resources as Record<string, unknown>)
+      : {};
+  if (pl.resources !== resources) {
+    pl.resources = resources;
+    mutated = true;
+  }
 
-    // HOOK-02 / D-57-01: additive default-fill for the new required
-    // `resources.hooks` field. Mirrors the agents / mcpServers arms
-    // above; STATE_VALIDATOR.Check would reject a record missing this
-    // field, so the default-fill MUST run before validation.
-    if (resources.hooks === undefined) {
-      resources.hooks = [];
+  for (const field of ["agents", "mcpServers", "hooks"] as const) {
+    if (resources[field] === undefined) {
+      resources[field] = [];
       mutated = true;
     }
   }

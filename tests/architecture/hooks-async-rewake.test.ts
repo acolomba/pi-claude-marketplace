@@ -44,12 +44,6 @@ import {
 import {
   _awaitLastPidTablePersistForTest,
   _getRegistryForTest,
-  _resetDispatchIdGeneratorForTest,
-  _resetOrphanProbesForTest,
-  _resetSpawnForTest,
-  _setDispatchIdGeneratorForTest,
-  _setOrphanProbesForTest,
-  _setSpawnForTest,
   MARKER_ENV,
   reapOrphans,
   shutdownInMemoryChildren,
@@ -60,11 +54,7 @@ import {
   STDERR_CAP_BYTES,
   STDOUT_CAP_BYTES,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
-import {
-  dispatchHookExec,
-  _resetSpawnForTest as _resetExecSpawnForTest,
-  _setSpawnForTest as _setExecSpawnForTest,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
+import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import {
   _bumpEpochForTest,
   _resetForTest as _resetEventRouterForTest,
@@ -73,7 +63,8 @@ import { MATCH_ALL_IF } from "../../extensions/pi-claude-marketplace/bridges/hoo
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { OrphanProbes } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
+import type { RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
@@ -157,15 +148,14 @@ function makeMockChild(call: SpawnCall, pid = 99_991): MockChild {
 }
 
 interface SpawnSpy {
+  /** Pass to `spawnAndRegister` / `dispatchHookExec`; both take it as a dependency. */
+  readonly spawnImpl: typeof import("node:child_process").spawn;
   readonly calls: SpawnCall[];
   readonly children: MockChild[];
   setPid(pid: number): void;
 }
 
-function installSpawnSpy(
-  configure?: (handle: MockChild) => void,
-  opts?: { wireBoth?: boolean },
-): SpawnSpy {
+function installSpawnSpy(configure?: (handle: MockChild) => void): SpawnSpy {
   const calls: SpawnCall[] = [];
   const children: MockChild[] = [];
   let nextPid = 99_991;
@@ -187,12 +177,8 @@ function installSpawnSpy(
 
     return handle.child;
   }) as unknown as typeof import("node:child_process").spawn;
-  _setSpawnForTest(fakeSpawn);
-  if (opts?.wireBoth === true) {
-    _setExecSpawnForTest(fakeSpawn);
-  }
-
   return {
+    spawnImpl: fakeSpawn,
     calls,
     children,
     setPid(pid): void {
@@ -372,17 +358,10 @@ async function makeTempLocations(): Promise<{
 
 beforeEach(() => {
   _resetEventRouterForTest();
-  _resetSpawnForTest();
-  _resetDispatchIdGeneratorForTest();
-  _resetOrphanProbesForTest();
   shutdownInMemoryChildren();
 });
 
 afterEach(() => {
-  _resetSpawnForTest();
-  _resetExecSpawnForTest();
-  _resetDispatchIdGeneratorForTest();
-  _resetOrphanProbesForTest();
   shutdownInMemoryChildren();
   _resetEventRouterForTest();
 });
@@ -396,7 +375,7 @@ describe("spawn-and-register", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-1");
+      const dispatchId = () => "fixed-uuid-1";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -405,6 +384,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       assert.equal(spy.calls.length, 1);
       const call = spy.calls[0];
@@ -420,7 +400,7 @@ describe("spawn-and-register", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-marker");
+      const dispatchId = () => "fixed-uuid-marker";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -429,6 +409,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       const env = spy.calls[0]?.options.env ?? {};
       assert.equal(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
@@ -446,8 +427,8 @@ describe("spawn-and-register", () => {
   test("EXEC-05: registry add happens before resolve", async () => {
     const tmp = await makeTempLocations();
     try {
-      installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-2");
+      const spy = installSpawnSpy();
+      const dispatchId = () => "fixed-uuid-2";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -456,6 +437,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       const reg = _getRegistryForTest();
       assert.equal(reg.has("fixed-uuid-2"), true);
@@ -480,6 +462,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl },
       );
       assert.equal(spy.calls.length, 0, "the guard must return before any child-process spawn");
       assert.equal(_getRegistryForTest().size, 0, "no registry entry may be recorded");
@@ -491,8 +474,8 @@ describe("spawn-and-register", () => {
   test("D-62-05: PID table persists the registered entry after spawnAndRegister", async () => {
     const tmp = await makeTempLocations();
     try {
-      installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-3");
+      const spy = installSpawnSpy();
+      const dispatchId = () => "fixed-uuid-3";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -501,6 +484,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       const table = await readPidTable(tmp.loc);
       assert.equal(table.length, 1);
@@ -515,7 +499,7 @@ describe("spawn-and-register", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-4");
+      const dispatchId = () => "fixed-uuid-4";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       const promise = spawnAndRegister(
@@ -524,6 +508,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       await promise;
       // Child still alive after the await -- exit handler has not fired
@@ -542,7 +527,7 @@ describe("spawn-and-register", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "fixed-uuid-onerror");
+      const dispatchId = () => "fixed-uuid-onerror";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -551,6 +536,7 @@ describe("spawn-and-register", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       const reg = _getRegistryForTest();
       assert.equal(reg.has("fixed-uuid-onerror"), true);
@@ -576,7 +562,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-exit-2");
+      const dispatchId = () => "uuid-exit-2";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -585,6 +571,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("blocking violation");
       spy.children[0]?.emitExit(2);
@@ -604,7 +591,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-raw-body");
+      const dispatchId = () => "uuid-raw-body";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -613,6 +600,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("finding-only");
       spy.children[0]?.emitExit(2);
@@ -628,7 +616,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-stdout");
+      const dispatchId = () => "uuid-stdout";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -637,6 +625,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStdout("from-stdout");
       spy.children[0]?.emitExit(2);
@@ -651,7 +640,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-zero");
+      const dispatchId = () => "uuid-zero";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -660,6 +649,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("ignored");
       spy.children[0]?.emitExit(0);
@@ -674,7 +664,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-empty-body");
+      const dispatchId = () => "uuid-empty-body";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -683,6 +673,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitExit(2);
       await new Promise((r) => setImmediate(r));
@@ -696,7 +687,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-idle");
+      const dispatchId = () => "uuid-idle";
       const ctx = makeMockCtx("/tmp/proj");
       ctx.setIdle(true);
       const pi = makeMockPi();
@@ -706,6 +697,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("body");
       spy.children[0]?.emitExit(2);
@@ -720,7 +712,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-busy");
+      const dispatchId = () => "uuid-busy";
       const ctx = makeMockCtx("/tmp/proj");
       ctx.setIdle(false);
       const pi = makeMockPi();
@@ -730,6 +722,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("body");
       spy.children[0]?.emitExit(2);
@@ -744,7 +737,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-throw");
+      const dispatchId = () => "uuid-throw";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       pi.setSendMessageThrow(new Error("sendMessage bombed"));
@@ -754,6 +747,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("body");
       // Must not throw out of the exit-handler microtask.
@@ -773,7 +767,7 @@ describe("on-exit", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-stale");
+      const dispatchId = () => "uuid-stale";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -782,6 +776,7 @@ describe("on-exit", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       // Simulate a /reload between spawn and exit.
       _bumpEpochForTest();
@@ -837,7 +832,7 @@ describe("ring-buffer", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-truncated");
+      const dispatchId = () => "uuid-truncated";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -846,6 +841,7 @@ describe("ring-buffer", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       // Emit > 64 KiB of stderr so the ring buffer truncates.
       spy.children[0]?.emitStderr(Buffer.alloc(STDERR_CAP_BYTES + 16, 0x41));
@@ -928,12 +924,12 @@ describe("orphan-reap", () => {
     const tmp = await makeTempLocations();
     try {
       const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      _setOrphanProbesForTest({
+      const probes: OrphanProbes = {
         killProbe: (pid, sig) => {
           killCalls.push({ pid, sig });
         },
         environReader: () => Promise.resolve(`${MARKER_ENV}=uuid-owned\0OTHER=x`),
-      });
+      };
       await writePidTable(tmp.loc, [
         {
           pid: 12_345,
@@ -944,7 +940,7 @@ describe("orphan-reap", () => {
           spawnedAt: "2026-06-15T00:00:00.000Z",
         },
       ]);
-      await reapOrphans(tmp.loc);
+      await reapOrphans(tmp.loc, probes);
       // First call is kill 0 (liveness probe); second call is SIGKILL.
       const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
       assert.equal(sigKillCalls.length, 1);
@@ -963,12 +959,12 @@ describe("orphan-reap", () => {
     const tmp = await makeTempLocations();
     try {
       const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      _setOrphanProbesForTest({
+      const probes: OrphanProbes = {
         killProbe: (pid, sig) => {
           killCalls.push({ pid, sig });
         },
         environReader: () => Promise.resolve(`${MARKER_ENV}=different-uuid\0OTHER=x`),
-      });
+      };
       await writePidTable(tmp.loc, [
         {
           pid: 54_321,
@@ -979,7 +975,7 @@ describe("orphan-reap", () => {
           spawnedAt: "2026-06-15T00:00:00.000Z",
         },
       ]);
-      await reapOrphans(tmp.loc);
+      await reapOrphans(tmp.loc, probes);
       const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
       assert.equal(sigKillCalls.length, 0);
     } finally {
@@ -996,12 +992,12 @@ describe("orphan-reap", () => {
     const tmp = await makeTempLocations();
     try {
       const killCalls: Array<{ pid: number; sig: number | NodeJS.Signals }> = [];
-      _setOrphanProbesForTest({
+      const probes: OrphanProbes = {
         killProbe: (pid, sig) => {
           killCalls.push({ pid, sig });
         },
         environReader: () => Promise.resolve(""),
-      });
+      };
       await writePidTable(tmp.loc, [
         {
           pid: 11_111,
@@ -1012,7 +1008,7 @@ describe("orphan-reap", () => {
           spawnedAt: "2026-06-15T00:00:00.000Z",
         },
       ]);
-      await reapOrphans(tmp.loc);
+      await reapOrphans(tmp.loc, probes);
       const sigKillCalls = killCalls.filter((c) => c.sig === "SIGKILL");
       assert.equal(sigKillCalls.length, 0);
     } finally {
@@ -1023,7 +1019,7 @@ describe("orphan-reap", () => {
   test("D-62-05: reapOrphans unlinks the PID table after the kill pass", async () => {
     const tmp = await makeTempLocations();
     try {
-      _setOrphanProbesForTest({
+      const probes: OrphanProbes = {
         killProbe: () => {
           // ESRCH -> dead pid; nothing to kill.
           const err = new Error("no such process") as NodeJS.ErrnoException;
@@ -1031,7 +1027,7 @@ describe("orphan-reap", () => {
           throw err;
         },
         environReader: () => Promise.resolve(""),
-      });
+      };
       await writePidTable(tmp.loc, [
         {
           pid: 99_999,
@@ -1045,7 +1041,7 @@ describe("orphan-reap", () => {
       // Sanity check: file exists pre-reap.
       const statPre = await stat(pidTablePath(tmp.loc));
       assert.ok(statPre.isFile());
-      await reapOrphans(tmp.loc);
+      await reapOrphans(tmp.loc, probes);
       await assert.rejects(() => stat(pidTablePath(tmp.loc)), /ENOENT/);
     } finally {
       await tmp.cleanup();
@@ -1071,7 +1067,7 @@ describe("dispatch-exec delegation", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-disp-async");
+      const dispatchId = () => "uuid-disp-async";
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
       const result = await dispatchHookExec(
@@ -1079,6 +1075,7 @@ describe("dispatch-exec delegation", () => {
         { toolName: "bash", input: {} },
         ctx.ctx,
         pi.pi,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       assert.deepEqual(result, { kind: "noop" });
       assert.equal(spy.calls.length, 1);
@@ -1091,21 +1088,21 @@ describe("dispatch-exec delegation", () => {
   test("D-62-01: asyncRewake:undefined -> sync EXEC body fires (single spawn, no async registry entry)", async () => {
     const tmp = await makeTempLocations();
     try {
-      const spy = installSpawnSpy(
-        (h) => {
-          // The sync EXEC body uses `close`, not `exit`, to settle. Push
-          // EOF on both streams then emit `close` on the EventEmitter
-          // backing the mock child.
-          h.child.stdout?.emit("end");
-          h.child.stderr?.emit("end");
-          (h.child as unknown as EventEmitter).emit("close", 0);
-        },
-        { wireBoth: true },
-      );
-      _setDispatchIdGeneratorForTest(() => "uuid-should-not-be-used");
+      const spy = installSpawnSpy((h) => {
+        // The sync EXEC body uses `close`, not `exit`, to settle. Push
+        // EOF on both streams then emit `close` on the EventEmitter
+        // backing the mock child.
+        h.child.stdout?.emit("end");
+        h.child.stderr?.emit("end");
+        (h.child as unknown as EventEmitter).emit("close", 0);
+      });
+      const dispatchId = () => "uuid-should-not-be-used";
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
-      await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, ctx.ctx, pi.pi);
+      await dispatchHookExec(makeEntry({}), { toolName: "bash", input: {} }, ctx.ctx, pi.pi, {
+        spawnImpl: spy.spawnImpl,
+        dispatchId,
+      });
       assert.equal(spy.calls.length, 1);
       // No async registry entry -- the spy uuid was never consumed.
       assert.equal(_getRegistryForTest().has("uuid-should-not-be-used"), false);
@@ -1117,15 +1114,12 @@ describe("dispatch-exec delegation", () => {
   test("HOOK-03 lenient: asyncRewake:'yes' (non-boolean truthy) routes to sync path", async () => {
     const tmp = await makeTempLocations();
     try {
-      const spy = installSpawnSpy(
-        (h) => {
-          h.child.stdout?.emit("end");
-          h.child.stderr?.emit("end");
-          (h.child as unknown as EventEmitter).emit("close", 0);
-        },
-        { wireBoth: true },
-      );
-      _setDispatchIdGeneratorForTest(() => "uuid-yes-route");
+      const spy = installSpawnSpy((h) => {
+        h.child.stdout?.emit("end");
+        h.child.stderr?.emit("end");
+        (h.child as unknown as EventEmitter).emit("close", 0);
+      });
+      const dispatchId = () => "uuid-yes-route";
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
       await dispatchHookExec(
@@ -1133,6 +1127,7 @@ describe("dispatch-exec delegation", () => {
         { toolName: "bash", input: {} },
         ctx.ctx,
         pi.pi,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       // Strict === true discriminator: non-boolean routes to sync.
       // Async registry is empty.
@@ -1152,9 +1147,9 @@ describe("dispatch-exec delegation", () => {
       // that throws synchronously so the registry's internal `try/catch`
       // arm exercises (the dispatch-exec outer try/catch is the
       // backstop the test pins).
-      _setSpawnForTest(((): ChildProcess => {
+      const spawnImpl = ((): ChildProcess => {
         throw new Error("synthetic spawn failure");
-      }) as unknown as typeof import("node:child_process").spawn);
+      }) as unknown as typeof import("node:child_process").spawn;
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
       const result = await dispatchHookExec(
@@ -1162,6 +1157,7 @@ describe("dispatch-exec delegation", () => {
         { toolName: "bash", input: {} },
         ctx.ctx,
         pi.pi,
+        { spawnImpl },
       );
       assert.deepEqual(result, { kind: "noop" });
     } finally {
@@ -1178,14 +1174,15 @@ describe("multi-hook fan-in", () => {
   test("HOOK-06: two concurrent spawnAndRegister calls produce distinct dispatchIds", async () => {
     const tmp = await makeTempLocations();
     try {
-      installSpawnSpy();
+      const spy = installSpawnSpy();
       const ids = ["uuid-fan-A", "uuid-fan-B"];
       let i = 0;
-      _setDispatchIdGeneratorForTest(() => {
+      const dispatchId = () => {
         const id = ids[i] ?? "uuid-overflow";
         i += 1;
         return id;
-      });
+      };
+
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await Promise.all([
@@ -1195,6 +1192,7 @@ describe("multi-hook fan-in", () => {
           ctx.ctx,
           pi.pi,
           tmp.loc,
+          { spawnImpl: spy.spawnImpl, dispatchId },
         ),
         spawnAndRegister(
           makeEntry({ pluginId: "p-b" }),
@@ -1202,6 +1200,7 @@ describe("multi-hook fan-in", () => {
           ctx.ctx,
           pi.pi,
           tmp.loc,
+          { spawnImpl: spy.spawnImpl, dispatchId },
         ),
       ]);
       const reg = _getRegistryForTest();
@@ -1219,11 +1218,12 @@ describe("multi-hook fan-in", () => {
       const spy = installSpawnSpy();
       const ids = ["uuid-indep-A", "uuid-indep-B"];
       let i = 0;
-      _setDispatchIdGeneratorForTest(() => {
+      const dispatchId = () => {
         const id = ids[i] ?? "uuid-overflow";
         i += 1;
         return id;
-      });
+      };
+
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -1232,6 +1232,7 @@ describe("multi-hook fan-in", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       await spawnAndRegister(
         makeEntry({ pluginId: "p-b" }),
@@ -1239,6 +1240,7 @@ describe("multi-hook fan-in", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       assert.equal(_getRegistryForTest().size, 2);
       spy.children[0]?.emitExit(0);
@@ -1259,11 +1261,12 @@ describe("multi-hook fan-in", () => {
       const spy = installSpawnSpy();
       const ids = ["uuid-pid-A", "uuid-pid-B"];
       let i = 0;
-      _setDispatchIdGeneratorForTest(() => {
+      const dispatchId = () => {
         const id = ids[i] ?? "uuid-overflow";
         i += 1;
         return id;
-      });
+      };
+
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -1272,6 +1275,7 @@ describe("multi-hook fan-in", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       await spawnAndRegister(
         makeEntry({ pluginId: "p-b" }),
@@ -1279,6 +1283,7 @@ describe("multi-hook fan-in", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       const table2 = await readPidTable(tmp.loc);
       assert.equal(table2.length, 2);
@@ -1306,7 +1311,7 @@ describe("rewakeSummary IL-2 exemption", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-summary-0");
+      const dispatchId = () => "uuid-summary-0";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -1315,6 +1320,7 @@ describe("rewakeSummary IL-2 exemption", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
@@ -1330,7 +1336,7 @@ describe("rewakeSummary IL-2 exemption", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-summary-2");
+      const dispatchId = () => "uuid-summary-2";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -1339,6 +1345,7 @@ describe("rewakeSummary IL-2 exemption", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitStderr("body");
       spy.children[0]?.emitExit(2);
@@ -1356,7 +1363,7 @@ describe("rewakeSummary IL-2 exemption", () => {
     const tmp = await makeTempLocations();
     try {
       const spy = installSpawnSpy();
-      _setDispatchIdGeneratorForTest(() => "uuid-no-summary");
+      const dispatchId = () => "uuid-no-summary";
       const ctx = makeMockCtx("/tmp/proj");
       const pi = makeMockPi();
       await spawnAndRegister(
@@ -1365,6 +1372,7 @@ describe("rewakeSummary IL-2 exemption", () => {
         ctx.ctx,
         pi.pi,
         tmp.loc,
+        { spawnImpl: spy.spawnImpl, dispatchId },
       );
       spy.children[0]?.emitExit(0);
       await new Promise((r) => setImmediate(r));
@@ -1398,7 +1406,7 @@ describe("hook env parity (HENV-02)", () => {
   }
 
   // Settle the sync EXEC collector (it uses `close`, not `exit`); harmless on
-  // the fire-and-forget async child. Fires on every spawn under wireBoth.
+  // the fire-and-forget async child. Fires on every spawn.
   const settleSyncChild = (h: MockChild): void => {
     h.child.stdout?.emit("end");
     h.child.stderr?.emit("end");
@@ -1408,14 +1416,19 @@ describe("hook env parity (HENV-02)", () => {
   test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (PreToolUse, CLAUDE_ENV_FILE absent)", async () => {
     const tmp = await makeTempLocations();
     try {
-      const spy = installSpawnSpy(settleSyncChild, { wireBoth: true });
-      _setDispatchIdGeneratorForTest(() => "fixed-marker");
+      const spy = installSpawnSpy(settleSyncChild);
+      const dispatchId = () => "fixed-marker";
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
       const entry = makeEntry({ claudeEvent: "PreToolUse" });
 
-      await dispatchHookExec(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi);
-      await spawnAndRegister(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, tmp.loc);
+      await dispatchHookExec(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, {
+        spawnImpl: spy.spawnImpl,
+      });
+      await spawnAndRegister(entry, { toolName: "bash", input: {} }, ctx.ctx, pi.pi, tmp.loc, {
+        spawnImpl: spy.spawnImpl,
+        dispatchId,
+      });
 
       const syncEnv = spy.calls[0]?.options.env ?? {};
       const asyncEnv = spy.calls[1]?.options.env ?? {};
@@ -1430,14 +1443,19 @@ describe("hook env parity (HENV-02)", () => {
   test("HENV-02 / D-91-01: sync and async lanes agree modulo MARKER_ENV (SessionStart, CLAUDE_ENV_FILE present + equal)", async () => {
     const tmp = await makeTempLocations();
     try {
-      const spy = installSpawnSpy(settleSyncChild, { wireBoth: true });
-      _setDispatchIdGeneratorForTest(() => "fixed-marker");
+      const spy = installSpawnSpy(settleSyncChild);
+      const dispatchId = () => "fixed-marker";
       const ctx = makeMockCtx(tmp.loc.scopeRoot);
       const pi = makeMockPi();
       const entry = makeEntry({ claudeEvent: "SessionStart" });
 
-      await dispatchHookExec(entry, { reason: "startup" }, ctx.ctx, pi.pi);
-      await spawnAndRegister(entry, { reason: "startup" }, ctx.ctx, pi.pi, tmp.loc);
+      await dispatchHookExec(entry, { reason: "startup" }, ctx.ctx, pi.pi, {
+        spawnImpl: spy.spawnImpl,
+      });
+      await spawnAndRegister(entry, { reason: "startup" }, ctx.ctx, pi.pi, tmp.loc, {
+        spawnImpl: spy.spawnImpl,
+        dispatchId,
+      });
 
       const syncEnv = spy.calls[0]?.options.env ?? {};
       const asyncEnv = spy.calls[1]?.options.env ?? {};

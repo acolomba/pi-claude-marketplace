@@ -1,5 +1,29 @@
 // tests/live-uat/manifest-absence-canary.mjs
 //
+// Standalone operator-run UAT driver: an engineer invokes it from the command
+// line and no module ever imports it, so being unreachable from the import
+// graph is its intended shape, not a defect.
+// fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
+//
+// Two `duplicates.ignoredClones` entries in `.fallowrc.json` are retained
+// against this file and `stop-canary.mjs`. Fallow types `ignoredClones` as
+// `string[]`, so the per-clone justification the conventions require cannot
+// live in the JSON and lives here instead:
+//   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
+//     at the foot of both drivers.
+//   - `dup:6d8c002d:2` -- the module preamble that resolves `execFileAsync`,
+//     `HERE`, `REPO_ROOT` and `EXTENSION_ENTRY`.
+// Both are retained for the same reason: each driver must stay independently
+// runnable as `node tests/live-uat/<file>.mjs` with nothing imported from a
+// sibling. Extracting a shared helper module would create exactly the import
+// edge that the standalone-driver shape exists to avoid, and would make the
+// two canaries fail together on one bad edit. The duplicated text is 23 lines
+// of boilerplate -- a process-exit epilogue and four path constants -- with no
+// assertion logic in it, so the copies cannot drift in a way that changes what
+// either canary proves. Line numbers are deliberately omitted; run
+// `fallow dupes --trace dup:<fingerprint>` with the entries temporarily
+// cleared to locate them.
+//
 // Live runtime UAT for the manifest-independent installed-plugin surface: a
 // scripted canary that drives the REAL extension against a REAL on-disk Pi
 // sandbox to prove, end to end, the milestone's user-visible claim -- an
@@ -319,38 +343,13 @@ function rowFor(text, pluginName) {
 // Flow A -- manifest absence
 // ---------------------------------------------------------------------------
 
-async function flowA(ext, root) {
-  const { run } = ext;
-
-  await run(`marketplace add ${root} --scope user`);
-  await run(`install ${VANISHING}@${MARKETPLACE_NAME} --scope user`);
-  await run(`install ${STAYING}@${MARKETPLACE_NAME} --scope user`);
-
-  const state = await loadState(locationsFor("user", REPO_ROOT).extensionRoot);
-  const record = state.marketplaces[MARKETPLACE_NAME]?.plugins?.[VANISHING];
-  if (record === undefined) {
-    liveRuntimeRequired("Canary install did not produce an installation record.");
-  }
-  const kinds = Object.entries(record.resources ?? {})
-    .filter(([, v]) => Array.isArray(v) && v.length > 0)
-    .map(([k]) => k);
-  pass(`installed ${VANISHING} with resource kinds: ${kinds.join(", ")}`);
-
-  const before = await run(`list --scope user`);
-  show("list BEFORE the manifest entry disappears", before.text);
-  if (before.text.includes(NOT_IN_MANIFEST)) {
-    fail("A0", `a freshly installed, still-declared plugin was stamped "${NOT_IN_MANIFEST}".`, before.text);
-  }
-  pass(`A0 baseline: both declared plugins render without "${NOT_IN_MANIFEST}"`);
-
-  // The manifest stays VALID -- only the entry goes away. That distinction is
-  // the whole milestone: an unreadable manifest must never be reported as a
-  // missing entry (BOUND-03), so the canary must not corrupt the file.
-  await writeManifest(root, [STAYING, PARTIAL]);
-
-  const after = await run(`list --scope user`);
-  show("list AFTER the manifest entry disappears", after.text);
-
+/**
+ * A1 (INV-01..04) and A2 (BOUND-03): the record whose manifest entry vanished
+ * keeps its row and gains the reason stamp, while the still-declared control
+ * plugin does NOT. A2 is the control that proves the reason tracks the ENTRY,
+ * not the manifest read.
+ */
+function assertManifestAbsenceRows(after) {
   const vanishingRows = rowFor(after.text, VANISHING);
   if (vanishingRows.length === 0) {
     fail("A1", `the installed plugin vanished from list output when its manifest entry was dropped.`, after.text);
@@ -368,7 +367,16 @@ async function flowA(ext, root) {
     fail("A2", `the still-declared control plugin was ALSO stamped "${NOT_IN_MANIFEST}" -- the reason is tracking the read, not the entry.`, stayingRows.join("\n"));
   }
   pass(`A2 (BOUND-03): the still-declared control plugin is NOT stamped`);
+}
 
+/**
+ * A3 (INFO-09..11), A4 (INFO-12), A5 (LIFE-05) and A6 (LIFE-04): every
+ * remaining surface must operate off the INSTALLATION RECORD once the manifest
+ * entry is gone -- info reconstructs the inventory, `--fetch` declines the
+ * network with a visible skip note, update skips, and uninstall still removes
+ * both the staged artifacts and the record.
+ */
+async function assertRecordBackedSurfaces(run) {
   const info = await run(`info ${VANISHING}@${MARKETPLACE_NAME} --scope user`);
   show("info on the manifest-absent plugin", info.text);
   if (info.text.includes("(failed)")) {
@@ -420,7 +428,43 @@ async function flowA(ext, root) {
   if (stateAfter.marketplaces[MARKETPLACE_NAME]?.plugins?.[VANISHING] !== undefined) {
     fail("A6", "uninstall left the installation record behind.");
   }
-  pass(`A6 (LIFE-04): uninstall succeeded, removed ${staged.length} staged artifact(s) and the record`);
+}
+
+async function flowA(ext, root) {
+  const { run } = ext;
+
+  await run(`marketplace add ${root} --scope user`);
+  await run(`install ${VANISHING}@${MARKETPLACE_NAME} --scope user`);
+  await run(`install ${STAYING}@${MARKETPLACE_NAME} --scope user`);
+
+  const state = await loadState(locationsFor("user", REPO_ROOT).extensionRoot);
+  const record = state.marketplaces[MARKETPLACE_NAME]?.plugins?.[VANISHING];
+  if (record === undefined) {
+    liveRuntimeRequired("Canary install did not produce an installation record.");
+  }
+  const kinds = Object.entries(record.resources ?? {})
+    .filter(([, v]) => Array.isArray(v) && v.length > 0)
+    .map(([k]) => k);
+  pass(`installed ${VANISHING} with resource kinds: ${kinds.join(", ")}`);
+
+  const before = await run(`list --scope user`);
+  show("list BEFORE the manifest entry disappears", before.text);
+  if (before.text.includes(NOT_IN_MANIFEST)) {
+    fail("A0", `a freshly installed, still-declared plugin was stamped "${NOT_IN_MANIFEST}".`, before.text);
+  }
+  pass(`A0 baseline: both declared plugins render without "${NOT_IN_MANIFEST}"`);
+
+  // The manifest stays VALID -- only the entry goes away. That distinction is
+  // the whole milestone: an unreadable manifest must never be reported as a
+  // missing entry (BOUND-03), so the canary must not corrupt the file.
+  await writeManifest(root, [STAYING, PARTIAL]);
+
+  const after = await run(`list --scope user`);
+  show("list AFTER the manifest entry disappears", after.text);
+
+  assertManifestAbsenceRows(after);
+
+  await assertRecordBackedSurfaces(run);
 }
 
 // ---------------------------------------------------------------------------

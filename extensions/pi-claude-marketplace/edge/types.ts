@@ -8,11 +8,11 @@
 // `PluginUpdateFn` lives in `orchestrators/types.ts` (D-06).
 // `edge/` imports both -- allowed by D-11 (edge -> orchestrators).
 //
-// `SubcommandHandlers` is re-exported from `./router.ts` so consumers can
-// import the entire edge type surface from a single module:
-// `import type { EdgeDeps, SubcommandHandlers } from "./types.ts"`.
-
-export type { SubcommandHandlers } from "./router.ts";
+// This module declares `EdgeDeps` only. `SubcommandHandlers` is declared and
+// exported by `./router.ts` -- import it from there
+// (`import type { SubcommandHandlers } from "./router.ts"`, as `register.ts`
+// does). A convenience re-export used to let both types be imported from this
+// module, but nothing imported the pair together, so it is gone.
 
 import type {
   ClaudeImportExecutionResult,

@@ -5,8 +5,8 @@
 // run one boolean-flag orchestrator (`opts.enable`) the way enable/disable do,
 // so this single module hosts TWO distinct command contexts.
 //
-// D-01 / D-10 / MOD-01 / MOD-03: each command owns its OWN mp-status set and its
-// OWN render map total over its OWN statuses. `marketplace autoupdate` records
+// D-01 / D-10 / MOD-01 / MOD-03: each command owns its OWN render map total over
+// its OWN plugin-child-row statuses. `marketplace autoupdate` records
 // `autoupdate enabled` (fresh flip) / `skipped {already autoupdate}` (idempotent)
 // / `failed`; `marketplace noautoupdate` records `autoupdate disabled` /
 // `skipped {already no autoupdate}` / `failed`. All marketplace headers render
@@ -19,22 +19,6 @@ import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 import type { PluginFailedMessage } from "../../shared/notify.ts";
-
-/**
- * D-01 / MOD-01: the marketplace-statuses `marketplace autoupdate` owns. The
- * idempotent reason `already autoupdate` comes from the shared idempotent group
- * in `shared/notify-reasons.ts`.
- */
-export const AUTOUPDATE_MP_STATUSES = ["autoupdate enabled", "skipped", "failed"] as const;
-export type AutoupdateMpStatus = (typeof AUTOUPDATE_MP_STATUSES)[number];
-
-/**
- * D-01 / MOD-01: the marketplace-statuses `marketplace noautoupdate` owns. The
- * idempotent reason `already no autoupdate` comes from the shared idempotent
- * group in `shared/notify-reasons.ts`.
- */
-export const NOAUTOUPDATE_MP_STATUSES = ["autoupdate disabled", "skipped", "failed"] as const;
-export type NoautoupdateMpStatus = (typeof NOAUTOUPDATE_MP_STATUSES)[number];
 
 /**
  * The single plugin-child-row status either flip command emits: a synthetic

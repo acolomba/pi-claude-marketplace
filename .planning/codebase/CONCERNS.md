@@ -1,228 +1,61 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-07
+**Analysis Date:** 2026-08-18
 
 ## Tech Debt
 
-**Uncovered rare failure/rollback arms in mutating orchestrators:**
-- Issue: overall Sonar coverage sits around 95.9% (line 96.7%, branch 90.5%),
-  but the uncovered lines cluster in rollback and rare-failure branches of the
-  largest orchestrators — precisely the paths where a silent regression is
-  most costly. Tracked in
-  `.planning/todos/pending/2026-06-12-coverage-sweep-test-rare-failure-arms-in-update-reinstall-in.md`
-  (open, not yet actioned as of this analysis).
-- Files: `extensions/pi-claude-marketplace/orchestrators/edge-deps.ts` (was
-  49.7% coverage at capture), `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts`
-  (87.9%, three-phase update rollback paths), `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`
-  (93.1%), `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`
-  (93.4%), `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`
-  (93.7%), `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`
-  (94.1%)
-- Impact: a regression in a rollback path (e.g. a partial-commit cleanup on
-  update failure) could silently corrupt on-disk state with no test to catch
-  it, violating NFR-1 (atomicity) and NFR-3 (safe-retry) guarantees.
-- Fix approach: targeted sweep starting with `update.ts` (largest absolute
-  uncovered chunk), then `reinstall.ts` / `install.ts` /
-  `marketplace/update.ts` / `import/execute.ts`. For `edge-deps.ts`
-  (dependency-injection wiring glue), decide explicitly whether to add tests
-  or a `sonar.coverage.exclusions` entry in `sonar-project.properties` — an
-  exclusion should be a deliberate call, not a default.
+**`.planning/` markdown has no automated formatting or lint gate:**
+- Issue: `.pre-commit-config.yaml` explicitly excludes `.planning/` from `mdformat` (`exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)`) and from `markdownlint-cli2` (same exclude line), and also skips `fix-smartquotes`, `fix-unicode-dashes`, and `fix-ligatures` for `.planning/`. `npm run format:check` (see `package.json`) globs only `**/*.{js,json,ts}`, so Prettier never touches `.planning/` either.
+- Files: `.pre-commit-config.yaml`, `.planning/codebase/*.md`, `.planning/BACKLOG.md`, and all phase/plan artifacts under `.planning/`
+- Impact: these generated docs (STACK.md, ARCHITECTURE.md, CONVENTIONS.md, BACKLOG.md, phase plans) are point-in-time snapshots with no verification loop. They drift silently as code lands — nothing fails CI or pre-commit when a doc goes stale, is malformed, or contradicts the source it describes.
+- Fix approach: none proposed in this pass; noted as a structural gap for future consideration (e.g., a periodic `/gsd-map-codebase` re-run gate, or a lightweight staleness check).
 
-**Very large orchestrator files concentrate complexity:**
-- Issue: several orchestrator files exceed 1,000-2,800 lines, each
-  coordinating multi-phase transactional workflows (install/update/reinstall
-  plus rollback).
-- Files (by size): `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts`
-  (2793 lines), `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`
-  (2380 lines), `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`
-  (2024 lines), `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts`
-  (1945 lines), `extensions/pi-claude-marketplace/domain/resolver.ts` (1534
-  lines), `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`
-  (1412 lines), `extensions/pi-claude-marketplace/orchestrators/plugin/list.ts`
-  (1282 lines)
-- Impact: high cognitive load for reviewers and future contributors; several
-  functions require `eslint-disable-next-line sonarjs/cognitive-complexity`
-  to pass lint (see below), a proxy signal that complexity is already at the
-  configured ceiling in multiple spots.
-- Fix approach: no active refactor plan exists. If growth continues, consider
-  splitting per-phase logic (prepare/commit/rollback) into named helper
-  modules under each orchestrator's directory, following the pattern already
-  used for `orchestrators/plugin/shared.ts`.
+**`fallow`'s dead-code/unused-export classes are near-vacuous under `production: false`:**
+- Issue: `.fallowrc.json` sets `"production": false` (confirmed by direct read), which admits `tests/**` into the reachability graph. This is what makes the codebase's `_*ForTest` DI seam convention analyzable without ~130 false positives (per `.planning/BACKLOG.md` FLOW-04). But the flip side — recorded in STACK.md and BACKLOG.md's FLOW-04 closure note — is that under `production: false`, fallow promotes every discovered file to an entry point, so an export consumed only by a test (and never by production code) is not flagged as dead.
+- Files: `.fallowrc.json`
+- Impact: a genuinely unused production export that happens to have a lingering test reference will not be caught by `npm run fallow`'s dead-code check. Boundary, coverage, and cycle enforcement are unaffected (each independently verified per FLOW-01/02/04's closure notes).
+- Fix approach: none — this is a knowing, documented trade-off (FLOW-04), not a bug. Carried here as a residual gap for anyone auditing why a stale export slipped through.
 
-**Cognitive-complexity suppressions accepted at multiple call sites:**
-- Issue: 8 functions across the orchestrator layer carry an explicit
-  `eslint-disable-next-line sonarjs/cognitive-complexity` to bypass the
-  linter's complexity ceiling rather than being decomposed.
-- Files: `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:340`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1281,2257`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:386,459`,
-  `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:538`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:1409,1549`
-- Impact: these functions are, by the project's own linting bar, harder to
-  reason about and more failure-prone to modify safely; they are exactly the
-  kind of code where the coverage gaps above are riskiest.
-- Fix approach: none planned currently. Treat any future change to these
-  functions as an opportunity to extract named sub-steps rather than adding
-  more branches under the same suppression.
+## Known Bugs / Silent-Failure Surfaces
 
-**`no-dynamic-delete` and `no-unnecessary-condition` suppressions on
-closure-mutated state:**
-- Issue: 17 additional inline `eslint-disable-next-line` suppressions exist,
-  mostly for `@typescript-eslint/no-dynamic-delete` (deleting keys from
-  `Record<string, ...>` state maps) and `@typescript-eslint/no-unnecessary-condition`
-  (re-checking a boolean that TS's flow analysis believes is still `false`
-  because it was mutated inside a `withLockedStateTransaction` closure the
-  compiler can't see through).
-- Files: `extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:372,451`,
-  `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:475,479`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:475,549,574`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts:2020`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:1109,1556,1582`,
-  `extensions/pi-claude-marketplace/persistence/config-write-back.ts:88,145`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts:2618,2789`
-  the `no-unnecessary-condition` sites are all documented as required at
-  runtime by inline comments explaining the closure-mutation gap.
-- Impact: low per-instance risk (each is documented with a reason), but the
-  repeated pattern across files signals that `withLockedStateTransaction`'s
-  closure-based mutation-tracking is not type-safe by construction — every
-  new orchestrator following this pattern will likely need the same
-  suppression.
-- Fix approach: if this pattern recurs again, consider a typed accumulator
-  object returned from the transaction closure instead of captured outer
-  `let` bindings, which TS can narrow without suppression.
+**Hook dispatch failures are silent by design (`dispatch-exec.ts`):**
+- Symptoms: a hook handler whose command is missing (ENOENT), or whose `CLAUDE_PLUGIN_DATA` path fails the NFR-10 containment assert, or whose stdout/stderr exceeds the manual caps, resolves to `{ kind: "noop" }` with only a `hookDebugLog` trace call — no `ctx.ui.notify`, nothing visible to the user in the session.
+- Files: `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` (documented "Never-throws contract" in the file header: "every error path resolves to `{ kind: "noop" }` + `hookDebugLog`")
+- Trigger: any of — spawn-time error (ENOENT, containment violation), stdout overflow past `STDOUT_MAX_BYTES` (1 MB), stderr overflow past `STDERR_MAX_BYTES` (64 KB), or an EPIPE from a fast-exiting child on stdin write
+- Workaround: `hookDebugLog` output is the only trace; there is no user-facing signal that a configured hook silently never ran. This is the largest silent-failure surface in the codebase — a misconfigured or broken hook produces no error, no warning, nothing.
 
-## Known Bugs
+**Orchestrated-mode install failures lose rollback detail across the outcome boundary:**
+- Symptoms: `classifyInstallFailure` (`extensions/pi-claude-marketplace/orchestrators/plugin/install.ts:2423`) collapses every failure variant to `{ status: "failed", error, cause }` — a flat `Error` plus a formatted string. Per-phase rollback children (`RollbackPartial[]`, from `transaction/phase-ledger.ts`) that are attached to `PluginFailedMessage` in the standalone-notify path are dropped here.
+- Files: `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` (`classifyInstallFailure`, line 2423; contrast with the standalone catch-site comment at line ~1598-1607 describing the `rollbackPartial` field carried by `PluginFailedMessage`)
+- Trigger: any install driven through a cascade (reconcile-triggered install/update, or bulk `import`) that fails mid-ledger
+- Impact: a reconcile- or import-driven install renders a bare `(failed)` row where the standalone `/claude:plugin install` path would show per-phase rollback detail in the notification.
 
-No open bug reports were found in `.planning/todos/pending/` or the
-milestone history at analysis time (the one pending todo is a coverage-sweep
-task, not a bug). No `TODO`/`FIXME`/`HACK`/`XXX` markers exist anywhere under
-`extensions/`.
+## Reconciliation Model Limits
 
-## Security Considerations
+**Load-time reconcile is config-to-record, not a deep diff against disk:**
+- Problem: `applyReconcile` (`extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`) diffs the **declared config** (merged `claude-plugins.json`) against **installation records** in `state.json` — it does not re-verify that recorded artifacts still exist on disk.
+- Files: `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `orchestrators/reconcile/plan.ts`
+- Cause: by design (documented in ARCHITECTURE.md's Data Flow section) — reconcile answers "does the config match the record," not "does the record match the filesystem."
+- Impact: an artifact deleted underneath an intact state record (e.g., a user manually `rm`s a skill file, or a bridge-committed file is lost) is not detected or repaired by `/reload`; the state record still claims it is installed.
 
-**Path containment relies on convention across many call sites (NFR-10):**
-- Risk: the project's core safety invariant — refusing to write outside
-  `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`,
-  `<scopeRoot>/mcp.json`, `<scopeRoot>/claude-plugins.json`, or
-  `<scopeRoot>/claude-plugins.local.json` — depends on every write path
-  calling the shared containment check consistently. A new orchestrator or
-  bridge that writes files without going through the shared helper would
-  silently violate NFR-10.
-- Files: containment logic is expected under `extensions/pi-claude-marketplace/shared/`
-  or `platform/`; every orchestrator under `extensions/pi-claude-marketplace/orchestrators/`
-  is a call site that must honor it.
-- Current mitigation: an architecture test guards network usage
-  (`tests/architecture/no-orchestrator-network.test.ts`, a `FORBIDDEN_TARGETS`
-  grep-gate) — no equivalent grep-gate test was found specifically for path
-  containment during this pass.
-- Recommendation: verify (or add) an architecture-level test asserting that
-  every filesystem write in `orchestrators/` and `persistence/` routes
-  through the shared path-containment/atomic-write helpers, mirroring the
-  existing network-purity gate pattern.
+## CI Coverage Gaps
 
-**Git-source marketplace/plugin installs shell out to `isomorphic-git`
-against user-supplied URLs:**
-- Risk: marketplace `add` (GitHub source) and plugin git-URL sources
-  (`domain/github-auth.ts`, `domain/auth-registry.ts`,
-  `orchestrators/plugin/clone-cache.ts`, `orchestrators/plugin/fetch.ts`)
-  clone and fetch from externally supplied repository URLs. Credential
-  handling for private repos flows through `domain/github-auth.ts`.
-- Files: `extensions/pi-claude-marketplace/platform/git.ts`,
-  `extensions/pi-claude-marketplace/domain/github-auth.ts`,
-  `extensions/pi-claude-marketplace/domain/auth-registry.ts`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts`
-- Current mitigation: NFR-5 confines network access to `marketplace add`
-  (GitHub source) and `update`/`marketplace update` against GitHub-source
-  marketplaces only; `install`/`list`/`uninstall`/`marketplace remove` and
-  path-source `marketplace add` are enforced network-free by the
-  `no-orchestrator-network` architecture test.
-- Recommendation: no specific gap identified beyond keeping the existing
-  architecture test current as new git-touching call sites are added.
+**CI `paths-ignore` skips `docs/**`, but a test byte-compares against a file under `docs/`:**
+- Issue: `.github/workflows/ci.yml` (both jobs, lines 14-19 and 24-29) and `.github/workflows/sonarcloud.yml` (lines 7-12 and 17-22) list `docs/**` in `paths-ignore`, so a docs-only commit does not trigger CI. But `tests/architecture/catalog-uat.test.ts` reads `docs/output-catalog.md` at test time and byte-compares 166 annotated fenced examples against live `notify()` output (confirmed: the test asserts `expect exactly 166 annotated catalog examples`, and its header describes a "BINDING USER-CONTRACT GATE: byte-equality between `notify()`'s output and the catalog").
+- Files: `.github/workflows/ci.yml`, `.github/workflows/sonarcloud.yml`, `docs/output-catalog.md`, `tests/architecture/catalog-uat.test.ts`
+- Impact: a docs-only edit to `docs/output-catalog.md` that breaks the byte-parity contract (e.g., a typo fix that changes an annotated example's exact text) can merge without CI ever running the test that would catch it. The test only runs when something outside `docs/**`/`**/*.md` also changes in the same push/PR.
 
-## Performance Bottlenecks
+## Open Backlog Items (from `.planning/BACKLOG.md`)
 
-No specific hot-path profiling data or reported slow operations were found.
-The domain resolver (`extensions/pi-claude-marketplace/domain/resolver.ts`,
-1534 lines) and the large orchestrators are the most likely places for
-algorithmic cost to accumulate (e.g. repeated full-state scans across many
-marketplaces/plugins), but nothing in the codebase or planning history flags
-a measured bottleneck as of this analysis.
+**UAT-02 — reconcile cascade invisible on `/reload` (host TUI limitation, open):**
+- `@earendil-works/pi-coding-agent`'s `handleReloadCommand` calls `rebuildChatFromMessages()` after `session.reload()`, which reconstructs the chat from the LLM transcript only — any `ctx.ui.notify` output emitted during the reload pipeline (including the reconcile cascade, RECON-04) is erased from the visible chat. Not our fork; no upstream issue filed as of 2026-06-11 per operator decision. Workaround: run `/claude:plugin pending` before reload, or `list` after.
 
-## Fragile Areas
+**REASON-01 — malformed-input failures misfiled under the "unsupported" reason family (open):**
+- Two cases mislabel a parse/structural defect as an unsupported-kind: inline malformed `mcpServers` resolves to `{unsupported source}` via the `narrowResolverNotes` catch-all, and malformed `hooks.json` (invalid JSON/schema) resolves to `{unsupported hooks}`. Both belong in a `{malformed <feature>}` family parallel to `{invalid manifest}`/`{unparseable}`. Deliberately left unchanged in Phase 85's `{malformed mcp}` introduction (out of scope for that milestone).
 
-**Three-phase update/rollback orchestrators:**
-- Files: `extensions/pi-claude-marketplace/orchestrators/plugin/update.ts`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`,
-  `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`
-- Why fragile: these implement multi-step commit/rollback sequences
-  (prepare → commit → rollback-on-failure) guarded by
-  `withLockedStateTransaction`/`withStateGuard`-style locking
-  (`extensions/pi-claude-marketplace/transaction/with-state-guard.ts`). The
-  closure-mutation pattern already forces multiple lint suppressions (see Tech
-  Debt above), and the failure/rollback branches are exactly the
-  under-tested lines flagged in the open coverage-sweep todo.
-- Safe modification: any change to a commit or rollback branch in these files
-  should add or update a corresponding failure-path test before merging;
-  changes should preserve the documented reasons behind each existing
-  `eslint-disable` (they encode real TS flow-analysis limitations, not lint
-  fatigue).
-- Test coverage: below the rest of the codebase on these specific files —
-  see Tech Debt section for exact figures at last measurement (2026-06-12).
-
-**Cross-scope resolution helpers (`orchestrators/plugin/shared.ts`):**
-- Files: `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts`
-  (`resolveCrossScopePluginTarget`, `resolveInstalledMarketplaceTarget`)
-- Why fragile: the two helpers deliberately share the same "requested scope
-  → other scope → absent" decision shape but are intentionally not
-  deduplicated (per `sonar-project.properties`'s `sonar.cpd.exclusions`
-  comment, this was an explicit Phase 38 decision to keep per-type contracts
-  visible at each call site). A future contributor unaware of that rationale
-  might try to merge them, which would obscure the per-type discriminator
-  each caller switches on.
-- Safe modification: preserve the parallel-but-separate structure; consult
-  the `sonar-project.properties` comment before attempting to extract a
-  shared helper.
-
-## Scaling Limits
-
-Not applicable in the traditional sense — this is a local CLI/agent extension
-operating on a user's filesystem, not a networked service with throughput
-limits. No scaling constraints were identified.
-
-## Dependencies at Risk
-
-**`peerDependencies.@earendil-works/pi-coding-agent` pinned as `">=0.80.5"`,
-`typebox` and `@earendil-works/pi-tui` pinned as `"*"`:**
-- Risk: an unpinned `"*"` peer dependency range allows installs against any
-  future breaking major version of `typebox` or `@earendil-works/pi-tui`,
-  which could silently break the extension at load time.
-- Impact: install-time or first-run breakage that surfaces only after a host
-  environment upgrades one of these peers.
-- Migration plan: NFR-11 already tracks pinning a floor for the pi-coding-agent
-  peer (done: `>=0.80.5`, per `package.json`); the same discipline has not
-  yet been applied to `typebox` or `@earendil-works/pi-tui`, both still `"*"`.
-
-## Missing Critical Features
-
-None identified — this document covers debt/risk, not the feature roadmap.
-See `.planning/milestones/` and the project ROADMAP for planned and shipped
-feature work.
-
-## Test Coverage Gaps
-
-**Rare failure/rollback arms in mutating orchestrators (see Tech Debt above
-for full detail and file-by-file coverage figures):**
-- What's not tested: exception and rollback branches in `update.ts`,
-  `reinstall.ts`, `install.ts`, `marketplace/update.ts`, `import/execute.ts`,
-  and the DI wiring in `orchestrators/edge-deps.ts`.
-- Files: see Tech Debt section above.
-- Risk: a regression in an untested rollback path could leave on-disk state
-  (`state.json`, `mcp.json`, staged agent/skill directories) inconsistent
-  after a failed operation, directly undermining NFR-1/NFR-3.
-- Priority: High — these are the exact paths a partial-failure user hits in
-  production, and they are already flagged in an open (unclaimed) todo.
+**COV-01 — coverage exclusion policy and two under-tested orchestrators (open):**
+- `orchestrators/import/execute.ts` (59 uncovered lines, 94.53%) and `orchestrators/marketplace/update.ts` (50 uncovered, 95.49%) sit outside the D-99-05b bounded-sweep scope (update/reinstall/install only). Both files' uncovered remainder is rare-failure and cascade-diagnostic arms. Undecided: follow-on bounded sweep vs. accept as-is — explicitly NOT to be resolved via a `sonar.coverage.exclusions` entry, per the policy recorded in the same backlog item.
 
 ---
 
-*Concerns audit: 2026-08-07*
+*Concerns audit: 2026-08-18*

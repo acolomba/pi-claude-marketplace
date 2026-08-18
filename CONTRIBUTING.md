@@ -28,7 +28,7 @@ pre-commit install --hook-type commit-msg
 ## Checks
 
 ```bash
-npm run check          # typecheck, lint, format check, and tests
+npm run check          # typecheck, lint, fallow, format check, unit + integration tests
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
 pre-commit run --all-files

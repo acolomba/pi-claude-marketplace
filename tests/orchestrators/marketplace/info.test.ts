@@ -18,8 +18,6 @@
 //   (h) absent from both scopes, no `--scope` -> bare row, no [scope]
 //   (i) NFR-5 grep-gate: no `platform/git` / `DEFAULT_GIT_OPS` /
 //       `refreshGitHubClone` imports in `info.ts`
-//   (j) barrel re-export: `orchestrators/marketplace/index.ts` exposes
-//       `getMarketplaceInfo`
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -633,13 +631,4 @@ test("NFR-5: info.ts has zero imports from platform/git, DEFAULT_GIT_OPS, or ref
     false,
     "info.ts must not reference refreshGitHubClone",
   );
-});
-
-test("Barrel: orchestrators/marketplace/index.ts re-exports getMarketplaceInfo and GetMarketplaceInfoOptions", async () => {
-  // Static-import the symbol via the barrel; both name + type re-exports
-  // must resolve at typecheck time. The runtime assertion below proves
-  // the named export is a function (not undefined).
-  const mod =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/marketplace/index.ts");
-  assert.equal(typeof mod.getMarketplaceInfo, "function");
 });

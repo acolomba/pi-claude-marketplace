@@ -85,7 +85,7 @@ export const PLUGIN_ENTRY_VALIDATOR = Compile(PLUGIN_ENTRY_SCHEMA);
  * optional (manifest may omit it; the entry name from marketplace.json
  * wins) and `source` is absent (a plugin.json describes itself).
  */
-export const PLUGIN_MANIFEST_SCHEMA = Type.Object({
+const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   name: Type.Optional(Type.String()),
 
   ...PLUGIN_METADATA_FIELDS,
@@ -95,8 +95,6 @@ export const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   mcpServers: Type.Optional(McpServersField), // MCPR-02: string reference OR inline map
   dependencies: Type.Optional(Type.Unknown()),
 });
-
-export type PluginManifest = Type.Static<typeof PLUGIN_MANIFEST_SCHEMA>;
 
 /** JIT-compiled validator (D-07). */
 export const PLUGIN_MANIFEST_VALIDATOR = Compile(PLUGIN_MANIFEST_SCHEMA);

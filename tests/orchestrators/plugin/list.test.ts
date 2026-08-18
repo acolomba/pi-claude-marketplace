@@ -35,16 +35,15 @@ import * as git from "isomorphic-git";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import {
-  __test_narrowListFailReason,
-  __test_narrowProbeError,
-  listPlugins,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
-import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { listPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { narrowUnsupportedKinds } from "../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+  seedAutoupdateConfig,
+} from "../../helpers/marketplace-seed.ts";
 
 import type {
   ExtensionAPI,
@@ -189,16 +188,6 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     await mkdir(path.join(mpRoot, rel), { recursive: true });
   }
 
-  // Build state, merging into any pre-existing state for the scope.
-  const stateJsonPath = path.join(locations.extensionRoot, "state.json");
-  let existing: { marketplaces: Record<string, unknown> } = { marketplaces: {} };
-  try {
-    const raw = await readFile(stateJsonPath, "utf8");
-    existing = JSON.parse(raw) as { marketplaces: Record<string, unknown> };
-  } catch {
-    /* no existing state.json -- first marketplace in scope */
-  }
-
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
     // ENBL-18: the inventory is INDEPENDENT of `disabled` -- disable preserves
@@ -226,27 +215,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
       hooks: [...(override?.hooks ?? defaults.hooks)],
     };
 
-    // FSTAT-01 / D-66-01: a recorded-installed plugin whose install-time
-    // resolution dropped components persists `unsupported` (and
-    // `installable: false`). The deriver reads this to render
-    // `(partially-installed)` -- no separate persisted flag.
-    const unsupported = info.unsupported ?? [];
-    const compatibility = {
-      installable: unsupported.length === 0,
-      notes: [],
-      supported: [],
-      unsupported: [...unsupported],
-    };
-
-    plugins[name] = {
-      version: info.version,
-      resolvedSource: "./placeholder",
-      compatibility,
-      resources,
-      enabled: info.disabled !== true,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
+    plugins[name] = buildInstalledPluginRecord(info, resources);
   }
 
   const record: Record<string, unknown> = {
@@ -262,37 +231,10 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
     record.autoupdate = opts.autoupdate;
   }
 
-  await saveState(locations.extensionRoot, {
-    schemaVersion: 2,
-    marketplaces: { ...existing.marketplaces, [mpName]: record },
-    // saveState validates -- the merged shape must satisfy STATE_SCHEMA.
-  } as unknown as Parameters<typeof saveState>[1]);
+  await mergeMarketplaceIntoState(locations.extensionRoot, mpName, record);
 
-  // SPLIT-01: autoupdate read-path lives in claude-plugins.json. Seed the
-  // config when autoupdate is set so the list/info orchestrators read the
-  // autoupdate truth from the new source of truth.
   if (opts.autoupdate !== undefined) {
-    const cfgPath = locations.configJsonPath;
-    let existingCfg: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } =
-      {};
-    try {
-      const raw = await readFile(cfgPath, "utf8");
-      existingCfg = JSON.parse(raw) as typeof existingCfg;
-    } catch {
-      /* no existing config -- first marketplace in scope */
-    }
-
-    await saveConfig(
-      cfgPath,
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          ...(existingCfg.marketplaces ?? {}),
-          [mpName]: { source: `./${mpName}-src`, autoupdate: opts.autoupdate },
-        },
-      },
-      locations.scopeRoot,
-    );
+    await seedAutoupdateConfig(locations, mpName, opts.autoupdate);
   }
 }
 
@@ -1926,104 +1868,26 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
 // surface for unexpected `resolveStrict` throws inside `availableRowComputation`.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("260525-cjr A3: narrowProbeError -> EACCES classifies as `permission denied`", () => {
-  const err = new Error("EACCES: permission denied, open '/foo/bar/manifest.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(__test_narrowProbeError(err), "permission denied");
-});
-
-test("260525-cjr A3: narrowProbeError -> EPERM also classifies as `permission denied`", () => {
-  const err = new Error("EPERM");
-  (err as NodeJS.ErrnoException).code = "EPERM";
-  assert.equal(__test_narrowProbeError(err), "permission denied");
-});
-
-test("260525-cjr A3: narrowProbeError -> ENOENT classifies as `source missing`", () => {
-  const err = new Error("ENOENT");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(__test_narrowProbeError(err), "source missing");
-});
-
-test("260525-cjr A3: narrowProbeError -> SyntaxError classifies as `unparseable`", () => {
-  const err = new SyntaxError("Unexpected token } in JSON at position 7");
-  assert.equal(__test_narrowProbeError(err), "unparseable");
-});
-
-test("D-48-B IN-02: narrowProbeError -> schema-invalid InvalidMarketplaceManifestError classifies as `invalid manifest`", () => {
-  // Schema-invalid manifest = typed error with NO SyntaxError cause. The read
-  // surface reports the SAME `{invalid manifest}` reason the write path does.
-  const err = new InvalidMarketplaceManifestError("marketplace.json schema invalid: plugins");
-  assert.equal(__test_narrowProbeError(err), "invalid manifest");
-});
-
-test("D-48-B IN-02: narrowProbeError -> malformed-JSON InvalidMarketplaceManifestError stays `unparseable`", () => {
-  // Malformed JSON = typed error WHOSE cause IS a SyntaxError. The collapse
-  // into one InvalidMarketplaceManifestError branch must preserve this arm.
-  const err = new InvalidMarketplaceManifestError("bad json", {
-    cause: new SyntaxError("Unexpected token"),
-  });
-  assert.equal(__test_narrowProbeError(err), "unparseable");
-});
-
-test("260525-cjr A3: narrowProbeError -> generic Error falls through to `unreadable` (NOT `unsupported source`)", () => {
-  // An unrecognized throw routes to `unreadable`, not `unsupported
-  // source`.
-  const err = new Error("something went wrong probing this plugin");
-  const reason = __test_narrowProbeError(err);
-  assert.equal(reason, "unreadable");
-  assert.notEqual(reason, "unsupported source");
-});
-
 // Note on integration coverage: constructing a real fixture that drives
 // `resolveStrict` into THROWING (vs returning NotInstallable with notes)
 // requires FS-level fault injection that is brittle across platforms
 // (chmod 000 behaves differently as root, on tmpfs, on macOS APFS, etc.).
-// The unit tests above exercise every classifier branch directly through
-// the `__test_narrowProbeError` re-export; the orchestrator wiring is a
-// straightforward pass-through. The binding contract is that
-// `narrowProbeError` returns the closed-set Reason the user sees on the
-// row.
+// The classifier ladder is exercised branch by branch in
+// tests/shared/probe-classifiers.test.ts, against the public
+// `narrowProbeError` this surface delegates to; the orchestrator wiring is
+// a straightforward pass-through. The binding contract is that the ladder
+// returns the closed-set Reason the user sees on the row.
 
 // ──────────────────────────────────────────────────────────────────────────
 // WR-03: narrowListFailReason -- dedicated narrower for orchestrator-level
 // list failures (loadState / cross-scope walk throws). Distinct from
 // narrowProbeError (per-row resolver probe failures). Mirrors the same
 // classifier ladder so the test ergonomics carry over.
+//
+// Its ladder tests live in tests/shared/probe-classifiers.test.ts, beside
+// the shared classifiers this wrapper delegates to -- the same move the
+// probe-error note above records. Nothing is asserted here.
 // ──────────────────────────────────────────────────────────────────────────
-
-test("WR-03: narrowListFailReason -> EACCES classifies as `permission denied`", () => {
-  const err = new Error("EACCES: permission denied, open '/foo/state.json'");
-  (err as NodeJS.ErrnoException).code = "EACCES";
-  assert.equal(__test_narrowListFailReason(err), "permission denied");
-});
-
-test("WR-03: narrowListFailReason -> EPERM also classifies as `permission denied`", () => {
-  const err = new Error("EPERM");
-  (err as NodeJS.ErrnoException).code = "EPERM";
-  assert.equal(__test_narrowListFailReason(err), "permission denied");
-});
-
-test("WR-03: narrowListFailReason -> ENOENT classifies as `source missing`", () => {
-  const err = new Error("ENOENT");
-  (err as NodeJS.ErrnoException).code = "ENOENT";
-  assert.equal(__test_narrowListFailReason(err), "source missing");
-});
-
-test("WR-03: narrowListFailReason -> SyntaxError classifies as `unparseable`", () => {
-  const err = new SyntaxError("Unexpected token } in JSON at position 7");
-  assert.equal(__test_narrowListFailReason(err), "unparseable");
-});
-
-test("WR-03: narrowListFailReason -> generic Error falls through to `unreadable`", () => {
-  const err = new Error("something went wrong loading state");
-  assert.equal(__test_narrowListFailReason(err), "unreadable");
-});
-
-test("WR-03: narrowListFailReason -> non-Error throw falls through to `unreadable`", () => {
-  assert.equal(__test_narrowListFailReason("string throw"), "unreadable");
-  assert.equal(__test_narrowListFailReason(42), "unreadable");
-  assert.equal(__test_narrowListFailReason(undefined), "unreadable");
-});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Source-grep self-tests (NFR-5 / PI-2 / PL-3 defense-in-depth)
@@ -2429,6 +2293,16 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     assert.equal(notifications[0]!.severity, "error");
     // The error message should reference the JSON parse failure.
     assert.match(notifications[0]!.message, /state\.json/);
+    // ...and carry the closed-set reason token. `narrowListFailReason` is a
+    // one-line delegate to `sharedNarrowProbeError`, whose ladder is tested
+    // directly in tests/shared/probe-classifiers.test.ts. This assertion is
+    // what pins the delegate itself: without it, hardcoding either wrapper's
+    // return value leaves the whole suite green.
+    //
+    // `unreadable`, not `unparseable`: loadState wraps the JSON failure, so
+    // the error reaching the classifier is not a bare SyntaxError and lands
+    // on the permissive fallback arm.
+    assert.match(notifications[0]!.message, /\{unreadable\}/);
   });
 });
 

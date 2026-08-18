@@ -1,22 +1,23 @@
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
-  ICON_PARTIALLY_AVAILABLE,
-  composeReasons,
-  partiallyInstalledRow,
   installedLikeRow,
-  joinTokens,
+  partiallyInstalledRow,
   pluginRow,
-  renderScopeBracket,
+  renderPartiallyAvailableRow,
+  renderUnavailableRow,
   renderVersion,
+  type ContentReason,
   type PluginFailedMessage,
-  type PluginPartiallyInstalledMessage,
   type PluginInstalledMessage,
-  type PluginUnavailableMessage,
   type PluginPartiallyAvailableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginUnavailableMessage,
+  type StatusToken,
 } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { Scope } from "../../shared/types.ts";
 
 /**
  * install.messaging.ts -- the command-local notification vocabulary for
@@ -39,14 +40,31 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * row (structural defect) or, per XSURF-01, a `partially-available` row (the
  * partially-available arm, consistent with `list` / `info`).
  */
-export const INSTALL_STATUSES = [
-  "installed",
-  "partially-installed",
-  "failed",
-  "unavailable",
-  "partially-available",
-] as const;
-export type InstallStatus = (typeof INSTALL_STATUSES)[number];
+type InstallStatus =
+  "installed" | "partially-installed" | "failed" | "unavailable" | "partially-available";
+
+/**
+ * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
+ * classified-error return shape for `classifyEntityShapeError` and the
+ * install.ts error-routing path. It lives here beside `InstallMsg` because
+ * it is a message-row shape: `composeInstallFailureMessage` consumes it and
+ * returns `InstallMsg`.
+ *
+ * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
+ * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
+ */
+export interface EntityErrorRow {
+  readonly kind: "entity-error";
+  readonly name: string;
+  readonly marketplace?: string;
+  readonly scope?: Scope;
+  readonly status: Extract<StatusToken, "failed" | "unavailable">;
+  readonly reasons: readonly ContentReason[];
+  // SEV-02 / D-69-03: carried from the thrown PluginShapeError's `partialable`
+  // discriminant on the `unavailable` arm -- `true` when the resolver verdict
+  // is partially-available, so the composed row points at `--partial`.
+  readonly partialable?: boolean;
+}
 
 /**
  * install's row message union -- the subset of the central plugin message
@@ -60,16 +78,6 @@ export type InstallMsg =
   | PluginFailedMessage
   | PluginUnavailableMessage
   | PluginPartiallyAvailableMessage;
-
-/**
- * install's command-private reason. `orphan rewake` surfaces a hook-config bug
- * (a handler declaring `rewakeMessage` / `rewakeSummary` without
- * `asyncRewake: true`) on the otherwise-successful `installed` row. The
- * failure-class reasons install also references (`rollback partial`,
- * `invalid manifest`, ...) are shared topic reasons owned by
- * `shared/notify-reasons.ts`.
- */
-export type InstallPrivateReason = "orphan rewake";
 
 /**
  * Render map total over install's OWN statuses (D-10): omitting an arm is a
@@ -92,29 +100,11 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
   // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
   // degraded install exactly as on a clean `(installed)` row.
   "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  unavailable: (p, probe, mpScope) =>
-    joinTokens([
-      ICON_UNINSTALLABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `unavailable` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(unavailable)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
   // XSURF-01: the partially-available install-failure arm. Byte-identical to the
   // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
   // `--partial` hint trailer is composed centrally by the renderer, not here.
-  "partially-available": (p, probe, mpScope) =>
-    joinTokens([
-      ICON_PARTIALLY_AVAILABLE,
-      p.name,
-      // MSG-PL-6 / SNM-11 carve-out: `partially-available` has NO `scope?` field.
-      renderScopeBracket(undefined, mpScope),
-      renderVersion(p.version),
-      "(partially-available)",
-      composeReasons(p.reasons, false, false, probe),
-    ]),
+  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
   failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
 };
 

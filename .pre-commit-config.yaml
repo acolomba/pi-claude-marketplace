@@ -93,30 +93,48 @@ repos:
 
   - repo: local
     hooks:
+      # Every hook below runs the WHOLE project (pass_filenames: false); the
+      # `files:` pattern only decides WHETHER it runs. So each pattern must
+      # name every path that can change that tool's verdict -- and all four
+      # read tests/ as well as extensions/, because tsconfig.json's `include`
+      # is ["extensions/**/*.ts", "tests/**/*.ts"], `npm run lint` is literally
+      # `eslint extensions tests eslint.config.js`, prettier globs
+      # `**/*.{js,json,ts}`, and fallow runs whole-repo with
+      # `production: false`. Each was verified by planting a violation under
+      # tests/ and watching the gate fire.
+      #
+      # Known residual gap, common to all four and NOT closable by a pattern:
+      # pre-commit selects staged files with `--diff-filter=ACMRTUXB` (no `D`),
+      # so a delete-only commit matches nothing and skips these hooks. Deletion
+      # is exactly what orphans an export elsewhere. Measured: zero
+      # delete-only commits in 173, and CI runs the full `npm run check`
+      # regardless, so this is a local-feedback gap rather than a merge-gate
+      # hole.
       - id: npm-lint
         name: npm lint
         entry: npm run lint
         language: system
         pass_filenames: false
-        files: '^(eslint\.config\.js|extensions/.*\.ts|package(-lock)?\.json)$'
+        files: '^(eslint\.config\.js|tsconfig\.json|(extensions|tests)/.*\.ts|package(-lock)?\.json)$'
       - id: npm-format-check
         name: npm format check
         entry: npm run format:check
         language: system
         pass_filenames: false
-        files: '^(eslint\.config\.js|extensions/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
+        files: '^(\.prettierrc\.json|\.prettierignore|eslint\.config\.js|(extensions|tests)/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
       - id: npm-typecheck
         name: npm typecheck
         entry: npm run typecheck
         language: system
         pass_filenames: false
-        files: '^(extensions/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
-      # Whole-graph, so it never takes filenames: moving a single import can
-      # orphan a file the commit does not touch. .fallowrc.json is a trigger
-      # because the zone definitions decide what counts as a violation.
+        files: '^((extensions|tests)/.*\.ts|package(-lock)?\.json|tsconfig\.json)$'
       - id: npm-fallow
         name: npm fallow
         entry: npm run fallow
         language: system
         pass_filenames: false
-        files: '^(\.fallowrc\.json|extensions/.*\.ts|package(-lock)?\.json)$'
+        # `.mjs` is included because `fallow dupes` analyzes
+        # tests/live-uat/*.mjs -- both `duplicates.ignoredClones` entries are
+        # clone groups in those two files. `.fallowrc.json` and `tsconfig.json`
+        # decide what enters the graph at all.
+        files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|package(-lock)?\.json)$'

@@ -35,7 +35,7 @@
  * A single per-verb flag: its long-flag name, an optional completion
  * description, and the parse/complete visibility bits.
  */
-export interface FlagEntry {
+interface FlagEntry {
   readonly name: string;
   readonly description?: string;
   readonly parse: boolean;

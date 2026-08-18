@@ -48,16 +48,20 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { applyPartialCascadeFold, resolveCrossScopePluginTarget } from "./shared.ts";
+import {
+  applyPartialCascadeFold,
+  emitMarketplaceNotAdded,
+  resolveCrossScopePluginTarget,
+} from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
@@ -66,6 +70,13 @@ import type {
   Reason,
 } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { UnstageOutcome } from "../marketplace/shared.ts";
+
+/** The config-layer paths the cross-layer sweep writes through. */
+type UninstallLocations = Pick<
+  ScopedLocations,
+  "configJsonPath" | "configLocalJsonPath" | "scopeRoot"
+>;
 
 /**
  * RECON-03: controls how `uninstallPlugin` surfaces
@@ -279,33 +290,6 @@ function emitConfigInvalid(args: {
 }
 
 /**
- * RECON-03: route the not-added cross-scope resolution path to either the
- * typed orchestrated outcome or the standalone notify() row.
- */
-function emitMarketplaceNotAdded(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
-  marketplace: string;
-  requestedScope: Scope | undefined;
-  orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
-  if (orchestrated) {
-    const scopeList: readonly Scope[] =
-      requestedScope === undefined ? ["project", "user"] : [requestedScope];
-    const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
-  }
-
-  notify(ctx, pi, {
-    kind: "marketplace-not-added",
-    name: marketplace,
-    ...(requestedScope !== undefined && { scope: requestedScope }),
-  });
-  return undefined;
-}
-
-/**
  * Delete the `plugin@marketplace` key from ONE physical config layer. Loads
  * the file fresh so the sweep sees that layer's on-disk truth.
  *
@@ -331,13 +315,183 @@ async function deletePluginFromLayer(
 }
 
 /**
+ * TR-03 failure split for a cascade that did not fully unstage.
+ *
+ *   - AG-5 (`AgentsUnstageFailureError`): foreign content owned by another
+ *     process. RETHROWN so the save aborts and the row stays intact for
+ *     manual recovery or retry (preserves PU-3 + PU-7).
+ *   - Non-AG-5 partial failure: the cascade dropped some artifacts before
+ *     throwing, so `resources.*` is filtered by `dropped.*` IN PLACE and the
+ *     shrunken row persists. The caller surfaces the returned cause AFTER the
+ *     save commits, so state.json never claims artifacts already gone from
+ *     disk (NFR-3 fail-clean).
+ */
+function foldPartialCascadeFailure(
+  plugin: string,
+  installed: Parameters<typeof applyPartialCascadeFold>[0],
+  localOutcome: UnstageOutcome,
+): Error {
+  // `localOutcome.cause` is non-undefined when ok=false (D-03 contract); the
+  // fallback keeps the type honest rather than asserting.
+  const cause = localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
+  if (cause instanceof AgentsUnstageFailureError) {
+    throw cause;
+  }
+
+  applyPartialCascadeFold(installed, localOutcome.dropped);
+  return cause;
+}
+
+/**
+ * The state-side removal commit: drop the record, then keep the hooks bridge
+ * in lockstep.
+ *
+ * D-59-02: the parsed-config cache removal is a synchronous in-memory delete
+ * and is idempotent, so the unconditional call is safe even for a plugin that
+ * never declared hooks. A closure throw between here and `tx.save()` leaves a
+ * bounded leak -- the routing table still resolves entries on the next
+ * dispatch until reconcile rebuilds -- and the next `/reload` resets it
+ * (D-59-03 epoch bump plus factory-time hydrate from disk).
+ *
+ * WR-03: the routing-table rebuild lets subsequent events bypass the removed
+ * plugin without requiring `/reload` (NFR-2). Without it dispatch would still
+ * try to spawn the uninstalled command; the never-throws contract would turn
+ * that into `{ kind: "noop" }` plus a debug log, which is correct but
+ * wasteful. Synchronous and zero disk I/O per DISP-02.
+ */
+function commitPluginRemoval(
+  mp: { plugins: Record<string, unknown> },
+  ids: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
+  delete mp.plugins[ids.plugin];
+  removePluginConfigFromCache(ids.scope, ids.marketplace, ids.plugin);
+  rebuildRoutingTables();
+}
+
+/**
+ * WB-01 / WR-09: delete the plugin entry from the user-authored config.
+ *
+ * Cross-layer sweep: the `plugin@marketplace` key may live in either
+ * `claude-plugins.json` or `claude-plugins.local.json` -- a prior `--local`
+ * install can have left it in the sibling layer. Both files are inside the
+ * NFR-10 sanctioned write set, and deleting from only the target layer would
+ * leave the sibling declaration as a perpetual dangling reference. Each layer
+ * loads fresh and is swept independently (WR-02 no-op guard per file: an
+ * absent or invalid layer, or one not declaring the key, is skipped and never
+ * rewritten, preserving RECON-05 byte and mtime stability).
+ */
+async function sweepPluginFromConfigLayers(
+  locations: UninstallLocations,
+  plugin: string,
+  marketplace: string,
+): Promise<void> {
+  await deletePluginFromLayer(locations.configJsonPath, locations.scopeRoot, plugin, marketplace);
+  await deletePluginFromLayer(
+    locations.configLocalJsonPath,
+    locations.scopeRoot,
+    plugin,
+    marketplace,
+  );
+}
+
+/**
+ * The three POST-state-commit cleanups, all of them hygienic and all of them
+ * swallowed per D-19-01: the underlying side effect still fires, only the
+ * user-visible warning surface is gone, because
+ * `MarketplaceNotificationMessage` has no field for a soft warning after a
+ * successful state mutation.
+ *
+ * D-03-INV: the plugin moved from "installed" to "available", so the cached
+ * plugin index for this marketplace is dropped and the next completion read
+ * rebuilds it with the new status.
+ *
+ * PU-2 / D-08: the per-plugin data dir is removed AFTER the state save, so an
+ * EACCES on `rm` cannot strand state in installed=true. This is where the
+ * PU-4 leaked-path warning used to surface.
+ *
+ * PURL-05 / D-78-01: the git clone cache is reclaimed once no surviving
+ * record references it. The GC derives live keys from the just-committed
+ * state, so a shared clone survives while any other plugin still references
+ * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
+ * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
+ * returned string[] rather than throwing; the try/catch is belt and braces.
+ */
+async function runPostUninstallCleanup(
+  locations: ScopedLocations,
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+): Promise<void> {
+  try {
+    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+
+  // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
+  // runs assertSafeName on both segments and assertPathInside on the result,
+  // and a containment failure must propagate rather than be mistaken for an
+  // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
+  // guarding it.
+  const dataDir = await locations.pluginDataDir(marketplace, plugin);
+
+  try {
+    await rm(dataDir, { recursive: true, force: true });
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch {
+    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+  }
+}
+
+/**
+ * PU-5 already-gone: the recorded plugin row is absent from state.json.
+ *
+ * WR-06: in ORCHESTRATED mode (reconcile apply) the converge stays SILENT --
+ * it surfaces as the explicit `converged` outcome so apply can DROP it, and a
+ * reconcile racing another process never reports an uninstall it did not
+ * perform.
+ *
+ * D-01: the STANDALONE user command names an absent target it cannot operate
+ * on, so it emits an error row (it was literal silence before). The row is
+ * `failed` carrying the `not installed` reason -- uninstall's render map has
+ * no `skipped` arm -- and carries no `cause`, so no path redaction applies.
+ */
+function emitAlreadyGone(args: {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly orchestrated: boolean;
+}): UninstallPluginOutcome | undefined {
+  const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
+  if (orchestrated) {
+    return { status: "converged", name: plugin };
+  }
+
+  const failedRow: PluginFailedMessage = {
+    status: "failed",
+    name: plugin,
+    reasons: ["not installed"],
+    severity: "error",
+    needsReload: false,
+  };
+  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+    { name: marketplace, scope, plugins: [failedRow] },
+  ]);
+  return undefined;
+}
+
+/**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  */
-// Uninstall sequencing intentionally keeps the cross-scope resolution, the
-// guarded cascade + CFG-03 + WB-01 write-back, and the post-guard outcome
-// dispatch in one audited flow matching PU-1..8.
-// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
@@ -453,73 +607,17 @@ export async function uninstallPlugin(
       // the filter MUST wire dropped.commands -> resources.prompts. The
       // other three axes are name-identical (skills, agents, mcpServers).
       if (!localOutcome.ok) {
-        // localOutcome.cause is non-undefined when ok=false (D-03 contract).
-        const cause =
-          localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
-        if (cause instanceof AgentsUnstageFailureError) {
-          // AG-5 carve-out: preserve the row intact (ST-7 abort-save).
-          throw cause;
-        }
-
-        // Non-AG-5: filter resources.* by dropped.* in place. The shrunken
-        // row persists via the explicit tx.save() (WR-04) -- this arm DID
-        // mutate state, unlike the abort arms above.
-        applyPartialCascadeFold(installed, localOutcome.dropped);
-        cascadeFailure = cause;
+        // Rethrows on the AG-5 carve-out; otherwise folds the partial drop
+        // into the record in place and returns the cause for the sentinel.
+        cascadeFailure = foldPartialCascadeFailure(plugin, installed, localOutcome);
         await tx.save();
         return;
       }
 
-      // State commit: remove the plugin record. The guard saves atomically
-      // on closure return.
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
-      delete mp.plugins[plugin];
+      commitPluginRemoval(mp, { scope, marketplace, plugin });
 
-      // D-59-02: hooks-bridge cache lifecycle -- synchronous in-memory
-      // remove. Idempotent: removing a missing key is a no-op (so the
-      // unconditional call is safe even for plugins that never declared
-      // hooks). Bounded leak on a closure throw between this line and
-      // `tx.save()`: the routing table still resolves entries on the next
-      // dispatch until reconcile rebuilds, but the next `/reload` resets
-      // the cache (D-59-03 epoch bump + factory-time hydrate from disk).
-      removePluginConfigFromCache(scope, marketplace, plugin);
-
-      // WR-03: keep the routing table in lockstep with the parsed-config
-      // cache so subsequent events bypass the now-removed plugin without
-      // requiring `/reload` (NFR-2). Otherwise dispatch would still attempt
-      // to spawn the uninstalled command (the never-throws contract would
-      // convert ENOENT to `{ kind: "noop" }` + hookDebugLog -- correct but
-      // wasteful). Synchronous + zero disk I/O per DISP-02.
-      rebuildRoutingTables();
-
-      // WB-01 / WR-09: delete the plugin entry from the user-authored config.
-      // SKIPPED in orchestrated mode (reconcile derives desired state FROM
-      // the merged config; writing back would clobber a per-machine override).
-      // The ALREADY-GONE arm above never reaches here -- it returns early
-      // (WB-01: uninstall alreadyGone leaves config untouched;
-      // planReconcile surfaces the declared-but-missing on next load).
-      //
-      // Cross-layer sweep: the `plugin@marketplace` key may live in either
-      // claude-plugins.json or claude-plugins.local.json (e.g. a prior --local
-      // install left it in the sibling layer). Both files are inside the
-      // NFR-10 sanctioned write set. Deleting from only the target layer
-      // leaves the sibling declaration as a perpetual dangling-reference.
-      // Each layer is loaded fresh and swept independently (WR-02 no-op guard
-      // per file: an absent/invalid layer or one not declaring the key is
-      // skipped, never rewritten -- RECON-05 byte/mtime stability).
-      if (opts.notifications?.mode !== "orchestrated") {
-        await deletePluginFromLayer(
-          locations.configJsonPath,
-          locations.scopeRoot,
-          plugin,
-          marketplace,
-        );
-        await deletePluginFromLayer(
-          locations.configLocalJsonPath,
-          locations.scopeRoot,
-          plugin,
-          marketplace,
-        );
+      if (!orchestrated) {
+        await sweepPluginFromConfigLayers(locations, plugin, marketplace);
       }
 
       // WR-04: explicit save on the mutating success arm. Ordering
@@ -559,39 +657,9 @@ export async function uninstallPlugin(
     });
   }
 
-  // PU-5 already-gone (the recorded plugin row is absent from state.json).
-  // WR-06: in ORCHESTRATED mode (reconcile apply) the converge stays SILENT --
-  // it surfaces as the explicit `converged` outcome so apply can DROP it, and a
-  // reconcile racing another process never reports an uninstall it did not
-  // perform.
-  //
-  // D-01: the STANDALONE user command names an absent target it cannot operate
-  // on -> error row (was literal silence). A `failed` row carrying the
-  // `not installed` reason (uninstall's render map renders `uninstalled` /
-  // `failed` only -- it has no `skipped` arm); no `cause`, so no path-redaction
-  // is required.
-  //
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
-    if (orchestrated) {
-      return { status: "converged", name: plugin };
-    }
-
-    const failedRow: PluginFailedMessage = {
-      status: "failed",
-      name: plugin,
-      reasons: ["not installed"],
-      severity: "error",
-      needsReload: false,
-    };
-    notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [failedRow],
-      },
-    ]);
-    return undefined;
+    return emitAlreadyGone({ ctx, pi, marketplace, scope, plugin, orchestrated });
   }
 
   // TR-03: non-AG-5 cascade partial-failure surface.
@@ -608,51 +676,7 @@ export async function uninstallPlugin(
     });
   }
 
-  // D-03-INV: post-state-commit completion-cache invalidation.
-  // Plugin moved from "installed" -> "available"; drop the cached plugin
-  // index for this marketplace so the next completion read rebuilds with
-  // the new status. Defense-in-depth try/catch.
-  try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
-  } catch {
-    // Per D-19-01 cache-refresh failures are swallowed silently. The
-    // cache-refresh side effect still fires; only the user-visible
-    // warning surface is gone (no clean MarketplaceNotificationMessage
-    // representation for a post-success "soft warning").
-  }
-
-  // POST-state-commit per PU-2 / D-08: drop the per-plugin data dir AFTER the
-  // state save so an EACCES on rm cannot strand state in installed=true.
-  //
-  // Per D-19-01 post-uninstall data-dir cleanup leaks are swallowed
-  // silently. The cleanup side effect still fires; only the user-visible
-  // warning surface is gone. The PU-4 notifyWarning that names the leaked
-  // path is dropped because the MarketplaceNotificationMessage type has no
-  // field to surface "cleanup leak after successful state mutation"; the
-  // user-visible primary success is what notify emits.
-  const dataDir = await locations.pluginDataDir(marketplace, plugin);
-  try {
-    await rm(dataDir, { recursive: true, force: true });
-  } catch {
-    // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
-  }
-
-  // PURL-05 / D-78-01: reclaim the git clone cache once no surviving record
-  // references it. Runs AFTER the state save committed above, so a
-  // still-installed record keeps its clone alive; the GC derives live keys
-  // from the just-committed state (a shared clone survives while any other
-  // plugin still references it). NFR-3: a crash before this leaves an orphan
-  // the next idempotent pass removes.
-  //
-  // Per D-19-01 this hygienic cleanup never becomes the primary user-facing
-  // path. garbageCollectPluginClones already swallows per-dir rm leaks into a
-  // returned string[] rather than throwing; the try/catch is belt-and-braces
-  // so a GC failure can never fail the user-visible uninstall.
-  try {
-    await garbageCollectPluginClones(locations);
-  } catch {
-    // Per D-19-01: hygienic cleanup never becomes the primary user-facing path.
-  }
+  await runPostUninstallCleanup(locations, scope, marketplace, plugin);
 
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing

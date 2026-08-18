@@ -40,27 +40,17 @@ jobs:
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
 
-  fallow:
+  fallow-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # Full history so fallow audit can compute a merge-base against the
-          # base branch. Without it the gate cannot separate findings this PR
-          # introduced from findings it inherited, and fails on both.
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Run fallow audit
-        run: >-
-          npm run fallow:audit -- --changed-since "origin/${{ github.event.pull_request.base.ref || 'main' }}"
+        uses: fallow-rs/fallow@v3
+        with:
+          command: audit
+          format: github-annotations

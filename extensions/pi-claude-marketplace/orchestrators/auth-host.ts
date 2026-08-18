@@ -3,8 +3,9 @@
  *
  * `buildAuthForHost` is the single seam that turns a bare host into a
  * `GitAuthBundle` bound to that host's registered provider. The marketplace
- * clone path (add.ts / update.ts) and the plugin clone-cache path (install.ts)
- * both call it instead of hardcoding `github.com` + `initiateDeviceFlow`.
+ * clone path (add.ts / update.ts) calls it directly and the plugin clone
+ * paths reach it through `buildCloneAuth`, instead of any of them hardcoding
+ * `github.com` + `initiateDeviceFlow`.
  *
  * PROV-02/03/04 contract:
  *   - Provider found  -> a bundle whose `onAuthRequired` runs that provider's
@@ -109,4 +110,41 @@ export function buildAuthForHost(args: {
   };
 
   return { credentialOps, host, onAuthRequired } satisfies GitAuthBundle;
+}
+
+/**
+ * PROV-02/03/04 / T-79-09 / D-81-05: build the host-keyed auth bundle for a
+ * resolved clone url.
+ *
+ * Returns a bundle for a registered provider host, so a private source
+ * authenticates, and `undefined` for a no-provider or public host, so it
+ * clones authless and no credential crosses hosts (the T-79-04 leak guard).
+ * `buildAuthForHost` never interpolates credentials into any surfaced string
+ * (AUTH-09). D-79-02: the command-scope `authMemo` caps the device flow at
+ * once per host.
+ *
+ * Shared by the install, reinstall, fetch, and `info --fetch` probes, and by
+ * the pinned and unpinned arms within each. Those four previously carried
+ * copies of this that their own comments described as mirrors of one another.
+ * `update.ts` is the one git-plugin probe still outside it: it keeps a local
+ * `buildBundle` because its cascade path may run with no `ctx` at all and
+ * returns undefined rather than a bundle in that case.
+ */
+export function buildCloneAuth(
+  cloneUrl: string,
+  kind: "url" | "git-subdir" | "github",
+  auth: {
+    readonly ctx: ExtensionContext;
+    readonly credentialOps: CredentialOps;
+    readonly deviceFlowHttp?: DeviceFlowHttp;
+    readonly authMemo?: Map<string, AuthAttemptResult>;
+  },
+): GitAuthBundle | undefined {
+  return buildAuthForHost({
+    host: hostFromCloneUrl(cloneUrl, kind),
+    credentialOps: auth.credentialOps,
+    ctx: auth.ctx,
+    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
+    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
+  });
 }

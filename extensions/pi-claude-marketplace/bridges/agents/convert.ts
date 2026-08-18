@@ -3,8 +3,10 @@
 // AG-7 conversion pipeline. Notable details:
 //   1. substituteClaudeVars from ../../shared/vars.ts (D-08 / PI-10) handles
 //      body substitution per the PI-10 contract.
-//   2. generatedAgentName from ../../domain/name.ts is the single source of
-//      truth for agent name generation + AG-1 elision.
+//   2. generatedSkillName from ../../domain/name.ts is the single source of
+//      truth for the skill-legend names this converter resolves; agent name
+//      generation (generatedAgentName, AG-1 elision) happens in ./discover.ts,
+//      not here.
 //   3. discoverPluginAgents lives in ./discover.ts so convert stays pure.
 //
 // MODEL_MAP, TOOL_MAP, THINKING_VALUES are user contract; tests assert exact
@@ -17,10 +19,6 @@ import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
 import type { SkillLegendEntry } from "./frontmatter.ts";
 import type { ConvertedAgent, DiscoveredAgent } from "./types.ts";
-
-// Re-export so consumers can import the agent-name generator from the
-// agents-bridge surface rather than knowing it lives in domain/.
-export { generatedAgentName } from "../../domain/name.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
