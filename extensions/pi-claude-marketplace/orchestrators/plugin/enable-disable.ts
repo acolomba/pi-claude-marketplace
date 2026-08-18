@@ -58,15 +58,10 @@ import { writeBatchedConfigEntries } from "../../persistence/config-write-back.t
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import {
-  errorMessage,
-  MarketplaceNotFoundError,
-  PluginShapeError,
-  StateLockHeldError,
-} from "../../shared/errors.ts";
+import { errorMessage, PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
-import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -80,6 +75,7 @@ import {
 import { runInstallLedger } from "./install.ts";
 import {
   applyPartialCascadeFold,
+  emitMarketplaceNotAdded,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
   selectConfigWriteTarget,
@@ -518,35 +514,6 @@ async function resolveIdempotentOutcome(
 }
 
 /**
- * M3 / M4: the marketplace is absent from the target scope, or recorded only
- * in the other one. Standalone emits the canonical
- * `MarketplaceNotAddedMessage` per D-47-A; orchestrated returns the typed
- * failure carrying the structural `not added` sentinel.
- */
-function emitMarketplaceAbsent(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
-  readonly marketplace: string;
-  readonly requestedScope: Scope | undefined;
-  readonly orchestrated: boolean;
-}): EnableDisablePluginOutcome | undefined {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
-  if (orchestrated) {
-    const scopeList: readonly Scope[] =
-      requestedScope === undefined ? ["project", "user"] : [requestedScope];
-    const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
-  }
-
-  notify(ctx, pi, {
-    kind: "marketplace-not-added",
-    name: marketplace,
-    ...(requestedScope !== undefined && { scope: requestedScope }),
-  });
-  return undefined;
-}
-
-/**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
  * RECON-03 (orchestrated).
@@ -601,7 +568,7 @@ export async function setPluginEnabled(
   }
 
   if (resolution.kind === "marketplace-absent" || resolution.kind === "other-scope") {
-    return emitMarketplaceAbsent({
+    return emitMarketplaceNotAdded({
       ctx,
       pi,
       marketplace,

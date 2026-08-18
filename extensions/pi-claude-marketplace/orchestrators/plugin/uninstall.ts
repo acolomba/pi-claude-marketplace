@@ -48,14 +48,17 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { applyPartialCascadeFold, resolveCrossScopePluginTarget } from "./shared.ts";
+import {
+  applyPartialCascadeFold,
+  emitMarketplaceNotAdded,
+  resolveCrossScopePluginTarget,
+} from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -283,33 +286,6 @@ function emitConfigInvalid(args: {
       ],
     },
   ]);
-  return undefined;
-}
-
-/**
- * RECON-03: route the not-added cross-scope resolution path to either the
- * typed orchestrated outcome or the standalone notify() row.
- */
-function emitMarketplaceNotAdded(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
-  marketplace: string;
-  requestedScope: Scope | undefined;
-  orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
-  if (orchestrated) {
-    const scopeList: readonly Scope[] =
-      requestedScope === undefined ? ["project", "user"] : [requestedScope];
-    const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return { status: "failed", reason: "not added", error: err, cause: errorMessage(err) };
-  }
-
-  notify(ctx, pi, {
-    kind: "marketplace-not-added",
-    name: marketplace,
-    ...(requestedScope !== undefined && { scope: requestedScope }),
-  });
   return undefined;
 }
 
