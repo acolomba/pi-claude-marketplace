@@ -223,8 +223,7 @@ export function malformedReasonsForKinds(
  * structural `"not added"` marketplace-absent marker is likewise not a shared
  * topic reason (it is excluded from `ContentReason` in `notify.ts`).
  */
-type SharedTopicReason =
-  IdempotentReason | UnsupportedReason | FailureReason | DeclaredStateReason;
+type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | DeclaredStateReason;
 
 /**
  * D-09: the command-private reasons, named here ONLY for the completeness

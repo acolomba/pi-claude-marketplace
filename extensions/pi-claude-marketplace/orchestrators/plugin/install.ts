@@ -2438,7 +2438,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
         name: marketplace,
         scope,
         plugins: [
-          disabledInstall.landed ? composeDisabledRow(installCtx) : composeInstalledRow(installCtx, pi),
+          disabledInstall.landed
+            ? composeDisabledRow(installCtx)
+            : composeInstalledRow(installCtx, pi),
         ],
       },
     ]);
